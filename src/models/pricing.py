@@ -16,7 +16,19 @@ class PricingMetrics(BaseModel):
     throughput: Optional[float] = Field(None, description="Tokens per second throughput")
     latency_ms: Optional[float] = Field(None, description="Average latency in milliseconds")
     context_window: Optional[int] = Field(None, description="Maximum context window size")
+    currency: str = Field(default="USD", description="Currency for pricing (default: USD)")
+    unit: str = Field(default="per_1k_tokens", description="Unit for pricing (default: per 1k tokens)")
+    source: Optional[str] = Field(None, description="Source of the pricing data (e.g., API, documentation)")
     last_updated: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Last update timestamp")
+
+
+class ProviderStatusInfo(BaseModel):
+    """Provider availability status information."""
+    
+    provider_name: str = Field(..., description="Name of the provider")
+    is_available: bool = Field(..., description="Whether the provider is currently available")
+    error_message: Optional[str] = Field(None, description="Error message if provider is unavailable")
+    models_count: int = Field(default=0, description="Number of models returned by this provider")
 
 
 class PricingResponse(BaseModel):
@@ -24,6 +36,7 @@ class PricingResponse(BaseModel):
     
     models: List[PricingMetrics] = Field(..., description="List of model pricing information")
     total_models: int = Field(..., description="Total number of models returned")
+    provider_status: List[ProviderStatusInfo] = Field(default_factory=list, description="Status of each provider")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Response timestamp")
 
 

@@ -53,20 +53,25 @@ async def get_pricing(
     """
     Get aggregated pricing data from multiple LLM providers.
     
+    This endpoint fetches real-time pricing data from all configured providers
+    asynchronously. If a provider is unavailable, partial data is returned with
+    status information about each provider.
+    
     Args:
         provider: Optional provider filter
         
     Returns:
-        PricingResponse: Aggregated pricing data with metrics
+        PricingResponse: Aggregated pricing data with metrics and provider status
     """
     if provider:
-        models = pricing_aggregator.get_pricing_by_provider(provider)
+        models, provider_status = await pricing_aggregator.get_pricing_by_provider_async(provider)
     else:
-        models = pricing_aggregator.get_all_pricing()
+        models, provider_status = await pricing_aggregator.get_all_pricing_async()
     
     return PricingResponse(
         models=models,
-        total_models=len(models)
+        total_models=len(models),
+        provider_status=provider_status
     )
 
 

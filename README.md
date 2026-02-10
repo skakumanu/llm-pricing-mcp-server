@@ -7,12 +7,16 @@ A public open-source Python-based MCP (Model Compute Pricing) server for dynamic
 
 ## Features
 
-- **Dynamic Pricing Data Retrieval**: Fetch pricing data from multiple LLM providers
-- **Comprehensive Metrics**: Track cost per token, throughput, latency, and context window sizes
+- **Real-Time Pricing Aggregation**: Asynchronously fetch pricing data from multiple LLM providers concurrently
+- **Graceful Error Handling**: Return partial data when providers are unavailable with detailed status information
+- **Provider Status Tracking**: Monitor availability and health of each pricing provider
+- **Unified Pricing Format**: All pricing data in USD per token with source attribution
+- **Comprehensive Metrics**: Track cost per token, context window sizes, and provider metadata
 - **RESTful API**: Clean, well-documented endpoints using FastAPI
 - **Data Validation**: Robust validation using Pydantic models
+- **Extensible Architecture**: Easy-to-use base provider interface for adding new providers
 - **Environment Configuration**: Secure configuration management with `.env` files
-- **Testing**: Comprehensive test suite using pytest
+- **Comprehensive Testing**: Full test suite including async operations and error handling
 - **CI/CD**: Automated testing and deployment via GitHub Actions
 - **Azure Deployment**: Ready-to-deploy on Azure App Service
 
@@ -100,7 +104,14 @@ Returns server information and available endpoints.
 ```
 
 #### `GET /pricing`
-Retrieves aggregated pricing data from all LLM providers.
+Retrieves aggregated pricing data from all LLM providers with real-time fetching.
+
+**Features:**
+- Asynchronous data fetching from multiple providers concurrently
+- Graceful handling of provider failures (returns partial data)
+- Provider availability status included in response
+- Unified pricing format (USD per token)
+- Source attribution for each pricing data point
 
 **Query Parameters:**
 - `provider` (optional): Filter by provider name (e.g., "openai", "anthropic")
@@ -114,14 +125,53 @@ Retrieves aggregated pricing data from all LLM providers.
       "provider": "OpenAI",
       "cost_per_input_token": 0.00003,
       "cost_per_output_token": 0.00006,
-      "throughput": 20.0,
-      "latency_ms": 2500.0,
       "context_window": 8192,
-      "last_updated": "2024-02-10T00:00:00"
+      "currency": "USD",
+      "unit": "per_token",
+      "source": "OpenAI Official Pricing (Static)",
+      "last_updated": "2024-02-10T00:00:00Z"
     }
   ],
-  "total_models": 6,
-  "timestamp": "2024-02-10T00:00:00"
+  "total_models": 10,
+  "provider_status": [
+    {
+      "provider_name": "OpenAI",
+      "is_available": true,
+      "error_message": null,
+      "models_count": 5
+    },
+    {
+      "provider_name": "Anthropic",
+      "is_available": true,
+      "error_message": null,
+      "models_count": 5
+    }
+  ],
+  "timestamp": "2024-02-10T00:00:00Z"
+}
+```
+
+**Note on Provider Failures:**
+If a provider is unavailable, the response will still include data from available providers:
+```json
+{
+  "models": [...],  // Only models from available providers
+  "total_models": 5,
+  "provider_status": [
+    {
+      "provider_name": "OpenAI",
+      "is_available": false,
+      "error_message": "Connection timeout",
+      "models_count": 0
+    },
+    {
+      "provider_name": "Anthropic",
+      "is_available": true,
+      "error_message": null,
+      "models_count": 5
+    }
+  ],
+  "timestamp": "2024-02-10T00:00:00Z"
 }
 ```
 
@@ -140,7 +190,7 @@ Health check endpoint for monitoring.
 ### Example Requests
 
 ```bash
-# Get all pricing data
+# Get all pricing data with provider status
 curl http://localhost:8000/pricing
 
 # Get OpenAI pricing only
@@ -151,6 +201,15 @@ curl http://localhost:8000/pricing?provider=anthropic
 
 # Health check
 curl http://localhost:8000/health
+
+# Pretty-print JSON output
+curl http://localhost:8000/pricing | python -m json.tool
+
+# Get only provider status information
+curl http://localhost:8000/pricing | python -c "import sys, json; data = json.load(sys.stdin); print(json.dumps(data['provider_status'], indent=2))"
+
+# Count total models by provider
+curl -s http://localhost:8000/pricing | python -c "import sys, json; data = json.load(sys.stdin); [print(f\"{s['provider_name']}: {s['models_count']} models\") for s in data['provider_status']]"
 ```
 
 ## Configuration
@@ -210,24 +269,48 @@ llm-pricing-mcp-server/
 
 ### Adding a New Provider
 
+The server uses a base provider interface that makes it easy to add new pricing providers. Follow these steps:
+
 1. Create a new service file in `src/services/`:
 ```python
 # src/services/new_provider_pricing.py
 from typing import List
 from src.models.pricing import PricingMetrics
+from src.services.base_provider import BasePricingProvider
 
-class NewProviderPricingService:
-    @staticmethod
-    def get_pricing_data() -> List[PricingMetrics]:
+class NewProviderPricingService(BasePricingProvider):
+    """Service to fetch and manage NewProvider model pricing."""
+    
+    def __init__(self, api_key=None):
+        super().__init__("NewProvider")
+        self.api_key = api_key
+    
+    async def fetch_pricing_data(self) -> List[PricingMetrics]:
+        """
+        Fetch pricing data from the provider.
+        
+        Returns:
+            List of PricingMetrics for NewProvider models
+        """
+        # Implement your pricing fetch logic here
         return [
             PricingMetrics(
                 model_name="model-name",
                 provider="NewProvider",
                 cost_per_input_token=0.001,
                 cost_per_output_token=0.002,
-                # ... other fields
+                context_window=100000,
+                currency="USD",
+                unit="per_token",
+                source="NewProvider Official Pricing"
             )
         ]
+    
+    @staticmethod
+    def get_pricing_data() -> List[PricingMetrics]:
+        """Synchronous method for backward compatibility."""
+        # Implement synchronous version if needed
+        pass
 ```
 
 2. Update the aggregator in `src/services/pricing_aggregator.py`:
@@ -236,12 +319,25 @@ from src.services.new_provider_pricing import NewProviderPricingService
 
 class PricingAggregatorService:
     def __init__(self):
-        self.new_provider_service = NewProviderPricingService()
+        self.openai_service = OpenAIPricingService()
+        self.anthropic_service = AnthropicPricingService()
+        self.newprovider_service = NewProviderPricingService()
     
-    def get_all_pricing(self):
-        # ... existing code
-        all_pricing.extend(self.new_provider_service.get_pricing_data())
+    async def get_all_pricing_async(self):
+        tasks = [
+            self.openai_service.get_pricing_with_status(),
+            self.anthropic_service.get_pricing_with_status(),
+            self.newprovider_service.get_pricing_with_status(),  # Add here
+        ]
+        # ... rest of implementation
 ```
+
+3. Add API key configuration to `.env`:
+```env
+NEWPROVIDER_API_KEY=your_api_key_here
+```
+
+4. Add tests in `tests/test_async_pricing.py` or create a new test file.
 
 ## Testing
 
@@ -325,10 +421,15 @@ For issues, questions, or contributions, please open an issue on GitHub.
 
 ## Roadmap
 
-- [ ] Real-time pricing API integration
-- [ ] Additional LLM providers (Google, Cohere, etc.)
-- [ ] Cost calculation endpoints
-- [ ] Historical pricing data
-- [ ] WebSocket support for live updates
-- [ ] Database integration for caching
+- [x] Real-time pricing API integration with async fetching
+- [x] Graceful error handling and partial data support
+- [x] Provider status tracking and monitoring
+- [x] Extensible base provider interface
+- [ ] Additional LLM providers (Google Gemini, Cohere, Meta Llama, etc.)
+- [ ] Web scraping for providers without public APIs
+- [ ] Cost calculation endpoints (estimate costs for token usage)
+- [ ] Historical pricing data and trend analysis
+- [ ] WebSocket support for live price updates
+- [ ] Database integration for caching and persistence
 - [ ] Authentication and rate limiting
+- [ ] Price comparison and recommendation features
