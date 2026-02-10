@@ -1,6 +1,7 @@
 """Service for aggregating pricing data from multiple providers."""
-from typing import List
-from src.models.pricing import PricingMetrics
+import asyncio
+from typing import List, Optional
+from src.models.pricing import PricingMetrics, ProviderStatusInfo
 from src.services.openai_pricing import OpenAIPricingService
 from src.services.anthropic_pricing import AnthropicPricingService
 
@@ -13,9 +14,77 @@ class PricingAggregatorService:
         self.openai_service = OpenAIPricingService()
         self.anthropic_service = AnthropicPricingService()
     
+    async def get_all_pricing_async(self) -> tuple[List[PricingMetrics], List[ProviderStatusInfo]]:
+        """
+        Aggregate pricing data from all providers asynchronously.
+        
+        This method fetches data from all providers concurrently and handles
+        partial failures gracefully. If a provider fails, its data is skipped
+        but other providers' data is still returned.
+        
+        Returns:
+            Tuple of (all_pricing_data, provider_statuses)
+        """
+        # Fetch data from all providers concurrently
+        tasks = [
+            self.openai_service.get_pricing_with_status(),
+            self.anthropic_service.get_pricing_with_status(),
+        ]
+        
+        results = await asyncio.gather(*tasks, return_exceptions=False)
+        
+        all_pricing = []
+        provider_statuses = []
+        
+        for pricing_data, status in results:
+            # Convert ProviderStatus to ProviderStatusInfo
+            provider_status = ProviderStatusInfo(
+                provider_name=status.provider_name,
+                is_available=status.is_available,
+                error_message=status.error_message,
+                models_count=len(pricing_data)
+            )
+            provider_statuses.append(provider_status)
+            
+            # Add pricing data if available
+            if pricing_data:
+                all_pricing.extend(pricing_data)
+        
+        return all_pricing, provider_statuses
+    
+    async def get_pricing_by_provider_async(
+        self, provider: str
+    ) -> tuple[List[PricingMetrics], List[ProviderStatusInfo]]:
+        """
+        Get pricing data for a specific provider asynchronously.
+        
+        Args:
+            provider: Provider name (case-insensitive)
+            
+        Returns:
+            Tuple of (pricing_data, provider_statuses)
+        """
+        provider_lower = provider.lower()
+        
+        if provider_lower == "openai":
+            pricing_data, status = await self.openai_service.get_pricing_with_status()
+        elif provider_lower == "anthropic":
+            pricing_data, status = await self.anthropic_service.get_pricing_with_status()
+        else:
+            return [], []
+        
+        provider_status = ProviderStatusInfo(
+            provider_name=status.provider_name,
+            is_available=status.is_available,
+            error_message=status.error_message,
+            models_count=len(pricing_data)
+        )
+        
+        return pricing_data, [provider_status]
+    
     def get_all_pricing(self) -> List[PricingMetrics]:
         """
-        Aggregate pricing data from all providers.
+        Aggregate pricing data from all providers (synchronous for backward compatibility).
         
         Returns:
             Combined list of PricingMetrics from all providers
@@ -32,7 +101,7 @@ class PricingAggregatorService:
     
     def get_pricing_by_provider(self, provider: str) -> List[PricingMetrics]:
         """
-        Get pricing data for a specific provider.
+        Get pricing data for a specific provider (synchronous for backward compatibility).
         
         Args:
             provider: Provider name (case-insensitive)

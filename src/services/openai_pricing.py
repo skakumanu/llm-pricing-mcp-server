@@ -1,50 +1,150 @@
 """Service for retrieving OpenAI model pricing data."""
-from typing import List
+from typing import List, Optional
+import httpx
 from src.models.pricing import PricingMetrics
+from src.services.base_provider import BasePricingProvider
+from src.config.settings import settings
 
 
-class OpenAIPricingService:
+class OpenAIPricingService(BasePricingProvider):
     """Service to fetch and manage OpenAI model pricing."""
+    
+    # OpenAI pricing data (per 1k tokens in USD) - updated from their official pricing page
+    # Source: https://openai.com/api/pricing/
+    STATIC_PRICING = {
+        "gpt-4": {
+            "input": 0.03,
+            "output": 0.06,
+            "context_window": 8192,
+        },
+        "gpt-4-turbo": {
+            "input": 0.01,
+            "output": 0.03,
+            "context_window": 128000,
+        },
+        "gpt-4-turbo-preview": {
+            "input": 0.01,
+            "output": 0.03,
+            "context_window": 128000,
+        },
+        "gpt-3.5-turbo": {
+            "input": 0.0005,
+            "output": 0.0015,
+            "context_window": 16385,
+        },
+        "gpt-3.5-turbo-0125": {
+            "input": 0.0005,
+            "output": 0.0015,
+            "context_window": 16385,
+        },
+    }
+    
+    def __init__(self, api_key: Optional[str] = None):
+        """Initialize the OpenAI pricing service.
+        
+        Args:
+            api_key: Optional OpenAI API key for authenticated requests
+        """
+        super().__init__("OpenAI")
+        self.api_key = api_key or settings.openai_api_key
+    
+    async def fetch_pricing_data(self) -> List[PricingMetrics]:
+        """
+        Fetch OpenAI model pricing data.
+        
+        Since OpenAI doesn't provide a public pricing API, this method returns
+        curated pricing data based on their official pricing page.
+        
+        In production, this could be enhanced to:
+        1. Scrape the pricing page (with appropriate caching)
+        2. Use OpenAI API to get available models and map to static pricing
+        3. Integrate with a third-party pricing aggregation service
+        
+        Returns:
+            List of PricingMetrics for OpenAI models
+            
+        Raises:
+            Exception: If unable to fetch or parse pricing data
+        """
+        try:
+            # If API key is available, optionally verify it's valid by making a test request
+            if self.api_key:
+                await self._verify_api_key()
+            
+            # Return curated pricing data
+            pricing_list = []
+            for model_name, pricing_info in self.STATIC_PRICING.items():
+                pricing_list.append(
+                    PricingMetrics(
+                        model_name=model_name,
+                        provider=self.provider_name,
+                        cost_per_input_token=pricing_info["input"] / 1000,  # Convert to per token
+                        cost_per_output_token=pricing_info["output"] / 1000,  # Convert to per token
+                        context_window=pricing_info["context_window"],
+                        currency="USD",
+                        unit="per_token",
+                        source="OpenAI Official Pricing (Static)"
+                    )
+                )
+            
+            return pricing_list
+            
+        except Exception as e:
+            raise Exception(f"Failed to fetch OpenAI pricing data: {str(e)}")
+    
+    async def _verify_api_key(self) -> bool:
+        """
+        Verify that the API key is valid by making a lightweight request.
+        
+        Returns:
+            True if the API key is valid
+            
+        Raises:
+            Exception: If the API key is invalid or the request fails
+        """
+        if not self.api_key:
+            return False
+        
+        # Make a lightweight request to verify the API key
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            try:
+                response = await client.get(
+                    "https://api.openai.com/v1/models",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}"
+                    }
+                )
+                response.raise_for_status()
+                return True
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 401:
+                    raise Exception("Invalid OpenAI API key")
+                raise Exception(f"OpenAI API error: {e.response.status_code}")
+            except Exception as e:
+                # Don't fail if verification fails - just log and continue with static data
+                return False
     
     @staticmethod
     def get_pricing_data() -> List[PricingMetrics]:
         """
-        Retrieve OpenAI model pricing data.
-        
-        Note: This returns static pricing data. In production, this would
-        fetch real-time data from OpenAI's pricing API.
+        Synchronous method for backward compatibility.
         
         Returns:
             List of PricingMetrics for OpenAI models
         """
-        # Static pricing data based on OpenAI's current pricing
-        # In a production environment, this would fetch from an API
-        return [
-            PricingMetrics(
-                model_name="gpt-4",
-                provider="OpenAI",
-                cost_per_input_token=0.00003,  # $0.03 per 1K tokens
-                cost_per_output_token=0.00006,  # $0.06 per 1K tokens
-                throughput=20.0,
-                latency_ms=2500.0,
-                context_window=8192
-            ),
-            PricingMetrics(
-                model_name="gpt-4-turbo",
-                provider="OpenAI",
-                cost_per_input_token=0.00001,  # $0.01 per 1K tokens
-                cost_per_output_token=0.00003,  # $0.03 per 1K tokens
-                throughput=40.0,
-                latency_ms=1500.0,
-                context_window=128000
-            ),
-            PricingMetrics(
-                model_name="gpt-3.5-turbo",
-                provider="OpenAI",
-                cost_per_input_token=0.0000005,  # $0.0005 per 1K tokens
-                cost_per_output_token=0.0000015,  # $0.0015 per 1K tokens
-                throughput=60.0,
-                latency_ms=800.0,
-                context_window=16385
-            ),
-        ]
+        # Return static pricing data for backward compatibility
+        pricing_list = []
+        for model_name, pricing_info in OpenAIPricingService.STATIC_PRICING.items():
+            pricing_list.append(
+                PricingMetrics(
+                    model_name=model_name,
+                    provider="OpenAI",
+                    cost_per_input_token=pricing_info["input"] / 1000,
+                    cost_per_output_token=pricing_info["output"] / 1000,
+                    context_window=pricing_info["context_window"],
+                    currency="USD",
+                    unit="per_token",
+                    source="OpenAI Official Pricing (Static)"
+                )
+            )
+        return pricing_list
