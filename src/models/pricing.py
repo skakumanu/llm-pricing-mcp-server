@@ -47,3 +47,25 @@ class ServerInfo(BaseModel):
     version: str = Field(..., description="Server version")
     description: str = Field(..., description="Server description")
     endpoints: List[str] = Field(..., description="Available API endpoints")
+
+
+class CostEstimateRequest(BaseModel):
+    """Request model for cost estimation endpoint."""
+    
+    model_name: str = Field(..., description="Name of the LLM model")
+    input_tokens: int = Field(..., ge=0, description="Number of input tokens")
+    output_tokens: int = Field(..., ge=0, description="Number of output tokens")
+
+
+class CostEstimateResponse(BaseModel):
+    """Response model for cost estimation endpoint."""
+    
+    model_name: str = Field(..., description="Name of the LLM model")
+    provider: str = Field(..., description="Provider of the model")
+    input_tokens: int = Field(..., description="Number of input tokens")
+    output_tokens: int = Field(..., description="Number of output tokens")
+    input_cost: float = Field(..., description="Cost for input tokens in USD")
+    output_cost: float = Field(..., description="Cost for output tokens in USD")
+    total_cost: float = Field(..., description="Total cost in USD")
+    currency: str = Field(default="USD", description="Currency for cost")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Calculation timestamp")
