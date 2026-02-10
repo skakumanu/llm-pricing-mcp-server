@@ -1,6 +1,6 @@
 """Service for aggregating pricing data from multiple providers."""
 import asyncio
-from typing import List
+from typing import List, Optional
 from src.models.pricing import PricingMetrics, ProviderStatusInfo
 from src.services.openai_pricing import OpenAIPricingService
 from src.services.anthropic_pricing import AnthropicPricingService
@@ -132,3 +132,23 @@ class PricingAggregatorService:
             return self.anthropic_service.get_pricing_data()
         else:
             return []
+    
+    async def find_model_pricing(self, model_name: str) -> Optional[PricingMetrics]:
+        """
+        Find pricing information for a specific model across all providers.
+        
+        Args:
+            model_name: Name of the model (case-insensitive)
+            
+        Returns:
+            PricingMetrics for the model if found, None otherwise
+        """
+        all_pricing, _ = await self.get_all_pricing_async()
+        
+        # Search for the model (case-insensitive)
+        model_name_lower = model_name.lower()
+        for pricing in all_pricing:
+            if pricing.model_name.lower() == model_name_lower:
+                return pricing
+        
+        return None
