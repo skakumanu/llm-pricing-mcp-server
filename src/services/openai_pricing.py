@@ -121,7 +121,7 @@ class OpenAIPricingService(BasePricingProvider):
                     raise Exception("Invalid OpenAI API key")
                 raise Exception(f"OpenAI API error: {e.response.status_code}")
             except Exception:
-                # Don't fail if verification fails - just log and continue with static data
+                # Verification failures are silently ignored and we continue with static data
                 return False
     
     @staticmethod

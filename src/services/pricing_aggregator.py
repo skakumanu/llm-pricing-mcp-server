@@ -26,17 +26,32 @@ class PricingAggregatorService:
             Tuple of (all_pricing_data, provider_statuses)
         """
         # Fetch data from all providers concurrently
+        # Using return_exceptions=True to handle individual provider failures gracefully
         tasks = [
             self.openai_service.get_pricing_with_status(),
             self.anthropic_service.get_pricing_with_status(),
         ]
         
-        results = await asyncio.gather(*tasks, return_exceptions=False)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         
         all_pricing = []
         provider_statuses = []
         
-        for pricing_data, status in results:
+        for result in results:
+            # Handle exceptions from individual providers
+            if isinstance(result, Exception):
+                # Provider failed completely - create error status
+                provider_status = ProviderStatusInfo(
+                    provider_name="Unknown",
+                    is_available=False,
+                    error_message=str(result),
+                    models_count=0
+                )
+                provider_statuses.append(provider_status)
+                continue
+            
+            pricing_data, status = result
+            
             # Convert ProviderStatus to ProviderStatusInfo
             provider_status = ProviderStatusInfo(
                 provider_name=status.provider_name,

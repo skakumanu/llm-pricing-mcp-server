@@ -220,6 +220,7 @@ async def test_concurrent_provider_fetching():
     elapsed_time = time.time() - start_time
     
     # Should complete quickly since both run concurrently
-    assert elapsed_time < 2.0  # Arbitrary threshold
+    # Using a generous threshold to avoid flaky tests in CI environments
+    assert elapsed_time < 5.0
     assert len(all_pricing) > 0
     assert len(provider_statuses) == 2

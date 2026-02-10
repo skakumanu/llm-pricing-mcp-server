@@ -108,7 +108,7 @@ class AnthropicPricingService(BasePricingProvider):
                 return False
             return True
         except Exception:
-            # Don't fail if verification fails - just return False
+            # Verification failures are silently ignored
             return False
     
     @staticmethod
