@@ -1,2 +1,334 @@
-# llm-pricing-mcp-server
-MCP servers to compare LLM models using latest data
+# LLM Pricing MCP Server
+
+[![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A public open-source Python-based MCP (Model Compute Pricing) server for dynamically retrieving and comparing pricing information for Large Language Models (LLMs). Built with FastAPI, this server aggregates pricing data from multiple LLM providers including OpenAI and Anthropic.
+
+## Features
+
+- **Dynamic Pricing Data Retrieval**: Fetch pricing data from multiple LLM providers
+- **Comprehensive Metrics**: Track cost per token, throughput, latency, and context window sizes
+- **RESTful API**: Clean, well-documented endpoints using FastAPI
+- **Data Validation**: Robust validation using Pydantic models
+- **Environment Configuration**: Secure configuration management with `.env` files
+- **Testing**: Comprehensive test suite using pytest
+- **CI/CD**: Automated testing and deployment via GitHub Actions
+- **Azure Deployment**: Ready-to-deploy on Azure App Service
+
+## Table of Contents
+
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [API Documentation](#api-documentation)
+- [Configuration](#configuration)
+- [Development](#development)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Installation
+
+### Prerequisites
+
+- Python 3.11 or higher
+- pip (Python package manager)
+
+### Setup
+
+1. Clone the repository:
+```bash
+git clone https://github.com/skakumanu/llm-pricing-mcp-server.git
+cd llm-pricing-mcp-server
+```
+
+2. Create a virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+4. Configure environment variables:
+```bash
+cp .env.example .env
+# Edit .env with your configuration
+```
+
+## Quick Start
+
+### Running the Server
+
+Start the development server:
+```bash
+python src/main.py
+```
+
+Or using uvicorn directly:
+```bash
+uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+The server will be available at `http://localhost:8000`
+
+### Interactive API Documentation
+
+Once the server is running, visit:
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+
+## API Documentation
+
+### Endpoints
+
+#### `GET /`
+Returns server information and available endpoints.
+
+**Response:**
+```json
+{
+  "name": "LLM Pricing MCP Server",
+  "version": "1.0.0",
+  "description": "Dynamic pricing comparison server for LLM models",
+  "endpoints": ["/", "/pricing", "/docs", "/redoc"]
+}
+```
+
+#### `GET /pricing`
+Retrieves aggregated pricing data from all LLM providers.
+
+**Query Parameters:**
+- `provider` (optional): Filter by provider name (e.g., "openai", "anthropic")
+
+**Response:**
+```json
+{
+  "models": [
+    {
+      "model_name": "gpt-4",
+      "provider": "OpenAI",
+      "cost_per_input_token": 0.00003,
+      "cost_per_output_token": 0.00006,
+      "throughput": 20.0,
+      "latency_ms": 2500.0,
+      "context_window": 8192,
+      "last_updated": "2024-02-10T00:00:00"
+    }
+  ],
+  "total_models": 6,
+  "timestamp": "2024-02-10T00:00:00"
+}
+```
+
+#### `GET /health`
+Health check endpoint for monitoring.
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "service": "LLM Pricing MCP Server",
+  "version": "1.0.0"
+}
+```
+
+### Example Requests
+
+```bash
+# Get all pricing data
+curl http://localhost:8000/pricing
+
+# Get OpenAI pricing only
+curl http://localhost:8000/pricing?provider=openai
+
+# Get Anthropic pricing only
+curl http://localhost:8000/pricing?provider=anthropic
+
+# Health check
+curl http://localhost:8000/health
+```
+
+## Configuration
+
+### Environment Variables
+
+Create a `.env` file in the root directory (use `.env.example` as template):
+
+```env
+# API Keys (optional - for future authenticated endpoints)
+OPENAI_API_KEY=your_openai_api_key_here
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+
+# Server Configuration
+SERVER_HOST=0.0.0.0
+SERVER_PORT=8000
+DEBUG=false
+```
+
+## Development
+
+### Project Structure
+
+```
+llm-pricing-mcp-server/
+├── src/
+│   ├── __init__.py
+│   ├── main.py                    # FastAPI application
+│   ├── config/
+│   │   ├── __init__.py
+│   │   └── settings.py            # Configuration settings
+│   ├── models/
+│   │   ├── __init__.py
+│   │   └── pricing.py             # Pydantic models
+│   └── services/
+│       ├── __init__.py
+│       ├── openai_pricing.py      # OpenAI pricing service
+│       ├── anthropic_pricing.py   # Anthropic pricing service
+│       └── pricing_aggregator.py  # Aggregator service
+├── tests/
+│   ├── conftest.py
+│   ├── test_api.py                # API endpoint tests
+│   ├── test_models.py             # Model validation tests
+│   └── test_services.py           # Service tests
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yml              # CI/CD pipeline
+├── .env.example
+├── .gitignore
+├── requirements.txt
+├── README.md
+├── DEPLOYMENT.md
+├── LICENSE
+├── Procfile                       # For deployment
+└── runtime.txt                    # Python version
+```
+
+### Adding a New Provider
+
+1. Create a new service file in `src/services/`:
+```python
+# src/services/new_provider_pricing.py
+from typing import List
+from src.models.pricing import PricingMetrics
+
+class NewProviderPricingService:
+    @staticmethod
+    def get_pricing_data() -> List[PricingMetrics]:
+        return [
+            PricingMetrics(
+                model_name="model-name",
+                provider="NewProvider",
+                cost_per_input_token=0.001,
+                cost_per_output_token=0.002,
+                # ... other fields
+            )
+        ]
+```
+
+2. Update the aggregator in `src/services/pricing_aggregator.py`:
+```python
+from src.services.new_provider_pricing import NewProviderPricingService
+
+class PricingAggregatorService:
+    def __init__(self):
+        self.new_provider_service = NewProviderPricingService()
+    
+    def get_all_pricing(self):
+        # ... existing code
+        all_pricing.extend(self.new_provider_service.get_pricing_data())
+```
+
+## Testing
+
+### Running Tests
+
+Run all tests:
+```bash
+pytest
+```
+
+Run with coverage:
+```bash
+pytest --cov=src --cov-report=term-missing
+```
+
+Run specific test file:
+```bash
+pytest tests/test_api.py -v
+```
+
+### Test Structure
+
+- `tests/test_api.py`: Tests for API endpoints
+- `tests/test_models.py`: Tests for Pydantic models
+- `tests/test_services.py`: Tests for pricing services
+
+## Deployment
+
+### Azure App Service
+
+Detailed deployment instructions are available in [DEPLOYMENT.md](DEPLOYMENT.md).
+
+**Quick Deploy:**
+```bash
+az webapp up --name llm-pricing-server --resource-group llm-pricing-rg --runtime "PYTHON:3.11"
+```
+
+### GitHub Actions CI/CD
+
+The repository includes a GitHub Actions workflow that:
+1. Runs tests on every push and pull request
+2. Performs code linting
+3. Deploys to Azure App Service on successful merge to main
+
+Configure the following secrets in your GitHub repository:
+- `AZURE_CREDENTIALS`: Azure service principal credentials
+- `AZURE_WEBAPP_NAME`: Your Azure web app name
+
+## Contributing
+
+Contributions are welcome! Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Run tests to ensure everything works
+5. Commit your changes (`git commit -m 'Add amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
+
+### Code Style
+
+- Follow PEP 8 guidelines
+- Use type hints where possible
+- Write docstrings for all functions and classes
+- Keep functions focused and small
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- FastAPI for the excellent web framework
+- Pydantic for robust data validation
+- The open-source community for inspiration and support
+
+## Support
+
+For issues, questions, or contributions, please open an issue on GitHub.
+
+## Roadmap
+
+- [ ] Real-time pricing API integration
+- [ ] Additional LLM providers (Google, Cohere, etc.)
+- [ ] Cost calculation endpoints
+- [ ] Historical pricing data
+- [ ] WebSocket support for live updates
+- [ ] Database integration for caching
+- [ ] Authentication and rate limiting
