@@ -48,6 +48,12 @@ def test_pricing_endpoint_with_provider_filter():
     assert response.status_code == 200
     data = response.json()
     assert all(model["provider"] == "Anthropic" for model in data["models"])
+    
+    # Test Google filter
+    response = client.get("/pricing?provider=google")
+    assert response.status_code == 200
+    data = response.json()
+    assert all(model["provider"] == "Google" for model in data["models"])
 
 
 def test_pricing_model_structure():

@@ -3,7 +3,7 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A public open-source Python-based MCP (Model Compute Pricing) server for dynamically retrieving and comparing pricing information for Large Language Models (LLMs). Built with FastAPI, this server aggregates pricing data from multiple LLM providers including OpenAI and Anthropic.
+A public open-source Python-based MCP (Model Compute Pricing) server for dynamically retrieving and comparing pricing information for Large Language Models (LLMs). Built with FastAPI, this server aggregates pricing data from multiple LLM providers including OpenAI, Anthropic, and Google Gemini.
 
 ## Features
 
@@ -252,6 +252,9 @@ curl http://localhost:8000/pricing?provider=openai
 # Get Anthropic pricing only
 curl http://localhost:8000/pricing?provider=anthropic
 
+# Get Google pricing only
+curl http://localhost:8000/pricing?provider=google
+
 # Estimate cost for GPT-4 with 1000 input tokens and 500 output tokens
 curl -X POST http://localhost:8000/cost-estimate \
   -H "Content-Type: application/json" \
@@ -261,6 +264,11 @@ curl -X POST http://localhost:8000/cost-estimate \
 curl -X POST http://localhost:8000/cost-estimate \
   -H "Content-Type: application/json" \
   -d '{"model_name": "claude-3-opus-20240229", "input_tokens": 5000, "output_tokens": 2000}'
+
+# Estimate cost for Gemini 1.5 Flash
+curl -X POST http://localhost:8000/cost-estimate \
+  -H "Content-Type: application/json" \
+  -d '{"model_name": "gemini-1.5-flash", "input_tokens": 1000000, "output_tokens": 500000}'
 
 # Health check
 curl http://localhost:8000/health
@@ -294,6 +302,7 @@ Create a `.env` file in the root directory (use `.env.example` as template):
 # API Keys (optional - for future authenticated endpoints)
 OPENAI_API_KEY=your_openai_api_key_here
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
+GOOGLE_API_KEY=your_google_api_key_here
 
 # Server Configuration
 SERVER_HOST=0.0.0.0
@@ -498,7 +507,8 @@ For issues, questions, or contributions, please open an issue on GitHub.
 - [x] Provider status tracking and monitoring
 - [x] Extensible base provider interface
 - [x] Cost calculation endpoints (estimate costs for token usage)
-- [ ] Additional LLM providers (Google Gemini, Cohere, Meta Llama, etc.)
+- [x] Additional LLM providers (Google Gemini)
+- [ ] More LLM providers (Cohere, Meta Llama, Mistral, etc.)
 - [ ] Web scraping for providers without public APIs
 - [ ] Historical pricing data and trend analysis
 - [ ] WebSocket support for live price updates

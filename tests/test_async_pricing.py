@@ -3,6 +3,7 @@ import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from src.services.openai_pricing import OpenAIPricingService
 from src.services.anthropic_pricing import AnthropicPricingService
+from src.services.google_pricing import GooglePricingService
 from src.services.pricing_aggregator import PricingAggregatorService
 from src.services.base_provider import ProviderStatus
 import httpx
@@ -39,6 +40,21 @@ async def test_anthropic_fetch_pricing_data():
 
 
 @pytest.mark.asyncio
+async def test_google_fetch_pricing_data():
+    """Test Google async pricing fetch."""
+    service = GooglePricingService()
+    pricing_data = await service.fetch_pricing_data()
+    
+    assert len(pricing_data) > 0
+    assert all(model.provider == "Google" for model in pricing_data)
+    assert all(model.cost_per_input_token > 0 for model in pricing_data)
+    assert all(model.cost_per_output_token > 0 for model in pricing_data)
+    assert all(model.currency == "USD" for model in pricing_data)
+    assert all(model.unit == "per_token" for model in pricing_data)
+    assert all(model.source is not None for model in pricing_data)
+
+
+@pytest.mark.asyncio
 async def test_openai_get_pricing_with_status_success():
     """Test OpenAI get_pricing_with_status returns correct status on success."""
     service = OpenAIPricingService()
@@ -57,6 +73,18 @@ async def test_anthropic_get_pricing_with_status_success():
     pricing_data, status = await service.get_pricing_with_status()
     
     assert status.provider_name == "Anthropic"
+    assert status.is_available is True
+    assert status.error_message is None
+    assert len(pricing_data) > 0
+
+
+@pytest.mark.asyncio
+async def test_google_get_pricing_with_status_success():
+    """Test Google get_pricing_with_status returns correct status on success."""
+    service = GooglePricingService()
+    pricing_data, status = await service.get_pricing_with_status()
+    
+    assert status.provider_name == "Google"
     assert status.is_available is True
     assert status.error_message is None
     assert len(pricing_data) > 0
@@ -84,12 +112,13 @@ async def test_aggregator_get_all_pricing_async():
     all_pricing, provider_statuses = await aggregator.get_all_pricing_async()
     
     assert len(all_pricing) > 0
-    assert len(provider_statuses) == 2  # OpenAI and Anthropic
+    assert len(provider_statuses) == 3  # OpenAI, Anthropic, and Google
     
     # Check provider statuses
     provider_names = {status.provider_name for status in provider_statuses}
     assert "OpenAI" in provider_names
     assert "Anthropic" in provider_names
+    assert "Google" in provider_names
     
     # All should be available
     assert all(status.is_available for status in provider_statuses)
@@ -112,12 +141,12 @@ async def test_aggregator_partial_failure():
     ):
         all_pricing, provider_statuses = await aggregator.get_all_pricing_async()
         
-        # Should still have Anthropic data
+        # Should still have Anthropic and Google data
         assert len(all_pricing) > 0
-        assert all(model.provider == "Anthropic" for model in all_pricing)
+        assert all(model.provider in ["Anthropic", "Google"] for model in all_pricing)
         
         # Check statuses
-        assert len(provider_statuses) == 2
+        assert len(provider_statuses) == 3
         openai_status = next(s for s in provider_statuses if s.provider_name == "OpenAI")
         anthropic_status = next(s for s in provider_statuses if s.provider_name == "Anthropic")
         
@@ -219,8 +248,8 @@ async def test_concurrent_provider_fetching():
     all_pricing, provider_statuses = await aggregator.get_all_pricing_async()
     elapsed_time = time.time() - start_time
     
-    # Should complete quickly since both run concurrently
+    # Should complete quickly since all run concurrently
     # Using a generous threshold to avoid flaky tests in CI environments
     assert elapsed_time < 5.0
     assert len(all_pricing) > 0
-    assert len(provider_statuses) == 2
+    assert len(provider_statuses) == 3  # OpenAI, Anthropic, and Google
