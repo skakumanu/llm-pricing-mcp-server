@@ -120,7 +120,7 @@ class OpenAIPricingService(BasePricingProvider):
                 if e.response.status_code == 401:
                     raise Exception("Invalid OpenAI API key")
                 raise Exception(f"OpenAI API error: {e.response.status_code}")
-            except Exception as e:
+            except Exception:
                 # Don't fail if verification fails - just log and continue with static data
                 return False
     

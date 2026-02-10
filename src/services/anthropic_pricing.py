@@ -1,6 +1,5 @@
 """Service for retrieving Anthropic model pricing data."""
 from typing import List, Optional
-import httpx
 from src.models.pricing import PricingMetrics
 from src.services.base_provider import BasePricingProvider
 from src.config.settings import settings

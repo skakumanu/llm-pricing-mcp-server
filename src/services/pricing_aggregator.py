@@ -1,6 +1,6 @@
 """Service for aggregating pricing data from multiple providers."""
 import asyncio
-from typing import List, Optional
+from typing import List
 from src.models.pricing import PricingMetrics, ProviderStatusInfo
 from src.services.openai_pricing import OpenAIPricingService
 from src.services.anthropic_pricing import AnthropicPricingService
