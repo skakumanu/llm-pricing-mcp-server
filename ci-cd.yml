@@ -1,0 +1,19 @@
+# CI/CD Pipeline Configuration
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - master  # Updated deployment trigger to 'master'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Build
+        run: echo 'Building...'
+      - name: Deploy
+        run: echo 'Deploying...'

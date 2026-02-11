@@ -1,9 +1,10 @@
 """Service for aggregating pricing data from multiple providers."""
 import asyncio
-from typing import List
+from typing import List, Optional
 from src.models.pricing import PricingMetrics, ProviderStatusInfo
 from src.services.openai_pricing import OpenAIPricingService
 from src.services.anthropic_pricing import AnthropicPricingService
+from src.services.google_pricing import GooglePricingService
 
 
 class PricingAggregatorService:
@@ -13,6 +14,7 @@ class PricingAggregatorService:
         """Initialize the aggregator service."""
         self.openai_service = OpenAIPricingService()
         self.anthropic_service = AnthropicPricingService()
+        self.google_service = GooglePricingService()
     
     async def get_all_pricing_async(self) -> tuple[List[PricingMetrics], List[ProviderStatusInfo]]:
         """
@@ -30,6 +32,7 @@ class PricingAggregatorService:
         tasks = [
             self.openai_service.get_pricing_with_status(),
             self.anthropic_service.get_pricing_with_status(),
+            self.google_service.get_pricing_with_status(),
         ]
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -85,6 +88,8 @@ class PricingAggregatorService:
             pricing_data, status = await self.openai_service.get_pricing_with_status()
         elif provider_lower == "anthropic":
             pricing_data, status = await self.anthropic_service.get_pricing_with_status()
+        elif provider_lower == "google":
+            pricing_data, status = await self.google_service.get_pricing_with_status()
         else:
             return [], []
         
@@ -112,6 +117,9 @@ class PricingAggregatorService:
         # Fetch Anthropic pricing
         all_pricing.extend(self.anthropic_service.get_pricing_data())
         
+        # Fetch Google pricing
+        all_pricing.extend(self.google_service.get_pricing_data())
+        
         return all_pricing
     
     def get_pricing_by_provider(self, provider: str) -> List[PricingMetrics]:
@@ -130,5 +138,27 @@ class PricingAggregatorService:
             return self.openai_service.get_pricing_data()
         elif provider_lower == "anthropic":
             return self.anthropic_service.get_pricing_data()
+        elif provider_lower == "google":
+            return self.google_service.get_pricing_data()
         else:
             return []
+    
+    async def find_model_pricing(self, model_name: str) -> Optional[PricingMetrics]:
+        """
+        Find pricing information for a specific model across all providers.
+        
+        Args:
+            model_name: Name of the model (case-insensitive)
+            
+        Returns:
+            PricingMetrics for the model if found, None otherwise
+        """
+        all_pricing, _ = await self.get_all_pricing_async()
+        
+        # Search for the model (case-insensitive)
+        model_name_lower = model_name.lower()
+        for pricing in all_pricing:
+            if pricing.model_name.lower() == model_name_lower:
+                return pricing
+        
+        return None

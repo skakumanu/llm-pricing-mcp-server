@@ -48,6 +48,12 @@ def test_pricing_endpoint_with_provider_filter():
     assert response.status_code == 200
     data = response.json()
     assert all(model["provider"] == "Anthropic" for model in data["models"])
+    
+    # Test Google filter
+    response = client.get("/pricing?provider=google")
+    assert response.status_code == 200
+    data = response.json()
+    assert all(model["provider"] == "Google" for model in data["models"])
 
 
 def test_pricing_model_structure():
@@ -88,3 +94,118 @@ def test_openapi_docs():
     
     response = client.get("/openapi.json")
     assert response.status_code == 200
+
+
+def test_cost_estimate_endpoint():
+    """Test the cost estimate endpoint with valid model."""
+    # First, get a valid model name from the pricing endpoint
+    pricing_response = client.get("/pricing")
+    assert pricing_response.status_code == 200
+    models = pricing_response.json()["models"]
+    assert len(models) > 0
+    
+    # Use the first model for cost estimation
+    test_model = models[0]["model_name"]
+    
+    # Test cost estimation
+    request_data = {
+        "model_name": test_model,
+        "input_tokens": 1000,
+        "output_tokens": 500
+    }
+    
+    response = client.post("/cost-estimate", json=request_data)
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Verify response structure
+    assert "model_name" in data
+    assert "provider" in data
+    assert "input_tokens" in data
+    assert "output_tokens" in data
+    assert "input_cost" in data
+    assert "output_cost" in data
+    assert "total_cost" in data
+    assert "currency" in data
+    assert "timestamp" in data
+    
+    # Verify values
+    assert data["model_name"] == test_model
+    assert data["input_tokens"] == 1000
+    assert data["output_tokens"] == 500
+    assert data["total_cost"] == data["input_cost"] + data["output_cost"]
+    assert data["currency"] == "USD"
+
+
+def test_cost_estimate_with_zero_tokens():
+    """Test cost estimation with zero tokens."""
+    pricing_response = client.get("/pricing")
+    models = pricing_response.json()["models"]
+    test_model = models[0]["model_name"]
+    
+    request_data = {
+        "model_name": test_model,
+        "input_tokens": 0,
+        "output_tokens": 0
+    }
+    
+    response = client.post("/cost-estimate", json=request_data)
+    assert response.status_code == 200
+    data = response.json()
+    
+    assert data["input_cost"] == 0.0
+    assert data["output_cost"] == 0.0
+    assert data["total_cost"] == 0.0
+
+
+def test_cost_estimate_nonexistent_model():
+    """Test cost estimation with a non-existent model."""
+    request_data = {
+        "model_name": "nonexistent-model-xyz",
+        "input_tokens": 1000,
+        "output_tokens": 500
+    }
+    
+    response = client.post("/cost-estimate", json=request_data)
+    assert response.status_code == 404
+    data = response.json()
+    assert "detail" in data
+    assert "not found" in data["detail"].lower()
+
+
+def test_cost_estimate_case_insensitive():
+    """Test that model name matching is case-insensitive."""
+    # Get a valid model
+    pricing_response = client.get("/pricing")
+    models = pricing_response.json()["models"]
+    test_model = models[0]["model_name"]
+    
+    # Test with uppercase version
+    request_data = {
+        "model_name": test_model.upper(),
+        "input_tokens": 100,
+        "output_tokens": 50
+    }
+    
+    response = client.post("/cost-estimate", json=request_data)
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Should return the original model name from pricing data
+    assert data["model_name"].lower() == test_model.lower()
+
+
+def test_cost_estimate_negative_tokens():
+    """Test that negative token counts are rejected."""
+    pricing_response = client.get("/pricing")
+    models = pricing_response.json()["models"]
+    test_model = models[0]["model_name"]
+    
+    request_data = {
+        "model_name": test_model,
+        "input_tokens": -100,
+        "output_tokens": 500
+    }
+    
+    response = client.post("/cost-estimate", json=request_data)
+    assert response.status_code == 422  # Validation error
