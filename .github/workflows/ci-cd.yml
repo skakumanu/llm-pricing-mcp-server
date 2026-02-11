@@ -1,0 +1,8 @@
+# CI/CD Pipeline Configuration
+
+# Previous configuration
+# ... (rest of the previous pipeline configuration)
+
+# Update the deployment branch to 'master'
+deploy:
+  branch: master
