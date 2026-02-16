@@ -15,31 +15,49 @@ class MistralPricingService(BasePricingProvider):
             "input": 0.004,
             "output": 0.012,
             "context_window": 32000,
+            "use_cases": ["Complex reasoning", "Advanced analytics", "Code generation", "Multi-step planning"],
+            "strengths": ["Excellent reasoning", "Strong code skills", "Well-balanced"],
+            "best_for": "Complex tasks requiring strong reasoning and code understanding"
         },
         "mistral-medium-latest": {
             "input": 0.0027,
             "output": 0.0081,
             "context_window": 32000,
+            "use_cases": ["General chat", "Content creation", "Code assistance", "Business logic"],
+            "strengths": ["Good balance", "Versatile", "Cost-effective"],
+            "best_for": "All-purpose assistant for varied business needs"
         },
         "mistral-small-latest": {
             "input": 0.001,
             "output": 0.003,
             "context_window": 32000,
+            "use_cases": ["Customer support", "FAQ automation", "Text classification", "Simple tasks"],
+            "strengths": ["Lightweight", "Affordable", "Fast responses"],
+            "best_for": "High-volume applications requiring fast, affordable responses"
         },
         "mistral-tiny": {
             "input": 0.00025,
             "output": 0.00025,
             "context_window": 32000,
+            "use_cases": ["Real-time processing", "Extreme cost optimization", "Simple classification"],
+            "strengths": ["Minimal cost", "Instant responses", "Edge deployment"],
+            "best_for": "Extreme cost optimization and ultra-fast responses"
         },
         "open-mistral-7b": {
             "input": 0.00025,
             "output": 0.00025,
             "context_window": 32000,
+            "use_cases": ["Self-hosted deployment", "Privacy-focused applications", "Custom fine-tuning"],
+            "strengths": ["Open source", "Self-hostable", "Privacy-friendly"],
+            "best_for": "Organizations needing self-hosted or locally deployable models"
         },
         "open-mixtral-8x7b": {
             "input": 0.0007,
             "output": 0.0007,
             "context_window": 32000,
+            "use_cases": ["Advanced open-source use", "Custom deployment", "High-performance inference"],
+            "strengths": ["Mixture of experts", "Self-hostable", "Good performance"],
+            "best_for": "Advanced use cases with self-hosted open-source requirements"
         },
     }
     
@@ -85,6 +103,9 @@ class MistralPricingService(BasePricingProvider):
                         source="Mistral AI Official Pricing (Static)",
                         throughput=90.0,  # Estimated tokens per second
                         latency_ms=280.0,  # Estimated latency in milliseconds
+                        use_cases=pricing_info.get("use_cases"),
+                        strengths=pricing_info.get("strengths"),
+                        best_for=pricing_info.get("best_for")
                     )
                 )
             

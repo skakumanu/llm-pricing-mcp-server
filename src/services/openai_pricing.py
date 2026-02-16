@@ -16,26 +16,41 @@ class OpenAIPricingService(BasePricingProvider):
             "input": 0.03,
             "output": 0.06,
             "context_window": 8192,
+            "use_cases": ["Complex reasoning", "Code generation", "Creative writing", "Data analysis"],
+            "strengths": ["High accuracy", "Strong reasoning", "Reliable outputs"],
+            "best_for": "High-stakes tasks requiring maximum accuracy and reasoning"
         },
         "gpt-4-turbo": {
             "input": 0.01,
             "output": 0.03,
             "context_window": 128000,
+            "use_cases": ["Long document analysis", "Multi-turn conversations", "Large codebase understanding"],
+            "strengths": ["Massive context window", "Cost-effective than GPT-4", "Fast performance"],
+            "best_for": "Processing large documents and maintaining long conversations"
         },
         "gpt-4-turbo-preview": {
             "input": 0.01,
             "output": 0.03,
             "context_window": 128000,
+            "use_cases": ["Testing new features", "Long document processing", "Complex multi-step tasks"],
+            "strengths": ["Latest capabilities", "Large context", "Good value"],
+            "best_for": "Beta testing new GPT-4 features with large context needs"
         },
         "gpt-3.5-turbo": {
             "input": 0.0005,
             "output": 0.0015,
             "context_window": 16385,
+            "use_cases": ["Chatbots", "Simple Q&A", "Content generation", "Data extraction"],
+            "strengths": ["Very low cost", "Fast responses", "Good for simple tasks"],
+            "best_for": "High-volume applications where cost efficiency is critical"
         },
         "gpt-3.5-turbo-0125": {
             "input": 0.0005,
             "output": 0.0015,
             "context_window": 16385,
+            "use_cases": ["Customer support", "Basic automation", "Simple text processing"],
+            "strengths": ["Latest 3.5 version", "Cost-effective", "Reliable"],
+            "best_for": "Cost-sensitive applications with moderate complexity"
         },
     }
     
@@ -83,7 +98,10 @@ class OpenAIPricingService(BasePricingProvider):
                         context_window=pricing_info["context_window"],
                         currency="USD",
                         unit="per_token",
-                        source="OpenAI Official Pricing (Static)"
+                        source="OpenAI Official Pricing (Static)",
+                        use_cases=pricing_info.get("use_cases"),
+                        strengths=pricing_info.get("strengths"),
+                        best_for=pricing_info.get("best_for")
                     )
                 )
             

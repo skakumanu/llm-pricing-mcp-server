@@ -14,22 +14,34 @@ class GooglePricingService(BasePricingProvider):
         "gemini-1.5-pro": {
             "input": 0.00125,
             "output": 0.00375,
-            "context_window": 2097152,  # 2M tokens
+            "context_window": 2097152,
+            "use_cases": ["Entire book analysis", "Large codebase understanding", "Video content analysis", "Complex multi-modal reasoning"],
+            "strengths": ["2M token context", "Multimodal capabilities", "Advanced reasoning"],
+            "best_for": "Processing massive amounts of data with multimodal understanding"
         },
         "gemini-1.5-flash": {
             "input": 0.000075,
             "output": 0.0003,
-            "context_window": 1048576,  # 1M tokens
+            "context_window": 1048576,
+            "use_cases": ["Fast document processing", "Real-time chat", "Quick summarization", "Content extraction"],
+            "strengths": ["Extremely fast", "Affordable", "1M token context"],
+            "best_for": "Speed-critical applications with large documents"
         },
         "gemini-1.0-pro": {
             "input": 0.0005,
             "output": 0.0015,
             "context_window": 32760,
+            "use_cases": ["General-purpose AI", "Chatbots", "Content moderation", "Text classification"],
+            "strengths": ["Balanced performance", "Good for most tasks", "Proven stability"],
+            "best_for": "General-purpose applications across various domains"
         },
         "gemini-1.0-ultra": {
             "input": 0.0125,
             "output": 0.0375,
             "context_window": 32760,
+            "use_cases": ["High-stakes reasoning", "Complex problem solving", "Advanced analysis"],
+            "strengths": ["Maximum intelligence", "Advanced reasoning", "Premium quality"],
+            "best_for": "Premium use cases demanding highest quality outputs"
         },
     }
     
@@ -75,6 +87,9 @@ class GooglePricingService(BasePricingProvider):
                         source="Google AI Pricing (Static)",
                         throughput=120.0,  # Estimated tokens per second
                         latency_ms=250.0,  # Estimated latency in milliseconds
+                        use_cases=pricing_info.get("use_cases"),
+                        strengths=pricing_info.get("strengths"),
+                        best_for=pricing_info.get("best_for")
                     )
                 )
             

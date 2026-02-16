@@ -516,6 +516,123 @@ def test_endpoint_methods_are_clear():
     assert endpoint_methods["/models"] == "GET"
     assert endpoint_methods["/pricing"] == "GET"
     assert endpoint_methods["/performance"] == "GET"
+    assert endpoint_methods["/use-cases"] == "GET"
+
+
+def test_use_cases_endpoint():
+    """Test the use cases endpoint returns use case information for all models."""
+    response = client.get("/use-cases")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Verify response structure
+    assert "models" in data
+    assert "total_models" in data
+    assert "providers" in data
+    assert isinstance(data["models"], list)
+    assert data["total_models"] > 0
+    assert len(data["models"]) == data["total_models"]
+    
+    # Verify each model has use case information
+    for model in data["models"]:
+        assert "model_name" in model
+        assert "provider" in model
+        assert "best_for" in model
+        assert "use_cases" in model
+        assert "strengths" in model
+        assert "cost_tier" in model
+        assert isinstance(model["use_cases"], list)
+        assert isinstance(model["strengths"], list)
+        assert len(model["use_cases"]) > 0
+        assert len(model["strengths"]) > 0
+
+
+def test_use_cases_with_provider_filter():
+    """Test use cases endpoint with provider filter."""
+    # Test OpenAI filter
+    response = client.get("/use-cases?provider=openai")
+    assert response.status_code == 200
+    data = response.json()
+    assert all(model["provider"] == "OpenAI" for model in data["models"])
+    
+    # Verify OpenAI models have proper use cases
+    model_names = [m["model_name"] for m in data["models"]]
+    assert "gpt-4" in model_names
+    
+    # Check gpt-4 specific strengths
+    gpt4 = next(m for m in data["models"] if m["model_name"] == "gpt-4")
+    assert "Complex reasoning" in gpt4["use_cases"]
+    assert "High accuracy" in gpt4["strengths"]
+
+
+def test_use_cases_cost_tier():
+    """Test that models have appropriate cost tiers."""
+    response = client.get("/use-cases")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Verify cost tiers exist
+    cost_tiers = {model["cost_tier"] for model in data["models"]}
+    valid_tiers = {"ultra-low", "low", "medium", "high"}
+    assert cost_tiers.issubset(valid_tiers)
+    
+    # Check that budget models (gpt-3.5) are in ultra-low tier
+    # gpt-3.5-turbo: $0.0005-0.0015 per 1k tokens = ultra-low per-token cost
+    gpt35 = next((m for m in data["models"] if m["model_name"] == "gpt-3.5-turbo"), None)
+    if gpt35:
+        assert gpt35["cost_tier"] in ["ultra-low"]
+    
+    # Check that premium models (gpt-4) are in low tier
+    # gpt-4: $0.03-0.06 per 1k tokens = low per-token cost
+    gpt4 = next((m for m in data["models"] if m["model_name"] == "gpt-4"), None)
+    if gpt4:
+        assert gpt4["cost_tier"] in ["low"]
+
+
+def test_use_cases_includes_all_providers():
+    """Test that use cases endpoint includes models from all providers."""
+    response = client.get("/use-cases")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Should have 5 providers
+    assert len(data["providers"]) == 5
+    assert "OpenAI" in data["providers"]
+    assert "Anthropic" in data["providers"]
+    assert "Google" in data["providers"]
+    assert "Cohere" in data["providers"]
+    assert "Mistral AI" in data["providers"]
+
+
+def test_use_cases_quick_recommendations():
+    """Test that best_for field provides quick recommendations."""
+    response = client.get("/use-cases")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Verify each model has a meaningful best_for recommendation
+    for model in data["models"]:
+        assert model["best_for"], f"Model {model['model_name']} missing best_for"
+        assert len(model["best_for"]) > 10, f"best_for too short for {model['model_name']}"
+        # best_for should be a sentence or phrase
+        assert not model["best_for"].endswith(",")
+
+
+def test_use_cases_context_window_included():
+    """Test that context window information is included in use cases."""
+    response = client.get("/use-cases")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Find models with known large context windows
+    large_context_models = [m for m in data["models"] if m.get("context_window", 0) > 100000]
+    assert len(large_context_models) > 0, "Should have models with large context windows"
+    
+    # Check Gemini 1.5 Pro has 2M context
+    gemini_pro = next((m for m in data["models"] if m["model_name"] == "gemini-1.5-pro"), None)
+    if gemini_pro:
+        assert gemini_pro["context_window"] == 2097152
+
 
 
 def test_new_providers_in_pricing():

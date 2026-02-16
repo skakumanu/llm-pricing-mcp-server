@@ -15,26 +15,41 @@ class AnthropicPricingService(BasePricingProvider):
             "input": 0.015,
             "output": 0.075,
             "context_window": 200000,
+            "use_cases": ["Research analysis", "Complex problem solving", "Advanced coding", "Strategic planning"],
+            "strengths": ["Superior intelligence", "Nuanced understanding", "Excellent at analysis"],
+            "best_for": "Most demanding tasks requiring top-tier intelligence"
         },
         "claude-3-sonnet-20240229": {
             "input": 0.003,
             "output": 0.015,
             "context_window": 200000,
+            "use_cases": ["Content creation", "Data processing", "Code review", "Research assistance"],
+            "strengths": ["Balanced performance/cost", "Large context", "Versatile"],
+            "best_for": "Balanced workloads needing intelligence and efficiency"
         },
         "claude-3-haiku-20240307": {
             "input": 0.00025,
             "output": 0.00125,
             "context_window": 200000,
+            "use_cases": ["Real-time chat", "Document processing", "Quick analysis", "Moderation"],
+            "strengths": ["Fastest Claude", "Ultra-low cost", "Huge context"],
+            "best_for": "High-speed applications requiring instant responses"
         },
         "claude-2.1": {
             "input": 0.008,
             "output": 0.024,
             "context_window": 200000,
+            "use_cases": ["Long document Q&A", "Summarization", "General chat"],
+            "strengths": ["Proven reliability", "Large context", "Stable"],
+            "best_for": "Production systems requiring stability"
         },
         "claude-2.0": {
             "input": 0.008,
             "output": 0.024,
             "context_window": 100000,
+            "use_cases": ["Legacy systems", "General assistance", "Text generation"],
+            "strengths": ["Mature model", "Reliable", "Well-tested"],
+            "best_for": "Maintaining existing Claude 2 integrations"
         },
     }
     
@@ -82,7 +97,10 @@ class AnthropicPricingService(BasePricingProvider):
                         context_window=pricing_info["context_window"],
                         currency="USD",
                         unit="per_token",
-                        source="Anthropic Official Pricing (Static)"
+                        source="Anthropic Official Pricing (Static)",
+                        use_cases=pricing_info.get("use_cases"),
+                        strengths=pricing_info.get("strengths"),
+                        best_for=pricing_info.get("best_for")
                     )
                 )
             
