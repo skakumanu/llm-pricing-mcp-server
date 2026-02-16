@@ -15,21 +15,33 @@ class CoherePricingService(BasePricingProvider):
             "input": 0.003,
             "output": 0.015,
             "context_window": 128000,
+            "use_cases": ["Enterprise search", "RAG systems", "Long document analysis", "Complex reasoning"],
+            "strengths": ["Enterprise-optimized", "Excellent for RAG", "Strong context window"],
+            "best_for": "Enterprise applications requiring long-context understanding"
         },
         "command-r": {
             "input": 0.0005,
             "output": 0.0015,
             "context_window": 128000,
+            "use_cases": ["Customer support automation", "FAQ systems", "Information retrieval", "Document Q&A"],
+            "strengths": ["Cost-effective RAG", "Good retrieval capabilities", "Large context"],
+            "best_for": "Mid-tier applications needing retrieval-augmented generation"
         },
         "command": {
             "input": 0.001,
             "output": 0.002,
             "context_window": 4096,
+            "use_cases": ["Content generation", "Copywriting", "Product descriptions"],
+            "strengths": ["Good for generation", "Affordable", "Reliable"],
+            "best_for": "Content creation tasks with reasonable budgets"
         },
         "command-light": {
             "input": 0.0003,
             "output": 0.0006,
             "context_window": 4096,
+            "use_cases": ["Lightweight chatbots", "Quick classification", "Simple generation"],
+            "strengths": ["Minimal cost", "Fast responses", "Good for simple tasks"],
+            "best_for": "Budget-conscious applications with simpler requirements"
         },
     }
     
@@ -75,6 +87,9 @@ class CoherePricingService(BasePricingProvider):
                         source="Cohere Official Pricing (Static)",
                         throughput=100.0,  # Estimated tokens per second
                         latency_ms=300.0,  # Estimated latency in milliseconds
+                        use_cases=pricing_info.get("use_cases"),
+                        strengths=pricing_info.get("strengths"),
+                        best_for=pricing_info.get("best_for")
                     )
                 )
             
