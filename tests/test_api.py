@@ -203,3 +203,221 @@ def test_cost_estimate_negative_tokens():
     
     response = client.post("/cost-estimate", json=request_data)
     assert response.status_code == 422  # Validation error
+
+
+def test_batch_cost_estimate_endpoint():
+    """Test the batch cost estimate endpoint."""
+    # Get some valid model names
+    pricing_response = client.get("/pricing")
+    assert pricing_response.status_code == 200
+    models = pricing_response.json()["models"]
+    assert len(models) >= 2
+    
+    # Use first few models for batch estimation
+    test_models = [m["model_name"] for m in models[:3]]
+    
+    request_data = {
+        "model_names": test_models,
+        "input_tokens": 1000,
+        "output_tokens": 500
+    }
+    
+    response = client.post("/cost-estimate/batch", json=request_data)
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Verify response structure
+    assert "input_tokens" in data
+    assert "output_tokens" in data
+    assert "models" in data
+    assert "cheapest_model" in data
+    assert "most_expensive_model" in data
+    assert "cost_range" in data
+    assert "currency" in data
+    assert "timestamp" in data
+    
+    # Verify values
+    assert data["input_tokens"] == 1000
+    assert data["output_tokens"] == 500
+    assert len(data["models"]) == len(test_models)
+    assert data["currency"] == "USD"
+    
+    # Verify cost range
+    if data["cost_range"]:
+        assert "min" in data["cost_range"]
+        assert "max" in data["cost_range"]
+        assert data["cost_range"]["min"] <= data["cost_range"]["max"]
+
+
+def test_batch_cost_estimate_model_comparison():
+    """Test that batch estimate properly compares model costs."""
+    pricing_response = client.get("/pricing")
+    models = pricing_response.json()["models"]
+    test_models = [m["model_name"] for m in models[:3]]
+    
+    request_data = {
+        "model_names": test_models,
+        "input_tokens": 1000,
+        "output_tokens": 500
+    }
+    
+    response = client.post("/cost-estimate/batch", json=request_data)
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Verify each model comparison
+    for model_comparison in data["models"]:
+        assert "model_name" in model_comparison
+        assert "provider" in model_comparison
+        assert "input_cost" in model_comparison
+        assert "output_cost" in model_comparison
+        assert "total_cost" in model_comparison
+        assert "cost_per_1m_tokens" in model_comparison
+        assert "is_available" in model_comparison
+        
+        if model_comparison["is_available"]:
+            # Total cost should equal sum of input and output costs
+            assert abs(
+                model_comparison["total_cost"] - 
+                (model_comparison["input_cost"] + model_comparison["output_cost"])
+            ) < 0.0001
+
+
+def test_batch_cost_estimate_with_nonexistent_model():
+    """Test batch estimate with some non-existent models."""
+    pricing_response = client.get("/pricing")
+    models = pricing_response.json()["models"]
+    valid_model = models[0]["model_name"]
+    
+    request_data = {
+        "model_names": [valid_model, "nonexistent-model-1", "nonexistent-model-2"],
+        "input_tokens": 1000,
+        "output_tokens": 500
+    }
+    
+    response = client.post("/cost-estimate/batch", json=request_data)
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Should return all models with availability status
+    assert len(data["models"]) == 3
+    
+    # Check that unavailable models are marked correctly
+    unavailable = [m for m in data["models"] if not m["is_available"]]
+    assert len(unavailable) == 2
+    
+    for model in unavailable:
+        assert "error_message" in model
+        assert model["error_message"] is not None
+
+
+def test_performance_endpoint():
+    """Test the performance metrics endpoint."""
+    response = client.get("/performance")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Verify response structure
+    assert "models" in data
+    assert "total_models" in data
+    assert "best_throughput" in data
+    assert "lowest_latency" in data
+    assert "largest_context" in data
+    assert "best_value" in data
+    assert "provider_status" in data
+    assert "timestamp" in data
+    
+    assert isinstance(data["models"], list)
+    assert data["total_models"] > 0
+    assert len(data["models"]) == data["total_models"]
+
+
+def test_performance_model_structure():
+    """Test that performance models have the required fields."""
+    response = client.get("/performance")
+    assert response.status_code == 200
+    data = response.json()
+    
+    if data["models"]:
+        model = data["models"][0]
+        required_fields = [
+            "model_name",
+            "provider",
+            "cost_per_input_token",
+            "cost_per_output_token"
+        ]
+        for field in required_fields:
+            assert field in model
+        
+        # Optional fields should exist but may be None
+        optional_fields = [
+            "throughput",
+            "latency_ms",
+            "context_window",
+            "performance_score",
+            "value_score"
+        ]
+        for field in optional_fields:
+            assert field in model
+
+
+def test_performance_with_provider_filter():
+    """Test the performance endpoint with provider filter."""
+    response = client.get("/performance?provider=openai")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # All models should be from OpenAI
+    assert all(model["provider"] == "OpenAI" for model in data["models"])
+
+
+def test_performance_with_sorting():
+    """Test the performance endpoint with different sort options."""
+    # Test sorting by cost
+    response = client.get("/performance?sort_by=cost")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Verify models are sorted by cost (ascending)
+    costs = [
+        (m["cost_per_input_token"] + m["cost_per_output_token"]) / 2 
+        for m in data["models"]
+    ]
+    assert costs == sorted(costs)
+    
+    # Test sorting by context_window
+    response = client.get("/performance?sort_by=context_window")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Verify sorting (models without context_window will be at the end)
+    context_windows = [m["context_window"] or 0 for m in data["models"]]
+    assert context_windows == sorted(context_windows, reverse=True)
+
+
+def test_performance_score_calculation():
+    """Test that performance scores are calculated correctly."""
+    response = client.get("/performance")
+    assert response.status_code == 200
+    data = response.json()
+    
+    for model in data["models"]:
+        # If model has throughput, it should have a performance score
+        if model["throughput"] and model["cost_per_input_token"] > 0:
+            assert model["performance_score"] is not None
+            assert model["performance_score"] > 0
+        
+        # If model has context_window, it should have a value score
+        if model["context_window"] and model["cost_per_input_token"] > 0:
+            assert model["value_score"] is not None
+            assert model["value_score"] > 0
+
+
+def test_root_endpoint_includes_new_endpoints():
+    """Test that root endpoint lists all new endpoints."""
+    response = client.get("/")
+    assert response.status_code == 200
+    data = response.json()
+    
+    assert "/cost-estimate/batch" in data["endpoints"]
+    assert "/performance" in data["endpoints"]
