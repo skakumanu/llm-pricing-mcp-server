@@ -17,8 +17,11 @@ def test_root_endpoint():
     assert "description" in data
     assert "endpoints" in data
     assert data["name"] == "LLM Pricing MCP Server"
-    assert "/" in data["endpoints"]
-    assert "/pricing" in data["endpoints"]
+    
+    # Endpoints is now a list of EndpointInfo objects
+    endpoint_paths = [e["path"] for e in data["endpoints"]]
+    assert "/" in endpoint_paths
+    assert "/pricing" in endpoint_paths
 
 
 def test_pricing_endpoint():
@@ -419,5 +422,97 @@ def test_root_endpoint_includes_new_endpoints():
     assert response.status_code == 200
     data = response.json()
     
-    assert "/cost-estimate/batch" in data["endpoints"]
-    assert "/performance" in data["endpoints"]
+    # Check that endpoints is now a list of EndpointInfo objects
+    assert "endpoints" in data
+    assert isinstance(data["endpoints"], list)
+    
+    # Check that each endpoint has method and description
+    for endpoint in data["endpoints"]:
+        assert "path" in endpoint
+        assert "method" in endpoint
+        assert "description" in endpoint
+    
+    # Check for specific endpoints
+    endpoint_paths = [e["path"] for e in data["endpoints"]]
+    assert "/cost-estimate/batch" in endpoint_paths
+    assert "/performance" in endpoint_paths
+    assert "/models" in endpoint_paths
+    
+    # Check that sample_models and quick_start_guide are present
+    assert "sample_models" in data
+    assert isinstance(data["sample_models"], list)
+    assert len(data["sample_models"]) > 0
+    assert "quick_start_guide" in data
+
+
+def test_models_endpoint():
+    """Test the models endpoint returns all available model names."""
+    response = client.get("/models")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Verify response structure
+    assert "total_models" in data
+    assert "providers" in data
+    assert "models_by_provider" in data
+    assert "all_models" in data
+    
+    # Verify data types
+    assert isinstance(data["total_models"], int)
+    assert isinstance(data["providers"], list)
+    assert isinstance(data["models_by_provider"], dict)
+    assert isinstance(data["all_models"], list)
+    
+    # Verify consistency
+    assert data["total_models"] == len(data["all_models"])
+    assert data["total_models"] > 0
+    
+    # Verify providers have model lists
+    for provider in data["providers"]:
+        assert provider in data["models_by_provider"]
+        assert isinstance(data["models_by_provider"][provider], list)
+        assert len(data["models_by_provider"][provider]) > 0
+
+
+def test_models_endpoint_with_provider_filter():
+    """Test the models endpoint with provider filter."""
+    # Test OpenAI filter
+    response = client.get("/models?provider=openai")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Should only have OpenAI provider
+    assert len(data["providers"]) == 1
+    assert "OpenAI" in data["providers"]
+    
+    # Test Anthropic filter
+    response = client.get("/models?provider=anthropic")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Should only have Anthropic provider
+    assert len(data["providers"]) == 1
+    assert "Anthropic" in data["providers"]
+
+
+def test_endpoint_methods_are_clear():
+    """Test that root endpoint clearly shows HTTP methods for each endpoint."""
+    response = client.get("/")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Find POST endpoints
+    post_endpoints = [e for e in data["endpoints"] if e["method"] == "POST"]
+    assert len(post_endpoints) >= 2  # At least /cost-estimate and /cost-estimate/batch
+    
+    # Find GET endpoints
+    get_endpoints = [e for e in data["endpoints"] if e["method"] == "GET"]
+    assert len(get_endpoints) >= 6  # /, /pricing, /models, /performance, /health, /docs, /redoc
+    
+    # Verify specific endpoints have correct methods
+    endpoint_methods = {e["path"]: e["method"] for e in data["endpoints"]}
+    assert endpoint_methods["/cost-estimate"] == "POST"
+    assert endpoint_methods["/cost-estimate/batch"] == "POST"
+    assert endpoint_methods["/models"] == "GET"
+    assert endpoint_methods["/pricing"] == "GET"
+    assert endpoint_methods["/performance"] == "GET"
