@@ -4,6 +4,9 @@ from typing import List, Optional
 from src.models.pricing import PricingMetrics, ProviderStatusInfo
 from src.services.openai_pricing import OpenAIPricingService
 from src.services.anthropic_pricing import AnthropicPricingService
+from src.services.google_pricing import GooglePricingService
+from src.services.cohere_pricing import CoherePricingService
+from src.services.mistral_pricing import MistralPricingService
 
 
 class PricingAggregatorService:
@@ -13,6 +16,9 @@ class PricingAggregatorService:
         """Initialize the aggregator service."""
         self.openai_service = OpenAIPricingService()
         self.anthropic_service = AnthropicPricingService()
+        self.google_service = GooglePricingService()
+        self.cohere_service = CoherePricingService()
+        self.mistral_service = MistralPricingService()
     
     async def get_all_pricing_async(self) -> tuple[List[PricingMetrics], List[ProviderStatusInfo]]:
         """
@@ -30,6 +36,9 @@ class PricingAggregatorService:
         tasks = [
             self.openai_service.get_pricing_with_status(),
             self.anthropic_service.get_pricing_with_status(),
+            self.google_service.get_pricing_with_status(),
+            self.cohere_service.get_pricing_with_status(),
+            self.mistral_service.get_pricing_with_status(),
         ]
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -85,6 +94,12 @@ class PricingAggregatorService:
             pricing_data, status = await self.openai_service.get_pricing_with_status()
         elif provider_lower == "anthropic":
             pricing_data, status = await self.anthropic_service.get_pricing_with_status()
+        elif provider_lower == "google":
+            pricing_data, status = await self.google_service.get_pricing_with_status()
+        elif provider_lower == "cohere":
+            pricing_data, status = await self.cohere_service.get_pricing_with_status()
+        elif provider_lower == "mistral" or provider_lower == "mistral ai":
+            pricing_data, status = await self.mistral_service.get_pricing_with_status()
         else:
             return [], []
         
@@ -112,6 +127,15 @@ class PricingAggregatorService:
         # Fetch Anthropic pricing
         all_pricing.extend(self.anthropic_service.get_pricing_data())
         
+        # Fetch Google pricing
+        all_pricing.extend(self.google_service.get_pricing_data())
+        
+        # Fetch Cohere pricing
+        all_pricing.extend(self.cohere_service.get_pricing_data())
+        
+        # Fetch Mistral pricing
+        all_pricing.extend(self.mistral_service.get_pricing_data())
+        
         return all_pricing
     
     def get_pricing_by_provider(self, provider: str) -> List[PricingMetrics]:
@@ -130,6 +154,12 @@ class PricingAggregatorService:
             return self.openai_service.get_pricing_data()
         elif provider_lower == "anthropic":
             return self.anthropic_service.get_pricing_data()
+        elif provider_lower == "google":
+            return self.google_service.get_pricing_data()
+        elif provider_lower == "cohere":
+            return self.cohere_service.get_pricing_data()
+        elif provider_lower == "mistral" or provider_lower == "mistral ai":
+            return self.mistral_service.get_pricing_data()
         else:
             return []
     

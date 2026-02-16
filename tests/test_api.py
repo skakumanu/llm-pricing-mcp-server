@@ -516,3 +516,166 @@ def test_endpoint_methods_are_clear():
     assert endpoint_methods["/models"] == "GET"
     assert endpoint_methods["/pricing"] == "GET"
     assert endpoint_methods["/performance"] == "GET"
+
+
+def test_new_providers_in_pricing():
+    """Test that new providers (Google, Cohere, Mistral) are included in pricing."""
+    response = client.get("/pricing")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Get all provider names
+    providers = set(model["provider"] for model in data["models"])
+    
+    # Check that we now have 5 providers
+    assert len(providers) >= 5, f"Expected at least 5 providers, got {len(providers)}: {providers}"
+    
+    # Verify each new provider is present
+    assert "Google" in providers
+    assert "Cohere" in providers
+    assert "Mistral AI" in providers
+    
+    # Verify we still have the original providers
+    assert "OpenAI" in providers
+    assert "Anthropic" in providers
+
+
+def test_google_provider_filter():
+    """Test filtering by Google provider."""
+    response = client.get("/pricing?provider=google")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # All models should be from Google
+    assert all(model["provider"] == "Google" for model in data["models"])
+    
+    # Should have Gemini models
+    model_names = [model["model_name"] for model in data["models"]]
+    assert "gemini-1.5-pro" in model_names
+    assert "gemini-1.5-flash" in model_names
+
+
+def test_cohere_provider_filter():
+    """Test filtering by Cohere provider."""
+    response = client.get("/pricing?provider=cohere")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # All models should be from Cohere
+    assert all(model["provider"] == "Cohere" for model in data["models"])
+    
+    # Should have Command models
+    model_names = [model["model_name"] for model in data["models"]]
+    assert "command-r-plus" in model_names
+    assert "command-r" in model_names
+
+
+def test_mistral_provider_filter():
+    """Test filtering by Mistral provider."""
+    response = client.get("/pricing?provider=mistral")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # All models should be from Mistral AI
+    assert all(model["provider"] == "Mistral AI" for model in data["models"])
+    
+    # Should have Mistral models
+    model_names = [model["model_name"] for model in data["models"]]
+    assert "mistral-large-latest" in model_names
+    assert "mistral-small-latest" in model_names
+
+
+def test_models_endpoint_includes_new_providers():
+    """Test that /models endpoint includes all providers."""
+    response = client.get("/models")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Should have 5 providers
+    assert len(data["providers"]) >= 5
+    assert "Google" in data["providers"]
+    assert "Cohere" in data["providers"]
+    assert "Mistral AI" in data["providers"]
+    
+    # Verify total model count increased
+    assert data["total_models"] >= 20  # At least 20 models across all providers
+
+
+def test_total_model_count_with_new_providers():
+    """Test that total model count reflects all providers."""
+    response = client.get("/pricing")
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Should have significantly more models now
+    # OpenAI: 5, Anthropic: 5, Google: 4, Cohere: 4, Mistral: 6 = 24 total
+    assert data["total_models"] >= 20
+    
+    # Verify provider status includes all providers
+    provider_names = [status["provider_name"] for status in data["provider_status"]]
+    assert len(provider_names) == 5
+
+
+def test_cost_estimate_with_new_provider_models():
+    """Test cost estimation with models from new providers."""
+    # Test with Google model
+    request_data = {
+        "model_name": "gemini-1.5-flash",
+        "input_tokens": 1000,
+        "output_tokens": 500
+    }
+    response = client.post("/cost-estimate", json=request_data)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["model_name"] == "gemini-1.5-flash"
+    assert data["provider"] == "Google"
+    assert data["total_cost"] > 0
+    
+    # Test with Cohere model
+    request_data["model_name"] = "command-r"
+    response = client.post("/cost-estimate", json=request_data)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["model_name"] == "command-r"
+    assert data["provider"] == "Cohere"
+    
+    # Test with Mistral model
+    request_data["model_name"] = "mistral-small-latest"
+    response = client.post("/cost-estimate", json=request_data)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["model_name"] == "mistral-small-latest"
+    assert data["provider"] == "Mistral AI"
+
+
+def test_batch_cost_estimate_with_mixed_providers():
+    """Test batch cost estimation with models from different providers."""
+    request_data = {
+        "model_names": [
+            "gpt-4",  # OpenAI
+            "claude-3-haiku-20240307",  # Anthropic
+            "gemini-1.5-flash",  # Google
+            "command-r",  # Cohere
+            "mistral-small-latest"  # Mistral
+        ],
+        "input_tokens": 1000,
+        "output_tokens": 500
+    }
+    
+    response = client.post("/cost-estimate/batch", json=request_data)
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Should have 5 model comparisons
+    assert len(data["models"]) == 5
+    
+    # Verify all models are available
+    assert all(model["is_available"] for model in data["models"])
+    
+    # Verify different providers
+    providers = set(model["provider"] for model in data["models"])
+    assert len(providers) == 5
+    assert "Google" in providers
+    assert "Cohere" in providers
+    assert "Mistral AI" in providers
+
