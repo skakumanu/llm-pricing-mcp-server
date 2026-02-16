@@ -40,13 +40,23 @@ class PricingResponse(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Response timestamp")
 
 
+class EndpointInfo(BaseModel):
+    """Endpoint information with method and description."""
+    
+    path: str = Field(..., description="Endpoint path")
+    method: str = Field(..., description="HTTP method (GET, POST, etc.)")
+    description: str = Field(..., description="Brief description of endpoint")
+    
+
 class ServerInfo(BaseModel):
     """Server information model."""
     
     name: str = Field(..., description="Server name")
     version: str = Field(..., description="Server version")
     description: str = Field(..., description="Server description")
-    endpoints: List[str] = Field(..., description="Available API endpoints")
+    endpoints: List[EndpointInfo] = Field(..., description="Available API endpoints with methods")
+    sample_models: List[str] = Field(default_factory=list, description="Sample model names for testing")
+    quick_start_guide: str = Field(default="Visit /docs for interactive API documentation", description="Quick start guidance")
 
 
 class CostEstimateRequest(BaseModel):

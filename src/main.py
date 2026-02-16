@@ -9,7 +9,7 @@ from fastapi import FastAPI, Query, HTTPException
 from typing import Optional
 from src.config.settings import settings
 from src.models.pricing import (
-    PricingResponse, ServerInfo, CostEstimateRequest, CostEstimateResponse,
+    PricingResponse, ServerInfo, EndpointInfo, CostEstimateRequest, CostEstimateResponse,
     BatchCostEstimateRequest, BatchCostEstimateResponse, ModelCostComparison,
     PerformanceResponse, PerformanceMetrics
 )
@@ -32,23 +32,109 @@ async def root():
     Root endpoint providing server information.
     
     Returns:
-        ServerInfo: Information about the server and available endpoints
+        ServerInfo: Information about the server and available endpoints with usage guidance
     """
     return ServerInfo(
         name=settings.app_name,
         version=settings.app_version,
         description=settings.app_description,
         endpoints=[
-            "/",
-            "/pricing",
-            "/cost-estimate",
-            "/cost-estimate/batch",
-            "/performance",
-            "/health",
-            "/docs",
-            "/redoc",
-        ]
+            EndpointInfo(
+                path="/",
+                method="GET",
+                description="Server information and API overview"
+            ),
+            EndpointInfo(
+                path="/pricing",
+                method="GET",
+                description="Get pricing data for all models (optional ?provider=openai filter)"
+            ),
+            EndpointInfo(
+                path="/models",
+                method="GET",
+                description="List all available model names (optional ?provider=openai filter)"
+            ),
+            EndpointInfo(
+                path="/cost-estimate",
+                method="POST",
+                description="Estimate cost for a single model (requires JSON body)"
+            ),
+            EndpointInfo(
+                path="/cost-estimate/batch",
+                method="POST",
+                description="Compare costs across multiple models (requires JSON body)"
+            ),
+            EndpointInfo(
+                path="/performance",
+                method="GET",
+                description="Get performance metrics for models (optional filters)"
+            ),
+            EndpointInfo(
+                path="/health",
+                method="GET",
+                description="Health check endpoint"
+            ),
+            EndpointInfo(
+                path="/docs",
+                method="GET",
+                description="Interactive API documentation (Swagger UI)"
+            ),
+            EndpointInfo(
+                path="/redoc",
+                method="GET",
+                description="Alternative API documentation (ReDoc)"
+            ),
+        ],
+        sample_models=[
+            "gpt-4", "gpt-4-turbo", "gpt-3.5-turbo",
+            "claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"
+        ],
+        quick_start_guide=(
+            "1. GET /models to see all available models | "
+            "2. GET /pricing to see pricing data | "
+            "3. POST /cost-estimate with JSON body to calculate costs | "
+            "4. Visit /docs for interactive testing"
+        )
     )
+
+
+@app.get("/models")
+async def get_models(
+    provider: Optional[str] = Query(
+        None,
+        description="Filter by provider (e.g., 'openai', 'anthropic')"
+    )
+):
+    """
+    Get a list of all available model names.
+    
+    This is a lightweight endpoint for quick model discovery without full pricing data.
+    Use this to find valid model names for cost estimation or performance comparison.
+    
+    Args:
+        provider: Optional provider filter
+        
+    Returns:
+        dict: List of model names organized by provider
+    """
+    if provider:
+        models, _ = await pricing_aggregator.get_pricing_by_provider_async(provider)
+    else:
+        models, _ = await pricing_aggregator.get_all_pricing_async()
+    
+    # Group models by provider
+    models_by_provider = {}
+    for model in models:
+        if model.provider not in models_by_provider:
+            models_by_provider[model.provider] = []
+        models_by_provider[model.provider].append(model.model_name)
+    
+    return {
+        "total_models": len(models),
+        "providers": list(models_by_provider.keys()),
+        "models_by_provider": models_by_provider,
+        "all_models": [model.model_name for model in models]
+    }
 
 
 @app.get("/pricing", response_model=PricingResponse)
