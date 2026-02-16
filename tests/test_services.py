@@ -65,3 +65,48 @@ def test_pricing_aggregator_invalid_provider():
     invalid_pricing = aggregator.get_pricing_by_provider("invalid_provider")
     
     assert len(invalid_pricing) == 0
+
+
+@pytest.mark.asyncio
+async def test_find_model_pricing():
+    """Test finding pricing for a specific model."""
+    aggregator = PricingAggregatorService()
+    
+    # Get all pricing first to find a valid model
+    all_pricing = aggregator.get_all_pricing()
+    assert len(all_pricing) > 0
+    
+    # Test finding an existing model
+    test_model = all_pricing[0].model_name
+    found_pricing = await aggregator.find_model_pricing(test_model)
+    
+    assert found_pricing is not None
+    assert found_pricing.model_name == test_model
+    assert found_pricing.cost_per_input_token > 0
+    assert found_pricing.cost_per_output_token > 0
+
+
+@pytest.mark.asyncio
+async def test_find_model_pricing_case_insensitive():
+    """Test that model finding is case-insensitive."""
+    aggregator = PricingAggregatorService()
+    
+    all_pricing = aggregator.get_all_pricing()
+    test_model = all_pricing[0].model_name
+    
+    # Test with uppercase
+    found_pricing = await aggregator.find_model_pricing(test_model.upper())
+    assert found_pricing is not None
+    
+    # Test with lowercase
+    found_pricing = await aggregator.find_model_pricing(test_model.lower())
+    assert found_pricing is not None
+
+
+@pytest.mark.asyncio
+async def test_find_model_pricing_nonexistent():
+    """Test finding pricing for a non-existent model."""
+    aggregator = PricingAggregatorService()
+    
+    found_pricing = await aggregator.find_model_pricing("nonexistent-model-xyz")
+    assert found_pricing is None

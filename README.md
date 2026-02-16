@@ -99,7 +99,7 @@ Returns server information and available endpoints.
   "name": "LLM Pricing MCP Server",
   "version": "1.0.0",
   "description": "Dynamic pricing comparison server for LLM models",
-  "endpoints": ["/", "/pricing", "/docs", "/redoc"]
+  "endpoints": ["/", "/pricing", "/cost-estimate", "/health", "/docs", "/redoc"]
 }
 ```
 
@@ -187,6 +187,59 @@ Health check endpoint for monitoring.
 }
 ```
 
+#### `POST /cost-estimate`
+Estimate the cost for using a specific LLM model based on token usage.
+
+**Features:**
+- Calculate total costs for any supported model
+- Provides detailed breakdown of input and output costs
+- Case-insensitive model name matching
+- Validates token counts (must be non-negative)
+
+**Request Body:**
+```json
+{
+  "model_name": "gpt-4",
+  "input_tokens": 1000,
+  "output_tokens": 500
+}
+```
+
+**Response:**
+```json
+{
+  "model_name": "gpt-4",
+  "provider": "OpenAI",
+  "input_tokens": 1000,
+  "output_tokens": 500,
+  "input_cost": 0.03,
+  "output_cost": 0.03,
+  "total_cost": 0.06,
+  "currency": "USD",
+  "timestamp": "2024-02-10T00:00:00Z"
+}
+```
+
+**Error Response (404 - Model Not Found):**
+```json
+{
+  "detail": "Model 'unknown-model' not found. Please check the /pricing endpoint for available models."
+}
+```
+
+**Error Response (422 - Validation Error):**
+```json
+{
+  "detail": [
+    {
+      "type": "greater_than_equal",
+      "loc": ["body", "input_tokens"],
+      "msg": "Input should be greater than or equal to 0"
+    }
+  ]
+}
+```
+
 ### Example Requests
 
 ```bash
@@ -199,6 +252,16 @@ curl http://localhost:8000/pricing?provider=openai
 # Get Anthropic pricing only
 curl http://localhost:8000/pricing?provider=anthropic
 
+# Estimate cost for GPT-4 with 1000 input tokens and 500 output tokens
+curl -X POST http://localhost:8000/cost-estimate \
+  -H "Content-Type: application/json" \
+  -d '{"model_name": "gpt-4", "input_tokens": 1000, "output_tokens": 500}'
+
+# Estimate cost for Claude 3 Opus
+curl -X POST http://localhost:8000/cost-estimate \
+  -H "Content-Type: application/json" \
+  -d '{"model_name": "claude-3-opus-20240229", "input_tokens": 5000, "output_tokens": 2000}'
+
 # Health check
 curl http://localhost:8000/health
 
@@ -210,6 +273,15 @@ curl http://localhost:8000/pricing | python -c "import sys, json; data = json.lo
 
 # Count total models by provider
 curl -s http://localhost:8000/pricing | python -c "import sys, json; data = json.load(sys.stdin); [print(f\"{s['provider_name']}: {s['models_count']} models\") for s in data['provider_status']]"
+
+# Calculate cost for a batch of prompts
+MODEL="gpt-3.5-turbo"
+INPUT_TOKENS=2000
+OUTPUT_TOKENS=500
+curl -s -X POST http://localhost:8000/cost-estimate \
+  -H "Content-Type: application/json" \
+  -d "{\"model_name\": \"$MODEL\", \"input_tokens\": $INPUT_TOKENS, \"output_tokens\": $OUTPUT_TOKENS}" | \
+  python -c "import sys, json; data = json.load(sys.stdin); print(f\"Total cost for {data['model_name']}: \${data['total_cost']:.4f}\")"
 ```
 
 ## Configuration
@@ -425,9 +497,9 @@ For issues, questions, or contributions, please open an issue on GitHub.
 - [x] Graceful error handling and partial data support
 - [x] Provider status tracking and monitoring
 - [x] Extensible base provider interface
+- [x] Cost calculation endpoints (estimate costs for token usage)
 - [ ] Additional LLM providers (Google Gemini, Cohere, Meta Llama, etc.)
 - [ ] Web scraping for providers without public APIs
-- [ ] Cost calculation endpoints (estimate costs for token usage)
 - [ ] Historical pricing data and trend analysis
 - [ ] WebSocket support for live price updates
 - [ ] Database integration for caching and persistence
