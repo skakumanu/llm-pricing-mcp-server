@@ -47,12 +47,12 @@ async def root():
             EndpointInfo(
                 path="/pricing",
                 method="GET",
-                description="Get pricing data for all models (optional ?provider=openai filter)"
+                description="Get pricing data for all models (optional ?provider=openai|anthropic|google|cohere|mistral filter)"
             ),
             EndpointInfo(
                 path="/models",
                 method="GET",
-                description="List all available model names (optional ?provider=openai filter)"
+                description="List all available model names (optional ?provider=openai|anthropic|google|cohere|mistral filter)"
             ),
             EndpointInfo(
                 path="/cost-estimate",
@@ -87,7 +87,10 @@ async def root():
         ],
         sample_models=[
             "gpt-4", "gpt-4-turbo", "gpt-3.5-turbo",
-            "claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"
+            "claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307",
+            "gemini-1.5-pro", "gemini-1.5-flash",
+            "command-r-plus", "command-r",
+            "mistral-large-latest", "mistral-small-latest"
         ],
         quick_start_guide=(
             "1. GET /models to see all available models | "
@@ -102,7 +105,7 @@ async def root():
 async def get_models(
     provider: Optional[str] = Query(
         None,
-        description="Filter by provider (e.g., 'openai', 'anthropic')"
+        description="Filter by provider (e.g., 'openai', 'anthropic', 'google', 'cohere', 'mistral')"
     )
 ):
     """
@@ -110,6 +113,8 @@ async def get_models(
     
     This is a lightweight endpoint for quick model discovery without full pricing data.
     Use this to find valid model names for cost estimation or performance comparison.
+    
+    Supported providers: OpenAI, Anthropic, Google, Cohere, Mistral AI
     
     Args:
         provider: Optional provider filter
@@ -141,7 +146,7 @@ async def get_models(
 async def get_pricing(
     provider: Optional[str] = Query(
         None,
-        description="Filter by provider (e.g., 'openai', 'anthropic')"
+        description="Filter by provider (e.g., 'openai', 'anthropic', 'google', 'cohere', 'mistral')"
     )
 ):
     """
@@ -150,6 +155,8 @@ async def get_pricing(
     This endpoint fetches real-time pricing data from all configured providers
     asynchronously. If a provider is unavailable, partial data is returned with
     status information about each provider.
+    
+    Supported providers: OpenAI, Anthropic, Google, Cohere, Mistral AI
     
     Args:
         provider: Optional provider filter
