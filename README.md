@@ -460,15 +460,41 @@ Configure the following secrets in your GitHub repository:
 
 ## Contributing
 
-Contributions are welcome! Please follow these steps:
+Contributions are welcome! We **strictly follow Git Flow** for all development. Please read our detailed [CONTRIBUTING.md](CONTRIBUTING.md) guide before starting.
+
+### Quick Start for Contributors
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Run tests to ensure everything works
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
+2. Clone your fork and checkout the `develop` branch:
+   ```bash
+   git checkout develop
+   git pull origin develop
+   ```
+3. Create a feature branch from `develop`:
+   ```bash
+   git checkout -b feature/amazing-feature
+   ```
+4. Make your changes and commit:
+   ```bash
+   git add .
+   git commit -m 'Add amazing feature'
+   ```
+5. Run tests to ensure everything works:
+   ```bash
+   pytest
+   ```
+6. Push to your fork:
+   ```bash
+   git push origin feature/amazing-feature
+   ```
+7. Open a Pull Request **against the `develop` branch** (NOT master)
+
+### Important Git Flow Rules
+
+- ⚠️ **Always branch from `develop`** for new features
+- ⚠️ **Never merge directly to `master`** - features go to `develop` first
+- ⚠️ **Use `--no-ff` for merges** to preserve branch history
+- ✅ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed Git Flow workflows
 
 ### Code Style
 
