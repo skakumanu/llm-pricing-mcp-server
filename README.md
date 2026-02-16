@@ -493,8 +493,29 @@ Contributions are welcome! We **strictly follow Git Flow** for all development. 
 
 - ⚠️ **Always branch from `develop`** for new features
 - ⚠️ **Never merge directly to `master`** - features go to `develop` first
+- ⚠️ **NEVER commit secrets or API keys** - use environment variables
 - ⚠️ **Use `--no-ff` for merges** to preserve branch history
 - ✅ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed Git Flow workflows
+
+### Security Requirements
+
+Before committing, **always verify**:
+
+```bash
+# Check for secrets in your changes
+git diff --cached
+grep -r "api_key" .
+grep -r "password" .
+```
+
+**Never commit:**
+- API keys (OpenAI, Anthropic, Azure, etc.)
+- Passwords or tokens
+- `.env` files (use `.env.example` instead)
+- Private keys (`.pem`, `.key`, `.pfx`)
+- Hard-coded credentials
+
+Use environment variables for all sensitive data. See the [Security Compliance](CONTRIBUTING.md#security-compliance) section for details.
 
 ### Code Style
 

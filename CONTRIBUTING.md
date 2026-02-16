@@ -128,21 +128,133 @@ We **STRICTLY** follow Git Flow for all development processes. This ensures a cl
 
 - ⚠️ **NEVER merge feature branches directly into `master`**
 - ⚠️ **NEVER commit directly to `master` or `develop`**
+- ⚠️ **NEVER commit secrets, API keys, or sensitive information**
 - ✅ **ALWAYS merge features into `develop` first**
 - ✅ **ALWAYS use `--no-ff` flag for merges** to preserve branch history
 - ✅ **ALWAYS sync `develop` after merging to `master`**
+- ✅ **ALWAYS check for secrets before committing** (see Security Checklist below)
 - ✅ **Use pull requests** for code review before merging
 - ✅ **Include detailed commit messages** describing what and why
+
+### Pre-Commit Security Checklist
+
+Before committing ANY code, verify:
+
+```bash
+# 1. Check what files you're about to commit
+git status
+git diff --cached
+
+# 2. Search for common secret patterns (run these checks!)
+grep -r "password" --include="*.py" --include="*.json" --include="*.txt" .
+grep -r "api_key" --include="*.py" --include="*.json" --include="*.txt" .
+grep -r "secret" --include="*.py" --include="*.json" --include="*.txt" .
+grep -r "token" --include="*.py" --include="*.json" --include="*.txt" .
+
+# 3. Ensure .env files are NOT staged
+git ls-files | grep -E "\.(env|secret|key|pem|pfx)$"
+```
+
+**If you find any secrets:**
+1. Remove them immediately
+2. Use environment variables instead
+3. Add the pattern to `.gitignore`
+4. Never commit the secrets
 
 Ensure to follow proper branching practices, including pull requests for merging, and always include detailed commit messages.
 
 ---
 
 ## Security Compliance
-1. All secrets are stored in Azure Key Vault. Ensure that no secrets are hard-coded or included in the repository.
-2. All contributions must undergo static code analysis using the provided CI/CD pipeline.
-3. Use secure coding practices, avoiding hard-coded credentials, and ensure proper use of environment variables.
-4. Follow the principle of least privilege for accessing sensitive resources.
+
+### Critical Security Rules
+
+⚠️ **NEVER commit secrets or sensitive information to the repository!**
+
+### What NOT to Commit
+
+**Secrets and Credentials:**
+- API keys (OpenAI, Anthropic, Azure, etc.)
+- Passwords or passphrases
+- Access tokens or bearer tokens
+- Database connection strings with credentials
+- Private keys (`.pem`, `.key`, `.pfx` files)
+- SSH keys
+- OAuth client secrets
+- Encryption keys
+- Azure storage account keys
+- Service principal credentials
+
+**Configuration Files with Secrets:**
+- `.env` files (use `.env.example` instead)
+- `secrets.json` or `config.local.json`
+- Any file containing hard-coded credentials
+
+**Personal Information:**
+- Email addresses (except in documentation)
+- Phone numbers
+- Personal identifiable information (PII)
+
+### How to Handle Secrets Properly
+
+1. **Use Environment Variables:**
+   ```python
+   import os
+   api_key = os.getenv("OPENAI_API_KEY")
+   ```
+
+2. **Store Secrets in Azure Key Vault:**
+   - All production secrets are stored in Azure Key Vault
+   - Access secrets at runtime, never hard-code them
+
+3. **Use `.env` for Local Development:**
+   - Create a `.env` file (already in `.gitignore`)
+   - Provide a `.env.example` template with dummy values
+   - Document required environment variables in README
+
+4. **Before Every Commit:**
+   - Run the pre-commit security checklist (see above)
+   - Review `git diff` carefully
+   - Check for accidentally staged secret files
+
+### Secret Detection Tools
+
+Consider using these tools to scan for secrets:
+
+```bash
+# Install git-secrets (prevents committing secrets)
+git secrets --install
+git secrets --register-aws
+
+# Scan repository for secrets
+git secrets --scan
+
+# Or use gitleaks
+gitleaks detect --source . --verbose
+```
+
+### If You Accidentally Commit a Secret
+
+1. **Immediately rotate/revoke the secret** (API key, password, etc.)
+2. Contact the repository maintainer
+3. Remove the secret from git history using:
+   ```bash
+   git filter-branch --force --index-filter \
+     "git rm --cached --ignore-unmatch <file-with-secret>" \
+     --prune-empty --tag-name-filter cat -- --all
+   ```
+   Or use [BFG Repo-Cleaner](https://rtyley.github.io/bfg-repo-cleaner/)
+4. Force push (requires admin approval)
+5. Notify the security team
+
+### Additional Security Practices
+
+1. All contributions must undergo static code analysis using the provided CI/CD pipeline
+2. Use secure coding practices, avoiding hard-coded credentials
+3. Always use environment variables for configuration
+4. Follow the principle of least privilege for accessing sensitive resources
+5. Keep dependencies updated to patch security vulnerabilities
+6. Review the security section in pull request reviews
 
 ---
 
