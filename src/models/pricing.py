@@ -20,6 +20,10 @@ class PricingMetrics(BaseModel):
     unit: str = Field(default="per_1k_tokens", description="Unit for pricing (default: per 1k tokens)")
     source: Optional[str] = Field(None, description="Source of the pricing data (e.g., API, documentation)")
     last_updated: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Last update timestamp")
+    # Use case information
+    use_cases: Optional[List[str]] = Field(None, description="List of ideal use cases for this model")
+    strengths: Optional[List[str]] = Field(None, description="Key strengths of this model")
+    best_for: Optional[str] = Field(None, description="Quick summary of what this model is best for")
 
 
 class ProviderStatusInfo(BaseModel):
@@ -141,4 +145,27 @@ class PerformanceResponse(BaseModel):
     largest_context: Optional[str] = Field(None, description="Model with largest context window")
     best_value: Optional[str] = Field(None, description="Model with best value score")
     provider_status: List[ProviderStatusInfo] = Field(default_factory=list, description="Status of each provider")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Response timestamp")
+
+
+class ModelUseCase(BaseModel):
+    """Use case information for a specific LLM model."""
+    
+    model_config = ConfigDict(protected_namespaces=())
+    
+    model_name: str = Field(..., description="Name of the LLM model")
+    provider: str = Field(..., description="Provider of the model")
+    best_for: str = Field(..., description="Quick summary of what this model is best for")
+    use_cases: List[str] = Field(..., description="List of ideal use cases")
+    strengths: List[str] = Field(..., description="Key strengths of this model")
+    context_window: Optional[int] = Field(None, description="Maximum context window size")
+    cost_tier: str = Field(..., description="Cost tier: low, medium, high")
+
+
+class UseCaseResponse(BaseModel):
+    """Response model for use cases endpoint."""
+    
+    models: List[ModelUseCase] = Field(..., description="Use case information for each model")
+    total_models: int = Field(..., description="Total number of models")
+    providers: List[str] = Field(..., description="List of providers included")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Response timestamp")

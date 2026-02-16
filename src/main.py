@@ -11,7 +11,7 @@ from src.config.settings import settings
 from src.models.pricing import (
     PricingResponse, ServerInfo, EndpointInfo, CostEstimateRequest, CostEstimateResponse,
     BatchCostEstimateRequest, BatchCostEstimateResponse, ModelCostComparison,
-    PerformanceResponse, PerformanceMetrics
+    PerformanceResponse, PerformanceMetrics, ModelUseCase, UseCaseResponse
 )
 from src.services.pricing_aggregator import PricingAggregatorService
 
@@ -83,6 +83,11 @@ async def root():
                 path="/redoc",
                 method="GET",
                 description="Alternative API documentation (ReDoc)"
+            ),
+            EndpointInfo(
+                path="/use-cases",
+                method="GET",
+                description="Get recommended use cases for each LLM model"
             ),
         ],
         sample_models=[
@@ -409,6 +414,70 @@ async def get_performance(
         largest_context=largest_context,
         best_value=best_value,
         provider_status=provider_status
+    )
+
+
+@app.get("/use-cases", response_model=UseCaseResponse)
+async def get_use_cases(
+    provider: Optional[str] = Query(
+        None,
+        description="Filter by provider (e.g., 'openai', 'anthropic', 'google', 'cohere', 'mistral')"
+    )
+):
+    """
+    Get recommended use cases and strengths for each LLM model.
+    
+    This endpoint provides curated use case recommendations, key strengths,
+    and ideal application areas for each available model. Use this to find
+    the best model for your specific use case.
+    
+    Supported providers: OpenAI, Anthropic, Google, Cohere, Mistral AI
+    
+    Args:
+        provider: Optional provider filter
+        
+    Returns:
+        UseCaseResponse: Use case information for each model
+    """
+    if provider:
+        all_models, _ = await pricing_aggregator.get_pricing_by_provider_async(provider)
+    else:
+        all_models, _ = await pricing_aggregator.get_all_pricing_async()
+    
+    # Determine cost tier based on token costs (costs are per token)
+    def get_cost_tier(input_cost: float, output_cost: float) -> str:
+        avg_cost = (input_cost + output_cost) / 2
+        if avg_cost < 0.00001:
+            return "ultra-low"
+        elif avg_cost < 0.0001:
+            return "low"
+        elif avg_cost < 0.001:
+            return "medium"
+        else:
+            return "high"
+    
+    # Convert to use case models
+    use_cases = []
+    for model in all_models:
+        use_cases.append(
+            ModelUseCase(
+                model_name=model.model_name,
+                provider=model.provider,
+                best_for=model.best_for or "General-purpose LLM tasks",
+                use_cases=model.use_cases or ["General tasks"],
+                strengths=model.strengths or ["Reliable", "Versatile"],
+                context_window=model.context_window,
+                cost_tier=get_cost_tier(model.cost_per_input_token, model.cost_per_output_token)
+            )
+        )
+    
+    # Get unique providers
+    providers = sorted(list(set(model.provider for model in use_cases)))
+    
+    return UseCaseResponse(
+        models=use_cases,
+        total_models=len(use_cases),
+        providers=providers
     )
 
 
