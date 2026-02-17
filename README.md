@@ -24,6 +24,7 @@ A public open-source Python-based MCP (Model Compute Pricing) server for dynamic
 
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Architecture](#architecture)
 - [API Documentation](#api-documentation)
 - [Configuration](#configuration)
 - [Development](#development)
@@ -85,6 +86,20 @@ The server will be available at `http://localhost:8000`
 Once the server is running, visit:
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
+
+## Architecture
+
+This project follows a modular, layered architecture designed for scalability and extensibility. For a comprehensive understanding of the system design, including detailed architecture diagrams, patterns, and component interactions, please refer to the [ARCHITECTURE.md](ARCHITECTURE.md) document.
+
+### Key Highlights
+
+- **Service Provider Pattern**: Each LLM provider is implemented as an independent service
+- **Aggregator Pattern**: Central service orchestrates and caches data from all providers
+- **Lazy Initialization**: Aggregator initializes on first request for optimal startup performance
+- **Async/Await**: Non-blocking I/O for handling concurrent requests efficiently
+- **Pydantic Models**: Strong data validation and serialization
+
+For detailed diagrams, design patterns, and architectural decisions, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## API Documentation
 
