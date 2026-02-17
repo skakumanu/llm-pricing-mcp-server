@@ -480,10 +480,11 @@ async def get_use_cases(
     Returns:
         UseCaseResponse: Use case information for each model
     """
+    aggregator = await get_pricing_aggregator()
     if provider:
-        all_models, _ = await pricing_aggregator.get_pricing_by_provider_async(provider)
+        all_models, _ = await aggregator.get_pricing_by_provider_async(provider)
     else:
-        all_models, _ = await pricing_aggregator.get_all_pricing_async()
+        all_models, _ = await aggregator.get_all_pricing_async()
     
     # Determine cost tier based on token costs (costs are per token)
     def get_cost_tier(input_cost: float, output_cost: float) -> str:
