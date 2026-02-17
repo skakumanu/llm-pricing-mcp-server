@@ -98,6 +98,8 @@ class AnthropicPricingService(BasePricingProvider):
                         currency="USD",
                         unit="per_token",
                         source="Anthropic Official Pricing (Static)",
+                        throughput=75.0,  # Estimated tokens per second
+                        latency_ms=350.0,  # Estimated latency in milliseconds
                         use_cases=pricing_info.get("use_cases"),
                         strengths=pricing_info.get("strengths"),
                         best_for=pricing_info.get("best_for")

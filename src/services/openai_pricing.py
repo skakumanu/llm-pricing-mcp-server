@@ -99,6 +99,8 @@ class OpenAIPricingService(BasePricingProvider):
                         currency="USD",
                         unit="per_token",
                         source="OpenAI Official Pricing (Static)",
+                        throughput=80.0,  # Estimated tokens per second
+                        latency_ms=320.0,  # Estimated latency in milliseconds
                         use_cases=pricing_info.get("use_cases"),
                         strengths=pricing_info.get("strengths"),
                         best_for=pricing_info.get("best_for")
