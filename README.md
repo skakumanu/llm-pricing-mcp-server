@@ -777,15 +777,31 @@ For issues, questions, or contributions, please open an issue on GitHub.
 
 ## Roadmap
 
+### Completed (v1.4.0)
 - [x] Real-time pricing API integration with async fetching
 - [x] Graceful error handling and partial data support
 - [x] Provider status tracking and monitoring
-- [x] Extensible base provider interface
-- [x] Cost calculation endpoints (estimate costs for token usage)
-- [ ] Additional LLM providers (Google Gemini, Cohere, Meta Llama, etc.)
-- [ ] Web scraping for providers without public APIs
+- [x] Extensible base provider interface for adding new providers
+- [x] Cost calculation endpoints (single and batch estimates)
+- [x] Support for multiple LLM providers (OpenAI, Anthropic, Google, Cohere, Mistral AI)
+- [x] Models discovery endpoint (/models)
+- [x] Performance metrics endpoint (/performance) - throughput, latency, context windows
+- [x] Value-based recommendations (/use-cases) - organizing models by use cases
+- [x] Batch cost comparison across multiple models
+- [x] Azure App Service deployment ready
+- [x] Comprehensive API documentation
+- [x] Architecture documentation with diagrams
+- [x] Error handling with detailed status information
+- [x] Performance metrics (throughput, latency) for all providers
+
+### Future Enhancements
 - [ ] Historical pricing data and trend analysis
 - [ ] WebSocket support for live price updates
 - [ ] Database integration for caching and persistence
 - [ ] Authentication and rate limiting
-- [ ] Price comparison and recommendation features
+- [ ] Additional exotic model providers
+- [ ] Web scraping for providers without public APIs
+- [ ] GraphQL API support
+- [ ] Pricing alerts and notifications
+- [ ] Multi-region deployment support
+- [ ] Advanced filtering and custom comparison criteria
