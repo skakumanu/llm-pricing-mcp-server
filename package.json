@@ -1,6 +1,6 @@
 {
   "name": "llm-pricing-mcp-server",
-  "version": "1.0.0",
+  "version": "1.4.2",
   "description": "LLM Pricing MCP Server for Azure App Service",
   "main": "src/main.py",
   "scripts": {

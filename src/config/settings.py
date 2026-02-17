@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     
     # Application metadata
     app_name: str = "LLM Pricing MCP Server"
-    app_version: str = "1.4.0"
+    app_version: str = "1.4.2"
     app_description: str = "Dynamic pricing comparison server for LLM models"
     
     model_config = {

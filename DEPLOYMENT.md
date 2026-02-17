@@ -164,7 +164,7 @@ Use the `/health` endpoint to verify the application is running:
 curl https://llm-pricing-mcp.azurewebsites.net/health
 
 # Should return:
-# {"status":"healthy","service":"LLM Pricing MCP Server","version":"1.4.0"}
+# {"status":"healthy","service":"LLM Pricing MCP Server","version":"1.4.2"}
 ```
 
 ## Scaling

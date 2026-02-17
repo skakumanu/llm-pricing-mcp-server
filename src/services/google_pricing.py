@@ -223,6 +223,35 @@ class GooglePricingService(BasePricingProvider):
             )
         return pricing_list
     
+    @staticmethod
+    def get_pricing_data() -> List[PricingMetrics]:
+        """Synchronous method for backward compatibility.
+        
+        Returns:
+            List of PricingMetrics for Google models
+        """
+        # Return static pricing data for backward compatibility
+        pricing_list = []
+        for model_name, pricing_info in GooglePricingService.STATIC_PRICING.items():
+            pricing_list.append(
+                PricingMetrics(
+                    model_name=model_name,
+                    provider="Google",
+                    cost_per_input_token=pricing_info["input"] / 1000,
+                    cost_per_output_token=pricing_info["output"] / 1000,
+                    context_window=pricing_info["context_window"],
+                    currency="USD",
+                    unit="per_token",
+                    source="Google AI Pricing (Static)",
+                    throughput=120.0,
+                    latency_ms=250.0,
+                    use_cases=pricing_info.get("use_cases"),
+                    strengths=pricing_info.get("strengths"),
+                    best_for=pricing_info.get("best_for")
+                )
+            )
+        return pricing_list
+    
     async def _verify_api_key(self) -> bool:
         """
         Verify that the API key is valid.

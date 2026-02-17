@@ -2,7 +2,7 @@
 
 ## Overview
 
-As of v1.4.1, the LLM Pricing MCP Server implements intelligent live data fetching with graceful fallback mechanisms. **API keys are completely optional** - the system uses public pricing pages and status pages for live data without requiring authentication.
+As of v1.4.2, the LLM Pricing MCP Server implements intelligent live data fetching with graceful fallback mechanisms. **API keys are completely optional** - the system uses public pricing pages and status pages for live data without requiring authentication.
 
 ## Public Data Sources (No API Keys Required)
 
