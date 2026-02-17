@@ -170,7 +170,10 @@ class OpenAIPricingService(BasePricingProvider):
             return self._get_static_pricing_data()
     
     async def _fetch_performance_metrics(self) -> dict:
-        """Fetch live performance metrics from OpenAI API.
+        """Fetch live performance metrics from OpenAI status page.
+        
+        Uses public status page when no API key available.
+        Falls back to direct API check when API key is available.
         
         Returns:
             Dict with model names as keys and {throughput, latency_ms} as values
@@ -181,7 +184,8 @@ class OpenAIPricingService(BasePricingProvider):
                 cache_key="openai_performance",
                 fetch_func=lambda: DataFetcher.check_api_health(
                     endpoint=perf_source.api_endpoint,
-                    api_key=self.api_key
+                    api_key=self.api_key,
+                    public_endpoint=perf_source.public_status_page
                 ),
                 ttl_seconds=perf_source.cache_ttl_seconds
             )

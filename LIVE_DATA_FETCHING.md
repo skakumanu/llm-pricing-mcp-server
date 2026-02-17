@@ -2,18 +2,32 @@
 
 ## Overview
 
-As of v1.4.1, the LLM Pricing MCP Server implements intelligent live data fetching with graceful fallback mechanisms. This ensures that users get the most current pricing and performance data from LLM providers while maintaining reliability through caching and fallback strategies.
+As of v1.4.1, the LLM Pricing MCP Server implements intelligent live data fetching with graceful fallback mechanisms. **API keys are completely optional** - the system uses public pricing pages and status pages for live data without requiring authentication.
 
-## Data Source Hierarchy
+## Public Data Sources (No API Keys Required)
 
-Each provider follows a data fetching hierarchy:
+All pricing and performance data can be fetched from **public endpoints**:
+
+| Provider | Pricing URL | Status Page |
+|----------|-------------|-------------|
+| **OpenAI** | https://openai.com/api/pricing/ | https://status.openai.com/ |
+| **Anthropic** | https://www.anthropic.com/api | https://www.anthropic.com/ |
+| **Google** | https://ai.google.dev/pricing | https://status.cloud.google.com/ |
+| **Cohere** | https://cohere.com/pricing | https://status.cohere.com/ |
+| **Mistral** | https://mistral.ai/technology/#pricing | https://status.mistral.ai/ |
+
+## How It Works Without API Keys
+
+The system follows a fallback strategy:
 
 ```
-1. Live API Data  (if API key available)
-       ↓ (fallback on failure)
-2. Cached Data    (from previous successful fetches)
-       ↓ (fallback if cache expired)
-3. Static Data    (hardcoded fallback)
+1. Web Scrape Pricing Pages (Public - No Auth)
+       ↓ (success)
+2. Check Public Status Pages for Performance (Public - No Auth)
+       ↓ (if already cached)
+3. Use Cached Data from Previous Successful Fetches
+       ↓ (if cache expired)
+4. Use Hardcoded Static Data (Always Available)
 ```
 
 ## Architecture Components
@@ -182,30 +196,52 @@ All errors are logged at WARNING level with context.
 
 ## Configuration for External Deployment
 
-To enable live data fetching in production:
+**API keys are optional** and not required to get live pricing and performance data.
 
-1. **Provide API Keys**: Set environment variables
-   ```bash
-   OPENAI_API_KEY=sk-...
-   ANTHROPIC_API_KEY=sk-ant-...
-   GOOGLE_API_KEY=...
-   COHERE_API_KEY=...
-   MISTRAL_API_KEY=...
-   ```
+### Option 1: Without API Keys (Recommended for Most Users)
 
-2. **Network Access**: Ensure outbound HTTPS to:
-   - `api.openai.com`
-   - `api.anthropic.com`
-   - `generativelanguage.googleapis.com`
-   - `api.cohere.ai`
-   - `api.mistral.ai`
-   - Pricing pages (for web scraping)
+The system automatically uses public pricing pages and status pages:
 
-3. **No Additional Configuration**: The system automatically:
-   - Detects available API keys
-   - Falls back gracefully if keys unavailable
-   - Caches results to minimize API calls
-   - Updates performance metrics every 5 minutes
+```bash
+# No configuration needed! The system works out-of-the-box with:
+# - Web scraping of official pricing pages
+# - Public status page health checks
+# - Smart caching (2 hours for pricing, 5 minutes for performance)
+```
+
+Just deploy and run - no API keys needed!
+
+### Option 2: With API Keys (For API Model Lists)
+
+If you want the absolute latest model list from provider APIs, set optional API keys:
+
+```bash
+# Optional: Set only if you want authenticated API access for model lists
+OPENAI_API_KEY=sk-...              # Optional
+ANTHROPIC_API_KEY=sk-ant-...       # Optional
+GOOGLE_API_KEY=...                 # Optional
+COHERE_API_KEY=...                 # Optional
+MISTRAL_API_KEY=...                # Optional
+```
+
+**Benefits of providing API keys:**
+- Get latest available models directly from provider APIs
+- Fallback to web scraping if API models unavailable
+- Performance slightly improved with direct API health checks
+
+**Without API keys:**
+- Still get live pricing from public pages (web scraping)
+- Still get performance metrics from public status pages
+- Still get model list from static data (always available)
+- Service **never fails** - always working
+
+### Network Requirements
+
+The system needs outbound HTTPS access to:
+- Pricing pages (for web scraping): `openai.com`, `anthropic.com`, `ai.google.dev`, `cohere.com`, `mistral.ai`
+- Status pages (for health checks): `status.openai.com`, `status.cloud.google.com`, `status.cohere.com`, `status.mistral.ai`
+
+No auth required - all public domains with standard HTTPS.
 
 ## Security Considerations
 

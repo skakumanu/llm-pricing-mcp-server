@@ -160,7 +160,9 @@ class GooglePricingService(BasePricingProvider):
             return self._get_static_pricing_data()
     
     async def _fetch_performance_metrics(self) -> dict:
-        """Fetch live performance metrics from Google API.
+        """Fetch live performance metrics from Google Cloud status page.
+        
+        Uses public status page when no API key available.
         
         Returns:
             Dict with model names as keys and {throughput, latency_ms} as values
@@ -171,7 +173,8 @@ class GooglePricingService(BasePricingProvider):
                 cache_key="google_performance",
                 fetch_func=lambda: DataFetcher.check_api_health(
                     endpoint=perf_source.api_endpoint,
-                    api_key=self.api_key
+                    api_key=self.api_key,
+                    public_endpoint=perf_source.public_status_page
                 ),
                 ttl_seconds=perf_source.cache_ttl_seconds
             )

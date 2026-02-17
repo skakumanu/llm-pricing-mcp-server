@@ -110,25 +110,32 @@ For detailed diagrams, design patterns, and architectural decisions, see [ARCHIT
 
 As of v1.4.1, the server implements intelligent live data fetching with smart caching and graceful fallbacks:
 
-### What's Live?
+### What's Live? (No API Keys Required)
 
-- **Pricing Data**: Fetched from provider APIs and official pricing pages
-- **Available Models**: Retrieved directly from provider model endpoints
-- **Performance Metrics**: Real-time API latency measurements
-- **Caching**: Automatic caching with TTL to minimize API calls (500x+ faster for cached requests)
+- **Pricing Data**: Fetched from official public pricing pages using web scraping
+- **Available Models**: Retrieved from public provider information pages  
+- **Performance Metrics**: Real-time measurements from public status pages
+- **Caching**: Automatic caching with TTL to minimize requests (500x+ faster for cached data)
 
-### How It Works
+### How It Works (Without API Keys)
 
-The server follows a smart data hierarchy:
+The server uses publicly available data sources:
 
-1. **Live API Data** (if API key available) - Freshest data
-2. **Cached Data** (from previous successful fetches) - Fast and reliable
-3. **Static Data** (hardcoded fallback) - Always available, never fails
+1. **Web Scraping**: Extracts current pricing from official pricing pages
+2. **Public Status Pages**: Measures API latency from provider status dashboards
+3. **Smart Caching**: Stores results for 2 hours (pricing) / 5 minutes (performance)
+4. **Fallback**: Returns hardcoded data if live sources unavailable
 
-### Requirements for Live Data
+✅ Works completely without API keys
+✅ 99.9%+ uptime with automatic fallbacks
+✅ Zero configuration required
 
-Set environment variables for provider API keys:
+### Optional: API Keys for Enhanced Model Lists
+
+Set environment variables to get the latest model list directly from provider APIs:
+
 ```bash
+# These are optional - system works fine without them
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
 GOOGLE_API_KEY=...
@@ -136,24 +143,27 @@ COHERE_API_KEY=...
 MISTRAL_API_KEY=...
 ```
 
-Without API keys, the server still works using cached or static pricing data.
+Benefits with API keys:
+- Get absolute latest available models from each provider
+- Slightly improved performance metrics from direct API checks
+- Better detection of new model releases
 
 ### Data Source Information
 
-The `source` field in API responses indicates data freshness:
+The `source` field in API responses indicates data origin:
 
-- `"OpenAI Official API"` - Live data from provider API
-- `"OpenAI Official Pricing (Cached)"` - Cached live data
-- `"OpenAI Official Pricing (Fallback - Static)"` - Static fallback
+- `"OpenAI Official API"` - Fresh data from provider API (with API key)
+- `"OpenAI Official Pricing (Cached)"` - Cached live data from web scraping
+- `"OpenAI Official Pricing (Fallback - Static)"` - Static fallback data
 
-### Performance Benefits
+### Performance Metrics
 
-- **First request**: ~500-700ms (live API call)
+- **First request**: ~500-700ms (real web scraping / status check)
 - **Subsequent requests**: ~1ms (from cache)
 - **Cache refresh**: Every 2 hours for pricing, 5 minutes for performance
 - **Uptime**: 99.9%+ with smart fallbacks
 
-For detailed information about live data fetching architecture, caching strategy, and configuration, see [LIVE_DATA_FETCHING.md](LIVE_DATA_FETCHING.md).
+For detailed information about live data fetching architecture, caching strategy, and data sources, see [LIVE_DATA_FETCHING.md](LIVE_DATA_FETCHING.md).
 
 ## API Documentation
 
