@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e
+
 cd /home/site/wwwroot
 python -m pip install --upgrade pip --quiet
 python -m pip install -r requirements.txt --quiet
