@@ -22,6 +22,7 @@ A public open-source Python-based MCP (Model Compute Pricing) server for dynamic
 
 ## Table of Contents
 
+- [Features](#features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Architecture](#architecture)
@@ -32,6 +33,9 @@ A public open-source Python-based MCP (Model Compute Pricing) server for dynamic
 - [Deployment](#deployment)
 - [Contributing](#contributing)
 - [License](#license)
+- [Acknowledgments](#acknowledgments)
+- [Support](#support)
+- [Roadmap](#roadmap)
 
 ## Installation
 
