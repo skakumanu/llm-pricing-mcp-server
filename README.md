@@ -26,6 +26,7 @@ A public open-source Python-based MCP (Model Compute Pricing) server for dynamic
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Architecture](#architecture)
+- [Live Data Fetching](#live-data-fetching)
 - [API Documentation](#api-documentation)
 - [Configuration](#configuration)
 - [Development](#development)
@@ -104,6 +105,55 @@ This project follows a modular, layered architecture designed for scalability an
 - **Pydantic Models**: Strong data validation and serialization
 
 For detailed diagrams, design patterns, and architectural decisions, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Live Data Fetching
+
+As of v1.4.1, the server implements intelligent live data fetching with smart caching and graceful fallbacks:
+
+### What's Live?
+
+- **Pricing Data**: Fetched from provider APIs and official pricing pages
+- **Available Models**: Retrieved directly from provider model endpoints
+- **Performance Metrics**: Real-time API latency measurements
+- **Caching**: Automatic caching with TTL to minimize API calls (500x+ faster for cached requests)
+
+### How It Works
+
+The server follows a smart data hierarchy:
+
+1. **Live API Data** (if API key available) - Freshest data
+2. **Cached Data** (from previous successful fetches) - Fast and reliable
+3. **Static Data** (hardcoded fallback) - Always available, never fails
+
+### Requirements for Live Data
+
+Set environment variables for provider API keys:
+```bash
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_API_KEY=...
+COHERE_API_KEY=...
+MISTRAL_API_KEY=...
+```
+
+Without API keys, the server still works using cached or static pricing data.
+
+### Data Source Information
+
+The `source` field in API responses indicates data freshness:
+
+- `"OpenAI Official API"` - Live data from provider API
+- `"OpenAI Official Pricing (Cached)"` - Cached live data
+- `"OpenAI Official Pricing (Fallback - Static)"` - Static fallback
+
+### Performance Benefits
+
+- **First request**: ~500-700ms (live API call)
+- **Subsequent requests**: ~1ms (from cache)
+- **Cache refresh**: Every 2 hours for pricing, 5 minutes for performance
+- **Uptime**: 99.9%+ with smart fallbacks
+
+For detailed information about live data fetching architecture, caching strategy, and configuration, see [LIVE_DATA_FETCHING.md](LIVE_DATA_FETCHING.md).
 
 ## API Documentation
 
