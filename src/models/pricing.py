@@ -224,3 +224,63 @@ class UseCaseResponse(BaseModel):
     total_models: int = Field(..., description="Total number of models")
     providers: List[str] = Field(..., description="List of providers included")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Response timestamp")
+
+
+class EndpointMetricResponse(BaseModel):
+    """Metrics for a single endpoint."""
+    
+    model_config = ConfigDict(protected_namespaces=())
+    
+    endpoint: str = Field(..., description="Endpoint path and method (method path)")
+    path: str = Field(..., description="Request path")
+    method: str = Field(..., description="HTTP method")
+    call_count: int = Field(..., description="Total number of calls to this endpoint")
+    error_count: int = Field(..., description="Number of failed requests")
+    success_rate: float = Field(..., description="Success rate as percentage")
+    avg_response_time_ms: float = Field(..., description="Average response time in milliseconds")
+    min_response_time_ms: float = Field(..., description="Minimum response time in milliseconds")
+    max_response_time_ms: float = Field(..., description="Maximum response time in milliseconds")
+    first_called: Optional[str] = Field(None, description="ISO timestamp of first call")
+    last_called: Optional[str] = Field(None, description="ISO timestamp of last call")
+
+
+class ProviderAdoptionResponse(BaseModel):
+    """Adoption metrics for a provider."""
+    
+    provider_name: str = Field(..., description="Name of the provider")
+    model_requests: int = Field(..., description="Total number of model requests for this provider")
+    unique_models_requested: int = Field(..., description="Number of unique models requested")
+    total_cost_estimated: float = Field(..., description="Total estimated cost (USD)")
+    last_requested: Optional[str] = Field(None, description="ISO timestamp of last request")
+
+
+class FeatureUsageResponse(BaseModel):
+    """Usage metrics for a feature."""
+    
+    feature_name: str = Field(..., description="Name of the feature")
+    usage_count: int = Field(..., description="Total number of times feature was used")
+    last_used: Optional[str] = Field(None, description="ISO timestamp of last usage")
+
+
+class TelemetryOverallStats(BaseModel):
+    """Overall telemetry statistics."""
+    
+    total_requests: int = Field(..., description="Total API requests since startup")
+    total_errors: int = Field(..., description="Total failed requests")
+    error_rate: float = Field(..., description="Error rate as percentage")
+    total_endpoints: int = Field(..., description="Number of unique endpoints called")
+    total_providers_adopted: int = Field(..., description="Number of providers adopted")
+    total_features_used: int = Field(..., description="Number of distinct features used")
+    avg_response_time_ms: float = Field(..., description="Average response time across all endpoints")
+    uptime_since: str = Field(..., description="ISO timestamp when telemetry tracking started")
+    timestamp: str = Field(..., description="ISO timestamp of this response")
+
+
+class TelemetryResponse(BaseModel):
+    """Complete telemetry data response."""
+    
+    overall_stats: TelemetryOverallStats = Field(..., description="Overall statistics")
+    endpoints: List[EndpointMetricResponse] = Field(..., description="Per-endpoint metrics")
+    provider_adoption: List[ProviderAdoptionResponse] = Field(..., description="Provider adoption metrics")
+    features: List[FeatureUsageResponse] = Field(..., description="Feature usage metrics")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Response timestamp")

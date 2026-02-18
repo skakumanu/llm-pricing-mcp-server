@@ -497,6 +497,101 @@ Health check endpoint for monitoring.
 }
 ```
 
+#### `GET /telemetry`
+Get real-time telemetry data including endpoint usage metrics, provider adoption, and feature usage.
+
+**Features:**
+- Real-time endpoint usage metrics (call count, error rates, response times)
+- Provider adoption tracking (which models are most requested)
+- Feature usage statistics (pricing lookups, cost comparisons, etc.)
+- Overall system health metrics and uptime
+- Comprehensive statistics for monitoring and optimization
+
+**Response:**
+```json
+{
+  "overall_stats": {
+    "total_requests": 150,
+    "total_errors": 3,
+    "error_rate": 0.02,
+    "total_endpoints": 8,
+    "total_providers_adopted": 5,
+    "total_features_used": 4,
+    "avg_response_time_ms": 45.5,
+    "uptime_since": "2024-02-10T12:00:00Z",
+    "timestamp": "2024-02-10T14:30:00Z"
+  },
+  "endpoints": [
+    {
+      "endpoint": "/pricing",
+      "path": "/pricing",
+      "method": "GET",
+      "call_count": 45,
+      "error_count": 0,
+      "success_rate": 1.0,
+      "avg_response_time_ms": 32.5,
+      "min_response_time_ms": 28.2,
+      "max_response_time_ms": 42.1,
+      "last_called": "2024-02-10T14:29:55Z"
+    },
+    {
+      "endpoint": "/cost-estimate",
+      "path": "/cost-estimate",
+      "method": "POST",
+      "call_count": 35,
+      "error_count": 1,
+      "success_rate": 0.97,
+      "avg_response_time_ms": 18.5,
+      "min_response_time_ms": 15.3,
+      "max_response_time_ms": 25.8,
+      "last_called": "2024-02-10T14:29:52Z"
+    }
+  ],
+  "provider_adoption": [
+    {
+      "provider_name": "OpenAI",
+      "model_requests": 65,
+      "unique_models_requested": 4,
+      "total_cost_estimated": 2.45,
+      "last_requested": "2024-02-10T14:29:50Z"
+    },
+    {
+      "provider_name": "Anthropic",
+      "model_requests": 42,
+      "unique_models_requested": 3,
+      "total_cost_estimated": 1.85,
+      "last_requested": "2024-02-10T14:29:48Z"
+    }
+  ],
+  "features": [
+    {
+      "feature_name": "cost_estimation",
+      "usage_count": 35,
+      "last_used": "2024-02-10T14:29:52Z"
+    },
+    {
+      "feature_name": "batch_cost_estimation",
+      "usage_count": 28,
+      "last_used": "2024-02-10T14:29:45Z"
+    },
+    {
+      "feature_name": "performance_comparison",
+      "usage_count": 15,
+      "last_used": "2024-02-10T14:28:30Z"
+    }
+  ],
+  "timestamp": "2024-02-10T14:30:00Z"
+}
+```
+
+**Use Cases for Telemetry:**
+- **Monitoring:** Track API health and response times
+- **Capacity Planning:** Identify peak usage patterns and bottlenecks
+- **Feature Adoption:** See which pricing features are used most
+- **Provider Insights:** Understand which LLM providers are most popular
+- **Cost Tracking:** Monitor estimated costs from usage patterns
+- **Performance Optimization:** Identify slow endpoints for optimization
+
 #### `POST /cost-estimate`
 Estimate the cost for using a specific LLM model based on token usage.
 
@@ -597,6 +692,18 @@ curl -X POST http://localhost:8000/cost-estimate/batch \
 
 # Health check
 curl http://localhost:8000/health
+
+# Get telemetry data (usage metrics, provider adoption, feature usage)
+curl http://localhost:8000/telemetry
+
+# View telemetry with pretty formatting
+curl http://localhost:8000/telemetry | python -m json.tool
+
+# Extract provider adoption metrics
+curl -s http://localhost:8000/telemetry | python -c "import sys, json; data = json.load(sys.stdin); [print(f\"{p['provider_name']}: {p['model_requests']} requests\") for p in data['provider_adoption']]"
+
+# Monitor endpoint performance
+curl -s http://localhost:8000/telemetry | python -c "import sys, json; data = json.load(sys.stdin); [print(f\"{e['path']}: {e['avg_response_time_ms']:.1f}ms avg\") for e in data['endpoints']]"
 
 # Pretty-print JSON output
 curl http://localhost:8000/pricing | python -m json.tool
