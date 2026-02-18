@@ -16,6 +16,38 @@ class GroqPricingService(BasePricingProvider):
     # Groq pricing data (per 1k tokens in USD)
     # Source: https://groq.com/pricing/
     STATIC_PRICING = {
+        "llama-3.2-90b-vision": {
+            "input": 0.0009,
+            "output": 0.0009,
+            "context_window": 8192,
+            "use_cases": ["Vision + text", "Image understanding", "Visual Q&A", "Multimodal analysis"],
+            "strengths": ["Multimodal", "Fast on Groq", "Open source", "Latest Llama"],
+            "best_for": "Open-source multimodal applications needing ultra-fast inference"
+        },
+        "llama-3.2-11b-vision": {
+            "input": 0.00018,
+            "output": 0.00018,
+            "context_window": 8192,
+            "use_cases": ["Edge vision tasks", "Cost-effective multimodal", "Mobile deployment"],
+            "strengths": ["Compact", "Vision capable", "Very fast", "Affordable"],
+            "best_for": "Edge and mobile vision applications with speed requirements"
+        },
+        "llama-3.2-3b": {
+            "input": 0.00006,
+            "output": 0.00006,
+            "context_window": 8192,
+            "use_cases": ["Edge deployment", "Ultra-fast responses", "High-volume text"],
+            "strengths": ["Tiny model", "Ultra-fast", "Very cheap", "Latest Llama"],
+            "best_for": "Edge devices and ultra-high-volume text applications"
+        },
+        "llama-3.2-1b": {
+            "input": 0.00004,
+            "output": 0.00004,
+            "context_window": 8192,
+            "use_cases": ["IoT devices", "Extreme edge", "Real-time processing"],
+            "strengths": ["Smallest Llama", "Instant responses", "Minimal cost"],
+            "best_for": "IoT and extreme edge deployments requiring minimal resources"
+        },
         "llama-3.1-405b": {
             "input": 0.00059,
             "output": 0.00079,
@@ -40,22 +72,6 @@ class GroqPricingService(BasePricingProvider):
             "strengths": ["Ultra-fast", "Very affordable", "Long context"],
             "best_for": "High-throughput applications with cost constraints"
         },
-        "llama-3-70b": {
-            "input": 0.00059,
-            "output": 0.00079,
-            "context_window": 8192,
-            "use_cases": ["General chat", "Content creation", "Code assistance"],
-            "strengths": ["Well-balanced", "Fast", "Reliable"],
-            "best_for": "General-purpose applications requiring speed"
-        },
-        "llama-3-8b": {
-            "input": 0.00005,
-            "output": 0.00008,
-            "context_window": 8192,
-            "use_cases": ["Chatbots", "Simple tasks", "High-volume processing"],
-            "strengths": ["Very fast", "Affordable", "Efficient"],
-            "best_for": "Cost-effective high-volume applications"
-        },
         "mixtral-8x7b": {
             "input": 0.00024,
             "output": 0.00024,
@@ -63,6 +79,14 @@ class GroqPricingService(BasePricingProvider):
             "use_cases": ["Code generation", "Multilingual tasks", "Reasoning"],
             "strengths": ["Mixture of experts", "Fast", "Good quality"],
             "best_for": "Applications needing balanced performance and speed"
+        },
+        "gemma-2-9b": {
+            "input": 0.0002,
+            "output": 0.0002,
+            "context_window": 8192,
+            "use_cases": ["Improved Gemma tasks", "Balanced performance", "Research"],
+            "strengths": ["Enhanced over Gemma", "Fast", "Open source"],
+            "best_for": "Next-gen Gemma applications with speed requirements"
         },
         "gemma-7b": {
             "input": 0.00007,

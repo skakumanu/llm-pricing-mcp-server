@@ -183,7 +183,7 @@ For detailed information about live data fetching architecture, caching strategy
 | **AI21 Labs** | ✅ Working | 5 models | Public Pricing + Status Page (Cached) |
 | **Anyscale** | ✅ Working | 6 models | Public Pricing + Status Page (Cached) |
 
-- **Total Models Available**: 60+ across all 11 providers
+- **Total Models Available**: 73+ across all 11 providers
 - **Cache Performance**: 58x faster on cached requests
 - **Deployment Status**: Ready for production (no API keys required)
 - **Test Coverage**: Comprehensive test suite included
@@ -868,7 +868,7 @@ For issues, questions, or contributions, please open an issue on GitHub.
 - [x] **NEW:** Perplexity AI integration - Search-augmented models
 - [x] **NEW:** AI21 Labs integration - Jamba and enterprise models
 - [x] **NEW:** Anyscale integration - Ray-optimized inference
-- [x] 60+ models available across all providers
+- [x] 73+ models available across all providers
 - [x] Live data fetching for all 11 providers (no API keys required)
 - [x] Smart caching and fallback mechanisms for all providers
 - [x] Public status page integration for performance metrics

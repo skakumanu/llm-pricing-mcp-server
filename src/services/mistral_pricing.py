@@ -16,6 +16,14 @@ class MistralPricingService(BasePricingProvider):
     # Mistral AI pricing data (per 1k tokens in USD)
     # Source: https://mistral.ai/technology/#pricing
     STATIC_PRICING = {
+        "mistral-large-2": {
+            "input": 0.003,
+            "output": 0.009,
+            "context_window": 128000,
+            "use_cases": ["Complex reasoning", "Advanced code generation", "Multi-step planning", "128K context tasks"],
+            "strengths": ["Latest flagship", "Enhanced reasoning", "128K context", "Function calling"],
+            "best_for": "Complex tasks with long context requiring best reasoning"
+        },
         "mistral-large-latest": {
             "input": 0.004,
             "output": 0.012,
@@ -24,13 +32,13 @@ class MistralPricingService(BasePricingProvider):
             "strengths": ["Excellent reasoning", "Strong code skills", "Well-balanced"],
             "best_for": "Complex tasks requiring strong reasoning and code understanding"
         },
-        "mistral-medium-latest": {
-            "input": 0.0027,
-            "output": 0.0081,
-            "context_window": 32000,
-            "use_cases": ["General chat", "Content creation", "Code assistance", "Business logic"],
-            "strengths": ["Good balance", "Versatile", "Cost-effective"],
-            "best_for": "All-purpose assistant for varied business needs"
+        "mistral-small-2": {
+            "input": 0.0006,
+            "output": 0.0018,
+            "context_window": 128000,
+            "use_cases": ["Cost-effective long context", "FAQ automation", "Text classification", "RAG applications"],
+            "strengths": ["Latest small model", "128K context", "Best price/performance", "Fast"],
+            "best_for": "High-volume long-context applications with budget constraints"
         },
         "mistral-small-latest": {
             "input": 0.001,
@@ -40,21 +48,21 @@ class MistralPricingService(BasePricingProvider):
             "strengths": ["Lightweight", "Affordable", "Fast responses"],
             "best_for": "High-volume applications requiring fast, affordable responses"
         },
-        "mistral-tiny": {
-            "input": 0.00025,
-            "output": 0.00025,
+        "codestral-latest": {
+            "input": 0.001,
+            "output": 0.003,
             "context_window": 32000,
-            "use_cases": ["Real-time processing", "Extreme cost optimization", "Simple classification"],
-            "strengths": ["Minimal cost", "Instant responses", "Edge deployment"],
-            "best_for": "Extreme cost optimization and ultra-fast responses"
+            "use_cases": ["Code completion", "Code generation", "Bug fixing", "Refactoring"],
+            "strengths": ["Specialized for code", "Fast inference", "Multi-language support"],
+            "best_for": "Dedicated coding assistance and code generation tasks"
         },
-        "open-mistral-7b": {
-            "input": 0.00025,
-            "output": 0.00025,
-            "context_window": 32000,
-            "use_cases": ["Self-hosted deployment", "Privacy-focused applications", "Custom fine-tuning"],
-            "strengths": ["Open source", "Self-hostable", "Privacy-friendly"],
-            "best_for": "Organizations needing self-hosted or locally deployable models"
+        "open-mistral-nemo": {
+            "input": 0.0003,
+            "output": 0.0003,
+            "context_window": 128000,
+            "use_cases": ["Edge deployment", "Self-hosted RAG", "Privacy-focused apps", "Cost optimization"],
+            "strengths": ["Open source", "128K context", "Ultra-affordable", "Apache 2.0"],
+            "best_for": "Self-hosted applications needing long context at minimal cost"
         },
         "open-mixtral-8x7b": {
             "input": 0.0007,
