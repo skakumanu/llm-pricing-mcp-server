@@ -16,6 +16,30 @@ class AnthropicPricingService(BasePricingProvider):
     # Anthropic pricing data (per 1k tokens in USD) - updated from their official pricing page
     # Source: https://www.anthropic.com/api
     STATIC_PRICING = {
+        "claude-3-5-sonnet-20241022": {
+            "input": 0.003,
+            "output": 0.015,
+            "context_window": 200000,
+            "use_cases": ["Advanced coding", "Complex analysis", "Content creation", "Research", "Agentic workflows"],
+            "strengths": ["Best Sonnet version", "Excellent coding", "Strong reasoning", "Computer use"],
+            "best_for": "Production systems requiring best-in-class performance at reasonable cost"
+        },
+        "claude-3-5-sonnet-20240620": {
+            "input": 0.003,
+            "output": 0.015,
+            "context_window": 200000,
+            "use_cases": ["Advanced coding", "Data analysis", "Visual processing", "Complex tasks"],
+            "strengths": ["Graduate-level reasoning", "Vision + text", "Improved coding"],
+            "best_for": "Applications requiring strong reasoning and coding capabilities"
+        },
+        "claude-3-5-haiku-20241022": {
+            "input": 0.001,
+            "output": 0.005,
+            "context_window": 200000,
+            "use_cases": ["Fast responses", "High-volume processing", "Real-time applications", "Cost-effective intelligence"],
+            "strengths": ["Fastest Claude", "Improved intelligence", "Affordable", "Large context"],
+            "best_for": "High-speed intelligent applications with cost constraints"
+        },
         "claude-3-opus-20240229": {
             "input": 0.015,
             "output": 0.075,
@@ -37,7 +61,7 @@ class AnthropicPricingService(BasePricingProvider):
             "output": 0.00125,
             "context_window": 200000,
             "use_cases": ["Real-time chat", "Document processing", "Quick analysis", "Moderation"],
-            "strengths": ["Fastest Claude", "Ultra-low cost", "Huge context"],
+            "strengths": ["Fast responses", "Ultra-low cost", "Huge context"],
             "best_for": "High-speed applications requiring instant responses"
         },
         "claude-2.1": {
@@ -47,14 +71,6 @@ class AnthropicPricingService(BasePricingProvider):
             "use_cases": ["Long document Q&A", "Summarization", "General chat"],
             "strengths": ["Proven reliability", "Large context", "Stable"],
             "best_for": "Production systems requiring stability"
-        },
-        "claude-2.0": {
-            "input": 0.008,
-            "output": 0.024,
-            "context_window": 100000,
-            "use_cases": ["Legacy systems", "General assistance", "Text generation"],
-            "strengths": ["Mature model", "Reliable", "Well-tested"],
-            "best_for": "Maintaining existing Claude 2 integrations"
         },
     }
     

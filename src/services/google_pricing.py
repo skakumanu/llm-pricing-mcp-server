@@ -16,6 +16,14 @@ class GooglePricingService(BasePricingProvider):
     # Google Gemini pricing data (per 1k tokens in USD)
     # Source: https://ai.google.dev/pricing
     STATIC_PRICING = {
+        "gemini-2.0-flash": {
+            "input": 0.0001,
+            "output": 0.0004,
+            "context_window": 1048576,
+            "use_cases": ["Next-gen multimodal", "Real-time applications", "Enhanced reasoning", "Multi-turn conversations"],
+            "strengths": ["Improved intelligence", "Faster responses", "Native tool use", "1M context"],
+            "best_for": "Production applications needing latest Gemini capabilities with speed"
+        },
         "gemini-1.5-pro": {
             "input": 0.00125,
             "output": 0.00375,
@@ -32,6 +40,14 @@ class GooglePricingService(BasePricingProvider):
             "strengths": ["Extremely fast", "Affordable", "1M token context"],
             "best_for": "Speed-critical applications with large documents"
         },
+        "gemini-1.5-flash-8b": {
+            "input": 0.0000375,
+            "output": 0.00015,
+            "context_window": 1048576,
+            "use_cases": ["Ultra-high-volume tasks", "Real-time inference", "Edge deployment", "Cost-sensitive workloads"],
+            "strengths": ["Lowest cost", "Very fast", "1M context", "Compact model"],
+            "best_for": "High-throughput applications with strict budget constraints"
+        },
         "gemini-1.0-pro": {
             "input": 0.0005,
             "output": 0.0015,
@@ -39,14 +55,6 @@ class GooglePricingService(BasePricingProvider):
             "use_cases": ["General-purpose AI", "Chatbots", "Content moderation", "Text classification"],
             "strengths": ["Balanced performance", "Good for most tasks", "Proven stability"],
             "best_for": "General-purpose applications across various domains"
-        },
-        "gemini-1.0-ultra": {
-            "input": 0.0125,
-            "output": 0.0375,
-            "context_window": 32760,
-            "use_cases": ["High-stakes reasoning", "Complex problem solving", "Advanced analysis"],
-            "strengths": ["Maximum intelligence", "Advanced reasoning", "Premium quality"],
-            "best_for": "Premium use cases demanding highest quality outputs"
         },
     }
     

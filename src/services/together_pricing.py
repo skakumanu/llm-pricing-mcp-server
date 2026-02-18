@@ -16,6 +16,14 @@ class TogetherPricingService(BasePricingProvider):
     # Together AI pricing data (per 1k tokens in USD)
     # Source: https://www.together.ai/pricing
     STATIC_PRICING = {
+        "meta-llama/Llama-3.3-70B-Instruct-Turbo": {
+            "input": 0.00088,
+            "output": 0.00088,
+            "context_window": 131072,
+            "use_cases": ["Latest Llama capabilities", "Complex reasoning", "Code generation", "Long context"],
+            "strengths": ["Latest Llama 3.3", "Enhanced reasoning", "128K context", "GPT-4 level performance"],
+            "best_for": "Applications needing latest open-source capabilities at scale"
+        },
         "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo": {
             "input": 0.005,
             "output": 0.015,
@@ -32,13 +40,29 @@ class TogetherPricingService(BasePricingProvider):
             "strengths": ["Well-balanced", "Long context", "Cost-effective"],
             "best_for": "General-purpose applications with long context needs"
         },
-        "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo": {
-            "input": 0.00018,
-            "output": 0.00018,
+        "meta-llama/Meta-Llama-3.2-3B-Instruct-Turbo": {
+            "input": 0.00006,
+            "output": 0.00006,
             "context_window": 131072,
-            "use_cases": ["High-volume", "Edge deployment", "Simple tasks", "Q&A"],
-            "strengths": ["Very affordable", "Fast", "Long context"],
-            "best_for": "High-volume applications with cost constraints"
+            "use_cases": ["Edge deployment", "Ultra-high-volume", "Mobile apps", "Real-time"],
+            "strengths": ["Compact", "Ultra-fast", "Very cheap", "Long context"],
+            "best_for": "Edge and mobile applications requiring minimal resources"
+        },
+        "Qwen/Qwen2.5-72B-Instruct-Turbo": {
+            "input": 0.0009,
+            "output": 0.0009,
+            "context_window": 131072,
+            "use_cases": ["Multilingual", "Code generation", "Math reasoning", "Analysis"],
+            "strengths": ["Latest Qwen", "Excellent multilingual", "Strong math", "128K context"],
+            "best_for": "Multilingual applications requiring strong reasoning and code"
+        },
+        "Qwen/Qwen2.5-7B-Instruct-Turbo": {
+            "input": 0.0003,
+            "output": 0.0003,
+            "context_window": 131072,
+            "use_cases": ["Cost-effective multilingual", "Efficient deployment", "High-volume"],
+            "strengths": ["Affordable", "Multilingual", "Long context", "Fast"],
+            "best_for": "Budget-friendly multilingual applications with long context"
         },
         "mistralai/Mixtral-8x7B-Instruct-v0.1": {
             "input": 0.0006,
@@ -47,22 +71,6 @@ class TogetherPricingService(BasePricingProvider):
             "use_cases": ["Code generation", "Multilingual", "Reasoning", "General chat"],
             "strengths": ["Mixture of experts", "Versatile", "Good performance"],
             "best_for": "Applications needing balanced performance and affordability"
-        },
-        "mistralai/Mistral-7B-Instruct-v0.1": {
-            "input": 0.0002,
-            "output": 0.0002,
-            "context_window": 8192,
-            "use_cases": ["Simple tasks", "Chatbots", "Classification"],
-            "strengths": ["Affordable", "Fast", "Efficient"],
-            "best_for": "Cost-sensitive applications"
-        },
-        "Qwen/Qwen2-72B-Instruct": {
-            "input": 0.0009,
-            "output": 0.0009,
-            "context_window": 32768,
-            "use_cases": ["Multilingual", "Code generation", "Analysis"],
-            "strengths": ["Strong multilingual", "Good code skills", "Well-rounded"],
-            "best_for": "Multilingual applications and code generation"
         },
         "google/gemma-2-27b-it": {
             "input": 0.0008,

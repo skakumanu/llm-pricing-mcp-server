@@ -16,6 +16,22 @@ class FireworksPricingService(BasePricingProvider):
     # Fireworks AI pricing data (per 1k tokens in USD)
     # Source: https://fireworks.ai/pricing
     STATIC_PRICING = {
+        "accounts/fireworks/models/llama-v3p3-70b-instruct": {
+            "input": 0.0009,
+            "output": 0.0009,
+            "context_window": 131072,
+            "use_cases": ["Latest Llama", "Complex reasoning", "Code generation", "Long context"],
+            "strengths": ["Latest Llama 3.3", "Enhanced intelligence", "Ultra-fast", "128K context"],
+            "best_for": "Applications needing cutting-edge Llama with fastest inference"
+        },
+        "accounts/fireworks/models/llama-v3p2-90b-vision-instruct": {
+            "input": 0.0009,
+            "output": 0.0009,
+            "context_window": 131072,
+            "use_cases": ["Vision + text", "Image analysis", "Multimodal reasoning", "Visual Q&A"],
+            "strengths": ["Multimodal", "Large vision model", "Fast", "Long context"],
+            "best_for": "Multimodal applications requiring vision understanding at speed"
+        },
         "accounts/fireworks/models/llama-v3p1-405b-instruct": {
             "input": 0.003,
             "output": 0.003,
@@ -32,13 +48,13 @@ class FireworksPricingService(BasePricingProvider):
             "strengths": ["Well-balanced", "Fast", "Long context"],
             "best_for": "General applications needing balanced performance"
         },
-        "accounts/fireworks/models/llama-v3p1-8b-instruct": {
-            "input": 0.0002,
-            "output": 0.0002,
+        "accounts/fireworks/models/qwen2p5-72b-instruct": {
+            "input": 0.0009,
+            "output": 0.0009,
             "context_window": 131072,
-            "use_cases": ["High-volume", "Simple tasks", "Chatbots", "Q&A"],
-            "strengths": ["Affordable", "Fast", "Long context"],
-            "best_for": "Cost-effective high-volume applications"
+            "use_cases": ["Multilingual", "Math reasoning", "Code generation", "Analysis"],
+            "strengths": ["Latest Qwen", "Excellent multilingual", "Strong math", "128K context"],
+            "best_for": "Multilingual applications with strong reasoning needs"
         },
         "accounts/fireworks/models/mixtral-8x7b-instruct": {
             "input": 0.0005,
@@ -47,14 +63,6 @@ class FireworksPricingService(BasePricingProvider):
             "use_cases": ["Code", "Multilingual", "Reasoning"],
             "strengths": ["MoE architecture", "Versatile", "Fast"],
             "best_for": "Balanced performance and cost"
-        },
-        "accounts/fireworks/models/qwen2-72b-instruct": {
-            "input": 0.0009,
-            "output": 0.0009,
-            "context_window": 32768,
-            "use_cases": ["Multilingual", "Code", "Analysis"],
-            "strengths": ["Strong multilingual", "Good code", "Fast"],
-            "best_for": "Multilingual applications"
         },
         "accounts/fireworks/models/yi-large": {
             "input": 0.003,

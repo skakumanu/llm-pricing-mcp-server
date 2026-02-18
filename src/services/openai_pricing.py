@@ -17,6 +17,38 @@ class OpenAIPricingService(BasePricingProvider):
     # OpenAI pricing data (per 1k tokens in USD) - updated from their official pricing page
     # Source: https://openai.com/api/pricing/
     STATIC_PRICING = {
+        "gpt-4o": {
+            "input": 0.0025,
+            "output": 0.010,
+            "context_window": 128000,
+            "use_cases": ["Multimodal analysis", "Vision + text", "Complex reasoning", "real-time applications"],
+            "strengths": ["Multimodal", "Fast", "Cost-effective", "High intelligence"],
+            "best_for": "Multimodal applications requiring vision, audio, and text understanding"
+        },
+        "gpt-4o-mini": {
+            "input": 0.00015,
+            "output": 0.0006,
+            "context_window": 128000,
+            "use_cases": ["Fast chat", "Simple vision tasks", "High-volume multimodal", "Cost-sensitive apps"],
+            "strengths": ["Very affordable", "Fast", "Multimodal", "Good intelligence"],
+            "best_for": "High-volume multimodal applications with cost constraints"
+        },
+        "gpt-4-turbo": {
+            "input": 0.01,
+            "output": 0.03,
+            "context_window": 128000,
+            "use_cases": ["Long document analysis", "Multi-turn conversations", "Large codebase understanding"],
+            "strengths": ["Massive context window", "Vision capable", "Fast performance"],
+            "best_for": "Processing large documents and maintaining long conversations"
+        },
+        "gpt-4-turbo-2024-04-09": {
+            "input": 0.01,
+            "output": 0.03,
+            "context_window": 128000,
+            "use_cases": ["Latest GPT-4 Turbo", "Vision tasks", "Function calling"],
+            "strengths": ["Latest version", "Vision + JSON mode", "Reliable"],
+            "best_for": "Production systems needing latest GPT-4 Turbo capabilities"
+        },
         "gpt-4": {
             "input": 0.03,
             "output": 0.06,
@@ -24,22 +56,6 @@ class OpenAIPricingService(BasePricingProvider):
             "use_cases": ["Complex reasoning", "Code generation", "Creative writing", "Data analysis"],
             "strengths": ["High accuracy", "Strong reasoning", "Reliable outputs"],
             "best_for": "High-stakes tasks requiring maximum accuracy and reasoning"
-        },
-        "gpt-4-turbo": {
-            "input": 0.01,
-            "output": 0.03,
-            "context_window": 128000,
-            "use_cases": ["Long document analysis", "Multi-turn conversations", "Large codebase understanding"],
-            "strengths": ["Massive context window", "Cost-effective than GPT-4", "Fast performance"],
-            "best_for": "Processing large documents and maintaining long conversations"
-        },
-        "gpt-4-turbo-preview": {
-            "input": 0.01,
-            "output": 0.03,
-            "context_window": 128000,
-            "use_cases": ["Testing new features", "Long document processing", "Complex multi-step tasks"],
-            "strengths": ["Latest capabilities", "Large context", "Good value"],
-            "best_for": "Beta testing new GPT-4 features with large context needs"
         },
         "gpt-3.5-turbo": {
             "input": 0.0005,
