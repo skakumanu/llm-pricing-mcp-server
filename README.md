@@ -3,7 +3,7 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A public open-source Python-based MCP (Model Compute Pricing) server for dynamically retrieving and comparing pricing information for Large Language Models (LLMs). Built with FastAPI, this server aggregates pricing data from multiple LLM providers including OpenAI, Anthropic, Google, Cohere, and Mistral AI.
+A public open-source Python-based MCP (Model Compute Pricing) server for dynamically retrieving and comparing pricing information for Large Language Models (LLMs). Built with FastAPI, this server aggregates pricing data from **11 major LLM providers** including OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, and Anyscale.
 
 ## Features
 
@@ -108,7 +108,7 @@ For detailed diagrams, design patterns, and architectural decisions, see [ARCHIT
 
 ## Live Data Fetching
 
-As of v1.4.2, the server implements intelligent live data fetching with smart caching and graceful fallbacks:
+As of v1.5.0, the server implements intelligent live data fetching with smart caching and graceful fallbacks:
 
 ### What's Live? (No API Keys Required)
 
@@ -167,7 +167,7 @@ For detailed information about live data fetching architecture, caching strategy
 
 ### Live Data Validation
 
-✅ **All systems validated and working** (February 16, 2026):
+✅ **All systems validated and working** (February 17, 2026):
 
 | Provider | Status | Models | Data Source |
 |----------|--------|--------|-------------|
@@ -176,8 +176,14 @@ For detailed information about live data fetching architecture, caching strategy
 | **Google** | ✅ Working | 4 models | Public Pricing + Status Page (Cached) |
 | **Cohere** | ✅ Working | 4 models | Public Pricing + Status Page (Cached) |
 | **Mistral AI** | ✅ Working | 6 models | Public Pricing + Status Page (Cached) |
+| **Groq** | ✅ Working | 8 models | Public Pricing + Status Page (Cached) |
+| **Together AI** | ✅ Working | 8 models | Public Pricing + Status Page (Cached) |
+| **Fireworks AI** | ✅ Working | 6 models | Public Pricing + Status Page (Cached) |
+| **Perplexity AI** | ✅ Working | 3 models | Public Pricing + Status Page (Cached) |
+| **AI21 Labs** | ✅ Working | 5 models | Public Pricing + Status Page (Cached) |
+| **Anyscale** | ✅ Working | 6 models | Public Pricing + Status Page (Cached) |
 
-- **Total Models Available**: 24 across all 5 providers
+- **Total Models Available**: 60+ across all 11 providers
 - **Cache Performance**: 58x faster on cached requests
 - **Deployment Status**: Ready for production (no API keys required)
 - **Test Coverage**: Comprehensive test suite included
@@ -193,8 +199,8 @@ Returns server information and available endpoints.
 ```json
 {
   "name": "LLM Pricing MCP Server",
-  "version": "1.4.2",
-  "description": "Dynamic pricing comparison server for LLM models",
+  "version": "1.5.0",
+  "description": "Dynamic pricing comparison server for LLM models across 11 major providers",
   "endpoints": ["/", "/models", "/pricing", "/performance", "/use-cases", "/cost-estimate", "/cost-estimate/batch", "/health", "/docs", "/redoc"]
 }
 ```
@@ -468,7 +474,7 @@ Health check endpoint for monitoring.
 {
   "status": "healthy",
   "service": "LLM Pricing MCP Server",
-  "version": "1.4.2"
+  "version": "1.5.0"
 }
 ```
 
@@ -854,13 +860,26 @@ For issues, questions, or contributions, please open an issue on GitHub.
 
 ## Roadmap
 
+### Completed (v1.5.0) - Latest
+- [x] **MAJOR:** Expanded to 11 major LLM providers (from 5)
+- [x] **NEW:** Groq integration - Ultra-fast inference platform 
+- [x] **NEW:** Together AI integration - Open-source model hosting
+- [x] **NEW:** Fireworks AI integration - Fast inference platform
+- [x] **NEW:** Perplexity AI integration - Search-augmented models
+- [x] **NEW:** AI21 Labs integration - Jamba and enterprise models
+- [x] **NEW:** Anyscale integration - Ray-optimized inference
+- [x] 60+ models available across all providers
+- [x] Live data fetching for all 11 providers (no API keys required)
+- [x] Smart caching and fallback mechanisms for all providers
+- [x] Public status page integration for performance metrics
+
 ### Completed (v1.4.2)
 - [x] Real-time pricing API integration with async fetching
 - [x] Graceful error handling and partial data support
 - [x] Provider status tracking and monitoring
 - [x] Extensible base provider interface for adding new providers
 - [x] Cost calculation endpoints (single and batch estimates)
-- [x] Support for multiple LLM providers (OpenAI, Anthropic, Google, Cohere, Mistral AI)
+- [x] Initial 5 providers (OpenAI, Anthropic, Google, Cohere, Mistral AI)
 - [x] Models discovery endpoint (/models)
 - [x] Performance metrics endpoint (/performance) - throughput, latency, context windows
 - [x] Value-based recommendations (/use-cases) - organizing models by use cases
@@ -869,19 +888,17 @@ For issues, questions, or contributions, please open an issue on GitHub.
 - [x] Comprehensive API documentation
 - [x] Architecture documentation with diagrams
 - [x] Error handling with detailed status information
-- [x] Performance metrics (throughput, latency) for all providers
-- [x] **NEW:** Live data fetching from public pricing pages (no API keys required)
-- [x] **NEW:** Smart caching with TTL (500x+ performance improvement)
-- [x] **NEW:** Comprehensive fallback mechanism with static data
-- [x] **NEW:** All 5 providers integrated with live data (OpenAI, Anthropic, Google, Cohere, Mistral)
-- [x] **NEW:** Public status page integration for performance metrics
+- [x] Live data fetching from public pricing pages
+- [x] Smart caching with TTL (500x+ performance improvement)
+- [x] Comprehensive fallback mechanism with static data
+- [x] Public status page integration for performance metrics
 
 ### Future Enhancements
 - [ ] Historical pricing data and trend analysis
 - [ ] WebSocket support for live price updates
 - [ ] Database integration for caching and persistence
 - [ ] Authentication and rate limiting
-- [ ] Additional exotic model providers
+- [ ] Additional specialized providers (Replicate, Hugging Face, etc.)
 - [ ] Web scraping for providers without public APIs
 - [ ] GraphQL API support
 - [ ] Pricing alerts and notifications

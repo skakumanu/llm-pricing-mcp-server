@@ -7,6 +7,12 @@ from src.services.anthropic_pricing import AnthropicPricingService
 from src.services.google_pricing import GooglePricingService
 from src.services.cohere_pricing import CoherePricingService
 from src.services.mistral_pricing import MistralPricingService
+from src.services.groq_pricing import GroqPricingService
+from src.services.together_pricing import TogetherPricingService
+from src.services.fireworks_pricing import FireworksPricingService
+from src.services.perplexity_pricing import PerplexityPricingService
+from src.services.ai21_pricing import AI21PricingService
+from src.services.anyscale_pricing import AnyscalePricingService
 
 
 class PricingAggregatorService:
@@ -19,6 +25,12 @@ class PricingAggregatorService:
         self.google_service = GooglePricingService()
         self.cohere_service = CoherePricingService()
         self.mistral_service = MistralPricingService()
+        self.groq_service = GroqPricingService()
+        self.together_service = TogetherPricingService()
+        self.fireworks_service = FireworksPricingService()
+        self.perplexity_service = PerplexityPricingService()
+        self.ai21_service = AI21PricingService()
+        self.anyscale_service = AnyscalePricingService()
     
     async def get_all_pricing_async(self) -> tuple[List[PricingMetrics], List[ProviderStatusInfo]]:
         """
@@ -39,6 +51,12 @@ class PricingAggregatorService:
             self.google_service.get_pricing_with_status(),
             self.cohere_service.get_pricing_with_status(),
             self.mistral_service.get_pricing_with_status(),
+            self.groq_service.get_pricing_with_status(),
+            self.together_service.get_pricing_with_status(),
+            self.fireworks_service.get_pricing_with_status(),
+            self.perplexity_service.get_pricing_with_status(),
+            self.ai21_service.get_pricing_with_status(),
+            self.anyscale_service.get_pricing_with_status(),
         ]
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -100,6 +118,18 @@ class PricingAggregatorService:
             pricing_data, status = await self.cohere_service.get_pricing_with_status()
         elif provider_lower == "mistral" or provider_lower == "mistral ai":
             pricing_data, status = await self.mistral_service.get_pricing_with_status()
+        elif provider_lower == "groq":
+            pricing_data, status = await self.groq_service.get_pricing_with_status()
+        elif provider_lower == "together" or provider_lower == "together ai":
+            pricing_data, status = await self.together_service.get_pricing_with_status()
+        elif provider_lower == "fireworks" or provider_lower == "fireworks ai":
+            pricing_data, status = await self.fireworks_service.get_pricing_with_status()
+        elif provider_lower == "perplexity" or provider_lower == "perplexity ai":
+            pricing_data, status = await self.perplexity_service.get_pricing_with_status()
+        elif provider_lower == "ai21" or provider_lower == "ai21 labs":
+            pricing_data, status = await self.ai21_service.get_pricing_with_status()
+        elif provider_lower == "anyscale":
+            pricing_data, status = await self.anyscale_service.get_pricing_with_status()
         else:
             return [], []
         
