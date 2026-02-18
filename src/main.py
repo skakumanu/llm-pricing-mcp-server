@@ -1,7 +1,11 @@
 """Main FastAPI application for LLM Pricing MCP Server."""
 import sys
 import logging
+import signal
 from pathlib import Path
+from datetime import datetime, timezone
+
+UTC = timezone.utc
 
 # Configure logging first
 logging.basicConfig(
@@ -14,16 +18,26 @@ logger.info("Starting application initialization...")
 # Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Request
 from typing import Optional
 import asyncio
+import time
 from src.config.settings import settings
 from src.models.pricing import (
     PricingResponse, ServerInfo, EndpointInfo, CostEstimateRequest, CostEstimateResponse,
     BatchCostEstimateRequest, BatchCostEstimateResponse, ModelCostComparison,
-    PerformanceResponse, PerformanceMetrics, ModelUseCase, UseCaseResponse
+    PerformanceResponse, PerformanceMetrics, ModelUseCase, UseCaseResponse, TelemetryResponse,
+    EndpointMetricResponse, ProviderAdoptionResponse, FeatureUsageResponse, TelemetryOverallStats,
+    ClientLocationStats, BrowserStats, ClientInfo
+)
+from src.models.deployment import (
+    HealthCheckResponse, DeploymentReadiness, DeploymentMetadata, ApiVersionInfo,
+    GracefulShutdownRequest, GracefulShutdownStatus
 )
 from src.services.pricing_aggregator import PricingAggregatorService
+from src.services.telemetry import get_telemetry_service
+from src.services.deployment import get_deployment_manager
+from src.services.geolocation import GeolocationService
 
 logger.info("Imports completed successfully")
 
@@ -35,6 +49,109 @@ app = FastAPI(
 )
 
 logger.info(f"FastAPI app created: {app.title} v{app.version}")
+
+# Initialize deployment manager for blue-green deployment support
+deployment_manager = get_deployment_manager(version=settings.app_version)
+logger.info("Deployment manager initialized")
+
+# Add deployment middleware for request tracking (needed for graceful shutdown)
+@app.middleware("http")
+async def deployment_middleware(request: Request, call_next):
+    """
+    Middleware to track active requests for graceful shutdown support.
+    Rejects new requests if graceful shutdown is in progress.
+    """
+    # Check if we're shutting down
+    if deployment_manager.is_shutting_down():
+        # Still allow health check endpoints during shutdown
+        if request.url.path not in ["/health", "/health/live", "/health/ready", "/health/detailed"]:
+            return HTTPException(
+                status_code=503,
+                detail="Service is shutting down",
+            )
+    
+    # Track request start
+    try:
+        await deployment_manager.track_request_start()
+    except RuntimeError as e:
+        return HTTPException(status_code=503, detail=str(e))
+    
+    try:
+        response = await call_next(request)
+    finally:
+        await deployment_manager.track_request_end()
+    
+    return response
+
+# Add telemetry middleware for automatic request tracking
+@app.middleware("http")
+async def telemetry_middleware(request: Request, call_next):
+    """
+    Middleware to automatically track all HTTP requests for telemetry.
+    Measures response time, status code, and client information for each endpoint.
+    """
+    start_time = time.time()
+    
+    # Extract client IP from headers (handles proxies and load balancers)
+    client_ip = (
+        request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        or request.headers.get("x-real-ip")
+        or (request.client.host if request.client else None)
+        or "unknown"
+    )
+    
+    # Extract user agent
+    user_agent = request.headers.get("user-agent")
+    
+    # Parse browser info synchronously (fast)
+    browser_info = GeolocationService.parse_user_agent(user_agent)
+    browser_name = browser_info.get("browser")
+    
+    # Get geolocation asynchronously (cached)
+    try:
+        geo_info = await GeolocationService.get_geolocation(client_ip)
+        country = geo_info.get("country") if geo_info else None
+        country_code = geo_info.get("country_code") if geo_info else None
+    except Exception as e:
+        logger.debug(f"Failed to get geolocation for {client_ip}: {e}")
+        country = None
+        country_code = None
+    
+    try:
+        response = await call_next(request)
+    except Exception as e:
+        # Handle exceptions, track as error
+        elapsed_ms = (time.time() - start_time) * 1000
+        telemetry = get_telemetry_service()
+        telemetry.track_endpoint_request(
+            request.url.path,
+            request.method,
+            elapsed_ms,
+            status_code=500,
+            client_ip=client_ip,
+            country=country,
+            country_code=country_code,
+            browser=browser_name,
+        )
+        raise
+    
+    # Track successful response
+    elapsed_ms = (time.time() - start_time) * 1000
+    telemetry = get_telemetry_service()
+    telemetry.track_endpoint_request(
+        request.url.path,
+        request.method,
+        elapsed_ms,
+        status_code=response.status_code,
+        client_ip=client_ip,
+        country=country,
+        country_code=country_code,
+        browser=browser_name,
+    )
+    
+    return response
+
+logger.info("Middleware registered: deployment tracking and telemetry")
 
 # Global pricing aggregator instance (lazy initialized)
 pricing_aggregator: Optional[PricingAggregatorService] = None
@@ -125,6 +242,11 @@ async def root():
                 method="GET",
                 description="Get recommended use cases for each LLM model"
             ),
+            EndpointInfo(
+                path="/telemetry",
+                method="GET",
+                description="Get telemetry data including endpoint usage, provider adoption, and feature usage"
+            ),
         ],
         sample_models=[
             "gpt-4", "gpt-4-turbo", "gpt-3.5-turbo",
@@ -212,6 +334,16 @@ async def get_pricing(
     else:
         models, provider_status = await aggregator.get_all_pricing_async()
     
+    # Track provider usage
+    telemetry = get_telemetry_service()
+    telemetry.track_feature_usage("get_pricing")
+    for model in models:
+        # Estimate cost per 1M tokens (rough estimate using average tokens)
+        estimated_cost = (
+            (model.cost_per_input_token + model.cost_per_output_token) / 2 * 1_000_000
+        )
+        telemetry.track_provider_usage(model.provider, model.model_name, estimated_cost)
+    
     return PricingResponse(
         models=models,
         total_models=len(models),
@@ -222,7 +354,10 @@ async def get_pricing(
 @app.get("/health")
 async def health_check():
     """
-    Health check endpoint.
+    Simple health check endpoint (backwards compatible).
+    
+    Returns basic health status. For production orchestrators (K8s, ECS),
+    use /health/live or /health/ready instead.
     
     Returns:
         dict: Server health status
@@ -232,6 +367,183 @@ async def health_check():
         "service": settings.app_name,
         "version": settings.app_version
     }
+
+
+@app.get("/health/detailed", response_model=HealthCheckResponse)
+async def health_check_detailed():
+    """
+    Detailed health check for monitoring and load balancers.
+    
+    Includes:
+    - Service status and version
+    - Environment and deployment information
+    - Active request count and uptime
+    - Dependency health (if available)
+    - Graceful shutdown status
+    
+    Use this endpoint for comprehensive monitoring of the service.
+    
+    Returns:
+        HealthCheckResponse: Detailed health information
+    """
+    return await deployment_manager.get_health_check(
+        include_metrics=True,
+        include_dependencies=True,
+    )
+
+
+@app.get("/health/ready", response_model=DeploymentReadiness)
+async def health_ready():
+    """
+    Kubernetes readinessProbe endpoint.
+    
+    Returns ready=true if the service is ready to accept traffic.
+    Returns ready=false during graceful shutdown.
+    
+    Load balancers should use this to determine if traffic should be routed here.
+    
+    Returns:
+        DeploymentReadiness: Ready status for traffic routing
+    """
+    return await deployment_manager.get_readiness_check()
+
+
+@app.get("/health/live")
+async def health_live():
+    """
+    Kubernetes livenessProbe endpoint.
+    
+    Returns alive=true if the process should continue running.
+    Orchestrators will restart the container if this returns false.
+    
+    Returns:
+        dict: Alive status
+    """
+    return await deployment_manager.get_liveness_check()
+
+
+@app.get("/deployment/metadata", response_model=DeploymentMetadata)
+async def get_deployment_metadata():
+    """
+    Get deployment metadata including version and API versioning information.
+    
+    Includes:
+    - Current application version
+    - Supported API versions
+    - Breaking changes documentation
+    - Backwards compatibility information
+    
+    Use this endpoint to:
+    - Detect breaking changes before updating clients
+    - Determine API version compatibility
+    - Understand deprecation timeline
+    
+    Returns:
+        DeploymentMetadata: Version and breaking change information
+    """
+    return deployment_manager.get_deployment_metadata()
+
+
+@app.get("/deployment/info")
+async def get_deployment_info():
+    """
+    Get deployment and blue-green environment information.
+    
+    Includes:
+    - Environment (production/staging)
+    - Deployment group (blue/green)
+    - Region and availability zone
+    - Instance/container ID
+    - Deployment timestamp
+    
+    Use this endpoint to:
+    - Verify blue/green deployment during traffic switching
+    - Identify which instance handled a request
+    - Monitor deployment consistency
+    - Debug region/zone issues
+    
+    Returns:
+        dict: Deployment environment information
+    """
+    env = deployment_manager.environment
+    return {
+        "environment": env.environment,
+        "deployment_group": env.deployment_group,
+        "region": env.region,
+        "availability_zone": env.availability_zone,
+        "instance_id": env.instance_id,
+        "deployment_timestamp": env.deployment_timestamp,
+        "service_uptime_seconds": deployment_manager.get_uptime_seconds(),
+    }
+
+
+@app.post("/deployment/shutdown", response_model=GracefulShutdownStatus)
+async def initiate_graceful_shutdown(request: GracefulShutdownRequest):
+    """
+    Initiate graceful shutdown of the service.
+    
+    Blue-Green Deployment Use Case:
+    1. Load balancer removes this instance from traffic routing
+    2. Load balancer calls this endpoint with drain_timeout_seconds
+    3. Service stops accepting new requests
+    4. Service waits up to drain_timeout_seconds for in-flight requests to complete
+    5. Service exits cleanly
+    6. Orchestrator (K8s, ECS) replaces the instance
+    
+    **Important**: This endpoint should only be called by orchestrators/load balancers,
+    not by end users. Implement proper access controls.
+    
+    Args:
+        request: GracefulShutdownRequest with drain timeout
+        
+    Returns:
+        GracefulShutdownStatus: Current shutdown status
+        
+    Security Note:
+        In production, restrict access to this endpoint using:
+        - Network policies (allow only from orchestrator/load balancer IP)
+        - API gateway authentication
+        - Service-to-service authentication
+    """
+    logger.warning("Graceful shutdown requested via API")
+    await deployment_manager.initiate_graceful_shutdown(request.drain_timeout_seconds)
+    return await deployment_manager.get_shutdown_status()
+
+
+@app.get("/deployment/shutdown/status", response_model=GracefulShutdownStatus)
+async def get_shutdown_status():
+    """
+    Get current graceful shutdown status.
+    
+    Returns:
+        GracefulShutdownStatus: Current shutdown state, active requests count, timeout
+    """
+    return await deployment_manager.get_shutdown_status()
+
+
+@app.get("/api/versions", response_model=ApiVersionInfo)
+async def get_api_versions():
+    """
+    Get API version information and migration guides.
+    
+    Helps clients understand:
+    - Current stable API version
+    - All available versions
+    - Deprecated versions still supported
+    - Breaking changes in each version
+    
+    Use this to plan API version upgrades.
+    
+    Returns:
+        ApiVersionInfo: Version compatibility information
+    """
+    metadata = deployment_manager.get_deployment_metadata()
+    return ApiVersionInfo(
+        current_version="v1",
+        all_versions=metadata.api_versions,
+        deprecated_versions=[],
+        migration_guide_url="https://github.com/skakumanu/llm-pricing-mcp-server/docs/MIGRATION.md",
+    )
 
 
 @app.post("/cost-estimate", response_model=CostEstimateResponse)
@@ -266,6 +578,11 @@ async def estimate_cost(request: CostEstimateRequest):
     input_cost = request.input_tokens * model_pricing.cost_per_input_token
     output_cost = request.output_tokens * model_pricing.cost_per_output_token
     total_cost = input_cost + output_cost
+    
+    # Track telemetry
+    telemetry = get_telemetry_service()
+    telemetry.track_feature_usage("cost_estimation")
+    telemetry.track_provider_usage(model_pricing.provider, model_pricing.model_name, total_cost)
     
     return CostEstimateResponse(
         model_name=model_pricing.model_name,
@@ -350,6 +667,12 @@ async def estimate_cost_batch(request: BatchCostEstimateRequest):
         min_cost = min(c.total_cost for c in available_comparisons)
         max_cost = max(c.total_cost for c in available_comparisons)
         cost_range = {"min": min_cost, "max": max_cost}
+    
+    # Track telemetry
+    telemetry = get_telemetry_service()
+    telemetry.track_feature_usage("batch_cost_estimation")
+    for comparison in available_comparisons:
+        telemetry.track_provider_usage(comparison.provider, comparison.model_name, comparison.total_cost)
     
     return BatchCostEstimateResponse(
         input_tokens=request.input_tokens,
@@ -447,6 +770,10 @@ async def get_performance(
     largest_context = max(models_with_context, key=lambda x: x.context_window).model_name if models_with_context else None
     best_value = max(models_with_value, key=lambda x: x.value_score).model_name if models_with_value else None
     
+    # Track telemetry
+    telemetry = get_telemetry_service()
+    telemetry.track_feature_usage("performance_comparison")
+    
     return PerformanceResponse(
         models=performance_metrics,
         total_models=len(performance_metrics),
@@ -523,8 +850,132 @@ async def get_use_cases(
     )
 
 
+@app.get("/telemetry", response_model=TelemetryResponse)
+async def get_telemetry():
+    """
+    Get real-time telemetry data including endpoint usage, provider adoption, feature usage,
+    and client geolocation/browser statistics.
+    
+    This endpoint provides comprehensive metrics about API usage patterns, which providers
+    and models are most requested, response times, error rates, geographic distribution,
+    browser usage, and overall system health.
+    
+    Returns:
+        TelemetryResponse: Comprehensive telemetry data with overall stats, endpoint metrics,
+                         provider adoption metrics, feature usage statistics, client locations,
+                         and browser statistics
+    """
+    telemetry = get_telemetry_service()
+    
+    # Track feature usage for telemetry endpoint itself
+    telemetry.track_feature_usage("telemetry_access")
+    
+    # Get all metrics
+    overall_stats = telemetry.get_overall_stats()
+    endpoint_stats = telemetry.get_endpoint_stats()
+    provider_adoption = telemetry.get_provider_adoption()
+    feature_usage = telemetry.get_feature_usage()
+    client_locations = telemetry.get_client_locations(limit=20)
+    browser_stats = telemetry.get_browser_stats(limit=20)
+    
+    # Convert uptime_since to ISO string if it's a datetime
+    uptime_since = overall_stats.get("uptime_since")
+    if uptime_since and isinstance(uptime_since, datetime):
+        uptime_since = uptime_since.isoformat()
+    elif uptime_since is None:
+        uptime_since = datetime.now(UTC).isoformat()
+    
+    # Build response
+    return TelemetryResponse(
+        overall_stats=TelemetryOverallStats(
+            total_requests=overall_stats.get("total_requests", 0),
+            total_errors=overall_stats.get("total_errors", 0),
+            error_rate=overall_stats.get("error_rate", 0.0),
+            total_endpoints=overall_stats.get("total_endpoints", 0),
+            total_providers_adopted=overall_stats.get("total_providers_adopted", 0),
+            total_features_used=overall_stats.get("total_features_used", 0),
+            avg_response_time_ms=overall_stats.get("avg_response_time_ms", 0.0),
+            unique_clients=overall_stats.get("unique_clients", 0),
+            unique_countries=overall_stats.get("unique_countries", 0),
+            uptime_since=uptime_since,
+            timestamp=datetime.now(UTC).isoformat()
+        ),
+        endpoints=[
+            EndpointMetricResponse(
+                endpoint=stat.get("endpoint", ""),
+                path=stat.get("path", ""),
+                method=stat.get("method", ""),
+                call_count=stat.get("call_count", 0),
+                error_count=stat.get("error_count", 0),
+                success_rate=stat.get("success_rate", 0.0),
+                avg_response_time_ms=stat.get("avg_response_time_ms", 0.0),
+                min_response_time_ms=stat.get("min_response_time_ms", 0.0),
+                max_response_time_ms=stat.get("max_response_time_ms", 0.0),
+                first_called=stat.get("first_called", None),
+                last_called=stat.get("last_called", None)
+            )
+            for stat in endpoint_stats
+        ],
+        provider_adoption=[
+            ProviderAdoptionResponse(
+                provider_name=adoption.get("provider_name", ""),
+                model_requests=adoption.get("model_requests", 0),
+                unique_models_requested=adoption.get("unique_models_requested", 0),
+                total_cost_estimated=adoption.get("total_cost_estimated", 0.0),
+                last_requested=adoption.get("last_requested", None)
+            )
+            for adoption in provider_adoption
+        ],
+        features=[
+            FeatureUsageResponse(
+                feature_name=feature.get("feature_name", ""),
+                usage_count=feature.get("usage_count", 0),
+                last_used=feature.get("last_used", None)
+            )
+            for feature in feature_usage
+        ],
+        client_locations=[
+            ClientLocationStats(
+                country=loc.get("country", "Unknown"),
+                country_code=loc.get("country_code", "XX"),
+                request_count=loc.get("request_count", 0),
+                unique_clients=loc.get("unique_clients", 0)
+            )
+            for loc in client_locations
+        ],
+        top_browsers=[
+            BrowserStats(
+                browser_name=browser.get("browser_name", "Unknown"),
+                request_count=browser.get("request_count", 0),
+                unique_clients=browser.get("unique_clients", 0)
+            )
+            for browser in browser_stats
+        ],
+        timestamp=datetime.now()
+    )
+
+
 if __name__ == "__main__":
     import uvicorn
+    
+    # Register signal handlers for graceful shutdown
+    def signal_handler(signum, frame):
+        """Handle termination signals for graceful shutdown."""
+        sig_name = signal.Signals(signum).name
+        logger.warning(f"Received signal {sig_name} - initiating graceful shutdown")
+        
+        # Trigger graceful shutdown
+        asyncio.create_task(deployment_manager.initiate_graceful_shutdown(drain_timeout_seconds=30))
+    
+    # Register SIGTERM (from orchestrators like K8s) and SIGINT (Ctrl+C)
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    logger.info(f"Starting {settings.app_name} v{settings.app_version}")
+    logger.info(f"Server: {settings.server_host}:{settings.server_port}")
+    if deployment_manager.environment.deployment_group:
+        logger.info(f"Deployment group: {deployment_manager.environment.deployment_group} (blue-green mode)")
+    
     uvicorn.run(
         "main:app",
         host=settings.server_host,

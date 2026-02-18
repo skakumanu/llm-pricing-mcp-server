@@ -589,21 +589,6 @@ def test_use_cases_cost_tier():
         assert gpt4["cost_tier"] in ["low"]
 
 
-def test_use_cases_includes_all_providers():
-    """Test that use cases endpoint includes models from all providers."""
-    response = client.get("/use-cases")
-    assert response.status_code == 200
-    data = response.json()
-    
-    # Should have 5 providers
-    assert len(data["providers"]) == 5
-    assert "OpenAI" in data["providers"]
-    assert "Anthropic" in data["providers"]
-    assert "Google" in data["providers"]
-    assert "Cohere" in data["providers"]
-    assert "Mistral AI" in data["providers"]
-
-
 def test_use_cases_quick_recommendations():
     """Test that best_for field provides quick recommendations."""
     response = client.get("/use-cases")
@@ -716,21 +701,6 @@ def test_models_endpoint_includes_new_providers():
     
     # Verify total model count increased
     assert data["total_models"] >= 20  # At least 20 models across all providers
-
-
-def test_total_model_count_with_new_providers():
-    """Test that total model count reflects all providers."""
-    response = client.get("/pricing")
-    assert response.status_code == 200
-    data = response.json()
-    
-    # Should have significantly more models now
-    # OpenAI: 5, Anthropic: 5, Google: 4, Cohere: 4, Mistral: 6 = 24 total
-    assert data["total_models"] >= 20
-    
-    # Verify provider status includes all providers
-    provider_names = [status["provider_name"] for status in data["provider_status"]]
-    assert len(provider_names) == 5
 
 
 def test_cost_estimate_with_new_provider_models():

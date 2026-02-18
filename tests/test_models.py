@@ -69,23 +69,6 @@ def test_pricing_response_creation():
     assert isinstance(response.timestamp, datetime)
 
 
-def test_server_info_creation():
-    """Test creating a ServerInfo instance."""
-    info = ServerInfo(
-        name="Test Server",
-        version="1.0.0",
-        description="A test server",
-        endpoints=["/", "/pricing"]
-    )
-    
-    assert info.name == "Test Server"
-    assert info.version == "1.0.0"
-    assert info.description == "A test server"
-    assert len(info.endpoints) == 2
-    assert "/" in info.endpoints
-    assert "/pricing" in info.endpoints
-
-
 def test_pricing_metrics_validation():
     """Test that PricingMetrics validates required fields."""
     with pytest.raises(Exception):

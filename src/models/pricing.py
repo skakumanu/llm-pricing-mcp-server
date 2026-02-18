@@ -1,7 +1,15 @@
 """Pydantic models for pricing data validation."""
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, computed_field
 from typing import Optional, List
 from datetime import datetime, UTC
+
+
+class TokenVolumePrice(BaseModel):
+    """Price breakdown for a specific token volume."""
+    
+    input_cost: float = Field(..., description="Cost for input tokens in USD")
+    output_cost: float = Field(..., description="Cost for output tokens in USD")
+    total_cost: float = Field(..., description="Total cost (50/50 input/output split) in USD")
 
 
 class PricingMetrics(BaseModel):
@@ -24,6 +32,53 @@ class PricingMetrics(BaseModel):
     use_cases: Optional[List[str]] = Field(None, description="List of ideal use cases for this model")
     strengths: Optional[List[str]] = Field(None, description="Key strengths of this model")
     best_for: Optional[str] = Field(None, description="Quick summary of what this model is best for")
+    
+    @computed_field
+    @property
+    def cost_at_10k_tokens(self) -> TokenVolumePrice:
+        """Calculate cost for 10,000 tokens (small volume)."""
+        input_cost = (self.cost_per_input_token / 1000) * 10000
+        output_cost = (self.cost_per_output_token / 1000) * 10000
+        total_cost = (input_cost + output_cost) / 2  # 50/50 split
+        return TokenVolumePrice(
+            input_cost=round(input_cost, 4),
+            output_cost=round(output_cost, 4),
+            total_cost=round(total_cost, 4)
+        )
+    
+    @computed_field
+    @property
+    def cost_at_100k_tokens(self) -> TokenVolumePrice:
+        """Calculate cost for 100,000 tokens (medium volume)."""
+        input_cost = (self.cost_per_input_token / 1000) * 100000
+        output_cost = (self.cost_per_output_token / 1000) * 100000
+        total_cost = (input_cost + output_cost) / 2  # 50/50 split
+        return TokenVolumePrice(
+            input_cost=round(input_cost, 4),
+            output_cost=round(output_cost, 4),
+            total_cost=round(total_cost, 4)
+        )
+    
+    @computed_field
+    @property
+    def cost_at_1m_tokens(self) -> TokenVolumePrice:
+        """Calculate cost for 1,000,000 tokens (large volume)."""
+        input_cost = (self.cost_per_input_token / 1000) * 1000000
+        output_cost = (self.cost_per_output_token / 1000) * 1000000
+        total_cost = (input_cost + output_cost) / 2  # 50/50 split
+        return TokenVolumePrice(
+            input_cost=round(input_cost, 2),
+            output_cost=round(output_cost, 2),
+            total_cost=round(total_cost, 2)
+        )
+    
+    @computed_field
+    @property
+    def estimated_time_1m_tokens(self) -> Optional[float]:
+        """Estimate time to process 1M tokens based on throughput (in seconds)."""
+        if self.throughput and self.throughput > 0:
+            return round(1000000 / self.throughput, 2)
+        return None
 
 
 class ProviderStatusInfo(BaseModel):
@@ -168,4 +223,101 @@ class UseCaseResponse(BaseModel):
     models: List[ModelUseCase] = Field(..., description="Use case information for each model")
     total_models: int = Field(..., description="Total number of models")
     providers: List[str] = Field(..., description="List of providers included")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Response timestamp")
+
+
+class EndpointMetricResponse(BaseModel):
+    """Metrics for a single endpoint."""
+    
+    model_config = ConfigDict(protected_namespaces=())
+    
+    endpoint: str = Field(..., description="Endpoint path and method (method path)")
+    path: str = Field(..., description="Request path")
+    method: str = Field(..., description="HTTP method")
+    call_count: int = Field(..., description="Total number of calls to this endpoint")
+    error_count: int = Field(..., description="Number of failed requests")
+    success_rate: float = Field(..., description="Success rate as percentage")
+    avg_response_time_ms: float = Field(..., description="Average response time in milliseconds")
+    min_response_time_ms: float = Field(..., description="Minimum response time in milliseconds")
+    max_response_time_ms: float = Field(..., description="Maximum response time in milliseconds")
+    first_called: Optional[str] = Field(None, description="ISO timestamp of first call")
+    last_called: Optional[str] = Field(None, description="ISO timestamp of last call")
+
+
+class ProviderAdoptionResponse(BaseModel):
+    """Adoption metrics for a provider."""
+    
+    provider_name: str = Field(..., description="Name of the provider")
+    model_requests: int = Field(..., description="Total number of model requests for this provider")
+    unique_models_requested: int = Field(..., description="Number of unique models requested")
+    total_cost_estimated: float = Field(..., description="Total estimated cost (USD)")
+    last_requested: Optional[str] = Field(None, description="ISO timestamp of last request")
+
+
+class FeatureUsageResponse(BaseModel):
+    """Usage metrics for a feature."""
+    
+    feature_name: str = Field(..., description="Name of the feature")
+    usage_count: int = Field(..., description="Total number of times feature was used")
+    last_used: Optional[str] = Field(None, description="ISO timestamp of last usage")
+
+
+class ClientLocationStats(BaseModel):
+    """Statistics about client locations."""
+    
+    country: str = Field(..., description="Country name")
+    country_code: str = Field(..., description="ISO country code")
+    request_count: int = Field(..., description="Number of requests from this country")
+    unique_clients: int = Field(..., description="Number of unique IP addresses from this country")
+
+
+class BrowserStats(BaseModel):
+    """Statistics about browsers used by clients."""
+    
+    browser_name: str = Field(..., description="Browser name (e.g., Chrome, Firefox)")
+    request_count: int = Field(..., description="Number of requests from this browser")
+    unique_clients: int = Field(..., description="Number of unique clients using this browser")
+
+
+class ClientInfo(BaseModel):
+    """Information about a client request."""
+    
+    ip_address: str = Field(..., description="Client IP address")
+    browser: Optional[str] = Field(None, description="Browser name")
+    browser_version: Optional[str] = Field(None, description="Browser version")
+    os: Optional[str] = Field(None, description="Operating system")
+    os_version: Optional[str] = Field(None, description="Operating system version")
+    device_type: Optional[str] = Field(None, description="Device type (desktop, mobile, tablet)")
+    country: Optional[str] = Field(None, description="Country name")
+    country_code: Optional[str] = Field(None, description="ISO country code")
+    city: Optional[str] = Field(None, description="City name")
+    latitude: Optional[float] = Field(None, description="Latitude coordinate")
+    longitude: Optional[float] = Field(None, description="Longitude coordinate")
+
+
+class TelemetryOverallStats(BaseModel):
+    """Overall telemetry statistics."""
+    
+    total_requests: int = Field(..., description="Total API requests since startup")
+    total_errors: int = Field(..., description="Total failed requests")
+    error_rate: float = Field(..., description="Error rate as percentage")
+    total_endpoints: int = Field(..., description="Number of unique endpoints called")
+    total_providers_adopted: int = Field(..., description="Number of providers adopted")
+    total_features_used: int = Field(..., description="Number of distinct features used")
+    avg_response_time_ms: float = Field(..., description="Average response time across all endpoints")
+    unique_clients: int = Field(..., description="Number of unique client IP addresses")
+    unique_countries: int = Field(..., description="Number of unique countries")
+    uptime_since: str = Field(..., description="ISO timestamp when telemetry tracking started")
+    timestamp: str = Field(..., description="ISO timestamp of this response")
+
+
+class TelemetryResponse(BaseModel):
+    """Complete telemetry data response."""
+    
+    overall_stats: TelemetryOverallStats = Field(..., description="Overall statistics")
+    endpoints: List[EndpointMetricResponse] = Field(..., description="Per-endpoint metrics")
+    provider_adoption: List[ProviderAdoptionResponse] = Field(..., description="Provider adoption metrics")
+    features: List[FeatureUsageResponse] = Field(..., description="Feature usage metrics")
+    client_locations: List[ClientLocationStats] = Field(default_factory=list, description="Geographic distribution of requests")
+    top_browsers: List[BrowserStats] = Field(default_factory=list, description="Top browsers used by clients")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Response timestamp")

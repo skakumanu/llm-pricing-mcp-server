@@ -16,6 +16,14 @@ class CoherePricingService(BasePricingProvider):
     # Cohere pricing data (per 1k tokens in USD)
     # Source: https://cohere.com/pricing
     STATIC_PRICING = {
+        "command-r-plus-08-2024": {
+            "input": 0.0025,
+            "output": 0.010,
+            "context_window": 128000,
+            "use_cases": ["Enterprise search", "Advanced RAG", "Long document analysis", "Complex reasoning"],
+            "strengths": ["Latest Command R+", "Enhanced retrieval", "Improved reasoning", "Tool use"],
+            "best_for": "Enterprise applications requiring best-in-class RAG and reasoning"
+        },
         "command-r-plus": {
             "input": 0.003,
             "output": 0.015,
@@ -23,6 +31,14 @@ class CoherePricingService(BasePricingProvider):
             "use_cases": ["Enterprise search", "RAG systems", "Long document analysis", "Complex reasoning"],
             "strengths": ["Enterprise-optimized", "Excellent for RAG", "Strong context window"],
             "best_for": "Enterprise applications requiring long-context understanding"
+        },
+        "command-r-08-2024": {
+            "input": 0.00015,
+            "output": 0.0006,
+            "context_window": 128000,
+            "use_cases": ["Customer support", "FAQ automation", "Cost-effective RAG", "Document Q&A"],
+            "strengths": ["Latest Command R", "Best price/performance", "Strong retrieval", "Tool use"],
+            "best_for": "Cost-effective applications needing latest RAG capabilities"
         },
         "command-r": {
             "input": 0.0005,

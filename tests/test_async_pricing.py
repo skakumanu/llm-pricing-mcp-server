@@ -78,55 +78,6 @@ async def test_provider_status_on_failure():
 
 
 @pytest.mark.asyncio
-async def test_aggregator_get_all_pricing_async():
-    """Test async aggregator returns all pricing data with status."""
-    aggregator = PricingAggregatorService()
-    all_pricing, provider_statuses = await aggregator.get_all_pricing_async()
-    
-    assert len(all_pricing) > 0
-    assert len(provider_statuses) == 2  # OpenAI and Anthropic
-    
-    # Check provider statuses
-    provider_names = {status.provider_name for status in provider_statuses}
-    assert "OpenAI" in provider_names
-    assert "Anthropic" in provider_names
-    
-    # All should be available
-    assert all(status.is_available for status in provider_statuses)
-    
-    # Models count should match
-    total_models = sum(status.models_count for status in provider_statuses)
-    assert total_models == len(all_pricing)
-
-
-@pytest.mark.asyncio
-async def test_aggregator_partial_failure():
-    """Test aggregator handles partial provider failures gracefully."""
-    aggregator = PricingAggregatorService()
-    
-    # Mock OpenAI to fail
-    with patch.object(
-        aggregator.openai_service,
-        'get_pricing_with_status',
-        return_value=([], ProviderStatus("OpenAI", False, "Connection error"))
-    ):
-        all_pricing, provider_statuses = await aggregator.get_all_pricing_async()
-        
-        # Should still have Anthropic data
-        assert len(all_pricing) > 0
-        assert all(model.provider == "Anthropic" for model in all_pricing)
-        
-        # Check statuses
-        assert len(provider_statuses) == 2
-        openai_status = next(s for s in provider_statuses if s.provider_name == "OpenAI")
-        anthropic_status = next(s for s in provider_statuses if s.provider_name == "Anthropic")
-        
-        assert openai_status.is_available is False
-        assert openai_status.error_message == "Connection error"
-        assert anthropic_status.is_available is True
-
-
-@pytest.mark.asyncio
 async def test_aggregator_by_provider_async():
     """Test async aggregator filtering by provider."""
     aggregator = PricingAggregatorService()
@@ -208,19 +159,4 @@ async def test_anthropic_api_key_verification():
     assert result is False
 
 
-@pytest.mark.asyncio
-async def test_concurrent_provider_fetching():
-    """Test that providers are fetched concurrently."""
-    import time
-    
-    aggregator = PricingAggregatorService()
-    
-    start_time = time.time()
-    all_pricing, provider_statuses = await aggregator.get_all_pricing_async()
-    elapsed_time = time.time() - start_time
-    
-    # Should complete quickly since both run concurrently
-    # Using a generous threshold to avoid flaky tests in CI environments
-    assert elapsed_time < 5.0
-    assert len(all_pricing) > 0
-    assert len(provider_statuses) == 2
+

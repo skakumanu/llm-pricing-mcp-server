@@ -3,11 +3,13 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A public open-source Python-based MCP (Model Compute Pricing) server for dynamically retrieving and comparing pricing information for Large Language Models (LLMs). Built with FastAPI, this server aggregates pricing data from multiple LLM providers including OpenAI, Anthropic, Google, Cohere, and Mistral AI.
+A public open-source Python-based MCP (Model Compute Pricing) server for dynamically retrieving and comparing pricing information for Large Language Models (LLMs). Built with FastAPI, this server aggregates pricing data from **12 major LLM providers** including OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Anyscale, and Amazon Bedrock.
 
 ## Features
 
 - **Real-Time Pricing Aggregation**: Asynchronously fetch pricing data from multiple LLM providers concurrently
+- **Volume-Based Cost Estimates**: Automatic cost calculations at small (10K), medium (100K), and large (1M) token volumes
+- **Performance Projections**: Estimated processing time for 1M tokens based on throughput metrics
 - **Graceful Error Handling**: Return partial data when providers are unavailable with detailed status information
 - **Provider Status Tracking**: Monitor availability and health of each pricing provider
 - **Unified Pricing Format**: All pricing data in USD per token with source attribution
@@ -108,7 +110,7 @@ For detailed diagrams, design patterns, and architectural decisions, see [ARCHIT
 
 ## Live Data Fetching
 
-As of v1.4.2, the server implements intelligent live data fetching with smart caching and graceful fallbacks:
+As of v1.5.0, the server implements intelligent live data fetching with smart caching and graceful fallbacks:
 
 ### What's Live? (No API Keys Required)
 
@@ -167,17 +169,24 @@ For detailed information about live data fetching architecture, caching strategy
 
 ### Live Data Validation
 
-✅ **All systems validated and working** (February 16, 2026):
+✅ **All systems validated and working** (February 17, 2026):
 
 | Provider | Status | Models | Data Source |
 |----------|--------|--------|-------------|
-| **OpenAI** | ✅ Working | 5 models | Public Pricing + Status Page (Cached) |
-| **Anthropic** | ✅ Working | 5 models | Public Pricing + Status Page (Cached) |
-| **Google** | ✅ Working | 4 models | Public Pricing + Status Page (Cached) |
-| **Cohere** | ✅ Working | 4 models | Public Pricing + Status Page (Cached) |
-| **Mistral AI** | ✅ Working | 6 models | Public Pricing + Status Page (Cached) |
+| **OpenAI** | ✅ Working | 7 models | Public Pricing + Status Page (Cached) |
+| **Anthropic** | ✅ Working | 7 models | Public Pricing + Status Page (Cached) |
+| **Google** | ✅ Working | 5 models | Public Pricing + Status Page (Cached) |
+| **Cohere** | ✅ Working | 6 models | Public Pricing + Status Page (Cached) |
+| **Mistral AI** | ✅ Working | 7 models | Public Pricing + Status Page (Cached) |
+| **Groq** | ✅ Working | 11 models | Public Pricing + Status Page (Cached) |
+| **Together AI** | ✅ Working | 9 models | Public Pricing + Status Page (Cached) |
+| **Fireworks AI** | ✅ Working | 7 models | Public Pricing + Status Page (Cached) |
+| **Perplexity AI** | ✅ Working | 3 models | Public Pricing + Status Page (Cached) |
+| **AI21 Labs** | ✅ Working | 5 models | Public Pricing + Status Page (Cached) |
+| **Anyscale** | ✅ Working | 6 models | Public Pricing + Status Page (Cached) |
+| **Amazon Bedrock** | ✅ Working | 14 models | Public Pricing + AWS Status (Cached) |
 
-- **Total Models Available**: 24 across all 5 providers
+- **Total Models Available**: 87+ across all 12 providers
 - **Cache Performance**: 58x faster on cached requests
 - **Deployment Status**: Ready for production (no API keys required)
 - **Test Coverage**: Comprehensive test suite included
@@ -193,8 +202,8 @@ Returns server information and available endpoints.
 ```json
 {
   "name": "LLM Pricing MCP Server",
-  "version": "1.4.2",
-  "description": "Dynamic pricing comparison server for LLM models",
+  "version": "1.5.0",
+  "description": "Dynamic pricing comparison server for LLM models across 11 major providers",
   "endpoints": ["/", "/models", "/pricing", "/performance", "/use-cases", "/cost-estimate", "/cost-estimate/batch", "/health", "/docs", "/redoc"]
 }
 ```
@@ -247,7 +256,23 @@ Retrieves aggregated pricing data from all LLM providers with real-time fetching
       "currency": "USD",
       "unit": "per_token",
       "source": "OpenAI Official Pricing (Static)",
-      "last_updated": "2024-02-10T00:00:00Z"
+      "last_updated": "2024-02-10T00:00:00Z",
+      "cost_at_10k_tokens": {
+        "input_cost": 0.3,
+        "output_cost": 0.6,
+        "total_cost": 0.45
+      },
+      "cost_at_100k_tokens": {
+        "input_cost": 3.0,
+        "output_cost": 6.0,
+        "total_cost": 4.5
+      },
+      "cost_at_1m_tokens": {
+        "input_cost": 30.0,
+        "output_cost": 60.0,
+        "total_cost": 45.0
+      },
+      "estimated_time_1m_tokens": 22222.22
     }
   ],
   "total_models": 10,
@@ -468,9 +493,104 @@ Health check endpoint for monitoring.
 {
   "status": "healthy",
   "service": "LLM Pricing MCP Server",
-  "version": "1.4.2"
+  "version": "1.5.0"
 }
 ```
+
+#### `GET /telemetry`
+Get real-time telemetry data including endpoint usage metrics, provider adoption, and feature usage.
+
+**Features:**
+- Real-time endpoint usage metrics (call count, error rates, response times)
+- Provider adoption tracking (which models are most requested)
+- Feature usage statistics (pricing lookups, cost comparisons, etc.)
+- Overall system health metrics and uptime
+- Comprehensive statistics for monitoring and optimization
+
+**Response:**
+```json
+{
+  "overall_stats": {
+    "total_requests": 150,
+    "total_errors": 3,
+    "error_rate": 0.02,
+    "total_endpoints": 8,
+    "total_providers_adopted": 5,
+    "total_features_used": 4,
+    "avg_response_time_ms": 45.5,
+    "uptime_since": "2024-02-10T12:00:00Z",
+    "timestamp": "2024-02-10T14:30:00Z"
+  },
+  "endpoints": [
+    {
+      "endpoint": "/pricing",
+      "path": "/pricing",
+      "method": "GET",
+      "call_count": 45,
+      "error_count": 0,
+      "success_rate": 1.0,
+      "avg_response_time_ms": 32.5,
+      "min_response_time_ms": 28.2,
+      "max_response_time_ms": 42.1,
+      "last_called": "2024-02-10T14:29:55Z"
+    },
+    {
+      "endpoint": "/cost-estimate",
+      "path": "/cost-estimate",
+      "method": "POST",
+      "call_count": 35,
+      "error_count": 1,
+      "success_rate": 0.97,
+      "avg_response_time_ms": 18.5,
+      "min_response_time_ms": 15.3,
+      "max_response_time_ms": 25.8,
+      "last_called": "2024-02-10T14:29:52Z"
+    }
+  ],
+  "provider_adoption": [
+    {
+      "provider_name": "OpenAI",
+      "model_requests": 65,
+      "unique_models_requested": 4,
+      "total_cost_estimated": 2.45,
+      "last_requested": "2024-02-10T14:29:50Z"
+    },
+    {
+      "provider_name": "Anthropic",
+      "model_requests": 42,
+      "unique_models_requested": 3,
+      "total_cost_estimated": 1.85,
+      "last_requested": "2024-02-10T14:29:48Z"
+    }
+  ],
+  "features": [
+    {
+      "feature_name": "cost_estimation",
+      "usage_count": 35,
+      "last_used": "2024-02-10T14:29:52Z"
+    },
+    {
+      "feature_name": "batch_cost_estimation",
+      "usage_count": 28,
+      "last_used": "2024-02-10T14:29:45Z"
+    },
+    {
+      "feature_name": "performance_comparison",
+      "usage_count": 15,
+      "last_used": "2024-02-10T14:28:30Z"
+    }
+  ],
+  "timestamp": "2024-02-10T14:30:00Z"
+}
+```
+
+**Use Cases for Telemetry:**
+- **Monitoring:** Track API health and response times
+- **Capacity Planning:** Identify peak usage patterns and bottlenecks
+- **Feature Adoption:** See which pricing features are used most
+- **Provider Insights:** Understand which LLM providers are most popular
+- **Cost Tracking:** Monitor estimated costs from usage patterns
+- **Performance Optimization:** Identify slow endpoints for optimization
 
 #### `POST /cost-estimate`
 Estimate the cost for using a specific LLM model based on token usage.
@@ -573,6 +693,18 @@ curl -X POST http://localhost:8000/cost-estimate/batch \
 # Health check
 curl http://localhost:8000/health
 
+# Get telemetry data (usage metrics, provider adoption, feature usage)
+curl http://localhost:8000/telemetry
+
+# View telemetry with pretty formatting
+curl http://localhost:8000/telemetry | python -m json.tool
+
+# Extract provider adoption metrics
+curl -s http://localhost:8000/telemetry | python -c "import sys, json; data = json.load(sys.stdin); [print(f\"{p['provider_name']}: {p['model_requests']} requests\") for p in data['provider_adoption']]"
+
+# Monitor endpoint performance
+curl -s http://localhost:8000/telemetry | python -c "import sys, json; data = json.load(sys.stdin); [print(f\"{e['path']}: {e['avg_response_time_ms']:.1f}ms avg\") for e in data['endpoints']]"
+
 # Pretty-print JSON output
 curl http://localhost:8000/pricing | python -m json.tool
 
@@ -597,6 +729,70 @@ curl -s -X POST http://localhost:8000/cost-estimate/batch \
   -d '{"model_names": ["gpt-4", "gpt-3.5-turbo", "claude-3-sonnet-20240229", "gemini-1.5-pro", "mistral-large-latest"], "input_tokens": 5000, "output_tokens": 2000}' | \
   python -c "import sys, json; data = json.load(sys.stdin); print(f\"Cheapest: {data['cheapest_model']} at \${data['cost_range']['min']:.4f}\")"
 ```
+
+## Understanding Volume-Based Pricing
+
+Every model response now includes automatic cost projections at three usage scales:
+
+### Cost Breakdown by Volume
+
+**Small Scale (10K tokens)**
+- Ideal for: Testing, prototyping, low-volume applications
+- Example: 50-100 user interactions per day
+- Shows: `cost_at_10k_tokens`
+
+**Medium Scale (100K tokens)**
+- Ideal for: Small production apps, moderate traffic
+- Example: 500-1,000 user interactions per day  
+- Shows: `cost_at_100k_tokens`
+
+**Large Scale (1M tokens)**
+- Ideal for: High-volume production, enterprise workloads
+- Example: 5,000-10,000+ user interactions per day
+- Shows: `cost_at_1m_tokens`
+
+### Cost Calculation Notes
+
+- All volume costs assume a **50/50 split** between input and output tokens (common in conversational AI)
+- Adjust your calculations based on your actual input/output ratio
+- For write-heavy workloads (summaries, generation): Use closer to 30/70 input/output
+- For read-heavy workloads (analysis, extraction): Use closer to 70/30 input/output
+
+### Performance Metrics
+
+**Processing Time Estimates**
+- `estimated_time_1m_tokens`: Time to process 1M tokens based on throughput
+- Calculated from provider's tokens/second performance
+- Helps plan for batch processing and real-time requirements
+- Example: 22,222 seconds (~6.2 hours) for a 45 tok/s model
+
+### Example Comparison
+
+```json
+{
+  "model_name": "gpt-4o-mini",
+  "provider": "OpenAI",
+  "cost_per_input_token": 0.00000015,
+  "cost_per_output_token": 0.0000006,
+  "cost_at_10k_tokens": {
+    "input_cost": 0.0015,
+    "output_cost": 0.006,
+    "total_cost": 0.00375
+  },
+  "cost_at_1m_tokens": {
+    "input_cost": 0.15,
+    "output_cost": 0.60,
+    "total_cost": 0.375
+  },
+  "estimated_time_1m_tokens": 12500.0
+}
+```
+
+**Reading these metrics:**
+- At 10K tokens: $0.00375 (less than half a cent)
+- At 1M tokens: $0.375 (about 38 cents)
+- Processing time: 3.5 hours at this throughput
+- Perfect for high-volume, cost-sensitive workloads
 
 ## Configuration
 
@@ -752,6 +948,85 @@ pytest tests/test_api.py -v
 
 ## Deployment
 
+### Production-Ready Features
+
+This service is fully production-ready with support for:
+
+- **Blue-Green Deployment**: Zero-downtime deployments with instant rollback capability
+- **Backwards Compatibility**: All endpoints maintain compatibility through major version boundaries
+- **Graceful Shutdown**: Proper handling of in-flight requests during deployment
+- **Health Checks**: Comprehensive liveness and readiness probes for orchestrators
+- **Telemetry**: Real-time usage and adoption metrics for monitoring
+
+### Blue-Green Deployment Guide
+
+For comprehensive instructions on deploying with zero downtime, see [BLUE_GREEN_DEPLOYMENT.md](BLUE_GREEN_DEPLOYMENT.md).
+
+**Key Features:**
+- Switch traffic between Blue and Green instances
+- Instant rollback if issues detected
+- Environment awareness (detect blue/green deployment group)
+- Graceful shutdown with request draining
+- Health check endpoints for orchestrators (K8s, Docker Swarm, ECS)
+
+**Quick Blue-Green Deployment:**
+
+```bash
+# 1. Deploy green instance
+docker run -d \
+  --name llm-pricing-green \
+  -e ENV=production \
+  -e DEPLOYMENT_GROUP=green \
+  -p 8001:8000 \
+  myregistry/llm-pricing:v1.5.0
+
+# 2. Verify health
+curl http://localhost:8001/health/ready
+
+# 3. Switch load balancer to green
+# (Configure in your load balancer)
+
+# 4. Graceful shutdown of blue
+curl -X POST http://localhost:8000/deployment/shutdown \
+  -d '{"drain_timeout_seconds": 30}'
+```
+
+### Backwards Compatibility
+
+All API endpoints maintain backwards compatibility. See [BACKWARDS_COMPATIBILITY.md](BACKWARDS_COMPATIBILITY.md) for:
+
+- API versioning strategy
+- Guaranteed stable endpoints
+- Client resilience recommendations
+- Migration planning
+- Common migration scenarios
+
+### Health Check Endpoints
+
+For orchestrators and load balancers:
+
+```bash
+# Simple health check (backwards compatible)
+GET /health
+→ {"status": "healthy", "service": "LLM Pricing MCP Server", "version": "1.5.0"}
+
+# Kubernetes readinessProbe (ready for traffic)
+GET /health/ready
+→ {"ready": true, "checks": {...}}
+
+# Kubernetes livenessProbe (process should continue)
+GET /health/live
+→ {"alive": true}
+
+# Comprehensive health details
+GET /health/detailed
+→ Detailed status including environment, metrics, services
+
+# Deployment information (blue-green aware)
+GET /deployment/info
+→ {"environment": "production", "deployment_group": "blue", "region": "us-east-1", ...}
+```
+
 ### Azure App Service
 
 Detailed deployment instructions are available in [DEPLOYMENT.md](DEPLOYMENT.md).
@@ -854,13 +1129,26 @@ For issues, questions, or contributions, please open an issue on GitHub.
 
 ## Roadmap
 
+### Completed (v1.5.0) - Latest
+- [x] **MAJOR:** Expanded to 11 major LLM providers (from 5)
+- [x] **NEW:** Groq integration - Ultra-fast inference platform 
+- [x] **NEW:** Together AI integration - Open-source model hosting
+- [x] **NEW:** Fireworks AI integration - Fast inference platform
+- [x] **NEW:** Perplexity AI integration - Search-augmented models
+- [x] **NEW:** AI21 Labs integration - Jamba and enterprise models
+- [x] **NEW:** Anyscale integration - Ray-optimized inference
+- [x] 87+ models available across all providers
+- [x] Live data fetching for all 12 providers (no API keys required)
+- [x] Smart caching and fallback mechanisms for all providers
+- [x] Public status page integration for performance metrics
+
 ### Completed (v1.4.2)
 - [x] Real-time pricing API integration with async fetching
 - [x] Graceful error handling and partial data support
 - [x] Provider status tracking and monitoring
 - [x] Extensible base provider interface for adding new providers
 - [x] Cost calculation endpoints (single and batch estimates)
-- [x] Support for multiple LLM providers (OpenAI, Anthropic, Google, Cohere, Mistral AI)
+- [x] Initial 5 providers (OpenAI, Anthropic, Google, Cohere, Mistral AI)
 - [x] Models discovery endpoint (/models)
 - [x] Performance metrics endpoint (/performance) - throughput, latency, context windows
 - [x] Value-based recommendations (/use-cases) - organizing models by use cases
@@ -869,19 +1157,17 @@ For issues, questions, or contributions, please open an issue on GitHub.
 - [x] Comprehensive API documentation
 - [x] Architecture documentation with diagrams
 - [x] Error handling with detailed status information
-- [x] Performance metrics (throughput, latency) for all providers
-- [x] **NEW:** Live data fetching from public pricing pages (no API keys required)
-- [x] **NEW:** Smart caching with TTL (500x+ performance improvement)
-- [x] **NEW:** Comprehensive fallback mechanism with static data
-- [x] **NEW:** All 5 providers integrated with live data (OpenAI, Anthropic, Google, Cohere, Mistral)
-- [x] **NEW:** Public status page integration for performance metrics
+- [x] Live data fetching from public pricing pages
+- [x] Smart caching with TTL (500x+ performance improvement)
+- [x] Comprehensive fallback mechanism with static data
+- [x] Public status page integration for performance metrics
 
 ### Future Enhancements
 - [ ] Historical pricing data and trend analysis
 - [ ] WebSocket support for live price updates
 - [ ] Database integration for caching and persistence
 - [ ] Authentication and rate limiting
-- [ ] Additional exotic model providers
+- [ ] Additional specialized providers (Replicate, Hugging Face, etc.)
 - [ ] Web scraping for providers without public APIs
 - [ ] GraphQL API support
 - [ ] Pricing alerts and notifications
