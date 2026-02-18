@@ -3,7 +3,7 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A public open-source Python-based MCP (Model Compute Pricing) server for dynamically retrieving and comparing pricing information for Large Language Models (LLMs). Built with FastAPI, this server aggregates pricing data from **12 major LLM providers** including OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Anyscale, and Amazon Bedrock.
+A production-ready Python-based MCP (Model Compute Pricing) server with zero-downtime deployment support. Built with FastAPI, this server aggregates real-time pricing data from **12 major LLM providers** including OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Anyscale, and Amazon Bedrock. Features geolocation tracking, browser analytics, and blue-green deployment support.
 
 ## Features
 
@@ -14,13 +14,19 @@ A public open-source Python-based MCP (Model Compute Pricing) server for dynamic
 - **Provider Status Tracking**: Monitor availability and health of each pricing provider
 - **Unified Pricing Format**: All pricing data in USD per token with source attribution
 - **Comprehensive Metrics**: Track cost per token, context window sizes, and provider metadata
+- **Geolocation Tracking**: Automatic client IP geolocation with country/city details and browser detection
+- **Browser Analytics**: User-Agent parsing for browser, OS, and device type classification
+- **Client Analytics**: Track unique clients, geographic distribution, and browser usage patterns
+- **Blue-Green Deployment**: Zero-downtime deployments with instant rollback capability
+- **Health Checks**: Kubernetes/Docker-compatible liveness, readiness, and detailed health probes
+- **Graceful Shutdown**: Proper request draining during deployment (SIGTERM/SIGINT handling)
 - **RESTful API**: Clean, well-documented endpoints using FastAPI
 - **Data Validation**: Robust validation using Pydantic models
 - **Extensible Architecture**: Easy-to-use base provider interface for adding new providers
 - **Environment Configuration**: Secure configuration management with `.env` files
-- **Comprehensive Testing**: Full test suite including async operations and error handling
+- **Comprehensive Testing**: 96 passing tests with 83% code coverage
 - **CI/CD**: Automated testing and deployment via GitHub Actions
-- **Azure Deployment**: Ready-to-deploy on Azure App Service
+- **Production Ready**: Azure App Service, Docker, Kubernetes compatible
 
 ## Table of Contents
 
@@ -498,16 +504,19 @@ Health check endpoint for monitoring.
 ```
 
 #### `GET /telemetry`
-Get real-time telemetry data including endpoint usage metrics, provider adoption, and feature usage.
+Get real-time telemetry data including endpoint usage metrics, provider adoption, feature usage, client locations, and browser analytics.
 
 **Features:**
 - Real-time endpoint usage metrics (call count, error rates, response times)
 - Provider adoption tracking (which models are most requested)
 - Feature usage statistics (pricing lookups, cost comparisons, etc.)
+- Client location analytics with geographic distribution (powered by IP geolocation)
+- Browser and OS analytics (User-Agent parsing for client environment detection)
 - Overall system health metrics and uptime
+- Unique client tracking and multi-country usage insights
 - Comprehensive statistics for monitoring and optimization
 
-**Response:**
+**Response (Includes Client Analytics):**
 ```json
 {
   "overall_stats": {
@@ -518,6 +527,8 @@ Get real-time telemetry data including endpoint usage metrics, provider adoption
     "total_providers_adopted": 5,
     "total_features_used": 4,
     "avg_response_time_ms": 45.5,
+    "unique_clients": 23,
+    "unique_countries": 8,
     "uptime_since": "2024-02-10T12:00:00Z",
     "timestamp": "2024-02-10T14:30:00Z"
   },
@@ -533,18 +544,6 @@ Get real-time telemetry data including endpoint usage metrics, provider adoption
       "min_response_time_ms": 28.2,
       "max_response_time_ms": 42.1,
       "last_called": "2024-02-10T14:29:55Z"
-    },
-    {
-      "endpoint": "/cost-estimate",
-      "path": "/cost-estimate",
-      "method": "POST",
-      "call_count": 35,
-      "error_count": 1,
-      "success_rate": 0.97,
-      "avg_response_time_ms": 18.5,
-      "min_response_time_ms": 15.3,
-      "max_response_time_ms": 25.8,
-      "last_called": "2024-02-10T14:29:52Z"
     }
   ],
   "provider_adoption": [
@@ -554,13 +553,6 @@ Get real-time telemetry data including endpoint usage metrics, provider adoption
       "unique_models_requested": 4,
       "total_cost_estimated": 2.45,
       "last_requested": "2024-02-10T14:29:50Z"
-    },
-    {
-      "provider_name": "Anthropic",
-      "model_requests": 42,
-      "unique_models_requested": 3,
-      "total_cost_estimated": 1.85,
-      "last_requested": "2024-02-10T14:29:48Z"
     }
   ],
   "features": [
@@ -568,16 +560,43 @@ Get real-time telemetry data including endpoint usage metrics, provider adoption
       "feature_name": "cost_estimation",
       "usage_count": 35,
       "last_used": "2024-02-10T14:29:52Z"
+    }
+  ],
+  "client_locations": [
+    {
+      "country": "United States",
+      "country_code": "US",
+      "request_count": 85,
+      "unique_clients": 15
     },
     {
-      "feature_name": "batch_cost_estimation",
-      "usage_count": 28,
-      "last_used": "2024-02-10T14:29:45Z"
+      "country": "United Kingdom",
+      "country_code": "GB",
+      "request_count": 32,
+      "unique_clients": 5
     },
     {
-      "feature_name": "performance_comparison",
-      "usage_count": 15,
-      "last_used": "2024-02-10T14:28:30Z"
+      "country": "Canada",
+      "country_code": "CA",
+      "request_count": 18,
+      "unique_clients": 3
+    }
+  ],
+  "top_browsers": [
+    {
+      "browser_name": "Chrome",
+      "request_count": 78,
+      "unique_clients": 12
+    },
+    {
+      "browser_name": "Firefox",
+      "request_count": 42,
+      "unique_clients": 8
+    },
+    {
+      "browser_name": "Safari",
+      "request_count": 30,
+      "unique_clients": 3
     }
   ],
   "timestamp": "2024-02-10T14:30:00Z"
@@ -590,6 +609,8 @@ Get real-time telemetry data including endpoint usage metrics, provider adoption
 - **Feature Adoption:** See which pricing features are used most
 - **Provider Insights:** Understand which LLM providers are most popular
 - **Cost Tracking:** Monitor estimated costs from usage patterns
+- **Geographic Analysis:** See which countries are using the API most
+- **Client Analytics:** Understand browser and device distribution of users
 - **Performance Optimization:** Identify slow endpoints for optimization
 
 #### `POST /cost-estimate`

@@ -1,7 +1,7 @@
 {
   "name": "llm-pricing-mcp-server",
   "version": "1.5.0",
-  "description": "LLM Pricing MCP Server for Azure App Service - Supporting 11 major LLM providers",
+  "description": "LLM Pricing MCP Server for Azure App Service - Supporting 12 major LLM providers with geolocation and blue-green deployment",
   "main": "src/main.py",
   "scripts": {
     "start": "python -m uvicorn src.main:app --host 0.0.0.0 --port 8000"

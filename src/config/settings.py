@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # Application metadata
     app_name: str = "LLM Pricing MCP Server"
     app_version: str = "1.5.0"
-    app_description: str = "Dynamic pricing comparison server for LLM models across 11 major providers"
+    app_description: str = "Dynamic pricing comparison server for LLM models across 12 major providers with geolocation and health checks"
     
     model_config = {
         "env_file": ".env",
