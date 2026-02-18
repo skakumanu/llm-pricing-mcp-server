@@ -137,6 +137,15 @@ PRICING_SOURCES = {
         requires_auth=False,  # Pricing page is public
         cache_ttl_seconds=7200,
     ),
+    "Amazon Bedrock": PricingDataSource(
+        provider="Amazon Bedrock",
+        source_type=DataSourceType.HYBRID,
+        api_endpoint="https://bedrock.amazonaws.com/",  # Requires AWS credentials
+        pricing_url="https://aws.amazon.com/bedrock/pricing/",  # Public: no auth needed
+        public_health_check="https://status.aws.amazon.com/",
+        requires_auth=False,  # Pricing page is public
+        cache_ttl_seconds=7200,
+    ),
 }
 
 # Performance data sources for each provider
@@ -227,6 +236,14 @@ PERFORMANCE_SOURCES = {
         api_endpoint="https://api.endpoints.anyscale.com/v1/models",  # Optional: requires API key
         health_check_endpoint="https://api.endpoints.anyscale.com/v1/models",
         public_status_page="https://status.anyscale.com/",  # Public: no auth
+        cache_ttl_seconds=300,
+    ),
+    "Amazon Bedrock": PerformanceDataSource(
+        provider="Amazon Bedrock",
+        source_type=DataSourceType.HYBRID,
+        api_endpoint="https://bedrock.amazonaws.com/",  # Requires AWS credentials
+        health_check_endpoint="https://status.aws.amazon.com/",
+        public_status_page="https://status.aws.amazon.com/",  # Public: no auth
         cache_ttl_seconds=300,
     ),
 }

@@ -3,7 +3,7 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A public open-source Python-based MCP (Model Compute Pricing) server for dynamically retrieving and comparing pricing information for Large Language Models (LLMs). Built with FastAPI, this server aggregates pricing data from **11 major LLM providers** including OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, and Anyscale.
+A public open-source Python-based MCP (Model Compute Pricing) server for dynamically retrieving and comparing pricing information for Large Language Models (LLMs). Built with FastAPI, this server aggregates pricing data from **12 major LLM providers** including OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Anyscale, and Amazon Bedrock.
 
 ## Features
 
@@ -171,19 +171,20 @@ For detailed information about live data fetching architecture, caching strategy
 
 | Provider | Status | Models | Data Source |
 |----------|--------|--------|-------------|
-| **OpenAI** | ✅ Working | 5 models | Public Pricing + Status Page (Cached) |
-| **Anthropic** | ✅ Working | 5 models | Public Pricing + Status Page (Cached) |
-| **Google** | ✅ Working | 4 models | Public Pricing + Status Page (Cached) |
-| **Cohere** | ✅ Working | 4 models | Public Pricing + Status Page (Cached) |
-| **Mistral AI** | ✅ Working | 6 models | Public Pricing + Status Page (Cached) |
-| **Groq** | ✅ Working | 8 models | Public Pricing + Status Page (Cached) |
-| **Together AI** | ✅ Working | 8 models | Public Pricing + Status Page (Cached) |
-| **Fireworks AI** | ✅ Working | 6 models | Public Pricing + Status Page (Cached) |
+| **OpenAI** | ✅ Working | 7 models | Public Pricing + Status Page (Cached) |
+| **Anthropic** | ✅ Working | 7 models | Public Pricing + Status Page (Cached) |
+| **Google** | ✅ Working | 5 models | Public Pricing + Status Page (Cached) |
+| **Cohere** | ✅ Working | 6 models | Public Pricing + Status Page (Cached) |
+| **Mistral AI** | ✅ Working | 7 models | Public Pricing + Status Page (Cached) |
+| **Groq** | ✅ Working | 11 models | Public Pricing + Status Page (Cached) |
+| **Together AI** | ✅ Working | 9 models | Public Pricing + Status Page (Cached) |
+| **Fireworks AI** | ✅ Working | 7 models | Public Pricing + Status Page (Cached) |
 | **Perplexity AI** | ✅ Working | 3 models | Public Pricing + Status Page (Cached) |
 | **AI21 Labs** | ✅ Working | 5 models | Public Pricing + Status Page (Cached) |
 | **Anyscale** | ✅ Working | 6 models | Public Pricing + Status Page (Cached) |
+| **Amazon Bedrock** | ✅ Working | 14 models | Public Pricing + AWS Status (Cached) |
 
-- **Total Models Available**: 73+ across all 11 providers
+- **Total Models Available**: 87+ across all 12 providers
 - **Cache Performance**: 58x faster on cached requests
 - **Deployment Status**: Ready for production (no API keys required)
 - **Test Coverage**: Comprehensive test suite included
@@ -868,8 +869,8 @@ For issues, questions, or contributions, please open an issue on GitHub.
 - [x] **NEW:** Perplexity AI integration - Search-augmented models
 - [x] **NEW:** AI21 Labs integration - Jamba and enterprise models
 - [x] **NEW:** Anyscale integration - Ray-optimized inference
-- [x] 73+ models available across all providers
-- [x] Live data fetching for all 11 providers (no API keys required)
+- [x] 87+ models available across all providers
+- [x] Live data fetching for all 12 providers (no API keys required)
 - [x] Smart caching and fallback mechanisms for all providers
 - [x] Public status page integration for performance metrics
 
