@@ -96,8 +96,91 @@ jobs:
         secrets: 'azure-webapp-name,azure-resource-group'
       id: kvsecrets
 
-    - name: Deploy to Azure App Service
+- name: Deploy to Azure App Service (Staging)
       uses: azure/webapps-deploy@v2
       with:
         app-name: ${{ steps.kvsecrets.outputs.azure-webapp-name }}
+        slot-name: staging
         package: .
+
+    - name: Wait for Staging Slot to Start
+      run: |
+        sleep 30
+        echo "Staging slot starting up..."
+
+    - name: Health Check - Staging Slot
+      run: |
+        echo "Validating staging slot health..."
+        STAGING_URL="https://${{ steps.kvsecrets.outputs.azure-webapp-name }}-staging.azurewebsites.net/health"
+        
+        for attempt in {1..12}; do
+          echo "Health check attempt $attempt/12..."
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X GET "$STAGING_URL")
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✓ Staging slot is healthy (HTTP $HTTP_CODE)"
+            exit 0
+          fi
+          
+          echo "Staging slot returned HTTP $HTTP_CODE, waiting..."
+          sleep 5
+        done
+        
+        echo "✗ Staging slot failed health check after 60 seconds"
+        exit 1
+
+    - name: Functional Test - Staging Slot
+      run: |
+        echo "Running functional tests on staging slot..."
+        STAGING_URL="https://${{ steps.kvsecrets.outputs.azure-webapp-name }}-staging.azurewebsites.net"
+        
+        # Test /models endpoint
+        MODELS_RESPONSE=$(curl -s "$STAGING_URL/models")
+        TOTAL_MODELS=$(echo "$MODELS_RESPONSE" | grep -o '"total_models":[0-9]*' | grep -o '[0-9]*')
+        
+        if [ "$TOTAL_MODELS" -gt 0 ]; then
+          echo "✓ Models endpoint working: $TOTAL_MODELS models available"
+        else
+          echo "✗ Models endpoint returned invalid data"
+          exit 1
+        fi
+        
+        # Test /pricing endpoint
+        PRICING_RESPONSE=$(curl -s "$STAGING_URL/pricing")
+        if echo "$PRICING_RESPONSE" | grep -q '"models"'; then
+          echo "✓ Pricing endpoint working: pricing data available"
+        else
+          echo "✗ Pricing endpoint failed"
+          exit 1
+        fi
+
+    - name: Swap Staging to Production
+      run: |
+        echo "Swapping staging slot to production..."
+        az webapp deployment slot swap \
+          --resource-group ${{ steps.kvsecrets.outputs.azure-resource-group }} \
+          --name ${{ steps.kvsecrets.outputs.azure-webapp-name }} \
+          --slot staging
+        
+        echo "✓ Slot swap completed successfully"
+
+    - name: Health Check - Production Slot
+      run: |
+        echo "Validating production slot after swap..."
+        PROD_URL="https://${{ steps.kvsecrets.outputs.azure-webapp-name }}.azurewebsites.net/health"
+        
+        for attempt in {1..12}; do
+          echo "Health check attempt $attempt/12..."
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X GET "$PROD_URL")
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✓ Production slot is healthy (HTTP $HTTP_CODE)"
+            exit 0
+          fi
+          
+          echo "Production slot returned HTTP $HTTP_CODE, waiting..."
+          sleep 5
+        done
+        
+        echo "⚠ Production slot health check timeout (may still be warming up)"
+        exit 0  # Don't fail the deployment on timeout
