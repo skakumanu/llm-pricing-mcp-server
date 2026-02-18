@@ -948,6 +948,85 @@ pytest tests/test_api.py -v
 
 ## Deployment
 
+### Production-Ready Features
+
+This service is fully production-ready with support for:
+
+- **Blue-Green Deployment**: Zero-downtime deployments with instant rollback capability
+- **Backwards Compatibility**: All endpoints maintain compatibility through major version boundaries
+- **Graceful Shutdown**: Proper handling of in-flight requests during deployment
+- **Health Checks**: Comprehensive liveness and readiness probes for orchestrators
+- **Telemetry**: Real-time usage and adoption metrics for monitoring
+
+### Blue-Green Deployment Guide
+
+For comprehensive instructions on deploying with zero downtime, see [BLUE_GREEN_DEPLOYMENT.md](BLUE_GREEN_DEPLOYMENT.md).
+
+**Key Features:**
+- Switch traffic between Blue and Green instances
+- Instant rollback if issues detected
+- Environment awareness (detect blue/green deployment group)
+- Graceful shutdown with request draining
+- Health check endpoints for orchestrators (K8s, Docker Swarm, ECS)
+
+**Quick Blue-Green Deployment:**
+
+```bash
+# 1. Deploy green instance
+docker run -d \
+  --name llm-pricing-green \
+  -e ENV=production \
+  -e DEPLOYMENT_GROUP=green \
+  -p 8001:8000 \
+  myregistry/llm-pricing:v1.5.0
+
+# 2. Verify health
+curl http://localhost:8001/health/ready
+
+# 3. Switch load balancer to green
+# (Configure in your load balancer)
+
+# 4. Graceful shutdown of blue
+curl -X POST http://localhost:8000/deployment/shutdown \
+  -d '{"drain_timeout_seconds": 30}'
+```
+
+### Backwards Compatibility
+
+All API endpoints maintain backwards compatibility. See [BACKWARDS_COMPATIBILITY.md](BACKWARDS_COMPATIBILITY.md) for:
+
+- API versioning strategy
+- Guaranteed stable endpoints
+- Client resilience recommendations
+- Migration planning
+- Common migration scenarios
+
+### Health Check Endpoints
+
+For orchestrators and load balancers:
+
+```bash
+# Simple health check (backwards compatible)
+GET /health
+→ {"status": "healthy", "service": "LLM Pricing MCP Server", "version": "1.5.0"}
+
+# Kubernetes readinessProbe (ready for traffic)
+GET /health/ready
+→ {"ready": true, "checks": {...}}
+
+# Kubernetes livenessProbe (process should continue)
+GET /health/live
+→ {"alive": true}
+
+# Comprehensive health details
+GET /health/detailed
+→ Detailed status including environment, metrics, services
+
+# Deployment information (blue-green aware)
+GET /deployment/info
+→ {"environment": "production", "deployment_group": "blue", "region": "us-east-1", ...}
+```
+
 ### Azure App Service
 
 Detailed deployment instructions are available in [DEPLOYMENT.md](DEPLOYMENT.md).

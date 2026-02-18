@@ -1,6 +1,7 @@
 """Main FastAPI application for LLM Pricing MCP Server."""
 import sys
 import logging
+import signal
 from pathlib import Path
 from datetime import datetime
 
@@ -26,8 +27,13 @@ from src.models.pricing import (
     PerformanceResponse, PerformanceMetrics, ModelUseCase, UseCaseResponse, TelemetryResponse,
     EndpointMetricResponse, ProviderAdoptionResponse, FeatureUsageResponse, TelemetryOverallStats
 )
+from src.models.deployment import (
+    HealthCheckResponse, DeploymentReadiness, DeploymentMetadata, ApiVersionInfo,
+    GracefulShutdownRequest, GracefulShutdownStatus
+)
 from src.services.pricing_aggregator import PricingAggregatorService
 from src.services.telemetry import get_telemetry_service
+from src.services.deployment import get_deployment_manager
 
 logger.info("Imports completed successfully")
 
@@ -39,6 +45,39 @@ app = FastAPI(
 )
 
 logger.info(f"FastAPI app created: {app.title} v{app.version}")
+
+# Initialize deployment manager for blue-green deployment support
+deployment_manager = get_deployment_manager(version=settings.app_version)
+logger.info("Deployment manager initialized")
+
+# Add deployment middleware for request tracking (needed for graceful shutdown)
+@app.middleware("http")
+async def deployment_middleware(request: Request, call_next):
+    """
+    Middleware to track active requests for graceful shutdown support.
+    Rejects new requests if graceful shutdown is in progress.
+    """
+    # Check if we're shutting down
+    if deployment_manager.is_shutting_down():
+        # Still allow health check endpoints during shutdown
+        if request.url.path not in ["/health", "/health/live", "/health/ready", "/health/detailed"]:
+            return HTTPException(
+                status_code=503,
+                detail="Service is shutting down",
+            )
+    
+    # Track request start
+    try:
+        await deployment_manager.track_request_start()
+    except RuntimeError as e:
+        return HTTPException(status_code=503, detail=str(e))
+    
+    try:
+        response = await call_next(request)
+    finally:
+        await deployment_manager.track_request_end()
+    
+    return response
 
 # Add telemetry middleware for automatic request tracking
 @app.middleware("http")
@@ -75,7 +114,7 @@ async def telemetry_middleware(request: Request, call_next):
     
     return response
 
-logger.info("Telemetry middleware registered")
+logger.info("Middleware registered: deployment tracking and telemetry")
 
 # Global pricing aggregator instance (lazy initialized)
 pricing_aggregator: Optional[PricingAggregatorService] = None
@@ -278,7 +317,10 @@ async def get_pricing(
 @app.get("/health")
 async def health_check():
     """
-    Health check endpoint.
+    Simple health check endpoint (backwards compatible).
+    
+    Returns basic health status. For production orchestrators (K8s, ECS),
+    use /health/live or /health/ready instead.
     
     Returns:
         dict: Server health status
@@ -288,6 +330,183 @@ async def health_check():
         "service": settings.app_name,
         "version": settings.app_version
     }
+
+
+@app.get("/health/detailed", response_model=HealthCheckResponse)
+async def health_check_detailed():
+    """
+    Detailed health check for monitoring and load balancers.
+    
+    Includes:
+    - Service status and version
+    - Environment and deployment information
+    - Active request count and uptime
+    - Dependency health (if available)
+    - Graceful shutdown status
+    
+    Use this endpoint for comprehensive monitoring of the service.
+    
+    Returns:
+        HealthCheckResponse: Detailed health information
+    """
+    return await deployment_manager.get_health_check(
+        include_metrics=True,
+        include_dependencies=True,
+    )
+
+
+@app.get("/health/ready", response_model=DeploymentReadiness)
+async def health_ready():
+    """
+    Kubernetes readinessProbe endpoint.
+    
+    Returns ready=true if the service is ready to accept traffic.
+    Returns ready=false during graceful shutdown.
+    
+    Load balancers should use this to determine if traffic should be routed here.
+    
+    Returns:
+        DeploymentReadiness: Ready status for traffic routing
+    """
+    return await deployment_manager.get_readiness_check()
+
+
+@app.get("/health/live")
+async def health_live():
+    """
+    Kubernetes livenessProbe endpoint.
+    
+    Returns alive=true if the process should continue running.
+    Orchestrators will restart the container if this returns false.
+    
+    Returns:
+        dict: Alive status
+    """
+    return await deployment_manager.get_liveness_check()
+
+
+@app.get("/deployment/metadata", response_model=DeploymentMetadata)
+async def get_deployment_metadata():
+    """
+    Get deployment metadata including version and API versioning information.
+    
+    Includes:
+    - Current application version
+    - Supported API versions
+    - Breaking changes documentation
+    - Backwards compatibility information
+    
+    Use this endpoint to:
+    - Detect breaking changes before updating clients
+    - Determine API version compatibility
+    - Understand deprecation timeline
+    
+    Returns:
+        DeploymentMetadata: Version and breaking change information
+    """
+    return deployment_manager.get_deployment_metadata()
+
+
+@app.get("/deployment/info")
+async def get_deployment_info():
+    """
+    Get deployment and blue-green environment information.
+    
+    Includes:
+    - Environment (production/staging)
+    - Deployment group (blue/green)
+    - Region and availability zone
+    - Instance/container ID
+    - Deployment timestamp
+    
+    Use this endpoint to:
+    - Verify blue/green deployment during traffic switching
+    - Identify which instance handled a request
+    - Monitor deployment consistency
+    - Debug region/zone issues
+    
+    Returns:
+        dict: Deployment environment information
+    """
+    env = deployment_manager.environment
+    return {
+        "environment": env.environment,
+        "deployment_group": env.deployment_group,
+        "region": env.region,
+        "availability_zone": env.availability_zone,
+        "instance_id": env.instance_id,
+        "deployment_timestamp": env.deployment_timestamp,
+        "service_uptime_seconds": deployment_manager.get_uptime_seconds(),
+    }
+
+
+@app.post("/deployment/shutdown", response_model=GracefulShutdownStatus)
+async def initiate_graceful_shutdown(request: GracefulShutdownRequest):
+    """
+    Initiate graceful shutdown of the service.
+    
+    Blue-Green Deployment Use Case:
+    1. Load balancer removes this instance from traffic routing
+    2. Load balancer calls this endpoint with drain_timeout_seconds
+    3. Service stops accepting new requests
+    4. Service waits up to drain_timeout_seconds for in-flight requests to complete
+    5. Service exits cleanly
+    6. Orchestrator (K8s, ECS) replaces the instance
+    
+    **Important**: This endpoint should only be called by orchestrators/load balancers,
+    not by end users. Implement proper access controls.
+    
+    Args:
+        request: GracefulShutdownRequest with drain timeout
+        
+    Returns:
+        GracefulShutdownStatus: Current shutdown status
+        
+    Security Note:
+        In production, restrict access to this endpoint using:
+        - Network policies (allow only from orchestrator/load balancer IP)
+        - API gateway authentication
+        - Service-to-service authentication
+    """
+    logger.warning("Graceful shutdown requested via API")
+    await deployment_manager.initiate_graceful_shutdown(request.drain_timeout_seconds)
+    return await deployment_manager.get_shutdown_status()
+
+
+@app.get("/deployment/shutdown/status", response_model=GracefulShutdownStatus)
+async def get_shutdown_status():
+    """
+    Get current graceful shutdown status.
+    
+    Returns:
+        GracefulShutdownStatus: Current shutdown state, active requests count, timeout
+    """
+    return await deployment_manager.get_shutdown_status()
+
+
+@app.get("/api/versions", response_model=ApiVersionInfo)
+async def get_api_versions():
+    """
+    Get API version information and migration guides.
+    
+    Helps clients understand:
+    - Current stable API version
+    - All available versions
+    - Deprecated versions still supported
+    - Breaking changes in each version
+    
+    Use this to plan API version upgrades.
+    
+    Returns:
+        ApiVersionInfo: Version compatibility information
+    """
+    metadata = deployment_manager.get_deployment_metadata()
+    return ApiVersionInfo(
+        current_version="v1",
+        all_versions=metadata.api_versions,
+        deprecated_versions=[],
+        migration_guide_url="https://github.com/skakumanu/llm-pricing-mcp-server/docs/MIGRATION.md",
+    )
 
 
 @app.post("/cost-estimate", response_model=CostEstimateResponse)
@@ -669,6 +888,25 @@ async def get_telemetry():
 
 if __name__ == "__main__":
     import uvicorn
+    
+    # Register signal handlers for graceful shutdown
+    def signal_handler(signum, frame):
+        """Handle termination signals for graceful shutdown."""
+        sig_name = signal.Signals(signum).name
+        logger.warning(f"Received signal {sig_name} - initiating graceful shutdown")
+        
+        # Trigger graceful shutdown
+        asyncio.create_task(deployment_manager.initiate_graceful_shutdown(drain_timeout_seconds=30))
+    
+    # Register SIGTERM (from orchestrators like K8s) and SIGINT (Ctrl+C)
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    logger.info(f"Starting {settings.app_name} v{settings.app_version}")
+    logger.info(f"Server: {settings.server_host}:{settings.server_port}")
+    if deployment_manager.environment.deployment_group:
+        logger.info(f"Deployment group: {deployment_manager.environment.deployment_group} (blue-green mode)")
+    
     uvicorn.run(
         "main:app",
         host=settings.server_host,
