@@ -1,12 +1,22 @@
 """Main FastAPI application for LLM Pricing MCP Server."""
 import sys
+import logging
 from pathlib import Path
+
+# Configure logging first
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+logger.info("Starting application initialization...")
 
 # Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from fastapi import FastAPI, Query, HTTPException
 from typing import Optional
+import asyncio
 from src.config.settings import settings
 from src.models.pricing import (
     PricingResponse, ServerInfo, EndpointInfo, CostEstimateRequest, CostEstimateResponse,
@@ -15,6 +25,8 @@ from src.models.pricing import (
 )
 from src.services.pricing_aggregator import PricingAggregatorService
 
+logger.info("Imports completed successfully")
+
 # Initialize FastAPI app
 app = FastAPI(
     title=settings.app_name,
@@ -22,8 +34,32 @@ app = FastAPI(
     description=settings.app_description,
 )
 
-# Initialize pricing aggregator service
-pricing_aggregator = PricingAggregatorService()
+logger.info(f"FastAPI app created: {app.title} v{app.version}")
+
+# Global pricing aggregator instance (lazy initialized)
+pricing_aggregator: Optional[PricingAggregatorService] = None
+_aggregator_lock = asyncio.Lock()
+
+
+async def get_pricing_aggregator() -> PricingAggregatorService:
+    """
+    Lazy-load the pricing aggregator on first use.
+    Uses a lock to ensure thread-safe initialization.
+    """
+    global pricing_aggregator
+    
+    if pricing_aggregator is None:
+        logger.info("First request - initializing pricing aggregator...")
+        async with _aggregator_lock:
+            # Double-check in case another coroutine initialized while we waited
+            if pricing_aggregator is None:
+                pricing_aggregator = PricingAggregatorService()
+                logger.info("Pricing aggregator initialized successfully")
+    
+    return pricing_aggregator
+
+logger.info("Application initialization complete")
+
 
 
 @app.get("/", response_model=ServerInfo)
@@ -127,10 +163,11 @@ async def get_models(
     Returns:
         dict: List of model names organized by provider
     """
+    aggregator = await get_pricing_aggregator()
     if provider:
-        models, _ = await pricing_aggregator.get_pricing_by_provider_async(provider)
+        models, _ = await aggregator.get_pricing_by_provider_async(provider)
     else:
-        models, _ = await pricing_aggregator.get_all_pricing_async()
+        models, _ = await aggregator.get_all_pricing_async()
     
     # Group models by provider
     models_by_provider = {}
@@ -169,10 +206,11 @@ async def get_pricing(
     Returns:
         PricingResponse: Aggregated pricing data with metrics and provider status
     """
+    aggregator = await get_pricing_aggregator()
     if provider:
-        models, provider_status = await pricing_aggregator.get_pricing_by_provider_async(provider)
+        models, provider_status = await aggregator.get_pricing_by_provider_async(provider)
     else:
-        models, provider_status = await pricing_aggregator.get_all_pricing_async()
+        models, provider_status = await aggregator.get_all_pricing_async()
     
     return PricingResponse(
         models=models,
@@ -215,7 +253,8 @@ async def estimate_cost(request: CostEstimateRequest):
         HTTPException: If the model is not found (404)
     """
     # Find the model pricing
-    model_pricing = await pricing_aggregator.find_model_pricing(request.model_name)
+    aggregator = await get_pricing_aggregator()
+    model_pricing = await aggregator.find_model_pricing(request.model_name)
     
     if not model_pricing:
         raise HTTPException(
@@ -256,10 +295,11 @@ async def estimate_cost_batch(request: BatchCostEstimateRequest):
         BatchCostEstimateResponse: Cost comparison across all requested models
     """
     comparisons = []
+    aggregator = await get_pricing_aggregator()
     
     # Calculate cost for each model
     for model_name in request.model_names:
-        model_pricing = await pricing_aggregator.find_model_pricing(model_name)
+        model_pricing = await aggregator.find_model_pricing(model_name)
         
         if not model_pricing:
             comparisons.append(ModelCostComparison(
@@ -347,10 +387,11 @@ async def get_performance(
         PerformanceResponse: Performance metrics with comparisons
     """
     # Get all pricing data (includes performance metrics)
+    aggregator = await get_pricing_aggregator()
     if provider:
-        models, provider_status = await pricing_aggregator.get_pricing_by_provider_async(provider)
+        models, provider_status = await aggregator.get_pricing_by_provider_async(provider)
     else:
-        models, provider_status = await pricing_aggregator.get_all_pricing_async()
+        models, provider_status = await aggregator.get_all_pricing_async()
     
     # Convert to performance metrics and calculate scores
     performance_metrics = []
@@ -439,10 +480,11 @@ async def get_use_cases(
     Returns:
         UseCaseResponse: Use case information for each model
     """
+    aggregator = await get_pricing_aggregator()
     if provider:
-        all_models, _ = await pricing_aggregator.get_pricing_by_provider_async(provider)
+        all_models, _ = await aggregator.get_pricing_by_provider_async(provider)
     else:
-        all_models, _ = await pricing_aggregator.get_all_pricing_async()
+        all_models, _ = await aggregator.get_all_pricing_async()
     
     # Determine cost tier based on token costs (costs are per token)
     def get_cost_tier(input_cost: float, output_cost: float) -> str:
