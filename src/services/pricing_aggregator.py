@@ -13,6 +13,7 @@ from src.services.fireworks_pricing import FireworksPricingService
 from src.services.perplexity_pricing import PerplexityPricingService
 from src.services.ai21_pricing import AI21PricingService
 from src.services.anyscale_pricing import AnyscalePricingService
+from src.services.bedrock_pricing import BedrockPricingService
 
 
 class PricingAggregatorService:
@@ -31,6 +32,7 @@ class PricingAggregatorService:
         self.perplexity_service = PerplexityPricingService()
         self.ai21_service = AI21PricingService()
         self.anyscale_service = AnyscalePricingService()
+        self.bedrock_service = BedrockPricingService()
     
     async def get_all_pricing_async(self) -> tuple[List[PricingMetrics], List[ProviderStatusInfo]]:
         """
@@ -57,6 +59,7 @@ class PricingAggregatorService:
             self.perplexity_service.get_pricing_with_status(),
             self.ai21_service.get_pricing_with_status(),
             self.anyscale_service.get_pricing_with_status(),
+            self.bedrock_service.get_pricing_with_status(),
         ]
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
