@@ -27,7 +27,8 @@ from src.models.pricing import (
     PricingResponse, ServerInfo, EndpointInfo, CostEstimateRequest, CostEstimateResponse,
     BatchCostEstimateRequest, BatchCostEstimateResponse, ModelCostComparison,
     PerformanceResponse, PerformanceMetrics, ModelUseCase, UseCaseResponse, TelemetryResponse,
-    EndpointMetricResponse, ProviderAdoptionResponse, FeatureUsageResponse, TelemetryOverallStats
+    EndpointMetricResponse, ProviderAdoptionResponse, FeatureUsageResponse, TelemetryOverallStats,
+    ClientLocationStats, BrowserStats, ClientInfo
 )
 from src.models.deployment import (
     HealthCheckResponse, DeploymentReadiness, DeploymentMetadata, ApiVersionInfo,
@@ -36,6 +37,7 @@ from src.models.deployment import (
 from src.services.pricing_aggregator import PricingAggregatorService
 from src.services.telemetry import get_telemetry_service
 from src.services.deployment import get_deployment_manager
+from src.services.geolocation import GeolocationService
 
 logger.info("Imports completed successfully")
 
@@ -86,9 +88,34 @@ async def deployment_middleware(request: Request, call_next):
 async def telemetry_middleware(request: Request, call_next):
     """
     Middleware to automatically track all HTTP requests for telemetry.
-    Measures response time and status code for each endpoint.
+    Measures response time, status code, and client information for each endpoint.
     """
     start_time = time.time()
+    
+    # Extract client IP from headers (handles proxies and load balancers)
+    client_ip = (
+        request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        or request.headers.get("x-real-ip")
+        or (request.client.host if request.client else None)
+        or "unknown"
+    )
+    
+    # Extract user agent
+    user_agent = request.headers.get("user-agent")
+    
+    # Parse browser info synchronously (fast)
+    browser_info = GeolocationService.parse_user_agent(user_agent)
+    browser_name = browser_info.get("browser")
+    
+    # Get geolocation asynchronously (cached)
+    try:
+        geo_info = await GeolocationService.get_geolocation(client_ip)
+        country = geo_info.get("country") if geo_info else None
+        country_code = geo_info.get("country_code") if geo_info else None
+    except Exception as e:
+        logger.debug(f"Failed to get geolocation for {client_ip}: {e}")
+        country = None
+        country_code = None
     
     try:
         response = await call_next(request)
@@ -100,7 +127,11 @@ async def telemetry_middleware(request: Request, call_next):
             request.url.path,
             request.method,
             elapsed_ms,
-            status_code=500
+            status_code=500,
+            client_ip=client_ip,
+            country=country,
+            country_code=country_code,
+            browser=browser_name,
         )
         raise
     
@@ -111,7 +142,11 @@ async def telemetry_middleware(request: Request, call_next):
         request.url.path,
         request.method,
         elapsed_ms,
-        status_code=response.status_code
+        status_code=response.status_code,
+        client_ip=client_ip,
+        country=country,
+        country_code=country_code,
+        browser=browser_name,
     )
     
     return response
@@ -818,14 +853,17 @@ async def get_use_cases(
 @app.get("/telemetry", response_model=TelemetryResponse)
 async def get_telemetry():
     """
-    Get real-time telemetry data including endpoint usage, provider adoption, and feature usage.
+    Get real-time telemetry data including endpoint usage, provider adoption, feature usage,
+    and client geolocation/browser statistics.
     
     This endpoint provides comprehensive metrics about API usage patterns, which providers
-    and models are most requested, response times, error rates, and overall system health.
+    and models are most requested, response times, error rates, geographic distribution,
+    browser usage, and overall system health.
     
     Returns:
         TelemetryResponse: Comprehensive telemetry data with overall stats, endpoint metrics,
-                         provider adoption metrics, and feature usage statistics
+                         provider adoption metrics, feature usage statistics, client locations,
+                         and browser statistics
     """
     telemetry = get_telemetry_service()
     
@@ -837,6 +875,8 @@ async def get_telemetry():
     endpoint_stats = telemetry.get_endpoint_stats()
     provider_adoption = telemetry.get_provider_adoption()
     feature_usage = telemetry.get_feature_usage()
+    client_locations = telemetry.get_client_locations(limit=20)
+    browser_stats = telemetry.get_browser_stats(limit=20)
     
     # Convert uptime_since to ISO string if it's a datetime
     uptime_since = overall_stats.get("uptime_since")
@@ -855,6 +895,8 @@ async def get_telemetry():
             total_providers_adopted=overall_stats.get("total_providers_adopted", 0),
             total_features_used=overall_stats.get("total_features_used", 0),
             avg_response_time_ms=overall_stats.get("avg_response_time_ms", 0.0),
+            unique_clients=overall_stats.get("unique_clients", 0),
+            unique_countries=overall_stats.get("unique_countries", 0),
             uptime_since=uptime_since,
             timestamp=datetime.now(UTC).isoformat()
         ),
@@ -869,6 +911,7 @@ async def get_telemetry():
                 avg_response_time_ms=stat.get("avg_response_time_ms", 0.0),
                 min_response_time_ms=stat.get("min_response_time_ms", 0.0),
                 max_response_time_ms=stat.get("max_response_time_ms", 0.0),
+                first_called=stat.get("first_called", None),
                 last_called=stat.get("last_called", None)
             )
             for stat in endpoint_stats
@@ -890,6 +933,23 @@ async def get_telemetry():
                 last_used=feature.get("last_used", None)
             )
             for feature in feature_usage
+        ],
+        client_locations=[
+            ClientLocationStats(
+                country=loc.get("country", "Unknown"),
+                country_code=loc.get("country_code", "XX"),
+                request_count=loc.get("request_count", 0),
+                unique_clients=loc.get("unique_clients", 0)
+            )
+            for loc in client_locations
+        ],
+        top_browsers=[
+            BrowserStats(
+                browser_name=browser.get("browser_name", "Unknown"),
+                request_count=browser.get("request_count", 0),
+                unique_clients=browser.get("unique_clients", 0)
+            )
+            for browser in browser_stats
         ],
         timestamp=datetime.now()
     )

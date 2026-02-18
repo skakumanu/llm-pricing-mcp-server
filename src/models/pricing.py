@@ -262,6 +262,39 @@ class FeatureUsageResponse(BaseModel):
     last_used: Optional[str] = Field(None, description="ISO timestamp of last usage")
 
 
+class ClientLocationStats(BaseModel):
+    """Statistics about client locations."""
+    
+    country: str = Field(..., description="Country name")
+    country_code: str = Field(..., description="ISO country code")
+    request_count: int = Field(..., description="Number of requests from this country")
+    unique_clients: int = Field(..., description="Number of unique IP addresses from this country")
+
+
+class BrowserStats(BaseModel):
+    """Statistics about browsers used by clients."""
+    
+    browser_name: str = Field(..., description="Browser name (e.g., Chrome, Firefox)")
+    request_count: int = Field(..., description="Number of requests from this browser")
+    unique_clients: int = Field(..., description="Number of unique clients using this browser")
+
+
+class ClientInfo(BaseModel):
+    """Information about a client request."""
+    
+    ip_address: str = Field(..., description="Client IP address")
+    browser: Optional[str] = Field(None, description="Browser name")
+    browser_version: Optional[str] = Field(None, description="Browser version")
+    os: Optional[str] = Field(None, description="Operating system")
+    os_version: Optional[str] = Field(None, description="Operating system version")
+    device_type: Optional[str] = Field(None, description="Device type (desktop, mobile, tablet)")
+    country: Optional[str] = Field(None, description="Country name")
+    country_code: Optional[str] = Field(None, description="ISO country code")
+    city: Optional[str] = Field(None, description="City name")
+    latitude: Optional[float] = Field(None, description="Latitude coordinate")
+    longitude: Optional[float] = Field(None, description="Longitude coordinate")
+
+
 class TelemetryOverallStats(BaseModel):
     """Overall telemetry statistics."""
     
@@ -272,6 +305,8 @@ class TelemetryOverallStats(BaseModel):
     total_providers_adopted: int = Field(..., description="Number of providers adopted")
     total_features_used: int = Field(..., description="Number of distinct features used")
     avg_response_time_ms: float = Field(..., description="Average response time across all endpoints")
+    unique_clients: int = Field(..., description="Number of unique client IP addresses")
+    unique_countries: int = Field(..., description="Number of unique countries")
     uptime_since: str = Field(..., description="ISO timestamp when telemetry tracking started")
     timestamp: str = Field(..., description="ISO timestamp of this response")
 
@@ -283,4 +318,6 @@ class TelemetryResponse(BaseModel):
     endpoints: List[EndpointMetricResponse] = Field(..., description="Per-endpoint metrics")
     provider_adoption: List[ProviderAdoptionResponse] = Field(..., description="Provider adoption metrics")
     features: List[FeatureUsageResponse] = Field(..., description="Feature usage metrics")
+    client_locations: List[ClientLocationStats] = Field(default_factory=list, description="Geographic distribution of requests")
+    top_browsers: List[BrowserStats] = Field(default_factory=list, description="Top browsers used by clients")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Response timestamp")
