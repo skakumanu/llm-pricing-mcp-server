@@ -1,7 +1,15 @@
 """Pydantic models for pricing data validation."""
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, computed_field
 from typing import Optional, List
 from datetime import datetime, UTC
+
+
+class TokenVolumePrice(BaseModel):
+    """Price breakdown for a specific token volume."""
+    
+    input_cost: float = Field(..., description="Cost for input tokens in USD")
+    output_cost: float = Field(..., description="Cost for output tokens in USD")
+    total_cost: float = Field(..., description="Total cost (50/50 input/output split) in USD")
 
 
 class PricingMetrics(BaseModel):
@@ -24,6 +32,53 @@ class PricingMetrics(BaseModel):
     use_cases: Optional[List[str]] = Field(None, description="List of ideal use cases for this model")
     strengths: Optional[List[str]] = Field(None, description="Key strengths of this model")
     best_for: Optional[str] = Field(None, description="Quick summary of what this model is best for")
+    
+    @computed_field
+    @property
+    def cost_at_10k_tokens(self) -> TokenVolumePrice:
+        """Calculate cost for 10,000 tokens (small volume)."""
+        input_cost = (self.cost_per_input_token / 1000) * 10000
+        output_cost = (self.cost_per_output_token / 1000) * 10000
+        total_cost = (input_cost + output_cost) / 2  # 50/50 split
+        return TokenVolumePrice(
+            input_cost=round(input_cost, 4),
+            output_cost=round(output_cost, 4),
+            total_cost=round(total_cost, 4)
+        )
+    
+    @computed_field
+    @property
+    def cost_at_100k_tokens(self) -> TokenVolumePrice:
+        """Calculate cost for 100,000 tokens (medium volume)."""
+        input_cost = (self.cost_per_input_token / 1000) * 100000
+        output_cost = (self.cost_per_output_token / 1000) * 100000
+        total_cost = (input_cost + output_cost) / 2  # 50/50 split
+        return TokenVolumePrice(
+            input_cost=round(input_cost, 4),
+            output_cost=round(output_cost, 4),
+            total_cost=round(total_cost, 4)
+        )
+    
+    @computed_field
+    @property
+    def cost_at_1m_tokens(self) -> TokenVolumePrice:
+        """Calculate cost for 1,000,000 tokens (large volume)."""
+        input_cost = (self.cost_per_input_token / 1000) * 1000000
+        output_cost = (self.cost_per_output_token / 1000) * 1000000
+        total_cost = (input_cost + output_cost) / 2  # 50/50 split
+        return TokenVolumePrice(
+            input_cost=round(input_cost, 2),
+            output_cost=round(output_cost, 2),
+            total_cost=round(total_cost, 2)
+        )
+    
+    @computed_field
+    @property
+    def estimated_time_1m_tokens(self) -> Optional[float]:
+        """Estimate time to process 1M tokens based on throughput (in seconds)."""
+        if self.throughput and self.throughput > 0:
+            return round(1000000 / self.throughput, 2)
+        return None
 
 
 class ProviderStatusInfo(BaseModel):

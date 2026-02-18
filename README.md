@@ -8,6 +8,8 @@ A public open-source Python-based MCP (Model Compute Pricing) server for dynamic
 ## Features
 
 - **Real-Time Pricing Aggregation**: Asynchronously fetch pricing data from multiple LLM providers concurrently
+- **Volume-Based Cost Estimates**: Automatic cost calculations at small (10K), medium (100K), and large (1M) token volumes
+- **Performance Projections**: Estimated processing time for 1M tokens based on throughput metrics
 - **Graceful Error Handling**: Return partial data when providers are unavailable with detailed status information
 - **Provider Status Tracking**: Monitor availability and health of each pricing provider
 - **Unified Pricing Format**: All pricing data in USD per token with source attribution
@@ -254,7 +256,23 @@ Retrieves aggregated pricing data from all LLM providers with real-time fetching
       "currency": "USD",
       "unit": "per_token",
       "source": "OpenAI Official Pricing (Static)",
-      "last_updated": "2024-02-10T00:00:00Z"
+      "last_updated": "2024-02-10T00:00:00Z",
+      "cost_at_10k_tokens": {
+        "input_cost": 0.3,
+        "output_cost": 0.6,
+        "total_cost": 0.45
+      },
+      "cost_at_100k_tokens": {
+        "input_cost": 3.0,
+        "output_cost": 6.0,
+        "total_cost": 4.5
+      },
+      "cost_at_1m_tokens": {
+        "input_cost": 30.0,
+        "output_cost": 60.0,
+        "total_cost": 45.0
+      },
+      "estimated_time_1m_tokens": 22222.22
     }
   ],
   "total_models": 10,
@@ -604,6 +622,70 @@ curl -s -X POST http://localhost:8000/cost-estimate/batch \
   -d '{"model_names": ["gpt-4", "gpt-3.5-turbo", "claude-3-sonnet-20240229", "gemini-1.5-pro", "mistral-large-latest"], "input_tokens": 5000, "output_tokens": 2000}' | \
   python -c "import sys, json; data = json.load(sys.stdin); print(f\"Cheapest: {data['cheapest_model']} at \${data['cost_range']['min']:.4f}\")"
 ```
+
+## Understanding Volume-Based Pricing
+
+Every model response now includes automatic cost projections at three usage scales:
+
+### Cost Breakdown by Volume
+
+**Small Scale (10K tokens)**
+- Ideal for: Testing, prototyping, low-volume applications
+- Example: 50-100 user interactions per day
+- Shows: `cost_at_10k_tokens`
+
+**Medium Scale (100K tokens)**
+- Ideal for: Small production apps, moderate traffic
+- Example: 500-1,000 user interactions per day  
+- Shows: `cost_at_100k_tokens`
+
+**Large Scale (1M tokens)**
+- Ideal for: High-volume production, enterprise workloads
+- Example: 5,000-10,000+ user interactions per day
+- Shows: `cost_at_1m_tokens`
+
+### Cost Calculation Notes
+
+- All volume costs assume a **50/50 split** between input and output tokens (common in conversational AI)
+- Adjust your calculations based on your actual input/output ratio
+- For write-heavy workloads (summaries, generation): Use closer to 30/70 input/output
+- For read-heavy workloads (analysis, extraction): Use closer to 70/30 input/output
+
+### Performance Metrics
+
+**Processing Time Estimates**
+- `estimated_time_1m_tokens`: Time to process 1M tokens based on throughput
+- Calculated from provider's tokens/second performance
+- Helps plan for batch processing and real-time requirements
+- Example: 22,222 seconds (~6.2 hours) for a 45 tok/s model
+
+### Example Comparison
+
+```json
+{
+  "model_name": "gpt-4o-mini",
+  "provider": "OpenAI",
+  "cost_per_input_token": 0.00000015,
+  "cost_per_output_token": 0.0000006,
+  "cost_at_10k_tokens": {
+    "input_cost": 0.0015,
+    "output_cost": 0.006,
+    "total_cost": 0.00375
+  },
+  "cost_at_1m_tokens": {
+    "input_cost": 0.15,
+    "output_cost": 0.60,
+    "total_cost": 0.375
+  },
+  "estimated_time_1m_tokens": 12500.0
+}
+```
+
+**Reading these metrics:**
+- At 10K tokens: $0.00375 (less than half a cent)
+- At 1M tokens: $0.375 (about 38 cents)
+- Processing time: 3.5 hours at this throughput
+- Perfect for high-volume, cost-sensitive workloads
 
 ## Configuration
 
