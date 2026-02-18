@@ -82,15 +82,22 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Azure Login
+    - name: Azure Login with OIDC
       uses: azure/login@v1
-      if: ${{ secrets.AZURE_CREDENTIALS != '' }}
       with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        client-id: 8c36eab2-8e8a-40eb-aef2-69ca6655fdcf
+        tenant-id: 61deb976-deca-4bb6-8118-55936023b8fc
+        subscription-id: faa433ef-c9e9-48c8-842b-42986d4be235
+
+    - name: Get Deployment Secrets from Key Vault
+      uses: azure/get-keyvault-secrets@v1
+      with:
+        keyvault: llm-pricing-vault
+        secrets: 'azure-webapp-name,azure-resource-group'
+      id: kvsecrets
 
     - name: Deploy to Azure App Service
       uses: azure/webapps-deploy@v2
-      if: ${{ secrets.AZURE_WEBAPP_NAME != '' }}
       with:
-        app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+        app-name: ${{ steps.kvsecrets.outputs.azure-webapp-name }}
         package: .
