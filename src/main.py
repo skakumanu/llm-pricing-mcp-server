@@ -3,7 +3,9 @@ import sys
 import logging
 import signal
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
+
+UTC = timezone.utc
 
 # Configure logging first
 logging.basicConfig(
@@ -836,6 +838,13 @@ async def get_telemetry():
     provider_adoption = telemetry.get_provider_adoption()
     feature_usage = telemetry.get_feature_usage()
     
+    # Convert uptime_since to ISO string if it's a datetime
+    uptime_since = overall_stats.get("uptime_since")
+    if uptime_since and isinstance(uptime_since, datetime):
+        uptime_since = uptime_since.isoformat()
+    elif uptime_since is None:
+        uptime_since = datetime.now(UTC).isoformat()
+    
     # Build response
     return TelemetryResponse(
         overall_stats=TelemetryOverallStats(
@@ -846,8 +855,8 @@ async def get_telemetry():
             total_providers_adopted=overall_stats.get("total_providers_adopted", 0),
             total_features_used=overall_stats.get("total_features_used", 0),
             avg_response_time_ms=overall_stats.get("avg_response_time_ms", 0.0),
-            uptime_since=overall_stats.get("uptime_since", None),
-            timestamp=datetime.now()
+            uptime_since=uptime_since,
+            timestamp=datetime.now(UTC).isoformat()
         ),
         endpoints=[
             EndpointMetricResponse(
