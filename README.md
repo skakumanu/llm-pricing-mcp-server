@@ -78,6 +78,17 @@ cp .env.example .env
 # Edit .env with your configuration
 ```
 
+Security baseline (recommended for production):
+```bash
+# Require API key for non-health endpoints
+MCP_API_KEY="replace-with-strong-key"
+MCP_API_KEY_HEADER="x-api-key"
+
+# Request limits
+MAX_BODY_BYTES=1000000
+RATE_LIMIT_PER_MINUTE=60
+```
+
 ## Quick Start
 
 ### Running the Server
@@ -93,6 +104,11 @@ uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 The server will be available at `http://localhost:8000`
+
+For protected endpoints, send the API key:
+```bash
+curl -H "x-api-key: $MCP_API_KEY" http://localhost:8000/pricing
+```
 
 ### Interactive API Documentation
 
