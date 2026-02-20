@@ -1,0 +1,98 @@
+{
+  "description": "Performance metrics for an LLM model.",
+  "properties": {
+    "model_name": {
+      "description": "Name of the LLM model",
+      "title": "Model Name",
+      "type": "string"
+    },
+    "provider": {
+      "description": "Provider of the model",
+      "title": "Provider",
+      "type": "string"
+    },
+    "throughput": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Tokens per second throughput",
+      "title": "Throughput"
+    },
+    "latency_ms": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Average latency in milliseconds",
+      "title": "Latency Ms"
+    },
+    "context_window": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Maximum context window size",
+      "title": "Context Window"
+    },
+    "cost_per_input_token": {
+      "description": "Cost per input token in USD",
+      "title": "Cost Per Input Token",
+      "type": "number"
+    },
+    "cost_per_output_token": {
+      "description": "Cost per output token in USD",
+      "title": "Cost Per Output Token",
+      "type": "number"
+    },
+    "performance_score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Calculated performance score (throughput/cost ratio)",
+      "title": "Performance Score"
+    },
+    "value_score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Value score (context_window/cost ratio)",
+      "title": "Value Score"
+    }
+  },
+  "required": [
+    "model_name",
+    "provider",
+    "cost_per_input_token",
+    "cost_per_output_token"
+  ],
+  "title": "PerformanceMetrics",
+  "type": "object"
+}

@@ -1,0 +1,27 @@
+{
+  "description": "Endpoint information with method and description.",
+  "properties": {
+    "path": {
+      "description": "Endpoint path",
+      "title": "Path",
+      "type": "string"
+    },
+    "method": {
+      "description": "HTTP method (GET, POST, etc.)",
+      "title": "Method",
+      "type": "string"
+    },
+    "description": {
+      "description": "Brief description of endpoint",
+      "title": "Description",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path",
+    "method",
+    "description"
+  ],
+  "title": "EndpointInfo",
+  "type": "object"
+}

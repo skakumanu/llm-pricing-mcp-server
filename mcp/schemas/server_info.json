@@ -1,0 +1,50 @@
+{
+  "description": "Server information model.",
+  "properties": {
+    "name": {
+      "description": "Server name",
+      "title": "Name",
+      "type": "string"
+    },
+    "version": {
+      "description": "Server version",
+      "title": "Version",
+      "type": "string"
+    },
+    "description": {
+      "description": "Server description",
+      "title": "Description",
+      "type": "string"
+    },
+    "endpoints": {
+      "description": "Available API endpoints with methods",
+      "items": {
+        "$ref": "#/$defs/EndpointInfo"
+      },
+      "title": "Endpoints",
+      "type": "array"
+    },
+    "sample_models": {
+      "description": "Sample model names for testing",
+      "items": {
+        "type": "string"
+      },
+      "title": "Sample Models",
+      "type": "array"
+    },
+    "quick_start_guide": {
+      "default": "Visit /docs for interactive API documentation",
+      "description": "Quick start guidance",
+      "title": "Quick Start Guide",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "version",
+    "description",
+    "endpoints"
+  ],
+  "title": "ServerInfo",
+  "type": "object"
+}

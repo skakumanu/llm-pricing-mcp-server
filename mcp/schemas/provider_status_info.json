@@ -1,0 +1,40 @@
+{
+  "description": "Provider availability status information.",
+  "properties": {
+    "provider_name": {
+      "description": "Name of the provider",
+      "title": "Provider Name",
+      "type": "string"
+    },
+    "is_available": {
+      "description": "Whether the provider is currently available",
+      "title": "Is Available",
+      "type": "boolean"
+    },
+    "error_message": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Error message if provider is unavailable",
+      "title": "Error Message"
+    },
+    "models_count": {
+      "default": 0,
+      "description": "Number of models returned by this provider",
+      "title": "Models Count",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "provider_name",
+    "is_available"
+  ],
+  "title": "ProviderStatusInfo",
+  "type": "object"
+}

@@ -1,0 +1,64 @@
+{
+  "description": "Use case information for a specific LLM model.",
+  "properties": {
+    "model_name": {
+      "description": "Name of the LLM model",
+      "title": "Model Name",
+      "type": "string"
+    },
+    "provider": {
+      "description": "Provider of the model",
+      "title": "Provider",
+      "type": "string"
+    },
+    "best_for": {
+      "description": "Quick summary of what this model is best for",
+      "title": "Best For",
+      "type": "string"
+    },
+    "use_cases": {
+      "description": "List of ideal use cases",
+      "items": {
+        "type": "string"
+      },
+      "title": "Use Cases",
+      "type": "array"
+    },
+    "strengths": {
+      "description": "Key strengths of this model",
+      "items": {
+        "type": "string"
+      },
+      "title": "Strengths",
+      "type": "array"
+    },
+    "context_window": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Maximum context window size",
+      "title": "Context Window"
+    },
+    "cost_tier": {
+      "description": "Cost tier: low, medium, high",
+      "title": "Cost Tier",
+      "type": "string"
+    }
+  },
+  "required": [
+    "model_name",
+    "provider",
+    "best_for",
+    "use_cases",
+    "strengths",
+    "cost_tier"
+  ],
+  "title": "ModelUseCase",
+  "type": "object"
+}

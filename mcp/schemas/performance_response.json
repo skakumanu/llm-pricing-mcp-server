@@ -1,0 +1,90 @@
+{
+  "description": "Response model for performance comparison endpoint.",
+  "properties": {
+    "models": {
+      "description": "Performance metrics for each model",
+      "items": {
+        "$ref": "#/$defs/PerformanceMetrics"
+      },
+      "title": "Models",
+      "type": "array"
+    },
+    "total_models": {
+      "description": "Total number of models",
+      "title": "Total Models",
+      "type": "integer"
+    },
+    "best_throughput": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Model with best throughput",
+      "title": "Best Throughput"
+    },
+    "lowest_latency": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Model with lowest latency",
+      "title": "Lowest Latency"
+    },
+    "largest_context": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Model with largest context window",
+      "title": "Largest Context"
+    },
+    "best_value": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Model with best value score",
+      "title": "Best Value"
+    },
+    "provider_status": {
+      "description": "Status of each provider",
+      "items": {
+        "$ref": "#/$defs/ProviderStatusInfo"
+      },
+      "title": "Provider Status",
+      "type": "array"
+    },
+    "timestamp": {
+      "description": "Response timestamp",
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    }
+  },
+  "required": [
+    "models",
+    "total_models"
+  ],
+  "title": "PerformanceResponse",
+  "type": "object"
+}

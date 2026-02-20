@@ -1,0 +1,38 @@
+{
+  "description": "Response model for pricing endpoint.",
+  "properties": {
+    "models": {
+      "description": "List of model pricing information",
+      "items": {
+        "$ref": "#/$defs/PricingMetrics"
+      },
+      "title": "Models",
+      "type": "array"
+    },
+    "total_models": {
+      "description": "Total number of models returned",
+      "title": "Total Models",
+      "type": "integer"
+    },
+    "provider_status": {
+      "description": "Status of each provider",
+      "items": {
+        "$ref": "#/$defs/ProviderStatusInfo"
+      },
+      "title": "Provider Status",
+      "type": "array"
+    },
+    "timestamp": {
+      "description": "Response timestamp",
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    }
+  },
+  "required": [
+    "models",
+    "total_models"
+  ],
+  "title": "PricingResponse",
+  "type": "object"
+}
