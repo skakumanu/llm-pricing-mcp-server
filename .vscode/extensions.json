@@ -1,0 +1,33 @@
+{
+    "recommendations": [
+        // Python Development
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.black-formatter",
+        "ms-python.flake8",
+        // Testing
+        "littlefoxteam.vscode-python-test-adapter",
+        "hbenl.vscode-test-explorer",
+        // REST API Development
+        "humao.rest-client",
+        "rangav.vscode-thunder-client",
+        // JSON & Schema
+        "tamasfe.even-better-toml",
+        "redhat.vscode-yaml",
+        // Git & Version Control
+        "eamodio.gitlens",
+        "mhutchie.git-graph",
+        // Docker (for deployment)
+        "ms-azuretools.vscode-docker",
+        // Markdown Documentation
+        "yzhang.markdown-all-in-one",
+        "davidanson.vscode-markdownlint",
+        // Code Quality
+        "streetsidesoftware.code-spell-checker",
+        "aaron-bond.better-comments",
+        // Productivity
+        "gruntfuggly.todo-tree",
+        "wayou.vscode-todo-highlight"
+    ],
+    "unwantedRecommendations": []
+}
