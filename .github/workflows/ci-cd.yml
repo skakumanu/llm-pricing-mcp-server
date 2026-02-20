@@ -66,6 +66,11 @@ jobs:
     permissions:
       contents: read
 
+    env:
+      ACR_NAME: llmpricingacr
+      ACR_LOGIN_SERVER: llmpricingacr.azurecr.io
+      IMAGE_NAME: llm-pricing-api
+
     steps:
     - uses: actions/checkout@v4
 
@@ -103,7 +108,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-
     - name: Azure Login with OIDC
       uses: azure/login@v1
       with:
