@@ -18,6 +18,14 @@ class Settings(BaseSettings):
     perplexity_api_key: Optional[str] = None
     ai21_api_key: Optional[str] = None
     anyscale_api_key: Optional[str] = None
+
+    # API Authentication
+    mcp_api_key: Optional[str] = None
+    mcp_api_key_header: str = "x-api-key"
+
+    # Request limits
+    max_body_bytes: int = 1_000_000
+    rate_limit_per_minute: int = 60
     
     # Server Configuration
     server_host: str = "0.0.0.0"

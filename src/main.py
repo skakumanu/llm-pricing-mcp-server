@@ -2,24 +2,19 @@
 import sys
 import logging
 import signal
+import secrets
 from pathlib import Path
 from datetime import datetime, timezone
+from collections import defaultdict, deque
 
 UTC = timezone.utc
-
-# Configure logging first
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-logger.info("Starting application initialization...")
 
 # Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from fastapi import FastAPI, Query, HTTPException, Request
-from typing import Optional
+from fastapi.responses import JSONResponse
+from typing import Optional, Deque, Dict
 import asyncio
 import time
 from src.config.settings import settings
@@ -39,6 +34,13 @@ from src.services.telemetry import get_telemetry_service
 from src.services.deployment import get_deployment_manager
 from src.services.geolocation import GeolocationService
 
+# Configure logging after settings are available
+logging.basicConfig(
+    level=logging.DEBUG if settings.debug else logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+logger.info("Starting application initialization...")
 logger.info("Imports completed successfully")
 
 # Initialize FastAPI app
@@ -53,6 +55,41 @@ logger.info(f"FastAPI app created: {app.title} v{app.version}")
 # Initialize deployment manager for blue-green deployment support
 deployment_manager = get_deployment_manager(version=settings.app_version)
 logger.info("Deployment manager initialized")
+
+# Security controls
+_rate_limit_store: Dict[str, Deque[float]] = defaultdict(deque)
+_rate_limit_lock = asyncio.Lock()
+_auth_warning_logged = False
+_last_rate_limit_cleanup = time.time()
+
+async def cleanup_stale_rate_limit_entries():
+    """Periodically remove IP entries with no recent requests to prevent memory leak."""
+    global _last_rate_limit_cleanup
+    now = time.time()
+    if now - _last_rate_limit_cleanup > 3600:  # Cleanup every hour
+        async with _rate_limit_lock:
+            # Remove IPs with empty buckets or no requests in the last hour
+            stale_threshold = now - 3600
+            to_remove = [
+                ip for ip, bucket in _rate_limit_store.items()
+                if not bucket or bucket[-1] < stale_threshold
+            ]
+            for ip in to_remove:
+                del _rate_limit_store[ip]
+            if to_remove:
+                logger.debug("Rate limit cleanup: removed %d stale IP entries", len(to_remove))
+        _last_rate_limit_cleanup = now
+
+_unauthenticated_paths = {
+    "/",
+    "/health",
+    "/health/live",
+    "/health/ready",
+    "/health/detailed",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+}
 
 # Add deployment middleware for request tracking (needed for graceful shutdown)
 @app.middleware("http")
@@ -82,6 +119,72 @@ async def deployment_middleware(request: Request, call_next):
         await deployment_manager.track_request_end()
     
     return response
+
+# Add security middleware for auth, rate limits, and size limits
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    """
+    Enforce API key auth, rate limits, and request size limits.
+    """
+    global _auth_warning_logged
+
+    path = request.url.path
+    if path not in _unauthenticated_paths:
+        if settings.mcp_api_key:
+            provided_key = request.headers.get(settings.mcp_api_key_header)
+            if not provided_key or not secrets.compare_digest(provided_key, settings.mcp_api_key):
+                client_ip = (
+                    request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+                    or request.headers.get("x-real-ip")
+                    or (request.client.host if request.client else None)
+                    or "unknown"
+                )
+                logger.warning(
+                    "Authentication failed for path %s from client IP %s",
+                    path,
+                    client_ip,
+                )
+                return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+        elif not _auth_warning_logged:
+            logger.warning("MCP API key not configured; endpoints are unauthenticated.")
+            _auth_warning_logged = True
+
+    if settings.rate_limit_per_minute > 0:
+        # Periodically cleanup stale IP entries
+        await cleanup_stale_rate_limit_entries()
+        
+        # Note: X-Forwarded-For header parsing assumes server is behind a trusted proxy
+        # (e.g., Azure App Service, nginx). Without a trusted proxy, this can be spoofed.
+        client_ip = (
+            request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+            or request.headers.get("x-real-ip")
+            or (request.client.host if request.client else None)
+            or "unknown"
+        )
+        now = time.time()
+        window_start = now - 60
+        async with _rate_limit_lock:
+            bucket = _rate_limit_store[client_ip]
+            while bucket and bucket[0] < window_start:
+                bucket.popleft()
+            if len(bucket) >= settings.rate_limit_per_minute:
+                return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
+            bucket.append(now)
+
+    if request.method in {"POST", "PUT", "PATCH"}:
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                if int(content_length) > settings.max_body_bytes:
+                    return JSONResponse(status_code=413, content={"detail": "Request body too large"})
+            except ValueError:
+                return JSONResponse(status_code=400, content={"detail": "Invalid Content-Length header"})
+        body = await request.body()
+        if len(body) > settings.max_body_bytes:
+            return JSONResponse(status_code=413, content={"detail": "Request body too large"})
+        request._body = body
+
+    return await call_next(request)
 
 # Add telemetry middleware for automatic request tracking
 @app.middleware("http")
@@ -113,7 +216,7 @@ async def telemetry_middleware(request: Request, call_next):
         country = geo_info.get("country") if geo_info else None
         country_code = geo_info.get("country_code") if geo_info else None
     except Exception as e:
-        logger.debug(f"Failed to get geolocation for {client_ip}: {e}")
+        logger.debug("Failed to get geolocation: %s", e)
         country = None
         country_code = None
     

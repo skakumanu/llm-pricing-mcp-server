@@ -40,6 +40,10 @@ az webapp create --resource-group $RESOURCE_GROUP --plan $APP_SERVICE_PLAN --nam
 az webapp config appsettings set --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME --settings \
   OPENAI_API_KEY="your_openai_api_key" \
   ANTHROPIC_API_KEY="your_anthropic_api_key" \
+  MCP_API_KEY="replace-with-strong-key" \
+  MCP_API_KEY_HEADER="x-api-key" \
+  MAX_BODY_BYTES="1000000" \
+  RATE_LIMIT_PER_MINUTE="60" \
   SERVER_HOST="0.0.0.0" \
   SERVER_PORT="8000" \
   DEBUG="false"
