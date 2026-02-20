@@ -51,7 +51,7 @@ mcp/
 └── tools/
     ├── __init__.py                          # Package initialization
     ├── tool_manager.py                      # Tool registry (156 lines)
-    │   - Registers 5 tools
+    │   - Registers 6 tools
     │   - Lists tools with metadata
     │   - Executes tools by name
     │   - Error handling
@@ -547,7 +547,7 @@ Before pushing to GitHub:
 ## ✨ Summary
 
 **What you have**:
-- ✅ Full-featured MCP server with 5 tools
+- ✅ Full-featured MCP server with 6 tools
 - ✅ JSON-RPC 2.0 protocol implementation
 - ✅ Zero impact on existing FastAPI
 - ✅ Comprehensive documentation

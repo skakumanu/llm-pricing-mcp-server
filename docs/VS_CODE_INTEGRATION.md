@@ -473,7 +473,7 @@ This guide complements other MCP documentation:
 1. ✅ Set up Claude Desktop: Follow [MCP_CLAUDE_INTEGRATION.md](MCP_CLAUDE_INTEGRATION.md)
 2. ✅ Configure MCP server in Claude config
 3. ✅ Test with simple query: "What's the pricing for GPT-4?"
-4. ✅ Explore 5 MCP tools via Claude
+4. ✅ Explore 6 MCP tools via Claude
 
 ### For DevOps/Deployers
 1. ✅ Understand deployment: Read [MCP_BLUE_GREEN_DEPLOYMENT.md](MCP_BLUE_GREEN_DEPLOYMENT.md)
