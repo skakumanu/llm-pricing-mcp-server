@@ -252,7 +252,7 @@ class DeploymentManager:
 _deployment_manager: Optional[DeploymentManager] = None
 
 
-def get_deployment_manager(version: str = "1.5.0") -> DeploymentManager:
+def get_deployment_manager(version: str = "1.5.1") -> DeploymentManager:
     """Get or create the global deployment manager instance."""
     global _deployment_manager
     
