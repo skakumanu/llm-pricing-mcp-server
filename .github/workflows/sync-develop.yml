@@ -1,0 +1,42 @@
+name: Auto-sync develop from master
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  sync-develop:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync develop from master
+        run: |
+          git fetch origin master develop
+          git checkout develop
+          git merge --no-edit origin/master
+          git push origin develop
+
+      - name: Notify on sync
+        if: success()
+        run: |
+          echo "✅ Successfully synced develop from master"
+          echo "Develop branch is now up-to-date with master"
+
+      - name: Report sync failure
+        if: failure()
+        run: |
+          echo "❌ Failed to sync develop from master"
+          echo "Please manually review and merge master into develop"
