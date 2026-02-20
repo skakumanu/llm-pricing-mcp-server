@@ -25,7 +25,7 @@ class DeploymentManager:
     - Request counting for drain operations
     """
     
-    def __init__(self, version: str = "1.5.0"):
+    def __init__(self, version: str = "1.5.1"):
         self.version = version
         self.start_time = datetime.now(UTC)
         self.graceful_shutdown_started: Optional[datetime] = None
