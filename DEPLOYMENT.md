@@ -33,14 +33,47 @@ az appservice plan create --name $APP_SERVICE_PLAN --resource-group $RESOURCE_GR
 az webapp create --resource-group $RESOURCE_GROUP --plan $APP_SERVICE_PLAN --name $WEB_APP_NAME --runtime "PYTHON:3.11"
 ```
 
-### 2. Configure Environment Variables
+### 2. Create Azure Key Vault and Managed Identity
 
 ```bash
-# Set environment variables in Azure App Service
+KEY_VAULT_NAME="llm-pricing-vault"
+
+# Create Key Vault
+az keyvault create --resource-group $RESOURCE_GROUP --name $KEY_VAULT_NAME --location $LOCATION
+
+# Enable system-assigned managed identity on App Service
+az webapp identity assign --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME --identities [system]
+
+# Get the principal ID
+PRINCIPAL_ID=$(az webapp identity show --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME --query principalId -o tsv)
+
+# Assign "Key Vault Secrets User" role to the managed identity
+az role assignment create --assignee-object-id $PRINCIPAL_ID --role "Key Vault Secrets User" \
+  --scope /subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.KeyVault/vaults/$KEY_VAULT_NAME
+```
+
+### 3. Store Secrets in Key Vault
+
+```bash
+# Create API key secret
+az keyvault secret set --vault-name $KEY_VAULT_NAME --name mcp-api-key --value "your-strong-random-key"
+
+# Store other sensitive secrets if needed
+az keyvault secret set --vault-name $KEY_VAULT_NAME --name openai-api-key --value "your_openai_api_key"
+az keyvault secret set --vault-name $KEY_VAULT_NAME --name anthropic-api-key --value "your_anthropic_api_key"
+```
+
+### 4. Configure Environment Variables with Key Vault References
+
+```bash
+# Get Key Vault URI values
+VAULT_URI=$(az keyvault show --resource-group $RESOURCE_GROUP --name $KEY_VAULT_NAME --query properties.vaultUri -o tsv)
+
+# Set environment variables (MCP_API_KEY references Key Vault)
 az webapp config appsettings set --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME --settings \
-  OPENAI_API_KEY="your_openai_api_key" \
-  ANTHROPIC_API_KEY="your_anthropic_api_key" \
-  MCP_API_KEY="replace-with-strong-key" \
+  "MCP_API_KEY=@Microsoft.KeyVault(SecretUri=${VAULT_URI}secrets/mcp-api-key/)" \
+  "OPENAI_API_KEY=@Microsoft.KeyVault(SecretUri=${VAULT_URI}secrets/openai-api-key/)" \
+  "ANTHROPIC_API_KEY=@Microsoft.KeyVault(SecretUri=${VAULT_URI}secrets/anthropic-api-key/)" \
   MCP_API_KEY_HEADER="x-api-key" \
   MAX_BODY_BYTES="1000000" \
   RATE_LIMIT_PER_MINUTE="60" \
@@ -49,7 +82,7 @@ az webapp config appsettings set --resource-group $RESOURCE_GROUP --name $WEB_AP
   DEBUG="false"
 ```
 
-### 3. Deploy via Zip Deployment (Recommended)
+### 5. Deploy via Zip Deployment (Recommended)
 
 The application uses a startup script (`run.sh`) to install dependencies and start the server:
 
@@ -87,7 +120,7 @@ az webapp deployment source config-zip --resource-group $RESOURCE_GROUP --name $
 
 **Important**: The `run.sh` script must have Unix (LF) line endings. Use `.gitattributes` with `*.sh text eol=lf` to ensure correct line endings in git.
 
-### 4. Manual Deployment via Git (Alternative)
+### 6. Manual Deployment via Git (Alternative)
 
 ```bash
 # Configure git deployment

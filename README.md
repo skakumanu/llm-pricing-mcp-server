@@ -24,8 +24,11 @@ A production-ready Python-based MCP (Model Compute Pricing) server with zero-dow
 - **Data Validation**: Robust validation using Pydantic models
 - **Extensible Architecture**: Easy-to-use base provider interface for adding new providers
 - **Environment Configuration**: Secure configuration management with `.env` files
-- **Comprehensive Testing**: 96 passing tests with 83% code coverage
-- **CI/CD**: Automated testing and deployment via GitHub Actions
+- **Security Baseline**: API key authentication (x-api-key header), rate limiting (60 req/min per IP), request size validation (1MB), safe logging, container hardening
+- **Secrets Management**: Secure integration with Azure Key Vault via managed identity
+- **Comprehensive Testing**: 109 passing tests (96 original + 13 security tests) with 83% code coverage
+- **CI/CD**: Automated testing and deployment via GitHub Actions with branch protection
+- **Git Flow**: Master branch protection with linear history enforcement, automated dependency updates
 - **Production Ready**: Azure App Service, Docker, Kubernetes compatible
 
 ## Table of Contents
@@ -78,17 +81,36 @@ cp .env.example .env
 # Edit .env with your configuration
 ```
 
-Security baseline (recommended for production):
+### Security Configuration (Recommended for Production)
 
-Add to `.env` file:
+Configure API key authentication and rate limiting in `.env`:
 ```bash
-# Require API key for non-health endpoints
-export MCP_API_KEY="replace-with-strong-key"
+# API Key Authentication (required for protected endpoints)
+export MCP_API_KEY="your-strong-random-key-here"
 export MCP_API_KEY_HEADER="x-api-key"
 
-# Request limits
-export MAX_BODY_BYTES=1000000
-export RATE_LIMIT_PER_MINUTE=60
+# Request Size Limits
+export MAX_BODY_BYTES=1000000  # 1MB
+
+# Rate Limiting
+export RATE_LIMIT_PER_MINUTE=60  # Per client IP
+```
+
+For production deployments on Azure, store `MCP_API_KEY` in Azure Key Vault:
+```bash
+# Create secret in Key Vault
+az keyvault secret set --vault-name your-vault --name mcp-api-key --value "your-key"
+
+# Reference from App Service settings
+az webapp config appsettings set --resource-group your-rg --name your-app \
+  --settings MCP_API_KEY="@Microsoft.KeyVault(SecretUri=https://your-vault.vault.azure.net/secrets/mcp-api-key/)"
+```
+
+### Protected Endpoints
+
+All endpoints except `/health`, `/docs`, and `/openapi.json` require the `x-api-key` header:
+```bash
+curl -H "x-api-key: your-api-key" https://your-server/pricing
 ```
 
 ## Quick Start
