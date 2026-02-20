@@ -91,6 +91,12 @@ _unauthenticated_paths = {
     "/openapi.json",
 }
 
+_sensitive_paths = {
+    "/telemetry",
+    "/deployment/shutdown",
+    "/deployment/shutdown/status",
+}
+
 # Add deployment middleware for request tracking (needed for graceful shutdown)
 @app.middleware("http")
 async def deployment_middleware(request: Request, call_next):
@@ -129,7 +135,27 @@ async def security_middleware(request: Request, call_next):
     global _auth_warning_logged
 
     path = request.url.path
-    if path not in _unauthenticated_paths:
+    if path in _sensitive_paths:
+        if not settings.mcp_api_key:
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "Authentication not configured"},
+            )
+        provided_key = request.headers.get(settings.mcp_api_key_header)
+        if not provided_key or not secrets.compare_digest(provided_key, settings.mcp_api_key):
+            client_ip = (
+                request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+                or request.headers.get("x-real-ip")
+                or (request.client.host if request.client else None)
+                or "unknown"
+            )
+            logger.warning(
+                "Authentication failed for path %s from client IP %s",
+                path,
+                client_ip,
+            )
+            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    elif path not in _unauthenticated_paths:
         if settings.mcp_api_key:
             provided_key = request.headers.get(settings.mcp_api_key_header)
             if not provided_key or not secrets.compare_digest(provided_key, settings.mcp_api_key):

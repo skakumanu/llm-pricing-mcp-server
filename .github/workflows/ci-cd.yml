@@ -61,8 +61,40 @@ jobs:
         # Exit-zero treats all errors as warnings
         flake8 src tests --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
+  security:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    env:
+      ACR_NAME: llmpricingacr
+      ACR_LOGIN_SERVER: llmpricingacr.azurecr.io
+      IMAGE_NAME: llm-pricing-api
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run OSV scanner
+      uses: google/osv-scanner-action@v1
+      with:
+        scan-args: "-r requirements.txt"
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install bandit
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit
+
+    - name: Run bandit
+      run: |
+        bandit -r src -q
+
   deploy:
-    needs: [test, lint]
+    needs: [test, lint, security]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -76,7 +108,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-
     - name: Azure Login with OIDC
       uses: azure/login@v1
       with:
@@ -136,7 +167,7 @@ jobs:
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X GET "$STAGING_URL")
           
           if [ "$HTTP_CODE" = "200" ]; then
-            echo "✓ Staging slot is healthy (HTTP $HTTP_CODE)"
+            echo "OK: Staging slot is healthy (HTTP $HTTP_CODE)"
             exit 0
           fi
           
@@ -144,7 +175,7 @@ jobs:
           sleep 5
         done
         
-        echo "✗ Staging slot failed health check after 60 seconds"
+        echo "ERROR: Staging slot failed health check after 60 seconds"
         exit 1
 
     - name: Functional Test - Staging Slot
@@ -157,18 +188,18 @@ jobs:
         TOTAL_MODELS=$(echo "$MODELS_RESPONSE" | grep -o '"total_models":[0-9]*' | grep -o '[0-9]*')
         
         if [ "$TOTAL_MODELS" -gt 0 ]; then
-          echo "✓ Models endpoint working: $TOTAL_MODELS models available"
+          echo "OK: Models endpoint working: $TOTAL_MODELS models available"
         else
-          echo "✗ Models endpoint returned invalid data"
+          echo "ERROR: Models endpoint returned invalid data"
           exit 1
         fi
         
         # Test /pricing endpoint
         PRICING_RESPONSE=$(curl -s "$STAGING_URL/pricing")
         if echo "$PRICING_RESPONSE" | grep -q '"models"'; then
-          echo "✓ Pricing endpoint working: pricing data available"
+          echo "OK: Pricing endpoint working: pricing data available"
         else
-          echo "✗ Pricing endpoint failed"
+          echo "ERROR: Pricing endpoint failed"
           exit 1
         fi
 
@@ -180,7 +211,7 @@ jobs:
           --name ${{ steps.kvsecrets.outputs.azure-webapp-name }} \
           --slot staging
         
-        echo "✓ Slot swap completed successfully"
+        echo "OK: Slot swap completed successfully"
 
     - name: Health Check - Production Slot
       run: |
@@ -192,7 +223,7 @@ jobs:
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X GET "$PROD_URL")
           
           if [ "$HTTP_CODE" = "200" ]; then
-            echo "✓ Production slot is healthy (HTTP $HTTP_CODE)"
+            echo "OK: Production slot is healthy (HTTP $HTTP_CODE)"
             exit 0
           fi
           
@@ -200,5 +231,5 @@ jobs:
           sleep 5
         done
         
-        echo "⚠ Production slot health check timeout (may still be warming up)"
+        echo "WARN: Production slot health check timeout (may still be warming up)"
         exit 0  # Don't fail the deployment on timeout
