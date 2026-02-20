@@ -28,7 +28,7 @@ class MCPServer:
     
     def __init__(self):
         """Initialize the MCP server."""
-        self.version = "1.0.0"
+        self.version = "1.1.0"
         self.name = "LLM Pricing MCP Server"
         self.tool_manager = ToolManager()
         self.telemetry = get_telemetry_service()

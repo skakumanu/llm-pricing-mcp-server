@@ -3,15 +3,16 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A production-ready Python-based **Model Context Protocol (MCP)** server for LLM pricing data with zero-downtime deployment support. This server provides both a RESTful API (via FastAPI) and an MCP protocol interface with 5 tools for querying pricing data from **12 major LLM providers** including OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Anyscale, and Amazon Bedrock. Features Claude Desktop integration, geolocation tracking, browser analytics, and blue-green deployment support.
+A production-ready Python-based **Model Context Protocol (MCP)** server for LLM pricing data with zero-downtime deployment support. This server provides both a RESTful API (via FastAPI) and an MCP protocol interface with 6 tools for querying pricing data from **12 major LLM providers** including OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Anyscale, and Amazon Bedrock. Features Claude Desktop integration, telemetry tracking, geolocation analytics, and blue-green deployment support.
 
 ## Features
 
 ### Model Context Protocol (MCP) Interface
-- **5 MCP Tools**: `estimate_cost`, `get_all_pricing`, `compare_costs`, `get_performance_metrics`, `get_use_cases`
+- **6 MCP Tools**: `estimate_cost`, `get_all_pricing`, `compare_costs`, `get_performance_metrics`, `get_use_cases`, `get_telemetry`
 - **STDIO JSON-RPC 2.0**: Standard MCP protocol for Claude Desktop and other MCP clients
 - **Tool Discovery**: Automatic tool registration with JSON schemas
 - **Session Management**: Isolated sessions with state tracking
+- **Telemetry Tracking**: Built-in request tracking with timing, tool usage, and client analytics
 - **Comprehensive Testing**: 3 test suites (quick, integration, comprehensive validation)
 
 ### RESTful API Interface

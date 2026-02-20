@@ -195,7 +195,7 @@ git push origin feat/mcp-server
 feat: Add MCP Server as Parallel Interface to FastAPI
 
 - Implements JSON-RPC 2.0 server over STDIO
-- 5 tools: pricing query, cost estimation, comparison, performance metrics, use cases
+- 6 tools: pricing query, cost estimation, comparison, performance metrics, use cases, telemetry
 - 15 auto-generated JSON schemas
 - Zero impact on existing FastAPI endpoints
 - Production-ready with comprehensive documentation
