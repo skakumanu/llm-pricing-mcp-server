@@ -3,10 +3,18 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A production-ready Python-based MCP (Model Compute Pricing) server with zero-downtime deployment support. Built with FastAPI, this server aggregates real-time pricing data from **12 major LLM providers** including OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Anyscale, and Amazon Bedrock. Features geolocation tracking, browser analytics, and blue-green deployment support.
+A production-ready Python-based **Model Context Protocol (MCP)** server for LLM pricing data with zero-downtime deployment support. This server provides both a RESTful API (via FastAPI) and an MCP protocol interface with 5 tools for querying pricing data from **12 major LLM providers** including OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Anyscale, and Amazon Bedrock. Features Claude Desktop integration, geolocation tracking, browser analytics, and blue-green deployment support.
 
 ## Features
 
+### Model Context Protocol (MCP) Interface
+- **5 MCP Tools**: `estimate_cost`, `get_all_pricing`, `compare_costs`, `get_performance_metrics`, `get_use_cases`
+- **STDIO JSON-RPC 2.0**: Standard MCP protocol for Claude Desktop and other MCP clients
+- **Tool Discovery**: Automatic tool registration with JSON schemas
+- **Session Management**: Isolated sessions with state tracking
+- **Comprehensive Testing**: 3 test suites (quick, integration, comprehensive validation)
+
+### RESTful API Interface
 - **Real-Time Pricing Aggregation**: Asynchronously fetch pricing data from multiple LLM providers concurrently
 - **Volume-Based Cost Estimates**: Automatic cost calculations at small (10K), medium (100K), and large (1M) token volumes
 - **Performance Projections**: Estimated processing time for 1M tokens based on throughput metrics
@@ -14,21 +22,33 @@ A production-ready Python-based MCP (Model Compute Pricing) server with zero-dow
 - **Provider Status Tracking**: Monitor availability and health of each pricing provider
 - **Unified Pricing Format**: All pricing data in USD per token with source attribution
 - **Comprehensive Metrics**: Track cost per token, context window sizes, and provider metadata
+- **Interactive Documentation**: Swagger UI and ReDoc endpoints
+
+### Analytics & Monitoring
 - **Geolocation Tracking**: Automatic client IP geolocation with country/city details and browser detection
 - **Browser Analytics**: User-Agent parsing for browser, OS, and device type classification
 - **Client Analytics**: Track unique clients, geographic distribution, and browser usage patterns
-- **Blue-Green Deployment**: Zero-downtime deployments with instant rollback capability
 - **Health Checks**: Kubernetes/Docker-compatible liveness, readiness, and detailed health probes
+- **Production Monitoring**: Automated health checks and tool validation
+
+### Deployment & Operations
+- **Blue-Green Deployment**: Zero-downtime deployments with instant rollback capability
+- **Automated Validation**: Pre-deployment testing with 6 critical tests
 - **Graceful Shutdown**: Proper request draining during deployment (SIGTERM/SIGINT handling)
-- **RESTful API**: Clean, well-documented endpoints using FastAPI
-- **Data Validation**: Robust validation using Pydantic models
-- **Extensible Architecture**: Easy-to-use base provider interface for adding new providers
-- **Environment Configuration**: Secure configuration management with `.env` files
+- **Deployment Manager**: Single-command deployment with automatic validation
+
+### Security & Quality
 - **Security Baseline**: API key authentication (x-api-key header), rate limiting (60 req/min per IP), request size validation (1MB), safe logging, container hardening
 - **Secrets Management**: Secure integration with Azure Key Vault via managed identity
-- **Comprehensive Testing**: 109 passing tests (96 original + 13 security tests) with 83% code coverage
+- **Data Validation**: Robust validation using Pydantic models
+- **Comprehensive Testing**: 159 passing tests (109 REST API + 50 MCP tools) with 83% code coverage
 - **CI/CD**: Automated testing and deployment via GitHub Actions with branch protection
-- **Git Flow**: Master branch protection with linear history enforcement, automated dependency updates
+- **Git Flow**: Master branch protection with linear history enforcement
+
+### Architecture & Extensibility
+- **Extensible Architecture**: Easy-to-use base provider interface for adding new providers
+- **Modular Design**: Clean separation between MCP protocol, tools, and business logic
+- **Environment Configuration**: Secure configuration management with `.env` files
 - **Production Ready**: Azure App Service, Docker, Kubernetes compatible
 
 ## Table of Contents

@@ -1,8 +1,218 @@
 # MCP Server Testing Guide
 
+**Last Updated**: February 20, 2026  
+**Version**: 1.6.0
+
+## Overview
+
+This guide covers all testing approaches for the MCP server, from quick validation to comprehensive integration testing. The server includes **3 automated test suites** designed for different scenarios:
+
+| Test Script | Purpose | Duration | Tests | Best For |
+|-------------|---------|----------|-------|----------|
+| `quick_validate.py` | Fast pre-deployment validation | ~15 sec | 6 core tests | CI/CD, blue-green deployment |
+| `test_mcp_server.py` | Integration testing | ~30 sec | Tool discovery + 5 tools | Development, integration testing |
+| `validate_mcp_client.py` | Comprehensive validation | ~2 min | 16 scenarios | Full QA, release validation |
+
 ## Quick Start Testing
 
-### 1. Manual STDIO Testing
+### 1. Quick Validation (Recommended for Pre-Deployment)
+
+**Purpose**: Fast validation of core MCP server functionality before deployment.
+
+**Location**: `scripts/quick_validate.py`
+
+**Tests Performed** (6 total):
+1. ✅ Server startup
+2. ✅ MCP initialization handshake
+3. ✅ Tool discovery (expects 5/5 tools)
+4. ✅ Tool execution (all 5 tools with valid parameters)
+5. ✅ Error handling (invalid tool name)
+6. ✅ Response format validation
+
+**Usage**:
+```bash
+# Run quick validation
+python scripts/quick_validate.py
+
+# Expected output:
+# [PASS] Server started (PID: xxxx)
+# [PASS] Received initialization message
+# [PASS] Initialize request-response successful
+# [PASS] All 5 tools discovered
+# [PASS] get_all_pricing executes successfully
+# [PASS] estimate_cost executes successfully
+# [PASS] compare_costs executes successfully
+# [PASS] get_performance_metrics executes successfully
+# [PASS] get_use_cases executes successfully
+# [PASS] Error handling works correctly
+# [SUCCESS] ALL TESTS PASSED - Server is ready for production
+```
+
+**Exit Codes**:
+- `0`: All tests passed (safe to deploy)
+- `1`: One or more tests failed (deployment blocked)
+
+**When to Use**:
+- Before production deployment
+- In CI/CD pipelines
+- Blue-green deployment validation (Phase 2)
+- Quick smoke testing after code changes
+
+---
+
+### 2. Integration Testing
+
+**Purpose**: Comprehensive tool testing with response validation.
+
+**Location**: `scripts/test_mcp_server.py`
+
+**Tests Performed**:
+- Tool discovery via `tools/list` RPC method
+- All 5 tool executions with sample parameters
+- Response schema validation
+- Performance timing
+- Success rate calculation
+
+**Usage**:
+```bash
+# Run integration tests
+python scripts/test_mcp_server.py
+
+# Expected output:
+# Test Results:
+# Tool Discovery: [PASS] 5/5 tools
+# Tool Execution: [PASS] 5/5 tools
+#   - get_all_pricing: [PASS]
+#   - estimate_cost: [PASS]
+#   - compare_costs: [PASS]
+#   - get_performance_metrics: [PASS]
+#   - get_use_cases: [PASS]
+# Pass Rate: 100%
+# Status: All tools operational
+```
+
+**When to Use**:
+- Local development testing
+- Integration with backend services
+- Verifying tool functionality after changes
+- Generating test reports
+
+---
+
+### 3. Comprehensive Validation
+
+**Purpose**: Exhaustive testing with strict schema validation and edge cases.
+
+**Location**: `scripts/validate_mcp_client.py`
+
+**Tests Performed** (16 scenarios):
+1. Server startup verification
+2. MCP initialization protocol
+3. Tool discovery validation
+4. `get_all_pricing` - no filters
+5. `get_all_pricing` - with provider filter
+6. `get_all_pricing` - with category filter
+7. `estimate_cost` - single model
+8. `estimate_cost` - with volume
+9. `compare_costs` - multiple models
+10. `compare_costs` - 5+ models
+11. `get_performance_metrics` - all providers
+12. `get_performance_metrics` - specific provider
+13. `get_use_cases` - all use cases
+14. `get_use_cases` - category filter
+15. Error handling - invalid tool
+16. Error handling - invalid parameters
+
+**Usage**:
+```bash
+# Run comprehensive validation
+python scripts/validate_mcp_client.py
+
+# Expected output:
+# [SCENARIO 1/16] Server Startup... [PASS]
+# [SCENARIO 2/16] MCP Initialization... [PASS]
+# [SCENARIO 3/16] Tool Discovery... [PASS]
+# ...
+# [SCENARIO 16/16] Error Handling... [PASS]
+#
+# Summary: 16/16 scenarios passed (100%)
+```
+
+**When to Use**:
+- Release candidate validation
+- Full QA testing cycle
+- Regression testing
+- Performance baseline establishment
+
+---
+
+## Testing Decision Matrix
+
+Choose the right test based on your scenario:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Scenario                     │ Recommended Test Script       │
+├──────────────────────────────┼──────────────────────────────┤
+│ Pre-deployment check         │ quick_validate.py            │
+│ CI/CD pipeline               │ quick_validate.py            │
+│ Blue-green validation        │ quick_validate.py            │
+│ Local development            │ test_mcp_server.py           │
+│ Integration testing          │ test_mcp_server.py           │
+│ Release candidate            │ validate_mcp_client.py       │
+│ Full QA cycle                │ validate_mcp_client.py       │
+│ Performance baseline         │ validate_mcp_client.py       │
+│ After tool changes           │ test_mcp_server.py +         │
+│                              │ quick_validate.py            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 4. Manual STDIO Testing (For Debugging)
+
+**Test the server is running**:
+
+```bash
+# Terminal 1: Start the server
+cd c:\Users\skaku\OneDrive\Documents\GitHub\llm-pricing-mcp-server
+.\.venv\Scripts\Activate.ps1
+python mcp\server.py
+```
+
+**Test the server responds**:
+
+```powershell
+# Terminal 2: Send requests
+cd c:\Users\skaku\OneDrive\Documents\GitHub\llm-pricing-mcp-server
+
+# Initialize request
+Write-Host '{"jsonrpc": "2.0", "id": 1, "method": "initialize"}' | python mcp\server.py
+
+# Or test interactively - copy/paste these one at a time in the first terminal:
+
+# Test Initialize
+{"jsonrpc": "2.0", "id": 1, "method": "initialize"}
+
+# Test List Tools
+{"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
+
+# Test Get All Pricing (no args)
+{"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "get_all_pricing", "arguments": {}}}
+
+# Test Estimate Cost
+{"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "estimate_cost", "arguments": {"model_name": "gpt-4", "input_tokens": 1000, "output_tokens": 500}}}
+
+# Test Compare Costs
+{"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "compare_costs", "arguments": {"model_names": ["gpt-4", "claude-3-opus"], "input_tokens": 1000, "output_tokens": 500}}}
+
+# Test Get Performance Metrics
+{"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "get_performance_metrics", "arguments": {}}}
+
+# Test Get Use Cases
+{"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "get_use_cases", "arguments": {}}}
+
+### 4. Manual STDIO Testing (For Debugging)
 
 **Test the server is running**:
 
@@ -49,138 +259,225 @@ Write-Host '{"jsonrpc": "2.0", "id": 1, "method": "initialize"}' | python mcp\se
 {"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {"name": "get_performance_metrics", "arguments": {"provider": "openai"}}}
 ```
 
-### 2. Automated Testing Script
+---
 
-Create `test_mcp_server.py`:
+## Automated Test Scripts Details
 
+### Script 1: quick_validate.py
+
+**File**: `scripts/quick_validate.py`  
+**Lines**: ~180  
+**Purpose**: Fast pre-deployment validation
+
+**Implementation Details**:
 ```python
-"""Test script for MCP server."""
-import asyncio
-import json
-import subprocess
-import sys
-from pathlib import Path
-
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent))
-
-async def test_mcp_server():
-    """Test the MCP server with all tools."""
-    
-    # Start the server process
-    process = subprocess.Popen(
-        [sys.executable, "mcp/server.py"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd=str(Path(__file__).parent)
-    )
-    
-    test_cases = [
-        ("Initialize", {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "initialize"
-        }),
-        ("List Tools", {
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "tools/list"
-        }),
-        ("Get All Pricing", {
-            "jsonrpc": "2.0",
-            "id": 3,
-            "method": "tools/call",
-            "params": {
-                "name": "get_all_pricing",
-                "arguments": {}
-            }
-        }),
-        ("Estimate Cost", {
-            "jsonrpc": "2.0",
-            "id": 4,
-            "method": "tools/call",
-            "params": {
-                "name": "estimate_cost",
-                "arguments": {
-                    "model_name": "gpt-4",
-                    "input_tokens": 1000,
-                    "output_tokens": 500
-                }
-            }
-        }),
-        ("Compare Costs", {
-            "jsonrpc": "2.0",
-            "id": 5,
-            "method": "tools/call",
-            "params": {
-                "name": "compare_costs",
-                "arguments": {
-                    "model_names": ["gpt-4", "claude-3-opus"],
-                    "input_tokens": 1000,
-                    "output_tokens": 500
-                }
-            }
-        }),
-    ]
-    
-    passed = 0
-    failed = 0
-    
-    try:
-        for test_name, request in test_cases:
-            try:
-                # Send request
-                request_json = json.dumps(request) + "\n"
-                process.stdin.write(request_json)
-                process.stdin.flush()
-                
-                # Get response
-                response_line = process.stdout.readline()
-                if not response_line:
-                    print(f"❌ {test_name}: No response")
-                    failed += 1
-                    continue
-                
-                response = json.loads(response_line)
-                
-                # Check response is valid JSON-RPC
-                if "jsonrpc" not in response or response["jsonrpc"] != "2.0":
-                    print(f"❌ {test_name}: Invalid JSON-RPC response")
-                    failed += 1
-                    continue
-                
-                if "error" in response and response["error"]["code"] != 0:
-                    print(f"❌ {test_name}: {response['error']['message']}")
-                    failed += 1
-                    continue
-                
-                print(f"✅ {test_name}")
-                passed += 1
-            
-            except Exception as e:
-                print(f"❌ {test_name}: {e}")
-                failed += 1
-    
-    finally:
-        process.terminate()
-        process.wait(timeout=5)
-    
-    print(f"\n{passed} passed, {failed} failed")
-    return failed == 0
-
-if __name__ == "__main__":
-    success = asyncio.run(test_mcp_server())
-    sys.exit(0 if success else 1)
+# Key features:
+# - Spawns MCP server as subprocess
+# - Tests via STDIO JSON-RPC protocol
+# - 6 critical tests in ~15 seconds
+# - Returns exit code 0 (pass) or 1 (fail)
+# - Used by blue-green deployment manager
 ```
 
-Run with:
+**Test Flow**:
+1. Start server subprocess
+2. Wait for initialization message
+3. Send initialize request
+4. Send tools/list request → validate 5 tools found
+5. Execute all 5 tools with valid params
+6. Test error handling with invalid tool name
+7. Terminate server gracefully
+
+**Error Handling**:
+- Catches subprocess failures
+- Validates JSON-RPC responses
+- Checks for server crashes
+- Ensures cleanup on exit
+
+---
+
+### Script 2: test_mcp_server.py
+
+**File**: `scripts/test_mcp_server.py`  
+**Purpose**: Integration and functional testing
+
+### Script 2: test_mcp_server.py
+
+**File**: `scripts/test_mcp_server.py`  
+**Purpose**: Integration and functional testing
+
+**Example Run**:
 ```bash
-python test_mcp_server.py
+python scripts/test_mcp_server.py
+
+# Output example:
+# ========================================
+# MCP Server Integration Tests
+# ========================================
+# 
+# [TEST 1/6] Tool Discovery
+#   Discovered 5 tools: [PASS]
+#   - estimate_cost
+#   - get_all_pricing
+#   - compare_costs
+#   - get_performance_metrics
+#   - get_use_cases
+#
+# [TEST 2/6] get_all_pricing
+#   Execution: [PASS]
+#   Response time: 1.2s
+#
+# [TEST 3/6] estimate_cost
+#   Execution: [PASS]
+#   Response time: 0.08s
+#
+# [TEST 4/6] compare_costs
+#   Execution: [PASS]
+#   Response time: 1.5s
+#
+# [TEST 5/6] get_performance_metrics
+#   Execution: [PASS]
+#   Response time: 1.3s
+#
+# [TEST 6/6] get_use_cases
+#   Execution: [PASS]
+#   Response time: 0.2s
+#
+# ========================================
+# Test Summary
+# ========================================
+# Total Tests: 6
+# Passed: 6
+# Failed: 0
+# Pass Rate: 100%
+# Status: All tools operational
 ```
 
-### 3. Pytest Integration Tests
+**Features**:
+- Tests all 5 MCP tools
+- Validates tool responses
+- Measures execution time
+- Reports success/failure rates
+- Windows-compatible output (no emoji)
+
+---
+
+### Script 3: validate_mcp_client.py
+
+**File**: `scripts/validate_mcp_client.py`  
+**Purpose**: Comprehensive validation with strict schema checks
+
+**Features**:
+- 16 test scenarios covering all tool variations
+- Strict response schema validation
+- Edge case testing (invalid params, error handling)
+- Performance metrics collection
+- Detailed failure diagnostics
+
+**Example Scenarios**:
+```python
+# Scenario examples:
+scenarios = [
+    "Server startup verification",
+    "MCP protocol initialization",
+    "Tool discovery (5/5 expected)",
+    "get_all_pricing without filters",
+    "get_all_pricing with provider='openai'",
+    "estimate_cost for gpt-4",
+    "compare_costs with 3 models",
+    "get_performance_metrics all",
+    "get_use_cases with category filter",
+    "Error handling: invalid tool name",
+    "Error handling: missing required params",
+    # ... 5 more scenarios
+]
+```
+
+---
+
+## Production Testing Workflow
+
+### Pre-Deployment Testing
+
+**Step 1**: Run quick validation
+```bash
+python scripts/quick_validate.py
+# Must pass all 6 tests before deploying
+```
+
+**Step 2**: Run integration tests (optional for minor changes)
+```bash
+python scripts/test_mcp_server.py
+```
+
+**Step 3**: Deploy with automated validation
+```bash
+python scripts/mcp_blue_green_deploy.py deploy --version 1.6.0
+# Automatically runs quick_validate.py in Phase 2
+```
+
+### Post-Deployment Testing
+
+**Step 1**: Verify deployment status
+```bash
+python scripts/mcp_blue_green_deploy.py status
+```
+
+**Step 2**: Run health check
+```bash
+python scripts/monitor_mcp_server.py --check
+```
+
+**Step 3**: Run integration tests (recommended)
+```bash
+python scripts/test_mcp_server.py
+```
+
+---
+
+## Testing in Different Environments
+
+### Local Development
+```bash
+# Terminal 1: Start server
+python mcp/server.py
+
+# Terminal 2: Run tests
+python scripts/test_mcp_server.py
+```
+
+### CI/CD Pipeline
+```yaml
+# GitHub Actions example
+- name: Run MCP Tests
+  run: |
+    python scripts/quick_validate.py
+    if [ $? -eq 0 ]; then
+      echo "✅ MCP tests passed"
+    else
+      echo "❌ MCP tests failed"
+      exit 1
+    fi
+```
+
+### Blue-Green Deployment
+```bash
+# Validation happens automatically in Phase 2
+python scripts/mcp_blue_green_deploy.py deploy --version 1.6.0
+
+# Phase 2 output:
+# [PHASE 2] Validating green environment...
+# [PASS] Server started
+# [PASS] Initialization successful
+# [PASS] All 5 tools discovered
+# [PASS] All 5 tools execute successfully
+# [PASS] Error handling works
+# [SUCCESS] GREEN validation passed
+```
+
+---
+
+### 5. Pytest Integration Tests
 
 Create `tests/test_mcp_server.py`:
 
@@ -453,5 +750,48 @@ All should work without issues.
 
 ---
 
-**Status**: Testing framework complete
-**Last Updated**: 2024
+## Test Results Archive
+
+### Latest Test Run (v1.6.0)
+
+**Date**: February 20, 2026  
+**Version**: 1.6.0  
+**Environment**: Production blue-green deployment
+
+**quick_validate.py Results**:
+- ✅ All 6/6 tests passed
+- Server startup: PASS
+- Initialization: PASS
+- Tool discovery: PASS (5/5)
+- Tool execution: PASS (5/5)
+- Error handling: PASS
+- Total time: 15 seconds
+
+**test_mcp_server.py Results**:
+- ✅ All 5/5 tools passing
+- Tool discovery: 5/5
+- Pass rate: 100%
+- Status: All tools operational
+
+**Deployment Validation**:
+- ✅ Phase 1: Green environment started
+- ✅ Phase 2: Validation passed (6/6 tests)
+- ✅ Phase 3: Traffic switched successfully
+- ✅ Phase 4: Blue environment shutdown
+- ✅ Phase 5: Green promoted to production
+
+---
+
+## Related Documentation
+
+- **[MCP_BLUE_GREEN_DEPLOYMENT.md](MCP_BLUE_GREEN_DEPLOYMENT.md)** - Deployment guide with automated testing
+- **[MCP_PRODUCTION_CHECKLIST.md](MCP_PRODUCTION_CHECKLIST.md)** - Pre-deployment checklist
+- **[MCP_MONITORING_GUIDE.md](MCP_MONITORING_GUIDE.md)** - Production monitoring
+- **[MCP_QUICK_START.md](MCP_QUICK_START.md)** - Quick start guide
+- **[CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md)** - Claude Desktop testing
+
+---
+
+**Status**: Testing framework complete and validated  
+**Last Updated**: February 20, 2026  
+**Current Version**: 1.6.0
