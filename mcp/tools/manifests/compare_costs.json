@@ -1,0 +1,68 @@
+{
+  "name": "compare_costs",
+  "description": "Compare the costs of multiple LLM models side-by-side to find the most cost-effective option",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "model_names": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "List of model names to compare (e.g., ['gpt-4', 'claude-3-opus', 'mistral-large'])"
+      },
+      "input_tokens": {
+        "type": "integer",
+        "description": "Number of input tokens (must be >= 0)",
+        "minimum": 0
+      },
+      "output_tokens": {
+        "type": "integer",
+        "description": "Number of output tokens (must be >= 0)",
+        "minimum": 0
+      }
+    },
+    "required": ["model_names", "input_tokens", "output_tokens"]
+  },
+  "examples": [
+    {
+      "description": "Compare costs for premium models with 1000 input and 500 output tokens",
+      "input": {
+        "model_names": ["gpt-4", "claude-3-opus", "gemini-pro"],
+        "input_tokens": 1000,
+        "output_tokens": 500
+      },
+      "output": {
+        "success": true,
+        "input_tokens": 1000,
+        "output_tokens": 500,
+        "total_tokens": 1500,
+        "models": [
+          {
+            "model_name": "gpt-4",
+            "provider": "openai",
+            "input_cost": 0.03,
+            "output_cost": 0.03,
+            "total_cost": 0.06,
+            "cost_per_1m_tokens": 40
+          },
+          {
+            "model_name": "claude-3-opus",
+            "provider": "anthropic",
+            "input_cost": 0.075,
+            "output_cost": 0.03,
+            "total_cost": 0.105,
+            "cost_per_1m_tokens": 70
+          }
+        ],
+        "cheapest_model": "gpt-4",
+        "most_expensive_model": "claude-3-opus",
+        "cost_range": {
+          "min": 0.06,
+          "max": 0.105,
+          "difference": 0.045
+        }
+      }
+    }
+  ]
+}

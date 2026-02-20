@@ -1,0 +1,29 @@
+{
+  "description": "Request model for cost estimation endpoint.",
+  "properties": {
+    "model_name": {
+      "description": "Name of the LLM model",
+      "title": "Model Name",
+      "type": "string"
+    },
+    "input_tokens": {
+      "description": "Number of input tokens",
+      "minimum": 0,
+      "title": "Input Tokens",
+      "type": "integer"
+    },
+    "output_tokens": {
+      "description": "Number of output tokens",
+      "minimum": 0,
+      "title": "Output Tokens",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "model_name",
+    "input_tokens",
+    "output_tokens"
+  ],
+  "title": "CostEstimateRequest",
+  "type": "object"
+}

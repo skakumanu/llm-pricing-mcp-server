@@ -1,0 +1,68 @@
+{
+  "name": "get_performance_metrics",
+  "description": "Get performance metrics for LLM models including throughput, latency, context window, and value scores",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "provider": {
+        "type": "string",
+        "description": "Optional provider filter to show only specific provider models (e.g., 'openai', 'anthropic', 'google')"
+      },
+      "include_cost": {
+        "type": "boolean",
+        "description": "Include cost metrics in response (default: true)",
+        "default": true
+      }
+    },
+    "required": []
+  },
+  "examples": [
+    {
+      "description": "Get performance metrics for all models",
+      "input": {},
+      "output": {
+        "success": true,
+        "total_models": 80,
+        "models": [
+          {
+            "model_name": "gpt-4",
+            "provider": "openai",
+            "throughput": 100,
+            "latency_ms": 250,
+            "context_window": 8192,
+            "performance_score": 33.33,
+            "value_score": 2730.77,
+            "cost_per_input_token": 0.00003,
+            "cost_per_output_token": 0.00006
+          }
+        ],
+        "best_throughput": "gpt-4",
+        "lowest_latency": "claude-3-sonnet",
+        "largest_context": "claude-3-opus"
+      }
+    },
+    {
+      "description": "Get OpenAI performance metrics without cost",
+      "input": {
+        "provider": "openai",
+        "include_cost": false
+      },
+      "output": {
+        "success": true,
+        "total_models": 12,
+        "models": [
+          {
+            "model_name": "gpt-4",
+            "provider": "openai",
+            "throughput": 100,
+            "latency_ms": 250,
+            "context_window": 8192,
+            "performance_score": 33.33,
+            "value_score": 2730.77
+          }
+        ],
+        "best_throughput": "gpt-4"
+      }
+    }
+  ]
+}

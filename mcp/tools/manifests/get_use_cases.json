@@ -1,0 +1,77 @@
+{
+  "name": "get_use_cases",
+  "description": "Get recommended use cases and best practices for LLM models to help select the right model for your project",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "provider": {
+        "type": "string",
+        "description": "Optional provider filter (e.g., 'openai', 'anthropic', 'google')"
+      }
+    },
+    "required": []
+  },
+  "examples": [
+    {
+      "description": "Get use cases for all models",
+      "input": {},
+      "output": {
+        "success": true,
+        "total_models": 80,
+        "models": [
+          {
+            "model_name": "gpt-4",
+            "provider": "openai",
+            "best_for": "Complex reasoning, coding, analysis tasks",
+            "use_cases": [
+              "Code generation and debugging",
+              "Complex problem solving",
+              "Technical writing",
+              "Data analysis",
+              "Research assistance"
+            ],
+            "strengths": [
+              "Excellent at reasoning tasks",
+              "Strong coding ability",
+              "Good at following complex instructions"
+            ],
+            "context_window": 8192,
+            "cost_tier": "high"
+          }
+        ],
+        "providers": ["openai", "anthropic", "google", "cohere"]
+      }
+    },
+    {
+      "description": "Get Anthropic models use cases",
+      "input": {
+        "provider": "anthropic"
+      },
+      "output": {
+        "success": true,
+        "total_models": 8,
+        "models": [
+          {
+            "model_name": "claude-3-opus",
+            "provider": "anthropic",
+            "best_for": "Advanced reasoning, analysis, and creative tasks",
+            "use_cases": [
+              "Complex analysis",
+              "Creative content generation",
+              "Detailed research",
+              "Code review and debugging"
+            ],
+            "strengths": [
+              "Superior reasoning ability",
+              "Excellent at nuance and context",
+              "Strong safety guidelines"
+            ],
+            "context_window": 200000,
+            "cost_tier": "high"
+          }
+        ],
+        "providers": ["anthropic"]
+      }
+    }
+  ]
+}

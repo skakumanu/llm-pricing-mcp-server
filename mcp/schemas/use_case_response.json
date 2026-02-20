@@ -1,0 +1,39 @@
+{
+  "description": "Response model for use cases endpoint.",
+  "properties": {
+    "models": {
+      "description": "Use case information for each model",
+      "items": {
+        "$ref": "#/$defs/ModelUseCase"
+      },
+      "title": "Models",
+      "type": "array"
+    },
+    "total_models": {
+      "description": "Total number of models",
+      "title": "Total Models",
+      "type": "integer"
+    },
+    "providers": {
+      "description": "List of providers included",
+      "items": {
+        "type": "string"
+      },
+      "title": "Providers",
+      "type": "array"
+    },
+    "timestamp": {
+      "description": "Response timestamp",
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    }
+  },
+  "required": [
+    "models",
+    "total_models",
+    "providers"
+  ],
+  "title": "UseCaseResponse",
+  "type": "object"
+}

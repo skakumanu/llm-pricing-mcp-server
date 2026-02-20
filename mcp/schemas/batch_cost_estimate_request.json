@@ -1,0 +1,32 @@
+{
+  "description": "Request model for batch cost estimation (compare multiple models).",
+  "properties": {
+    "model_names": {
+      "description": "List of LLM model names to compare",
+      "items": {
+        "type": "string"
+      },
+      "title": "Model Names",
+      "type": "array"
+    },
+    "input_tokens": {
+      "description": "Number of input tokens",
+      "minimum": 0,
+      "title": "Input Tokens",
+      "type": "integer"
+    },
+    "output_tokens": {
+      "description": "Number of output tokens",
+      "minimum": 0,
+      "title": "Output Tokens",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "model_names",
+    "input_tokens",
+    "output_tokens"
+  ],
+  "title": "BatchCostEstimateRequest",
+  "type": "object"
+}

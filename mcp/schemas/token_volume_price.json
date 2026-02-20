@@ -1,0 +1,27 @@
+{
+  "description": "Price breakdown for a specific token volume.",
+  "properties": {
+    "input_cost": {
+      "description": "Cost for input tokens in USD",
+      "title": "Input Cost",
+      "type": "number"
+    },
+    "output_cost": {
+      "description": "Cost for output tokens in USD",
+      "title": "Output Cost",
+      "type": "number"
+    },
+    "total_cost": {
+      "description": "Total cost (50/50 input/output split) in USD",
+      "title": "Total Cost",
+      "type": "number"
+    }
+  },
+  "required": [
+    "input_cost",
+    "output_cost",
+    "total_cost"
+  ],
+  "title": "TokenVolumePrice",
+  "type": "object"
+}
