@@ -1,0 +1,82 @@
+{
+  "description": "Response model for batch cost estimation endpoint.",
+  "properties": {
+    "input_tokens": {
+      "description": "Number of input tokens used for comparison",
+      "title": "Input Tokens",
+      "type": "integer"
+    },
+    "output_tokens": {
+      "description": "Number of output tokens used for comparison",
+      "title": "Output Tokens",
+      "type": "integer"
+    },
+    "models": {
+      "description": "Cost comparison for each model",
+      "items": {
+        "$ref": "#/$defs/ModelCostComparison"
+      },
+      "title": "Models",
+      "type": "array"
+    },
+    "cheapest_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Name of the cheapest model",
+      "title": "Cheapest Model"
+    },
+    "most_expensive_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Name of the most expensive model",
+      "title": "Most Expensive Model"
+    },
+    "cost_range": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Min and max costs across all models",
+      "title": "Cost Range"
+    },
+    "currency": {
+      "default": "USD",
+      "description": "Currency for costs",
+      "title": "Currency",
+      "type": "string"
+    },
+    "timestamp": {
+      "description": "Calculation timestamp",
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    }
+  },
+  "required": [
+    "input_tokens",
+    "output_tokens",
+    "models"
+  ],
+  "title": "BatchCostEstimateResponse",
+  "type": "object"
+}

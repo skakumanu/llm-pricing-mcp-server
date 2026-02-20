@@ -1,0 +1,42 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "MCP Server (STDIO)",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/mcp/server.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      },
+      "args": []
+    },
+    {
+      "name": "MCP Server (Debug)",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/mcp/server.py",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "DEBUG": "1"
+      },
+      "args": []
+    },
+    {
+      "name": "FastAPI Server",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/main.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      },
+      "args": []
+    }
+  ]
+}

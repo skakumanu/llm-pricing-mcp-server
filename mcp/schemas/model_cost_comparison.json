@@ -1,0 +1,64 @@
+{
+  "description": "Cost comparison for a single model.",
+  "properties": {
+    "model_name": {
+      "description": "Name of the LLM model",
+      "title": "Model Name",
+      "type": "string"
+    },
+    "provider": {
+      "description": "Provider of the model",
+      "title": "Provider",
+      "type": "string"
+    },
+    "input_cost": {
+      "description": "Cost for input tokens in USD",
+      "title": "Input Cost",
+      "type": "number"
+    },
+    "output_cost": {
+      "description": "Cost for output tokens in USD",
+      "title": "Output Cost",
+      "type": "number"
+    },
+    "total_cost": {
+      "description": "Total cost in USD",
+      "title": "Total Cost",
+      "type": "number"
+    },
+    "cost_per_1m_tokens": {
+      "description": "Estimated cost per 1M tokens (average of input/output)",
+      "title": "Cost Per 1M Tokens",
+      "type": "number"
+    },
+    "is_available": {
+      "default": true,
+      "description": "Whether the model pricing was found",
+      "title": "Is Available",
+      "type": "boolean"
+    },
+    "error_message": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Error message if model not found",
+      "title": "Error Message"
+    }
+  },
+  "required": [
+    "model_name",
+    "provider",
+    "input_cost",
+    "output_cost",
+    "total_cost",
+    "cost_per_1m_tokens"
+  ],
+  "title": "ModelCostComparison",
+  "type": "object"
+}
