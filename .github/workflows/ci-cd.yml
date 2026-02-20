@@ -5,6 +5,7 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -190,22 +191,26 @@ jobs:
         STAGING_URL="https://${{ steps.kvsecrets.outputs.azure-webapp-name }}-staging.azurewebsites.net"
         
         # Test /models endpoint
+        echo "Testing /models endpoint..."
         MODELS_RESPONSE=$(curl -s "$STAGING_URL/models")
+        echo "Response: $MODELS_RESPONSE"
         TOTAL_MODELS=$(echo "$MODELS_RESPONSE" | grep -o '"total_models":[0-9]*' | grep -o '[0-9]*')
         
-        if [ "$TOTAL_MODELS" -gt 0 ]; then
-          echo "OK: Models endpoint working: $TOTAL_MODELS models available"
-        else
-          echo "ERROR: Models endpoint returned invalid data"
+        if [ -z "$TOTAL_MODELS" ] || [ "$TOTAL_MODELS" -eq 0 ]; then
+          echo "ERROR: Models endpoint returned invalid data: '$MODELS_RESPONSE'"
           exit 1
         fi
+        echo "OK: Models endpoint working: $TOTAL_MODELS models available"
         
         # Test /pricing endpoint
+        echo "Testing /pricing endpoint..."
         PRICING_RESPONSE=$(curl -s "$STAGING_URL/pricing")
+        echo "Response (first 500 chars): ${PRICING_RESPONSE:0:500}"
         if echo "$PRICING_RESPONSE" | grep -q '"models"'; then
           echo "OK: Pricing endpoint working: pricing data available"
         else
           echo "ERROR: Pricing endpoint failed"
+          echo "Full response: $PRICING_RESPONSE"
           exit 1
         fi
 
