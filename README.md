@@ -142,7 +142,7 @@ Once the server is running, visit:
 
 ## Architecture
 
-This project follows a modular, layered architecture designed for scalability and extensibility. For a comprehensive understanding of the system design, including detailed architecture diagrams, patterns, and component interactions, please refer to the [ARCHITECTURE.md](ARCHITECTURE.md) document.
+This project follows a modular, layered architecture designed for scalability and extensibility. For a comprehensive understanding of the system design, including detailed architecture diagrams, patterns, and component interactions, please refer to the [ARCHITECTURE.md](docs/ARCHITECTURE.md) document.
 
 ### Key Highlights
 
@@ -152,7 +152,7 @@ This project follows a modular, layered architecture designed for scalability an
 - **Async/Await**: Non-blocking I/O for handling concurrent requests efficiently
 - **Pydantic Models**: Strong data validation and serialization
 
-For detailed diagrams, design patterns, and architectural decisions, see [ARCHITECTURE.md](ARCHITECTURE.md).
+For detailed diagrams, design patterns, and architectural decisions, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Live Data Fetching
 
@@ -211,7 +211,7 @@ The `source` field in API responses indicates data origin:
 - **Cache refresh**: Every 2 hours for pricing, 5 minutes for performance
 - **Uptime**: 99.9%+ with smart fallbacks
 
-For detailed information about live data fetching architecture, caching strategy, and data sources, see [LIVE_DATA_FETCHING.md](LIVE_DATA_FETCHING.md).
+For detailed information about live data fetching architecture, caching strategy, and data sources, see [LIVE_DATA_FETCHING.md](docs/LIVE_DATA_FETCHING.md).
 
 ### Live Data Validation
 
@@ -1021,7 +1021,7 @@ This service is fully production-ready with support for:
 
 ### Blue-Green Deployment Guide
 
-For comprehensive instructions on deploying with zero downtime, see [BLUE_GREEN_DEPLOYMENT.md](BLUE_GREEN_DEPLOYMENT.md).
+For comprehensive instructions on deploying with zero downtime, see [BLUE_GREEN_DEPLOYMENT.md](docs/BLUE_GREEN_DEPLOYMENT.md).
 
 **Key Features:**
 - Switch traffic between Blue and Green instances
@@ -1054,7 +1054,7 @@ curl -X POST http://localhost:8000/deployment/shutdown \
 
 ### Backwards Compatibility
 
-All API endpoints maintain backwards compatibility. See [BACKWARDS_COMPATIBILITY.md](BACKWARDS_COMPATIBILITY.md) for:
+All API endpoints maintain backwards compatibility. See [BACKWARDS_COMPATIBILITY.md](docs/BACKWARDS_COMPATIBILITY.md) for:
 
 - API versioning strategy
 - Guaranteed stable endpoints
@@ -1090,7 +1090,7 @@ GET /deployment/info
 
 ### Azure App Service
 
-Detailed deployment instructions are available in [DEPLOYMENT.md](DEPLOYMENT.md).
+Detailed deployment instructions are available in [DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 **Quick Deploy:**
 ```bash
@@ -1110,7 +1110,7 @@ Configure the following secrets in your GitHub repository:
 
 ## Contributing
 
-Contributions are welcome! We **strictly follow Git Flow** for all development. Please read our detailed [CONTRIBUTING.md](CONTRIBUTING.md) guide before starting.
+Contributions are welcome! We **strictly follow Git Flow** for all development. Please read our detailed [CONTRIBUTING.md](docs/CONTRIBUTING.md) guide before starting.
 
 ### Quick Start for Contributors
 
@@ -1145,7 +1145,7 @@ Contributions are welcome! We **strictly follow Git Flow** for all development. 
 - ⚠️ **Never merge directly to `master`** - features go to `develop` first
 - ⚠️ **NEVER commit secrets or API keys** - use environment variables
 - ⚠️ **Use `--no-ff` for merges** to preserve branch history
-- ✅ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed Git Flow workflows
+- ✅ See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for detailed Git Flow workflows
 
 ### Security Requirements
 
@@ -1165,7 +1165,7 @@ grep -r "password" .
 - Private keys (`.pem`, `.key`, `.pfx`)
 - Hard-coded credentials
 
-Use environment variables for all sensitive data. See the [Security Compliance](CONTRIBUTING.md#security-compliance) section for details.
+Use environment variables for all sensitive data. See the [Security Compliance](docs/CONTRIBUTING.md#security-compliance) section for details.
 
 ### Code Style
 
