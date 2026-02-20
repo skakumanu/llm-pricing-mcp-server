@@ -7,6 +7,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# Disable rate limiting for tests to prevent 429 responses from multiple requests
-# coming from same IP (127.0.0.1)
-os.environ["RATE_LIMIT_PER_MINUTE"] = "0"
+# Set a high rate limit for tests to exercise middleware without causing 429 responses
+# from multiple requests coming from the same IP (127.0.0.1).
+# This allows testing of the rate limiting code path while preventing false failures.
+os.environ["RATE_LIMIT_PER_MINUTE"] = "10000"

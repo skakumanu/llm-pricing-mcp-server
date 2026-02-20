@@ -79,14 +79,16 @@ cp .env.example .env
 ```
 
 Security baseline (recommended for production):
+
+Add to `.env` file:
 ```bash
 # Require API key for non-health endpoints
-MCP_API_KEY="replace-with-strong-key"
-MCP_API_KEY_HEADER="x-api-key"
+export MCP_API_KEY="replace-with-strong-key"
+export MCP_API_KEY_HEADER="x-api-key"
 
 # Request limits
-MAX_BODY_BYTES=1000000
-RATE_LIMIT_PER_MINUTE=60
+export MAX_BODY_BYTES=1000000
+export RATE_LIMIT_PER_MINUTE=60
 ```
 
 ## Quick Start

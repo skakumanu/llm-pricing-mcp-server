@@ -60,6 +60,25 @@ logger.info("Deployment manager initialized")
 _rate_limit_store: Dict[str, Deque[float]] = defaultdict(deque)
 _rate_limit_lock = asyncio.Lock()
 _auth_warning_logged = False
+_last_rate_limit_cleanup = time.time()
+
+async def cleanup_stale_rate_limit_entries():
+    """Periodically remove IP entries with no recent requests to prevent memory leak."""
+    global _last_rate_limit_cleanup
+    now = time.time()
+    if now - _last_rate_limit_cleanup > 3600:  # Cleanup every hour
+        async with _rate_limit_lock:
+            # Remove IPs with empty buckets or no requests in the last hour
+            stale_threshold = now - 3600
+            to_remove = [
+                ip for ip, bucket in _rate_limit_store.items()
+                if not bucket or bucket[-1] < stale_threshold
+            ]
+            for ip in to_remove:
+                del _rate_limit_store[ip]
+            if to_remove:
+                logger.debug("Rate limit cleanup: removed %d stale IP entries", len(to_remove))
+        _last_rate_limit_cleanup = now
 
 _unauthenticated_paths = {
     "/",
@@ -114,12 +133,28 @@ async def security_middleware(request: Request, call_next):
         if settings.mcp_api_key:
             provided_key = request.headers.get(settings.mcp_api_key_header)
             if not provided_key or not secrets.compare_digest(provided_key, settings.mcp_api_key):
+                client_ip = (
+                    request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+                    or request.headers.get("x-real-ip")
+                    or (request.client.host if request.client else None)
+                    or "unknown"
+                )
+                logger.warning(
+                    "Authentication failed for path %s from client IP %s",
+                    path,
+                    client_ip,
+                )
                 return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
         elif not _auth_warning_logged:
             logger.warning("MCP API key not configured; endpoints are unauthenticated.")
             _auth_warning_logged = True
 
     if settings.rate_limit_per_minute > 0:
+        # Periodically cleanup stale IP entries
+        await cleanup_stale_rate_limit_entries()
+        
+        # Note: X-Forwarded-For header parsing assumes server is behind a trusted proxy
+        # (e.g., Azure App Service, nginx). Without a trusted proxy, this can be spoofed.
         client_ip = (
             request.headers.get("x-forwarded-for", "").split(",")[0].strip()
             or request.headers.get("x-real-ip")
@@ -138,8 +173,12 @@ async def security_middleware(request: Request, call_next):
 
     if request.method in {"POST", "PUT", "PATCH"}:
         content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > settings.max_body_bytes:
-            return JSONResponse(status_code=413, content={"detail": "Request body too large"})
+        if content_length:
+            try:
+                if int(content_length) > settings.max_body_bytes:
+                    return JSONResponse(status_code=413, content={"detail": "Request body too large"})
+            except ValueError:
+                return JSONResponse(status_code=400, content={"detail": "Invalid Content-Length header"})
         body = await request.body()
         if len(body) > settings.max_body_bytes:
             return JSONResponse(status_code=413, content={"detail": "Request body too large"})
