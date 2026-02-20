@@ -16,7 +16,7 @@ from mcp.tools.tool_manager import ToolManager
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.FileHandler('/tmp/mcp_server.log') if sys.__platform__ != 'win32' else logging.FileHandler('mcp_server.log')]
+    handlers=[logging.FileHandler('/tmp/mcp_server.log') if sys.platform != 'win32' else logging.FileHandler('mcp_server.log')]
 )
 logger = logging.getLogger(__name__)
 
