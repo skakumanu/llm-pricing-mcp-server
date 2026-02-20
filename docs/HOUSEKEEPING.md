@@ -2,6 +2,238 @@
 
 This document outlines the automatic housekeeping tasks that should be performed after development work is completed. These checks ensure code quality, security, documentation accuracy, and a consistent user experience without requiring manual prompts.
 
+---
+
+## 🚨 MANDATORY: Git Flow Requirements
+
+**Every single change to this repository MUST follow Git Flow.** This is not optional. Violations block deployments and break the CI/CD pipeline.
+
+### ✅ Before You Commit: Ask Yourself These Questions
+
+**✓ YES - Continue if:**
+- [ ] Am I on a feature/*, hotfix/*, or release/* branch?
+- [ ] Did I create this branch from the correct base (develop for features, master for hotfixes)?
+- [ ] Is the branch name descriptive and follows the pattern (feature/*, hotfix/*, release/*)?
+- [ ] Did I check `git status` to see my current branch?
+- [ ] Did I run tests locally and they all pass?
+- [ ] Did I review my changes with `git diff --cached`?
+
+**✗ NO - STOP and create proper branch if:**
+- [ ] Am I on `master` or `develop` branch trying to commit feature code? **→ WRONG!**
+- [ ] Did I make changes directly on master? **→ WRONG!**
+- [ ] Did I plan to push directly to develop? **→ WRONG!**
+- [ ] Is this my first commit on master without a PR? **→ WRONG!**
+
+### 🔀 Branch Decision Tree
+
+```
+What are you working on?
+
+├─ New Feature (code, docs, tests for new functionality)
+│  ├─ Base: develop
+│  ├─ Branch: feature/description-of-feature
+│  ├─ PR to: develop
+│  └─ Example: feature/file-organization-standards
+│
+├─ Bug Fix in Production (urgent, breaking production)
+│  ├─ Base: master
+│  ├─ Branch: hotfix/brief-description
+│  ├─ PR to: master AND develop
+│  └─ Example: hotfix/deployment-slot-issue
+│
+├─ Release Preparation (version bump, final testing)
+│  ├─ Base: develop
+│  ├─ Branch: release/vX.X.X
+│  ├─ PR to: master
+│  └─ Example: release/v1.5.2
+│
+├─ Documentation Only (no code changes)
+│  ├─ Base: develop
+│  ├─ Branch: feature/docs/description
+│  ├─ PR to: develop
+│  └─ Example: feature/docs/git-flow-guidelines
+│
+└─ Test Updates Only (no production code changes)
+   ├─ Base: develop
+   ├─ Branch: feature/tests/description
+   ├─ PR to: develop
+   └─ Example: feature/tests/add-security-validations
+```
+
+### ❌ What NOT To Do (These Violations Will Block Your PR)
+
+| ❌ VIOLATION | ✅ CORRECT APPROACH |
+|---|---|
+| Direct commit to `master` | Create `feature/*` from `develop`, PR to `develop`, then release to `master` |
+| Direct commit to `develop` | Create `feature/*` from `develop`, PR to `develop` |
+| Push directly to `master` without PR | All commits to `master` must be via PR from `release/*` or `hotfix/*` |
+| `feature/` branch from `master` | Feature branches ALWAYS come from `develop` |
+| `hotfix/` branch from `develop` | Hotfixes come from `master` only (for production issues) |
+| Multiple feature changes in one branch | Keep branches focused on one feature; split large changes |
+| Commit without tests | Every code commit must include related tests |
+| Commit with hardcoded secrets | Scan with `git diff --cached` before committing |
+
+### ✅ Quick Pre-Commit Checklist
+
+Before EVERY commit, run this checklist:
+
+```bash
+# 1. Verify you're on the right branch
+git status
+# Should show: feature/*, hotfix/*, release/*, develop, or master
+
+# 2. Verify your branch is based on the right parent
+git log --oneline --graph --all | head -20
+# Check that your branch stems from develop or master appropriately
+
+# 3. Review ALL staged changes
+git diff --cached
+# Verify: no secrets, no debug code, correct files included
+
+# 4. Run tests
+pytest tests/ -q --tb=no
+# All 109 tests must pass
+
+# 5. Only THEN commit
+git commit -m "type(scope): description"
+
+# 6. Push to YOUR feature branch (not master/develop)
+git push origin feature/your-name
+```
+
+### 📋 Standard Git Flow Workflows
+
+#### ✅ Correct: Adding a New Feature
+
+```bash
+# Step 1: Start from develop
+git checkout develop
+git pull origin develop
+
+# Step 2: Create feature branch
+git checkout -b feature/add-new-feature
+
+# Step 3: Make changes, test locally
+# ... make code changes ...
+pytest tests/ -q --tb=no          # All tests pass ✓
+git diff --cached                 # No secrets ✓
+
+# Step 4: Commit with clear message
+git add .
+git commit -m "feat(module): add new feature implementation"
+
+# Step 5: Push feature branch
+git push origin feature/add-new-feature
+
+# Step 6: Create PR on GitHub
+# - Base: develop
+# - Compare: feature/add-new-feature
+# - Add description of what changed and why
+
+# Step 7: After PR approved and CI passes
+# - GitHub will show "Merge pull request" button
+# - Click to merge (DO NOT push directly)
+# - Delete remote branch
+
+# Step 8: Clean up locally
+git checkout develop
+git pull origin develop
+git branch -d feature/add-new-feature
+```
+
+#### ✅ Correct: Production Hotfix
+
+```bash
+# Step 1: Start from master (production)
+git checkout master
+git pull origin master
+
+# Step 2: Create hotfix branch
+git checkout -b hotfix/fix-production-issue
+
+# Step 3: Make fix, test thoroughly
+# ... make fix ...
+pytest tests/ -q --tb=no          # All tests pass ✓
+
+# Step 4: Commit hotfix
+git add .
+git commit -m "fix(deployment): correct production issue"
+
+# Step 5: Push hotfix branch
+git push origin hotfix/fix-production-issue
+
+# Step 6: Create TWO PRs
+# - PR #1: hotfix → master (for production release)
+# - PR #2: hotfix → develop (to merge fix into development)
+
+# Both must pass CI/CD before merging
+```
+
+#### ❌ WRONG: Direct Commit to Master
+
+```bash
+# This will FAIL:
+git checkout master
+git commit -m "quick fix"          # ❌ BLOCKED - Cannot commit to master
+git push origin master             # ❌ BLOCKED - Branch protection
+
+# Instead, do this:
+git checkout -b hotfix/quick-fix   # ✓ Create branch first
+git commit -m "fix: quick fix"     # ✓ Commit to feature branch
+git push origin hotfix/quick-fix   # ✓ Push to feature branch
+# Then create PR and merge properly
+```
+
+#### ❌ WRONG: Documentation Changed on Master
+
+```bash
+# This will FAIL:
+git checkout master
+# ... update docs/HOUSEKEEPING.md ...
+git commit -m "docs: update housekeeping"        # ❌ BLOCKED
+git push origin master                           # ❌ BLOCKED
+
+# Instead, do this:
+git checkout develop                  # ✓ Start from develop
+git pull origin develop
+git checkout -b feature/docs/update-housekeeping # ✓ Feature branch
+# ... update docs/HOUSEKEEPING.md ...
+git commit -m "docs: update housekeeping"        # ✓ Commit to feature
+git push origin feature/docs/update-housekeeping # ✓ Push to feature
+# Then create PR to develop
+```
+
+### 🔍 How to Check If You're on the Right Branch
+
+```bash
+# See current branch (highlighted with *)
+git branch
+
+# See full branch history with base
+git log --graph --oneline --all | head -30
+
+# See which branch you're currently on
+git rev-parse --abbrev-ref HEAD
+# Output: develop, feature/*, hotfix/*, release/*, or master
+
+# See all remote branches
+git branch -r
+```
+
+### ⚠️ Branch Protection Rules Enforced
+
+| Branch | Protection |
+|---|---|
+| `master` | ✓ PR required ✓ All tests must pass ✓ CI /test must pass ✓ Cannot push directly |
+| `develop` | ✓ PR required from feature branches ✓ All tests must pass ✓ Cannot commit directly |
+| `feature/*` | No protection - but PR required for merge to develop |
+| `hotfix/*` | No protection - but PR to both master AND develop |
+| `release/*` | No protection - but PR to master for final release |
+
+**Attempting to push directly to `master` will be blocked by GitHub branch protection.**
+
+---
+
 ## Code Changes Housekeeping
 
 ### ✅ After Every Code Modification
