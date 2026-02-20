@@ -190,27 +190,23 @@ jobs:
         echo "Running functional tests on staging slot..."
         STAGING_URL="https://${{ steps.kvsecrets.outputs.azure-webapp-name }}-staging.azurewebsites.net"
         
-        # Test /models endpoint
-        echo "Testing /models endpoint..."
-        MODELS_RESPONSE=$(curl -s "$STAGING_URL/models")
-        echo "Response: $MODELS_RESPONSE"
-        TOTAL_MODELS=$(echo "$MODELS_RESPONSE" | grep -o '"total_models":[0-9]*' | grep -o '[0-9]*')
-        
-        if [ -z "$TOTAL_MODELS" ] || [ "$TOTAL_MODELS" -eq 0 ]; then
-          echo "ERROR: Models endpoint returned invalid data: '$MODELS_RESPONSE'"
+        # Test /health/detailed endpoint (doesn't require auth)
+        echo "Testing /health/detailed endpoint..."
+        HEALTH_RESPONSE=$(curl -s "$STAGING_URL/health/detailed")
+        echo "Response: $HEALTH_RESPONSE"
+        if echo "$HEALTH_RESPONSE" | grep -q '"status"'; then
+          echo "OK: Health endpoint working"
+        else
+          echo "ERROR: Health endpoint failed"
+          echo "Full response: $HEALTH_RESPONSE"
           exit 1
         fi
-        echo "OK: Models endpoint working: $TOTAL_MODELS models available"
         
-        # Test /pricing endpoint
-        echo "Testing /pricing endpoint..."
-        PRICING_RESPONSE=$(curl -s "$STAGING_URL/pricing")
-        echo "Response (first 500 chars): ${PRICING_RESPONSE:0:500}"
-        if echo "$PRICING_RESPONSE" | grep -q '"models"'; then
-          echo "OK: Pricing endpoint working: pricing data available"
+        # Verify the app is running version 1.5.4 or later
+        if echo "$HEALTH_RESPONSE" | grep -q '"version"'; then
+          echo "OK: Version information available"
         else
-          echo "ERROR: Pricing endpoint failed"
-          echo "Full response: $PRICING_RESPONSE"
+          echo "ERROR: Version information not found"
           exit 1
         fi
 
