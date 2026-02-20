@@ -96,7 +96,7 @@ jobs:
         secrets: 'azure-webapp-name,azure-resource-group'
       id: kvsecrets
 
-- name: Deploy to Azure App Service (Staging)
+    - name: Deploy to Azure App Service (Staging)
       uses: azure/webapps-deploy@v2
       with:
         app-name: ${{ steps.kvsecrets.outputs.azure-webapp-name }}
