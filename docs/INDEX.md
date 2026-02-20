@@ -25,7 +25,8 @@ Welcome to the LLM Pricing MCP Server documentation! This directory contains com
 - **[MCP_QUICK_START.md](MCP_QUICK_START.md)** - Quick start guide for running the MCP server
 - **[MCP_TESTING.md](MCP_TESTING.md)** - Comprehensive testing guide with all test scripts
 - **[MCP_INTEGRATION.md](MCP_INTEGRATION.md)** - Architecture and integration patterns
-- **[CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md)** - Claude Desktop integration guide
+- **[CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md)** - Claude Desktop integration guide (local development)
+- **[MCP_AZURE_CLIENT_SETUP.md](MCP_AZURE_CLIENT_SETUP.md)** - End-user guide for connecting to Azure-hosted server
 - **[VS_CODE_INTEGRATION.md](VS_CODE_INTEGRATION.md)** - VS Code workspace setup and development guide
 - **[MCP_PRODUCTION_CHECKLIST.md](MCP_PRODUCTION_CHECKLIST.md)** - Pre-deployment checklist and procedures
 - **[MCP_MONITORING_GUIDE.md](MCP_MONITORING_GUIDE.md)** - Production monitoring and observability
@@ -59,9 +60,9 @@ Welcome to the LLM Pricing MCP Server documentation! This directory contains com
 6. Use [HOUSEKEEPING.md](HOUSEKEEPING.md) for operational procedures
 
 **For MCP Client Integrators:**
-1. Start with [MCP_QUICK_START.md](MCP_QUICK_START.md) for quick setup
-2. Follow [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md) for Claude Desktop
-3. Review [MCP_INTEGRATION.md](MCP_INTEGRATION.md) for custom clients
+1. **Azure Users (Recommended)**: Follow [MCP_AZURE_CLIENT_SETUP.md](MCP_AZURE_CLIENT_SETUP.md) to connect to the cloud server
+2. **Local Development**: Follow [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md) for Claude Desktop with local server
+3. Review [MCP_INTEGRATION.md](MCP_INTEGRATION.md) for architecture and custom clients
 4. Use [MCP_TESTING.md](MCP_TESTING.md) to validate your integration
 5. Check [MCP_VALIDATION_REPORT.md](MCP_VALIDATION_REPORT.md) for expected behavior
 
@@ -84,7 +85,8 @@ Welcome to the LLM Pricing MCP Server documentation! This directory contains com
 **MCP Protocol & Tools:**
 - [MCP_QUICK_START.md](MCP_QUICK_START.md)
 - [MCP_INTEGRATION.md](MCP_INTEGRATION.md)
-- [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md)
+- [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md) - Local development setup
+- [MCP_AZURE_CLIENT_SETUP.md](MCP_AZURE_CLIENT_SETUP.md) - Cloud server connection (recommended for end users)
 - [VS_CODE_INTEGRATION.md](VS_CODE_INTEGRATION.md)
 - [MCP_TESTING.md](MCP_TESTING.md)
 - [MCP_MONITORING_GUIDE.md](MCP_MONITORING_GUIDE.md)
