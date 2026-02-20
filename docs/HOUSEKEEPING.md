@@ -62,6 +62,264 @@ This document outlines the automatic housekeeping tasks that should be performed
 - [ ] **Verify imports work** - Test that packages install and import correctly
 - [ ] **Check for security vulnerabilities** - Run vulnerability scanner
 
+## File & Directory Organization
+
+Maintaining well-organized files and directories is essential for code maintainability, collaboration, and scalability.
+
+### ✅ Directory Structure Standards
+
+**Root Directory Organization:**
+```
+llm-pricing-mcp-server/
+├── .github/              # GitHub workflows and CI/CD
+├── .azure/               # Azure configuration files
+├── docs/                 # All project documentation
+├── scripts/              # Deployment and utility scripts
+├── src/                  # Source code (all Python)
+├── tests/                # Test files
+├── redirect-app/         # Redirect/proxy application
+├── .env.example          # Example environment variables
+├── .gitignore            # Git ignore rules
+├── .dockerignore         # Docker ignore rules
+├── Dockerfile            # Docker container definition
+├── README.md             # Project overview (root only)
+├── LICENSE               # License text
+├── requirements.txt      # Python dependencies
+├── pyproject.toml        # Project metadata and config
+├── Procfile              # Heroku/Cloud deployment
+└── [other config files]
+```
+
+**Rules:**
+- [ ] Root directory kept clean (only essential files)
+- [ ] All code in `src/` directory
+- [ ] All tests in `tests/` directory
+- [ ] All documentation in `docs/` directory
+- [ ] Scripts in `scripts/` directory
+- [ ] No loose Python files in root
+- [ ] No scattered configuration files
+
+### ✅ Source Code Organization (`src/`)
+
+**Expected Structure:**
+```
+src/
+├── __init__.py           # Package initialization with __version__
+├── main.py               # FastAPI application entry point
+├── config/               # Configuration management
+│   ├── __init__.py
+│   └── settings.py       # Settings and environment config
+├── models/               # Data models (Pydantic)
+│   ├── __init__.py
+│   ├── pricing.py        # Pricing data models
+│   └── deployment.py     # Deployment models
+├── services/             # Business logic services
+│   ├── __init__.py
+│   ├── base_provider.py         # Abstract base provider
+│   ├── [provider]_pricing.py    # Provider implementations
+│   ├── pricing_aggregator.py    # Aggregate multiple providers
+│   ├── data_fetcher.py          # Data fetching utilities
+│   ├── data_sources.py          # Data source definitions
+│   ├── deployment.py            # Deployment management
+│   ├── geolocation.py           # Geolocation service
+│   ├── telemetry.py             # Telemetry tracking
+│   └── [other services]
+└── __pycache__/          # Python cache (gitignored)
+```
+
+**Naming Conventions:**
+- [ ] Modules use `snake_case` (lowercase with underscores)
+- [ ] Classes use `PascalCase` (uppercase first letter)
+- [ ] Constants use `UPPER_CASE` (all uppercase)
+- [ ] Functions use `snake_case` (lowercase with underscores)
+- [ ] Private functions/vars start with `_` (underscore)
+- [ ] Protected functions/vars start with `_` (underscore)
+- [ ] Dunder methods: `__init__`, `__str__`, etc.
+
+**Module Organization:**
+- [ ] One main class per file (when possible)
+- [ ] Related functions grouped together
+- [ ] Imports organized: stdlib → third-party → local
+- [ ] Each module has clear docstring
+- [ ] Each class has clear docstring
+- [ ] Each function has docstring with params and returns
+
+### ✅ Test File Organization (`tests/`)
+
+**Expected Structure:**
+```
+tests/
+├── __init__.py
+├── conftest.py           # Pytest configuration and fixtures
+├── test_api.py           # API endpoint tests
+├── test_async_pricing.py # Async functionality tests
+├── test_deployment.py    # Deployment feature tests
+├── test_geolocation.py   # Geolocation service tests
+├── test_models.py        # Data model tests
+├── test_security.py      # Security/auth tests
+├── test_services.py      # Service layer tests
+└── __pycache__/          # Python cache (gitignored)
+```
+
+**Naming Conventions:**
+- [ ] Test files start with `test_` prefix
+- [ ] Test functions start with `test_` prefix
+- [ ] Test classes start with `Test` prefix
+- [ ] Test fixtures in `conftest.py` or test file
+- [ ] Descriptive test names (e.g., `test_deployment_metadata_endpoint_returns_version`)
+- [ ] One test suite per module being tested
+- [ ] Related tests grouped in test classes
+
+**Organization Rules:**
+- [ ] One test file per source module
+- [ ] Test file name matches source module name
+- [ ] Tests kept in sync with source code changes
+- [ ] Test coverage ≥ 90% for all modules
+- [ ] No skipped tests without documented reason
+- [ ] Fixtures for common test data/setup
+
+### ✅ Documentation Organization (`docs/`)
+
+**Expected Structure:**
+```
+docs/
+├── INDEX.md                           # Documentation table of contents
+├── ARCHITECTURE.md                    # System architecture
+├── DESIGN_PRINCIPLES.md               # Design philosophy
+├── LIVE_DATA_FETCHING.md              # Data fetching architecture
+├── BACKWARDS_COMPATIBILITY.md         # API versioning
+├── DEPLOYMENT.md                      # Deployment overview
+├── BLUE_GREEN_DEPLOYMENT.md           # Zero-downtime deployment
+├── DEPLOYMENT_IMPLEMENTATION.md       # Implementation details
+├── CONTRIBUTING.md                    # Contribution guidelines
+└── HOUSEKEEPING.md                    # This file
+```
+
+**Documentation Standards:**
+- [ ] All .md files in `docs/` folder only
+- [ ] README.md in root (project overview only)
+- [ ] Each doc has clear H1 title
+- [ ] H2 sections for major topics
+- [ ] H3 subsections for details
+- [ ] Table of contents for long documents
+- [ ] Cross-references using relative links
+- [ ] Code examples in fenced blocks with language
+- [ ] Updated date at bottom of each doc
+- [ ] INDEX.md provides navigation
+
+**Link Format in docs/:**
+- [ ] Relative links between docs (no `/docs/`)
+- [ ] Links to README: `[README](../README.md)`
+- [ ] Links to same folder: `[FILE.md](FILE.md)`
+- [ ] External links with full URLs
+
+### ✅ Scripts Organization (`scripts/`)
+
+**Expected Structure:**
+```
+scripts/
+├── blue_green_deployment.sh  # Bash deployment script
+├── blue_green_deployment.ps1 # PowerShell script
+├── [utility scripts]
+└── README.md                 # Scripts documentation
+```
+
+**Naming Conventions:**
+- [ ] Descriptive script names
+- [ ] Extensions match language (`.sh`, `.ps1`, `.py`)
+- [ ] Executable permissions set (`chmod +x`)
+- [ ] Shebang line at top (e.g., `#!/bin/bash`)
+- [ ] Comments explaining what script does
+- [ ] Error handling and exit codes
+- [ ] Help text/usage examples
+
+### ✅ Configuration File Organization
+
+**Root Level Config Files:**
+- `pyproject.toml` - Python project config (primary)
+- `requirements.txt` - Python dependencies
+- `.env.example` - Example environment variables
+- `.gitignore` - Git ignore rules
+- `.dockerignore` - Docker ignore rules
+- `Dockerfile` - Container definition
+- `LICENSE` - License file
+
+**Rules:**
+- [ ] Only essential config files in root
+- [ ] All sensitive configs in `.env` (not in repo)
+- [ ] Example configs with `.example` suffix
+- [ ] Document config requirements in README
+- [ ] Use environment variables for secrets
+- [ ] Azure Key Vault for production secrets
+- [ ] Never commit `.env` files
+
+### ✅ Git Repository Organization
+
+**Git Files/Folders:**
+```
+.git/               # Git repository (auto-created, never touch)
+.github/            # GitHub-specific configs
+.gitignore          # Ignore rules
+.gitattributes      # File handling rules
+```
+
+**Rules:**
+- [ ] `.gitignore` excludes all secrets/credentials
+- [ ] `.gitignore` excludes build artifacts
+- [ ] `.gitignore` excludes cache/temp files
+- [ ] `.gitignore` excludes environment files
+- [ ] `.gitattributes` handles line endings
+- [ ] Meaningful `.git` history (linear on master)
+- [ ] Commit messages follow conventions
+- [ ] No large files in git (> 100MB)
+- [ ] Binary files properly marked
+
+### ✅ Keeping Files Organized (Ongoing)
+
+**Weekly Organization Review:**
+- [ ] Check for loose files outside proper directories
+- [ ] Verify no cache/temp files committed
+- [ ] Review test file coverage completeness
+- [ ] Check documentation for outdated links
+- [ ] Scan for duplicated code/files
+
+**Monthly Organization Audit:**
+- [ ] Review directory structure alignment
+- [ ] Check for orphaned or unused files
+- [ ] Verify naming conventions followed
+- [ ] Scan for inconsistent file organization
+- [ ] Update documentation organization if needed
+
+**When Adding New Files:**
+- [ ] Determine correct directory/module
+- [ ] Follow naming conventions
+- [ ] Add to proper test suite
+- [ ] Update related documentation
+- [ ] Update INDEX.md if adding docs
+- [ ] Commit as single logical change
+
+**When Refactoring/Reorganizing:**
+- [ ] Use `git mv` to preserve history
+- [ ] Update all internal references
+- [ ] Update all relative paths
+- [ ] Update documentation links
+- [ ] Single refactoring-only commit
+- [ ] Mark as refactoring in commit message
+
+### ✅ File Organization Checklist (Pre-Commit)
+
+- [ ] New Python files in `src/` or `tests/`
+- [ ] New tests in `tests/` folder
+- [ ] New docs in `docs/` folder
+- [ ] Scripts in `scripts/` folder
+- [ ] No lost files in root directory
+- [ ] Naming conventions followed
+- [ ] Internal references updated
+- [ ] GitHub-specific files in `.github/`
+- [ ] Azure-specific files in `.azure/`
+- [ ] No duplicate files
+- [ ] No orphaned files
+
 ## Git Flow Workflow
 
 ### ✅ Branch Strategy (Git Flow)
