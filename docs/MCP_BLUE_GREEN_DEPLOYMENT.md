@@ -51,7 +51,7 @@ Blue-green deployment enables **zero-downtime updates** by running two identical
 
 ### Code Readiness
 - [x] All 159 tests passing
-- [x] All 5 MCP tools functional
+- [x] All 6 MCP tools functional
 - [x] Integration tests: 100% pass rate
 - [x] No critical security issues
 - [x] Version bumped to 1.6.0
@@ -127,7 +127,7 @@ python scripts/mcp_blue_green_deploy.py deploy --version 1.6.0
 #   [PASS] Server started
 #   [PASS] Received initialization message
 #   [PASS] Initialize request-response successful
-#   [PASS] All 5 tools discovered
+#   [PASS] All 6 tools discovered
 #   [PASS] get_all_pricing executes successfully
 #   [PASS] estimate_cost executes successfully
 #   [PASS] compare_costs executes successfully
@@ -151,8 +151,8 @@ python scripts/mcp_blue_green_deploy.py deploy --version 1.6.0
 2. **Phase 2**: Runs `scripts/quick_validate.py` automatically (6 tests, ~15 sec)
    - Server startup check
    - MCP initialization handshake
-   - Tool discovery (5/5 tools)
-   - Tool execution (all 5 tools)
+   - Tool discovery (6/6 tools)
+   - Tool execution (all 6 tools)
    - Error handling validation
 3. **Phase 3**: Switches traffic to green if validation passes
 4. **Phase 4**: Gracefully stops old blue environment
@@ -185,14 +185,14 @@ python mcp/server.py
 ### Health Check
 ```bash
 python scripts/monitor_mcp_server.py --check
-# Verify: All imports OK, all 5 tools discovered
+# Verify: All imports OK, all 6 tools discovered
 ```
 
 ### Quick Validation (Automated)
 ```bash
 python scripts/quick_validate.py
 # Expected: 6/6 tests passed in ~15 seconds
-# Tests: Startup, init, discovery, 5 tool execution, error handling
+# Tests: Startup, init, discovery, 6 tool execution, error handling
 ```
 
 **Expected Output**:
@@ -200,7 +200,7 @@ python scripts/quick_validate.py
 [PASS] Server started (PID: xxxx)
 [PASS] Received initialization message
 [PASS] Initialize request-response successful
-[PASS] All 5 tools discovered
+[PASS] All 6 tools discovered
 [PASS] get_all_pricing executes successfully
 [PASS] estimate_cost executes successfully
 [PASS] compare_costs executes successfully
@@ -213,7 +213,7 @@ python scripts/quick_validate.py
 ### Tool Functionality Tests
 ```bash
 python scripts/test_mcp_server.py
-# Expected: 6/6 tests passing (tool discovery + 5 tools)
+# Expected: 7/7 tests passing (tool discovery + 6 tools)
 ```
 
 ### Comprehensive Client Validation (Optional)
@@ -256,7 +256,7 @@ p.stdin.flush()
 resp = json.loads(p.stdout.readline())
 
 tools = resp.get('result', {}).get('tools', [])
-print(f'[PASS] Discovered {len(tools)}/5 tools')
+print(f'[PASS] Discovered {len(tools)}/6 tools')
 
 p.terminate()
 "
@@ -347,7 +347,7 @@ All of the following must pass before switching traffic:
 | Test | Expected | Status |
 |------|----------|--------|
 | Process Running | YES | [ ] |
-| All 5 Tools Discovered | 5/5 | [ ] |
+| All 6 Tools Discovered | 6/6 | [ ] |
 | Tool Listing Test | PASS | [ ] |
 | estimate_cost Test | PASS | [ ] |
 | compare_costs Test | PASS | [ ] |
@@ -553,7 +553,7 @@ print(result)
 You'll know deployment succeeded when:
 
 ✓ Green environment starts without errors  
-✓ All 5 tools successfully discovered  
+✓ All 6 tools successfully discovered  
 ✓ Tool execution returns valid responses  
 ✓ Response times < 100ms  
 ✓ Error handling works for invalid inputs  
@@ -595,7 +595,7 @@ The deployment process uses three testing scripts:
 **Purpose**: Fast pre-deployment validation  
 **Location**: `scripts/quick_validate.py`  
 **Duration**: ~15 seconds  
-**Tests**: 6 core tests (startup, init, discovery, 5 tools, error handling)  
+**Tests**: 7 core tests (startup, init, discovery, 6 tools, error handling)  
 **Usage**: Automatically run by deployment manager  
 **Exit Code**: 0 = pass (deploy), 1 = fail (abort)
 

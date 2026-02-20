@@ -120,7 +120,7 @@ Root/
 - Async request processing
 
 **mcp/tools/tool_manager.py** (156 lines)
-- Registers all 5 tools
+- Registers all 6 tools
 - Lists tools with metadata
 - Executes tools by name
 - Handles tool not found errors

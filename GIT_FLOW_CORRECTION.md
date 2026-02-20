@@ -95,7 +95,7 @@ git add mcp/tools/estimate_cost.py
 git add mcp/tools/compare_costs.py
 git add mcp/tools/get_performance_metrics.py
 git add mcp/tools/get_use_cases.py
-git commit -m "feat: implement 5 MCP tools for pricing operations"
+git commit -m "feat: implement 6 MCP tools for pricing operations"
 ```
 
 ### Commit 4: Tool Manifests

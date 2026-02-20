@@ -11,12 +11,13 @@ Your MCP server is **ready to run**. Here's a summary of what was implemented:
 - `mcp/tools/tool_manager.py` - Tool registry and executor
 - `mcp/sessions/session_manager.py` - Session management
 
-**Tool Implementations** (5 tools):
+**Tool Implementations** (6 tools):
 - `mcp/tools/get_all_pricing.py`
 - `mcp/tools/estimate_cost.py`
 - `mcp/tools/compare_costs.py`
 - `mcp/tools/get_performance_metrics.py`
 - `mcp/tools/get_use_cases.py`
+- `mcp/tools/get_telemetry.py`
 
 **Tool Manifests** (5 manifests):
 - `mcp/tools/manifests/get_all_pricing.json`
@@ -84,7 +85,7 @@ python mcp\server.py
 # Paste into Tab 1:
 {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
 
-# Response should show 5 tools
+# Response should show 6 tools
 ```
 
 ### Step 5: Get All Pricing
@@ -121,7 +122,7 @@ python mcp\server.py
 ```bash
 # Input:  {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
 # Output: {"jsonrpc": "2.0", "result": {"tools": [...]}, "id": 2}
-# Should have 5 tools
+# Should have 6 tools
 ```
 
 ### ✅ Test 4: All Tools Callable
@@ -133,6 +134,7 @@ python mcp\server.py
 # 3. compare_costs (with model_names[], input_tokens, output_tokens)
 # 4. get_performance_metrics (optional: provider, include_cost)
 # 5. get_use_cases (optional: provider)
+# 6. get_telemetry (optional: include_details, limit)
 
 # Each should return {"success": true, ...} or valid error
 ```
@@ -203,6 +205,14 @@ python mcp\server.py
 ```
 
 **Response**: What each Anthropic model is best for
+
+### Scenario 6: Get Server Telemetry
+
+```json
+{"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "get_telemetry", "arguments": {"include_details": true, "limit": 10}}}
+```
+
+**Response**: Server usage statistics, MCP request tracking, tool usage metrics, and client analytics
 
 ## 🧪 Automated Testing
 
@@ -289,7 +299,7 @@ Once the server is stable, you can integrate it with Claude AI:
 }
 ```
 
-Claude will then have access to all 5 tools automatically.
+Claude will then have access to all 6 tools automatically.
 
 ## 🎓 Understanding the Flow
 

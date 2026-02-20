@@ -3,6 +3,7 @@ import sys
 import json
 import logging
 import asyncio
+import time
 from typing import Any, Dict, Optional
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,12 +12,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from mcp.tools.tool_manager import ToolManager
+from src.services.telemetry import get_telemetry_service
 
-# Configure logging for debugging
+# Configure logging - disabled for MCP stdio mode to avoid interference
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.CRITICAL,  # Only log critical errors
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.FileHandler('/tmp/mcp_server.log') if sys.platform != 'win32' else logging.FileHandler('mcp_server.log')]
+    handlers=[logging.NullHandler()]  # Don't write logs to avoid file permission issues
 )
 logger = logging.getLogger(__name__)
 
@@ -26,23 +28,22 @@ class MCPServer:
     
     def __init__(self):
         """Initialize the MCP server."""
-        self.version = "1.0.0"
+        self.version = "1.1.0"
         self.name = "LLM Pricing MCP Server"
         self.tool_manager = ToolManager()
+        self.telemetry = get_telemetry_service()
         self.request_id_counter = 0
         logger.info(f"Initializing {self.name} v{self.version}")
     
     async def run(self):
         """Run the MCP server in STDIO mode."""
         logger.info("MCP Server starting (STDIO mode)")
-        print(json.dumps(self._get_initialization_response()), flush=True)
         
         try:
-            loop = asyncio.get_event_loop()
             while True:
-                # Read a line from stdin
+                # Read a line from stdin (synchronous, more reliable on Windows)
                 try:
-                    line = await loop.run_in_executor(None, sys.stdin.readline)
+                    line = sys.stdin.readline()
                     if not line:
                         logger.info("EOF reached, shutting down")
                         break
@@ -55,12 +56,36 @@ class MCPServer:
                     request = json.loads(line)
                     logger.debug(f"Received request: {request}")
                     
+                    # Track timing
+                    start_time = time.time()
+                    
                     # Handle the request
                     response = await self._handle_request(request)
                     
-                    # Send response
-                    logger.debug(f"Sending response: {response}")
-                    print(json.dumps(response), flush=True)
+                    # Track telemetry
+                    response_time_ms = (time.time() - start_time) * 1000
+                    method = request.get("method", "unknown")
+                    # Don't treat notifications (no response) as errors
+                    is_notification = response is None
+                    status_code = 200 if (response and "error" not in response) or is_notification else 500
+                    
+                    self.telemetry.track_endpoint_request(
+                        path=f"mcp:{method}",
+                        method="MCP",
+                        response_time_ms=response_time_ms,
+                        status_code=status_code,
+                        client_ip="mcp_client"
+                    )
+                    
+                    # Track tool usage specifically
+                    if method == "tools/call" and "params" in request:
+                        tool_name = request["params"].get("name", "unknown")
+                        self.telemetry.track_feature_usage(f"mcp_tool:{tool_name}")
+                    
+                    # Send response (skip for notifications)
+                    if response is not None:
+                        logger.debug(f"Sending response: {response}")
+                        print(json.dumps(response), flush=True)
                     
                 except json.JSONDecodeError as e:
                     logger.error(f"Invalid JSON: {e}")
@@ -82,8 +107,8 @@ class MCPServer:
         except Exception as e:
             logger.error(f"Server error: {e}", exc_info=True)
     
-    async def _handle_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle a JSON-RPC 2.0 request."""
+    async def _handle_request(self, request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Handle a JSON-RPC 2.0 request. Returns None for notifications."""
         # Validate JSON-RPC 2.0 structure
         if "jsonrpc" not in request or request["jsonrpc"] != "2.0":
             return self._error_response(
@@ -109,6 +134,16 @@ class MCPServer:
         if method == "initialize":
             return self._success_response(request_id, self._get_initialization_response())
         
+        elif method == "initialized":
+            # Notification with no response required
+            logger.info("Client initialized notification received")
+            return None
+        
+        elif method == "notifications/initialized":
+            # Alternative form of initialized notification
+            logger.info("Client initialized notification received")
+            return None
+        
         elif method == "tools/list":
             return self._success_response(request_id, {
                 "tools": self.tool_manager.list_tools()
@@ -126,7 +161,17 @@ class MCPServer:
             tool_arguments = params.get("arguments", {})
             
             result = await self.tool_manager.execute_tool(tool_name, tool_arguments)
-            return self._success_response(request_id, result)
+            
+            # Wrap result in MCP content format
+            mcp_result = {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(result, indent=2)
+                    }
+                ]
+            }
+            return self._success_response(request_id, mcp_result)
         
         else:
             return self._error_response(

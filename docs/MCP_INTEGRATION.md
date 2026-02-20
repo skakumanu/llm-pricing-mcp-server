@@ -95,7 +95,7 @@ Response:
 
 ### 2. Tool System
 
-**Five Core Tools** (mapped to PricingAggregatorService):
+**Six Core Tools** (mapped to PricingAggregatorService and TelemetryService):
 
 | Tool | Purpose | Input | Output |
 |------|---------|-------|--------|
@@ -104,6 +104,7 @@ Response:
 | `compare_costs` | Compare multiple models | model_names[], input_tokens, output_tokens | Side-by-side comparison, cheapest/most expensive |
 | `get_performance_metrics` | Throughput, latency, context window | provider (optional), include_cost | Performance scores, best metrics |
 | `get_use_cases` | Model recommendations | provider (optional) | Use cases, strengths, best_for |
+| `get_telemetry` | Server usage statistics | include_details (optional), limit (optional) | MCP request tracking, tool usage, analytics |
 
 **Tool Implementations**:
 - All async, using `PricingAggregatorService` methods
@@ -224,7 +225,7 @@ Commit 6: VS Code configuration
 
 ### PR Checklist
 
-- [ ] All 5 tools implemented and tested
+- [ ] All 6 tools implemented and tested
 - [ ] All JSON schemas generated correctly
 - [ ] All tool manifests created with examples
 - [ ] Server can be started: `python mcp/server.py`
