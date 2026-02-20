@@ -1,6 +1,7 @@
 """Configuration settings for the MCP server."""
 from pydantic_settings import BaseSettings
 from typing import Optional
+from src import __version__
 
 
 class Settings(BaseSettings):
@@ -34,7 +35,7 @@ class Settings(BaseSettings):
     
     # Application metadata
     app_name: str = "LLM Pricing MCP Server"
-    app_version: str = "1.5.1"
+    app_version: str = __version__
     app_description: str = "Dynamic pricing comparison server for LLM models across 12 major providers with geolocation and health checks"
     
     model_config = {

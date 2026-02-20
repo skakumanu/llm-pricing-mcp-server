@@ -25,7 +25,7 @@ class DeploymentManager:
     - Request counting for drain operations
     """
     
-    def __init__(self, version: str = "1.5.1"):
+    def __init__(self, version: str):
         self.version = version
         self.start_time = datetime.now(UTC)
         self.graceful_shutdown_started: Optional[datetime] = None
@@ -252,7 +252,7 @@ class DeploymentManager:
 _deployment_manager: Optional[DeploymentManager] = None
 
 
-def get_deployment_manager(version: str = "1.5.1") -> DeploymentManager:
+def get_deployment_manager(version: str) -> DeploymentManager:
     """Get or create the global deployment manager instance."""
     global _deployment_manager
     
