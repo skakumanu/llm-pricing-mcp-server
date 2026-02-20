@@ -186,7 +186,7 @@ develop (c3541df)
 
 ```
 1. Deploy Green Instance
-   docker run ... -e DEPLOYMENT_GROUP=green ... myregistry/llm-pricing:v1.5.0
+   docker run ... -e DEPLOYMENT_GROUP=green ... myregistry/llm-pricing:v1.5.1
 
 2. Verify Health
    curl http://green:8000/health/ready  → ready=true
@@ -215,7 +215,7 @@ spec:
     spec:
       containers:
       - name: llm-pricing
-        image: myregistry/llm-pricing:v1.5.0
+        image: myregistry/llm-pricing:v1.5.1
         
         livenessProbe:
           httpGet:

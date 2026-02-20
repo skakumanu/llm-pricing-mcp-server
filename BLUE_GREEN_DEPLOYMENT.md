@@ -228,7 +228,7 @@ Link: <https://docs.example.com/migration>; rel="deprecation"
 Responses are designed to be forward/backward compatible:
 
 ```json
-// v1.5.0 response
+// v1.5.1 response
 {
   "models": [...],
   "total_models": 87,
@@ -296,7 +296,7 @@ spec:
     spec:
       containers:
       - name: llm-pricing
-        image: myregistry.azurecr.io/llm-pricing:v1.5.0
+        image: myregistry.azurecr.io/llm-pricing:v1.5.1
         ports:
         - containerPort: 8000
         

@@ -9,13 +9,13 @@ This guide explains how the LLM Pricing MCP Server manages backwards compatibili
 ### Current Status
 
 - **Stable Version**: v1 (Current - fully backwards compatible)
-- **Latest Version**: 1.5.0
+- **Latest Version**: 1.5.1
 - **Support Policy**: All patches maintain backwards compatibility until major version bump to v2
 
 ### Semantic Versioning
 
 ```
-Version: 1.5.0
+Version: 1.5.1
          │ │ └─ Patch (bug fixes, no breaking changes)
          │ └─── Minor (new features, no breaking changes)
          └───── Major (breaking changes)
@@ -23,7 +23,7 @@ Version: 1.5.0
 Backwards Compatibility Rules:
 ├─ MAJOR (1→2): Breaking changes allowed
 ├─ MINOR (1.4→1.5): New features only, no breaking changes
-└─ PATCH (1.5.0→1.5.1): Bug fixes only
+└─ PATCH (1.5.1→1.5.2): Bug fixes only
 ```
 
 ## Backwards Compatibility Guarantees
@@ -324,7 +324,7 @@ Mid 2026: v1 support ends
 ```bash
 # Run against v1.5
 curl http://localhost:8000/deployment/metadata | jq .version
-# "1.5.0"
+# "1.5.1"
 
 # Run your client code
 python my_client.py
@@ -481,7 +481,7 @@ POST /cost-estimate with body:
 
 ### Q: What if I find a bug in behavior?
 
-**A:** Bugs are fixed in patch versions (1.5.0 → 1.5.1) without breaking compatibility. Your client code doesn't need changes for patch updates.
+**A:** Bugs are fixed in patch versions (1.5.1 → 1.5.2) without breaking compatibility. Your client code doesn't need changes for patch updates.
 
 ## Support
 
@@ -494,4 +494,4 @@ For backwards compatibility questions:
 ---
 
 **Last Updated:** February 17, 2026  
-**Status:** v1.5.0 - Stable and backwards compatible until June 2025 migration to v2.0
+**Status:** v1.5.1 - Stable and backwards compatible until June 2025 migration to v2.0

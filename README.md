@@ -156,7 +156,7 @@ For detailed diagrams, design patterns, and architectural decisions, see [ARCHIT
 
 ## Live Data Fetching
 
-As of v1.5.0, the server implements intelligent live data fetching with smart caching and graceful fallbacks:
+As of v1.5.1, the server implements intelligent live data fetching with smart caching and graceful fallbacks:
 
 ### What's Live? (No API Keys Required)
 
@@ -248,7 +248,7 @@ Returns server information and available endpoints.
 ```json
 {
   "name": "LLM Pricing MCP Server",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Dynamic pricing comparison server for LLM models across 11 major providers",
   "endpoints": ["/", "/models", "/pricing", "/performance", "/use-cases", "/cost-estimate", "/cost-estimate/batch", "/health", "/docs", "/redoc"]
 }
@@ -539,7 +539,7 @@ Health check endpoint for monitoring.
 {
   "status": "healthy",
   "service": "LLM Pricing MCP Server",
-  "version": "1.5.0"
+  "version": "1.5.1"
 }
 ```
 
@@ -1039,7 +1039,7 @@ docker run -d \
   -e ENV=production \
   -e DEPLOYMENT_GROUP=green \
   -p 8001:8000 \
-  myregistry/llm-pricing:v1.5.0
+  myregistry/llm-pricing:v1.5.1
 
 # 2. Verify health
 curl http://localhost:8001/health/ready
@@ -1069,7 +1069,7 @@ For orchestrators and load balancers:
 ```bash
 # Simple health check (backwards compatible)
 GET /health
-→ {"status": "healthy", "service": "LLM Pricing MCP Server", "version": "1.5.0"}
+→ {"status": "healthy", "service": "LLM Pricing MCP Server", "version": "1.5.1"}
 
 # Kubernetes readinessProbe (ready for traffic)
 GET /health/ready
@@ -1190,7 +1190,7 @@ For issues, questions, or contributions, please open an issue on GitHub.
 
 ## Roadmap
 
-### Completed (v1.5.0) - Latest
+### Completed (v1.5.1) - Latest
 - [x] **MAJOR:** Expanded to 11 major LLM providers (from 5)
 - [x] **NEW:** Groq integration - Ultra-fast inference platform 
 - [x] **NEW:** Together AI integration - Open-source model hosting
