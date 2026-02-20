@@ -5,6 +5,7 @@ from mcp.tools.estimate_cost import EstimateCostTool
 from mcp.tools.compare_costs import CompareCostsTool
 from mcp.tools.get_performance_metrics import GetPerformanceMetricsTool
 from mcp.tools.get_use_cases import GetUseCasesTool
+from mcp.tools.get_telemetry import GetTelemetryTool
 
 
 class ToolManager:
@@ -109,6 +110,29 @@ class ToolManager:
                         "provider": {
                             "type": "string",
                             "description": "Optional provider filter",
+                        },
+                    },
+                    "required": [],
+                },
+            },
+            "get_telemetry": {
+                "instance": GetTelemetryTool(),
+                "name": "get_telemetry",
+                "description": "Get MCP server telemetry and usage statistics including tool usage, response times, and error rates",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "include_details": {
+                            "type": "boolean",
+                            "description": "Include detailed statistics (default: true)",
+                            "default": True,
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum items per category (default: 10, max: 50)",
+                            "default": 10,
+                            "minimum": 1,
+                            "maximum": 50,
                         },
                     },
                     "required": [],

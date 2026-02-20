@@ -6,16 +6,15 @@
             "type": "shell",
             "command": "${workspaceFolder}/.venv/Scripts/python.exe",
             "args": [
-                "src/main.py"
+                "mcp/server.py"
             ],
+            "isBackground": false,
             "problemMatcher": [],
             "presentation": {
                 "echo": true,
                 "reveal": "always",
                 "focus": false,
-                "panel": "dedicated",
-                "showReuseMessage": false,
-                "clear": false
+                "panel": "dedicated"
             },
             "group": {
                 "kind": "build",
