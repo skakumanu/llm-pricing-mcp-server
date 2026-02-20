@@ -1,0 +1,98 @@
+{
+    // Python Configuration
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+    "python.terminal.activateEnvironment": true,
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.autoImportCompletions": true,
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": [
+        "tests",
+        "-v",
+        "--tb=short"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": false,
+    "python.linting.flake8Enabled": true,
+    "python.formatting.provider": "black",
+    // Editor Configuration
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+    },
+    "editor.rulers": [
+        88,
+        120
+    ],
+    // File Associations
+    "files.associations": {
+        "*.json": "jsonc",
+        "Procfile": "shellscript",
+        "runtime.txt": "plaintext"
+    },
+    // File Exclusions
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/.pytest_cache": true,
+        "**/.coverage": true,
+        "**/htmlcov": true,
+        "**/.mypy_cache": true
+    },
+    // Search Exclusions
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/.venv": true,
+        "**/venv": true,
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/staging-logs*": true,
+        "**/webapp_logs_latest": true
+    },
+    // Terminal Configuration
+    "terminal.integrated.env.windows": {
+        "PYTHONPATH": "${workspaceFolder}"
+    },
+    // JSON Schema Mappings for MCP
+    "json.schemas": [
+        {
+            "fileMatch": [
+                "mcp/schemas/*.json"
+            ],
+            "url": "http://json-schema.org/draft-07/schema#"
+        },
+        {
+            "fileMatch": [
+                "mcp/tools/manifests/*.json"
+            ],
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "inputSchema": {
+                        "type": "object"
+                    },
+                    "version": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "name",
+                    "description",
+                    "inputSchema"
+                ]
+            }
+        }
+    ],
+    // MCP Server Configuration
+    "llm-pricing-mcp.serverPort": 8000,
+    "llm-pricing-mcp.debugMode": false,
+    // Git Configuration
+    "git.ignoreLimitWarning": true,
+    "git.confirmSync": false
+}

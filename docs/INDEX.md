@@ -26,6 +26,7 @@ Welcome to the LLM Pricing MCP Server documentation! This directory contains com
 - **[MCP_TESTING.md](MCP_TESTING.md)** - Comprehensive testing guide with all test scripts
 - **[MCP_INTEGRATION.md](MCP_INTEGRATION.md)** - Architecture and integration patterns
 - **[CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md)** - Claude Desktop integration guide
+- **[VS_CODE_INTEGRATION.md](VS_CODE_INTEGRATION.md)** - VS Code workspace setup and development guide
 - **[MCP_PRODUCTION_CHECKLIST.md](MCP_PRODUCTION_CHECKLIST.md)** - Pre-deployment checklist and procedures
 - **[MCP_MONITORING_GUIDE.md](MCP_MONITORING_GUIDE.md)** - Production monitoring and observability
 - **[MCP_VALIDATION_REPORT.md](MCP_VALIDATION_REPORT.md)** - Validation results and test reports
@@ -43,10 +44,11 @@ Welcome to the LLM Pricing MCP Server documentation! This directory contains com
 **For Developers:**
 1. Start with [README.md](../README.md) for project overview
 2. Read [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow
-3. Review [ARCHITECTURE.md](ARCHITECTURE.md) for system design
-4. Check [MCP_QUICK_START.md](MCP_QUICK_START.md) for MCP server setup
-5. Use [MCP_TESTING.md](MCP_TESTING.md) for testing approaches
-6. Follow [HOUSEKEEPING.md](HOUSEKEEPING.md) for quality standards
+3. Set up [VS_CODE_INTEGRATION.md](VS_CODE_INTEGRATION.md) for optimal development experience
+4. Review [ARCHITECTURE.md](ARCHITECTURE.md) for system design
+5. Check [MCP_QUICK_START.md](MCP_QUICK_START.md) for MCP server setup
+6. Use [MCP_TESTING.md](MCP_TESTING.md) for testing approaches
+7. Follow [HOUSEKEEPING.md](HOUSEKEEPING.md) for quality standards
 
 **For DevOps/SRE:**
 1. Begin with [DEPLOYMENT.md](DEPLOYMENT.md) for overview
@@ -83,6 +85,7 @@ Welcome to the LLM Pricing MCP Server documentation! This directory contains com
 - [MCP_QUICK_START.md](MCP_QUICK_START.md)
 - [MCP_INTEGRATION.md](MCP_INTEGRATION.md)
 - [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md)
+- [VS_CODE_INTEGRATION.md](VS_CODE_INTEGRATION.md)
 - [MCP_TESTING.md](MCP_TESTING.md)
 - [MCP_MONITORING_GUIDE.md](MCP_MONITORING_GUIDE.md)
 - [MCP_VALIDATION_REPORT.md](MCP_VALIDATION_REPORT.md)
@@ -131,6 +134,7 @@ All documentation in this directory follows these standards:
 | MCP_QUICK_START.md | Quick start guide | All Users | ~353 lines |
 | MCP_TESTING.md | Testing procedures | Developers, QA | ~458 lines |
 | MCP_VALIDATION_REPORT.md | Test results and validation | QA, Management | ~150 lines |
+| VS_CODE_INTEGRATION.md | VS Code workspace & development | Developers | ~600 lines |
 | SECURITY_AUDIT.md | Security findings | Security, Architects | ~250 lines |
 | NEXT_STEPS.md | Roadmap and future work | Management, Architects | ~100 lines |
 
@@ -139,6 +143,7 @@ All documentation in this directory follows these standards:
 **Common Questions:**
 
 - **How do I set up the project?** → [README.md](../README.md#installation)
+- **How do I configure VS Code for development?** → [VS_CODE_INTEGRATION.md](VS_CODE_INTEGRATION.md)
 - **How do I run the MCP server?** → [MCP_QUICK_START.md](MCP_QUICK_START.md)
 - **How do I test the MCP server?** → [MCP_TESTING.md](MCP_TESTING.md)
 - **How do I integrate with Claude Desktop?** → [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md)
@@ -153,6 +158,7 @@ All documentation in this directory follows these standards:
 
 ## Latest Updates
 
+- **February 20, 2026** - Added VS Code workspace configuration and integration guide
 - **February 20, 2026** - Added MCP testing scripts (quick_validate.py, validate_mcp_client.py, mcp_blue_green_deploy.py)
 - **February 20, 2026** - Completed MCP blue-green deployment with v1.6.0 production deployment
 - **February 20, 2026** - Updated documentation index with all MCP guides
