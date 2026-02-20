@@ -61,6 +61,17 @@ jobs:
         # Exit-zero treats all errors as warnings
         flake8 src tests --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
+  osv_scan:
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.3.3"
+    permissions:
+      actions: read
+      security-events: write
+      contents: read
+    with:
+      scan-args: |-
+        -r
+        requirements.txt
+
   security:
     runs-on: ubuntu-latest
     permissions:
@@ -73,11 +84,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-
-    - name: Run OSV scanner
-      uses: google/osv-scanner-action@v2.3.3
-      with:
-        scan-args: "-r requirements.txt"
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -94,7 +100,7 @@ jobs:
         bandit -r src -q
 
   deploy:
-    needs: [test, lint, security]
+    needs: [test, lint, osv_scan, security]
     runs-on: ubuntu-latest
     permissions:
       contents: read
