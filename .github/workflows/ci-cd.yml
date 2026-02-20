@@ -69,18 +69,13 @@ jobs:
       id-token: write
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
 
+    env:
+      ACR_NAME: llmpricingacr
+      ACR_LOGIN_SERVER: llmpricingacr.azurecr.io
+      IMAGE_NAME: llm-pricing-api
+
     steps:
     - uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
 
     - name: Azure Login with OIDC
       uses: azure/login@v1
@@ -96,12 +91,35 @@ jobs:
         secrets: 'azure-webapp-name,azure-resource-group'
       id: kvsecrets
 
-    - name: Deploy to Azure App Service (Staging)
-      uses: azure/webapps-deploy@v2
-      with:
-        app-name: ${{ steps.kvsecrets.outputs.azure-webapp-name }}
-        slot-name: staging
-        package: .
+    - name: ACR Login
+      run: |
+        az acr login --name "$ACR_NAME"
+
+    - name: Build and Push Image
+      run: |
+        IMAGE_SHA="$ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}"
+        IMAGE_LATEST="$ACR_LOGIN_SERVER/$IMAGE_NAME:latest"
+
+        docker build -t "$IMAGE_SHA" -t "$IMAGE_LATEST" .
+        docker push "$IMAGE_SHA"
+        docker push "$IMAGE_LATEST"
+
+    - name: Update Staging Slot Image
+      run: |
+        IMAGE_SHA="$ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}"
+
+        az webapp config container set \
+          --resource-group "${{ steps.kvsecrets.outputs.azure-resource-group }}" \
+          --name "${{ steps.kvsecrets.outputs.azure-webapp-name }}" \
+          --slot staging \
+          --docker-custom-image-name "DOCKER|$IMAGE_SHA"
+
+    - name: Restart Staging Slot
+      run: |
+        az webapp restart \
+          --resource-group "${{ steps.kvsecrets.outputs.azure-resource-group }}" \
+          --name "${{ steps.kvsecrets.outputs.azure-webapp-name }}" \
+          --slot staging
 
     - name: Wait for Staging Slot to Start
       run: |
