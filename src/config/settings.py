@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 60
     
     # Server Configuration
-    server_host: str = "0.0.0.0"  # nosec B104
+    server_host: str = "0.0.0.0"
     server_port: int = 8000
     debug: bool = False
     
