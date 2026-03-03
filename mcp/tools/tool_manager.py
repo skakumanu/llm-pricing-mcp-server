@@ -6,7 +6,6 @@ from mcp.tools.compare_costs import CompareCostsTool
 from mcp.tools.get_performance_metrics import GetPerformanceMetricsTool
 from mcp.tools.get_use_cases import GetUseCasesTool
 from mcp.tools.get_telemetry import GetTelemetryTool
-from mcp.tools.ask_agent import AskAgentTool
 
 
 class ToolManager:
@@ -15,12 +14,7 @@ class ToolManager:
     def __init__(self):
         """Initialize all tools."""
         self.tools: Dict[str, Any] = {}
-        self._ask_agent_tool = AskAgentTool()  # agent bound later via set_pricing_agent()
         self._register_tools()
-
-    def set_pricing_agent(self, agent) -> None:
-        """Bind the PricingAgent to the ask_agent tool (called after agent.initialize())."""
-        self._ask_agent_tool.set_agent(agent)
     
     def _register_tools(self):
         """Register all available tools."""
@@ -142,34 +136,6 @@ class ToolManager:
                         },
                     },
                     "required": [],
-                },
-            },
-            "ask_agent": {
-                "instance": self._ask_agent_tool,
-                "name": "ask_agent",
-                "description": (
-                    "Ask the LLM pricing agent a natural language question. "
-                    "The agent uses RAG and live pricing tools to produce a sourced answer. "
-                    "Supports multi-turn conversations via conversation_id."
-                ),
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "message": {
-                            "type": "string",
-                            "description": "Natural language question or task for the agent",
-                        },
-                        "conversation_id": {
-                            "type": "string",
-                            "description": "Optional UUID to continue an existing conversation",
-                        },
-                        "autonomous": {
-                            "type": "boolean",
-                            "description": "If true, run as autonomous multi-step task (no history)",
-                            "default": False,
-                        },
-                    },
-                    "required": ["message"],
                 },
             },
         }

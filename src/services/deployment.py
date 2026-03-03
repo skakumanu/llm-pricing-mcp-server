@@ -32,12 +32,7 @@ class DeploymentManager:
         self.drain_timeout_seconds = 30
         self.active_requests = 0
         self._request_lock = asyncio.Lock()
-
-        # External service health registry (populated by components at runtime)
-        self._external_services: Dict[str, ServiceHealth] = {}
-        # Component readiness flags (populated after lazy initialization)
-        self._component_readiness: Dict[str, bool] = {}
-
+        
         # Get deployment environment info
         self.environment = self._get_environment_info()
         self.deployment_metadata = self._get_deployment_metadata()
@@ -142,33 +137,6 @@ class DeploymentManager:
                 f"Drain timeout reached with {self.active_requests} requests still in-flight"
             )
     
-    def register_service_health(
-        self,
-        name: str,
-        status: "DeploymentStatus",
-        response_time_ms: float = 0.0,
-        error_message: Optional[str] = None,
-    ) -> None:
-        """Register or update an external component's health status.
-
-        Called by lazily-initialized components (e.g. PricingAgent, RAGPipeline)
-        after they finish starting up so the health endpoint reflects their state.
-        """
-        self._external_services[name] = ServiceHealth(
-            name=name,
-            status=status,
-            response_time_ms=response_time_ms,
-            error_message=error_message,
-        )
-
-    def set_component_ready(self, component: str, ready: bool) -> None:
-        """Mark a component as ready (or not) for the readiness probe.
-
-        Used by lazily-initialized services to signal their readiness state
-        without the DeploymentManager knowing their internal details.
-        """
-        self._component_readiness[component] = ready
-
     def is_shutting_down(self) -> bool:
         """Check if graceful shutdown is in progress."""
         return self.graceful_shutdown_started is not None
@@ -220,31 +188,19 @@ class DeploymentManager:
     async def get_readiness_check(self) -> DeploymentReadiness:
         """
         Get readiness check response (K8s readinessProbe, etc.).
-
-        Returns True if ready to accept traffic.  A component that has
-        explicitly set itself to not-ready (via set_component_ready) will
-        cause the overall readiness to be False.
+        
+        Returns True if ready to accept traffic.
         """
-        not_shutting_down = not self.is_shutting_down()
-
-        checks: Dict[str, bool] = {
-            "aggregator_initialized": True,
-            "not_shutting_down": not_shutting_down,
+        ready = not self.is_shutting_down()
+        
+        checks = {
+            "aggregator_initialized": True,  # Could be enhanced with actual checks
+            "not_shutting_down": ready,
         }
-        # Include all dynamically registered component readiness flags
-        checks.update(self._component_readiness)
-
-        ready = all(checks.values())
-
-        if not ready:
-            failed = [k for k, v in checks.items() if not v]
-            reason = f"Not ready: {', '.join(failed)}"
-        else:
-            reason = None
-
+        
         return DeploymentReadiness(
             ready=ready,
-            reason=reason,
+            reason=None if ready else "Graceful shutdown in progress",
             checks=checks,
         )
     
@@ -260,8 +216,9 @@ class DeploymentManager:
         }
     
     def _get_dependency_health(self) -> List[ServiceHealth]:
-        """Get health status of all tracked dependencies."""
-        services = [
+        """Get health status of dependencies."""
+        # Could be enhanced to actually check dependencies
+        return [
             ServiceHealth(
                 name="pricing_aggregator",
                 status=DeploymentStatus.HEALTHY,
@@ -275,9 +232,6 @@ class DeploymentManager:
                 error_message=None,
             ),
         ]
-        # Include dynamically registered external services (e.g. agent, RAG)
-        services.extend(self._external_services.values())
-        return services
     
     def get_deployment_metadata(self) -> DeploymentMetadata:
         """Get deployment metadata including version and breaking changes."""
