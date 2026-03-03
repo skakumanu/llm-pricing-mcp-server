@@ -4,13 +4,14 @@ python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
 addopts = "-v --strict-markers"
+asyncio_mode = "auto"
 markers = [
     "slow: marks tests as slow",
     "integration: marks tests as integration tests"
 ]
 
 [tool.coverage.run]
-source = ["src"]
+source = ["src", "agent", "rag", "mcp"]
 omit = ["*/tests/*", "*/__init__.py"]
 
 [tool.coverage.report]
