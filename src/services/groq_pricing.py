@@ -54,7 +54,10 @@ class GroqPricingService(BasePricingProvider):
             "context_window": 131072,
             "use_cases": ["Complex reasoning", "Long context analysis", "Advanced research", "Multi-turn conversations"],
             "strengths": ["Largest Llama model", "Excellent reasoning", "Very fast on Groq"],
-            "best_for": "Complex tasks requiring state-of-the-art reasoning with ultra-fast inference"
+            "best_for": (
+                "Complex tasks requiring state-of-the-art reasoning "
+                "with ultra-fast inference"
+            )
         },
         "llama-3.1-70b": {
             "input": 0.00059,
@@ -133,9 +136,8 @@ class GroqPricingService(BasePricingProvider):
         """
         try:
             # Fetch available models from API (live data)
-            models_list = None
             if self.api_key:
-                models_list = await DataFetcher.fetch_with_cache(
+                _ = await DataFetcher.fetch_with_cache(
                     cache_key="groq_models",
                     fetch_func=lambda: DataFetcher.fetch_api_models(
                         api_endpoint=PRICING_SOURCES["Groq"].api_endpoint,
@@ -146,7 +148,7 @@ class GroqPricingService(BasePricingProvider):
                 )
 
             # Fetch pricing from website (live data)
-            live_pricing_data = await DataFetcher.fetch_with_cache(
+            _ = await DataFetcher.fetch_with_cache(
                 cache_key="groq_pricing_web",
                 fetch_func=lambda: DataFetcher.fetch_pricing_from_website(
                     url=PRICING_SOURCES["Groq"].pricing_url

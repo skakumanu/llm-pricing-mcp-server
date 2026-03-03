@@ -618,7 +618,6 @@ def test_use_cases_context_window_included():
         assert gemini_pro["context_window"] == 2097152
 
 
-
 def test_new_providers_in_pricing():
     """Test that new providers (Google, Cohere, Mistral) are included in pricing."""
     response = client.get("/pricing")

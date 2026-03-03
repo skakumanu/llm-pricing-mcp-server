@@ -115,7 +115,10 @@ class ServerInfo(BaseModel):
     description: str = Field(..., description="Server description")
     endpoints: List[EndpointInfo] = Field(..., description="Available API endpoints with methods")
     sample_models: List[str] = Field(default_factory=list, description="Sample model names for testing")
-    quick_start_guide: str = Field(default="Visit /docs for interactive API documentation", description="Quick start guidance")
+    quick_start_guide: str = Field(
+        default="Visit /docs for interactive API documentation",
+        description="Quick start guidance"
+    )
 
 
 class CostEstimateRequest(BaseModel):
@@ -318,6 +321,12 @@ class TelemetryResponse(BaseModel):
     endpoints: List[EndpointMetricResponse] = Field(..., description="Per-endpoint metrics")
     provider_adoption: List[ProviderAdoptionResponse] = Field(..., description="Provider adoption metrics")
     features: List[FeatureUsageResponse] = Field(..., description="Feature usage metrics")
-    client_locations: List[ClientLocationStats] = Field(default_factory=list, description="Geographic distribution of requests")
-    top_browsers: List[BrowserStats] = Field(default_factory=list, description="Top browsers used by clients")
+    client_locations: List[ClientLocationStats] = Field(
+        default_factory=list,
+        description="Geographic distribution of requests"
+    )
+    top_browsers: List[BrowserStats] = Field(
+        default_factory=list,
+        description="Top browsers used by clients"
+    )
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Response timestamp")

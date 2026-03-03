@@ -117,9 +117,8 @@ class TogetherPricingService(BasePricingProvider):
         """
         try:
             # Fetch available models from API (live data)
-            models_list = None
             if self.api_key:
-                models_list = await DataFetcher.fetch_with_cache(
+                _ = await DataFetcher.fetch_with_cache(
                     cache_key="together_models",
                     fetch_func=lambda: DataFetcher.fetch_api_models(
                         api_endpoint=PRICING_SOURCES["Together AI"].api_endpoint,
@@ -130,7 +129,7 @@ class TogetherPricingService(BasePricingProvider):
                 )
 
             # Fetch pricing from website (live data)
-            live_pricing_data = await DataFetcher.fetch_with_cache(
+            _ = await DataFetcher.fetch_with_cache(
                 cache_key="together_pricing_web",
                 fetch_func=lambda: DataFetcher.fetch_pricing_from_website(
                     url=PRICING_SOURCES["Together AI"].pricing_url

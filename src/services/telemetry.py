@@ -367,7 +367,6 @@ class TelemetryService:
             logger.info("Telemetry data reset")
 
 
-
 # Global telemetry instance
 _telemetry_service: Optional[TelemetryService] = None
 

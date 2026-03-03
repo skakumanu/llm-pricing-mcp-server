@@ -20,7 +20,12 @@ class GooglePricingService(BasePricingProvider):
             "input": 0.0001,
             "output": 0.0004,
             "context_window": 1048576,
-            "use_cases": ["Next-gen multimodal", "Real-time applications", "Enhanced reasoning", "Multi-turn conversations"],
+            "use_cases": [
+                "Next-gen multimodal",
+                "Real-time applications",
+                "Enhanced reasoning",
+                "Multi-turn conversations"
+            ],
             "strengths": ["Improved intelligence", "Faster responses", "Native tool use", "1M context"],
             "best_for": "Production applications needing latest Gemini capabilities with speed"
         },
@@ -28,9 +33,17 @@ class GooglePricingService(BasePricingProvider):
             "input": 0.00125,
             "output": 0.00375,
             "context_window": 2097152,
-            "use_cases": ["Entire book analysis", "Large codebase understanding", "Video content analysis", "Complex multi-modal reasoning"],
+            "use_cases": [
+                "Entire book analysis",
+                "Large codebase understanding",
+                "Video content analysis",
+                "Complex multi-modal reasoning"
+            ],
             "strengths": ["2M token context", "Multimodal capabilities", "Advanced reasoning"],
-            "best_for": "Processing massive amounts of data with multimodal understanding"
+            "best_for": (
+                "General-purpose applications requiring "
+                "balanced performance and cost"
+            )
         },
         "gemini-1.5-flash": {
             "input": 0.000075,

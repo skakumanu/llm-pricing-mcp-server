@@ -36,7 +36,12 @@ class AnthropicPricingService(BasePricingProvider):
             "input": 0.001,
             "output": 0.005,
             "context_window": 200000,
-            "use_cases": ["Fast responses", "High-volume processing", "Real-time applications", "Cost-effective intelligence"],
+            "use_cases": [
+                "Fast responses",
+                "High-volume processing",
+                "Real-time applications",
+                "Cost-effective intelligence"
+            ],
             "strengths": ["Fastest Claude", "Improved intelligence", "Affordable", "Large context"],
             "best_for": "High-speed intelligent applications with cost constraints"
         },

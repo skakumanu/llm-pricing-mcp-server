@@ -92,9 +92,8 @@ class FireworksPricingService(BasePricingProvider):
         """
         try:
             # Fetch available models from API (live data)
-            models_list = None
             if self.api_key:
-                models_list = await DataFetcher.fetch_with_cache(
+                _ = await DataFetcher.fetch_with_cache(
                     cache_key="fireworks_models",
                     fetch_func=lambda: DataFetcher.fetch_api_models(
                         api_endpoint=PRICING_SOURCES["Fireworks AI"].api_endpoint,
@@ -105,7 +104,7 @@ class FireworksPricingService(BasePricingProvider):
                 )
 
             # Fetch pricing from website (live data)
-            live_pricing_data = await DataFetcher.fetch_with_cache(
+            _ = await DataFetcher.fetch_with_cache(
                 cache_key="fireworks_pricing_web",
                 fetch_func=lambda: DataFetcher.fetch_pricing_from_website(
                     url=PRICING_SOURCES["Fireworks AI"].pricing_url

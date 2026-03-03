@@ -62,6 +62,7 @@ _rate_limit_lock = asyncio.Lock()
 _auth_warning_logged = False
 _last_rate_limit_cleanup = time.time()
 
+
 async def cleanup_stale_rate_limit_entries():
     """Periodically remove IP entries with no recent requests to prevent memory leak."""
     global _last_rate_limit_cleanup
@@ -98,6 +99,8 @@ _sensitive_paths = {
 }
 
 # Add deployment middleware for request tracking (needed for graceful shutdown)
+
+
 @app.middleware("http")
 async def deployment_middleware(request: Request, call_next):
     """
@@ -127,6 +130,8 @@ async def deployment_middleware(request: Request, call_next):
     return response
 
 # Add security middleware for auth, rate limits, and size limits
+
+
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
     """
@@ -213,6 +218,8 @@ async def security_middleware(request: Request, call_next):
     return await call_next(request)
 
 # Add telemetry middleware for automatic request tracking
+
+
 @app.middleware("http")
 async def telemetry_middleware(request: Request, call_next):
     """
@@ -248,7 +255,7 @@ async def telemetry_middleware(request: Request, call_next):
 
     try:
         response = await call_next(request)
-    except Exception as e:
+    except Exception:
         # Handle exceptions, track as error
         elapsed_ms = (time.time() - start_time) * 1000
         telemetry = get_telemetry_service()
@@ -305,7 +312,6 @@ async def get_pricing_aggregator() -> PricingAggregatorService:
     return pricing_aggregator
 
 logger.info("Application initialization complete")
-
 
 
 @app.get("/", response_model=ServerInfo)

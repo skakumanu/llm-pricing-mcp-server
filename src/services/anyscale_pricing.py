@@ -79,9 +79,8 @@ class AnyscalePricingService(BasePricingProvider):
         """Fetch Anyscale model pricing data."""
         try:
             # Fetch available models from API
-            models_list = None
             if self.api_key:
-                models_list = await DataFetcher.fetch_with_cache(
+                _ = await DataFetcher.fetch_with_cache(
                     cache_key="anyscale_models",
                     fetch_func=lambda: DataFetcher.fetch_api_models(
                         api_endpoint=PRICING_SOURCES["Anyscale"].api_endpoint,
@@ -92,7 +91,7 @@ class AnyscalePricingService(BasePricingProvider):
                 )
 
             # Fetch pricing from website
-            live_pricing_data = await DataFetcher.fetch_with_cache(
+            _ = await DataFetcher.fetch_with_cache(
                 cache_key="anyscale_pricing_web",
                 fetch_func=lambda: DataFetcher.fetch_pricing_from_website(
                     url=PRICING_SOURCES["Anyscale"].pricing_url

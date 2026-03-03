@@ -55,9 +55,8 @@ class PerplexityPricingService(BasePricingProvider):
         """Fetch Perplexity AI model pricing data."""
         try:
             # Fetch available models from API
-            models_list = None
             if self.api_key:
-                models_list = await DataFetcher.fetch_with_cache(
+                _ = await DataFetcher.fetch_with_cache(
                     cache_key="perplexity_models",
                     fetch_func=lambda: DataFetcher.fetch_api_models(
                         api_endpoint=PRICING_SOURCES["Perplexity AI"].api_endpoint,
@@ -68,7 +67,7 @@ class PerplexityPricingService(BasePricingProvider):
                 )
 
             # Fetch pricing from website
-            live_pricing_data = await DataFetcher.fetch_with_cache(
+            _ = await DataFetcher.fetch_with_cache(
                 cache_key="perplexity_pricing_web",
                 fetch_func=lambda: DataFetcher.fetch_pricing_from_website(
                     url=PRICING_SOURCES["Perplexity AI"].pricing_url

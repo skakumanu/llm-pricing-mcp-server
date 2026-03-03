@@ -76,7 +76,7 @@ def validate_server():
         if len(tools) != 6:
             print(f"[FAIL] Expected 6 tools, got {len(tools)}")
             return False
-        print(f"[PASS] All 6 tools discovered\n")
+        print("[PASS] All 6 tools discovered\n")
 
         # Test each tool
         tests_passed = 0
@@ -210,7 +210,7 @@ def validate_server():
 
         # Check if response indicates error (either JSON-RPC error or result.success=false)
         if ("error" in resp and resp["error"]) or \
-           ("result" in resp and resp["result"] and resp["result"].get("success") == False):
+           ("result" in resp and resp["result"] and resp["result"].get("success") is False):
             print("[PASS] Error handling works correctly")
         else:
             print("[FAIL] Error handling failed")
