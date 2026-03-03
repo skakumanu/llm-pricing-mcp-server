@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class FireworksPricingService(BasePricingProvider):
     """Service to fetch and manage Fireworks AI model pricing."""
-    
+
     # Fireworks AI pricing data (per 1k tokens in USD)
     # Source: https://fireworks.ai/pricing
     STATIC_PRICING = {
@@ -73,20 +73,20 @@ class FireworksPricingService(BasePricingProvider):
             "best_for": "Enterprise applications requiring strong reasoning"
         }
     }
-    
+
     def __init__(self, api_key: Optional[str] = None):
         """Initialize the Fireworks AI pricing service.
-        
+
         Args:
             api_key: Optional Fireworks AI API key for authenticated requests
         """
         super().__init__("Fireworks AI")
         self.api_key = api_key or getattr(settings, 'fireworks_api_key', None)
-    
+
     async def fetch_pricing_data(self) -> List[PricingMetrics]:
         """
         Fetch Fireworks AI model pricing data.
-        
+
         Returns:
             List of PricingMetrics for Fireworks AI models
         """
@@ -103,7 +103,7 @@ class FireworksPricingService(BasePricingProvider):
                     ),
                     ttl_seconds=PRICING_SOURCES["Fireworks AI"].cache_ttl_seconds
                 )
-            
+
             # Fetch pricing from website (live data)
             live_pricing_data = await DataFetcher.fetch_with_cache(
                 cache_key="fireworks_pricing_web",
@@ -113,19 +113,19 @@ class FireworksPricingService(BasePricingProvider):
                 ttl_seconds=PRICING_SOURCES["Fireworks AI"].cache_ttl_seconds,
                 fallback_data=None
             )
-            
+
             # Fetch performance metrics
             performance_data = await self._fetch_performance_metrics()
-            
+
             # Use static pricing as base
             pricing_list = self._get_static_pricing_data(performance_data)
-            
+
             return pricing_list
-            
+
         except Exception as e:
             logger.warning(f"Error fetching Fireworks AI pricing data: {e}")
             return self._get_static_pricing_data({})
-    
+
     def _get_static_pricing_data(self, performance_data: dict) -> List[PricingMetrics]:
         """Get static pricing metrics with optional performance data."""
         pricing_list = []
@@ -149,7 +149,7 @@ class FireworksPricingService(BasePricingProvider):
                 )
             )
         return pricing_list
-    
+
     async def _fetch_performance_metrics(self) -> dict:
         """Fetch performance metrics for Fireworks AI models."""
         try:
@@ -162,22 +162,22 @@ class FireworksPricingService(BasePricingProvider):
                 ttl_seconds=PERFORMANCE_SOURCES["Fireworks AI"].cache_ttl_seconds,
                 fallback_data={"status": "unknown", "latency_ms": None}
             )
-            
+
             latency = health_data.get("latency_ms", 200.0)
-            
+
             performance_dict = {}
             for model_name in self.STATIC_PRICING.keys():
                 performance_dict[model_name] = {
                     "throughput": 200.0,  # Fast inference
                     "latency_ms": latency if latency else 200.0
                 }
-            
+
             return performance_dict
-            
+
         except Exception as e:
             logger.warning(f"Error fetching Fireworks AI performance metrics: {e}")
             return {}
-    
+
     @staticmethod
     def get_pricing_data() -> List[PricingMetrics]:
         """Synchronous method for backward compatibility."""

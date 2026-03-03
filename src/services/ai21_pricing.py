@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class AI21PricingService(BasePricingProvider):
     """Service to fetch and manage AI21 Labs model pricing."""
-    
+
     # AI21 Labs pricing data (per 1k tokens in USD)
     # Source: https://www.ai21.com/pricing
     STATIC_PRICING = {
@@ -57,16 +57,16 @@ class AI21PricingService(BasePricingProvider):
             "best_for": "Cost-effective enterprise tasks"
         }
     }
-    
+
     def __init__(self, api_key: Optional[str] = None):
         """Initialize the AI21 Labs pricing service.
-        
+
         Args:
             api_key: Optional AI21 API key for authenticated requests
         """
         super().__init__("AI21 Labs")
         self.api_key = api_key or getattr(settings, 'ai21_api_key', None)
-    
+
     async def fetch_pricing_data(self) -> List[PricingMetrics]:
         """Fetch AI21 Labs model pricing data."""
         try:
@@ -82,7 +82,7 @@ class AI21PricingService(BasePricingProvider):
                     ),
                     ttl_seconds=PRICING_SOURCES["AI21 Labs"].cache_ttl_seconds
                 )
-            
+
             # Fetch pricing from website
             live_pricing_data = await DataFetcher.fetch_with_cache(
                 cache_key="ai21_pricing_web",
@@ -92,18 +92,18 @@ class AI21PricingService(BasePricingProvider):
                 ttl_seconds=PRICING_SOURCES["AI21 Labs"].cache_ttl_seconds,
                 fallback_data=None
             )
-            
+
             # Fetch performance metrics
             performance_data = await self._fetch_performance_metrics()
-            
+
             pricing_list = self._get_static_pricing_data(performance_data)
-            
+
             return pricing_list
-            
+
         except Exception as e:
             logger.warning(f"Error fetching AI21 Labs pricing data: {e}")
             return self._get_static_pricing_data({})
-    
+
     def _get_static_pricing_data(self, performance_data: dict) -> List[PricingMetrics]:
         """Get static pricing metrics with optional performance data."""
         pricing_list = []
@@ -127,7 +127,7 @@ class AI21PricingService(BasePricingProvider):
                 )
             )
         return pricing_list
-    
+
     async def _fetch_performance_metrics(self) -> dict:
         """Fetch performance metrics for AI21 Labs models."""
         try:
@@ -140,22 +140,22 @@ class AI21PricingService(BasePricingProvider):
                 ttl_seconds=PERFORMANCE_SOURCES["AI21 Labs"].cache_ttl_seconds,
                 fallback_data={"status": "unknown", "latency_ms": None}
             )
-            
+
             latency = health_data.get("latency_ms", 350.0)
-            
+
             performance_dict = {}
             for model_name in self.STATIC_PRICING.keys():
                 performance_dict[model_name] = {
                     "throughput": 70.0,
                     "latency_ms": latency if latency else 350.0
                 }
-            
+
             return performance_dict
-            
+
         except Exception as e:
             logger.warning(f"Error fetching AI21 Labs performance metrics: {e}")
             return {}
-    
+
     @staticmethod
     def get_pricing_data() -> List[PricingMetrics]:
         """Synchronous method for backward compatibility."""

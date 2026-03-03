@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class AnyscalePricingService(BasePricingProvider):
     """Service to fetch and manage Anyscale model pricing."""
-    
+
     # Anyscale pricing data (per 1k tokens in USD)
     # Source: https://www.anyscale.com/pricing
     STATIC_PRICING = {
@@ -65,16 +65,16 @@ class AnyscalePricingService(BasePricingProvider):
             "best_for": "Large-scale code generation applications"
         }
     }
-    
+
     def __init__(self, api_key: Optional[str] = None):
         """Initialize the Anyscale pricing service.
-        
+
         Args:
             api_key: Optional Anyscale API key for authenticated requests
         """
         super().__init__("Anyscale")
         self.api_key = api_key or getattr(settings, 'anyscale_api_key', None)
-    
+
     async def fetch_pricing_data(self) -> List[PricingMetrics]:
         """Fetch Anyscale model pricing data."""
         try:
@@ -90,7 +90,7 @@ class AnyscalePricingService(BasePricingProvider):
                     ),
                     ttl_seconds=PRICING_SOURCES["Anyscale"].cache_ttl_seconds
                 )
-            
+
             # Fetch pricing from website
             live_pricing_data = await DataFetcher.fetch_with_cache(
                 cache_key="anyscale_pricing_web",
@@ -100,18 +100,18 @@ class AnyscalePricingService(BasePricingProvider):
                 ttl_seconds=PRICING_SOURCES["Anyscale"].cache_ttl_seconds,
                 fallback_data=None
             )
-            
+
             # Fetch performance metrics
             performance_data = await self._fetch_performance_metrics()
-            
+
             pricing_list = self._get_static_pricing_data(performance_data)
-            
+
             return pricing_list
-            
+
         except Exception as e:
             logger.warning(f"Error fetching Anyscale pricing data: {e}")
             return self._get_static_pricing_data({})
-    
+
     def _get_static_pricing_data(self, performance_data: dict) -> List[PricingMetrics]:
         """Get static pricing metrics with optional performance data."""
         pricing_list = []
@@ -135,7 +135,7 @@ class AnyscalePricingService(BasePricingProvider):
                 )
             )
         return pricing_list
-    
+
     async def _fetch_performance_metrics(self) -> dict:
         """Fetch performance metrics for Anyscale models."""
         try:
@@ -148,22 +148,22 @@ class AnyscalePricingService(BasePricingProvider):
                 ttl_seconds=PERFORMANCE_SOURCES["Anyscale"].cache_ttl_seconds,
                 fallback_data={"status": "unknown", "latency_ms": None}
             )
-            
+
             latency = health_data.get("latency_ms", 250.0)
-            
+
             performance_dict = {}
             for model_name in self.STATIC_PRICING.keys():
                 performance_dict[model_name] = {
                     "throughput": 150.0,  # Ray optimized
                     "latency_ms": latency if latency else 250.0
                 }
-            
+
             return performance_dict
-            
+
         except Exception as e:
             logger.warning(f"Error fetching Anyscale performance metrics: {e}")
             return {}
-    
+
     @staticmethod
     def get_pricing_data() -> List[PricingMetrics]:
         """Synchronous method for backward compatibility."""

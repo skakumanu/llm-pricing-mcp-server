@@ -1,6 +1,6 @@
 """Data sources configuration for fetching live pricing and performance data."""
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Optional
 from enum import Enum
 
 
@@ -22,7 +22,7 @@ class PricingDataSource:
     cache_ttl_seconds: int = 3600  # Cache for 1 hour by default
     requires_auth: bool = False
     public_health_check: Optional[str] = None  # Public endpoint for health checks
-    
+
 
 @dataclass
 class PerformanceDataSource:

@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class TogetherPricingService(BasePricingProvider):
     """Service to fetch and manage Together AI model pricing."""
-    
+
     # Together AI pricing data (per 1k tokens in USD)
     # Source: https://www.together.ai/pricing
     STATIC_PRICING = {
@@ -89,29 +89,29 @@ class TogetherPricingService(BasePricingProvider):
             "best_for": "Enterprise applications requiring strong performance"
         }
     }
-    
+
     def __init__(self, api_key: Optional[str] = None):
         """Initialize the Together AI pricing service.
-        
+
         Args:
             api_key: Optional Together AI API key for authenticated requests
         """
         super().__init__("Together AI")
         self.api_key = api_key or getattr(settings, 'together_api_key', None)
-    
+
     async def fetch_pricing_data(self) -> List[PricingMetrics]:
         """
         Fetch Together AI model pricing data.
-        
+
         This method attempts to fetch live data from:
         1. Together AI API to get available models
         2. Together AI pricing website for current pricing
-        
+
         Falls back to curated static pricing data if live fetch fails.
-        
+
         Returns:
             List of PricingMetrics for Together AI models
-            
+
         Raises:
             Exception: If unable to fetch or parse pricing data
         """
@@ -128,7 +128,7 @@ class TogetherPricingService(BasePricingProvider):
                     ),
                     ttl_seconds=PRICING_SOURCES["Together AI"].cache_ttl_seconds
                 )
-            
+
             # Fetch pricing from website (live data)
             live_pricing_data = await DataFetcher.fetch_with_cache(
                 cache_key="together_pricing_web",
@@ -138,28 +138,28 @@ class TogetherPricingService(BasePricingProvider):
                 ttl_seconds=PRICING_SOURCES["Together AI"].cache_ttl_seconds,
                 fallback_data=None
             )
-            
+
             # Fetch performance metrics
             performance_data = await self._fetch_performance_metrics()
-            
+
             # Use static pricing as base (most reliable)
             # TODO: Parse live_pricing_data when available
             pricing_list = self._get_static_pricing_data(performance_data)
-            
+
             return pricing_list
-            
+
         except Exception as e:
             logger.warning(f"Error fetching Together AI pricing data: {e}")
             # Fall back to static data without performance metrics
             return self._get_static_pricing_data({})
-    
+
     def _get_static_pricing_data(self, performance_data: dict) -> List[PricingMetrics]:
         """
         Get static pricing metrics with optional performance data.
-        
+
         Args:
             performance_data: Dictionary of performance metrics by model
-            
+
         Returns:
             List of PricingMetrics with static pricing data
         """
@@ -184,11 +184,11 @@ class TogetherPricingService(BasePricingProvider):
                 )
             )
         return pricing_list
-    
+
     async def _fetch_performance_metrics(self) -> dict:
         """
         Fetch performance metrics for Together AI models.
-        
+
         Returns:
             Dictionary mapping model names to performance data
         """
@@ -202,9 +202,9 @@ class TogetherPricingService(BasePricingProvider):
                 ttl_seconds=PERFORMANCE_SOURCES["Together AI"].cache_ttl_seconds,
                 fallback_data={"status": "unknown", "latency_ms": None}
             )
-            
+
             latency = health_data.get("latency_ms", 300.0)
-            
+
             # Typical Together AI performance
             performance_dict = {}
             for model_name in self.STATIC_PRICING.keys():
@@ -212,17 +212,17 @@ class TogetherPricingService(BasePricingProvider):
                     "throughput": 100.0,
                     "latency_ms": latency if latency else 300.0
                 }
-            
+
             return performance_dict
-            
+
         except Exception as e:
             logger.warning(f"Error fetching Together AI performance metrics: {e}")
             return {}
-    
+
     @staticmethod
     def get_pricing_data() -> List[PricingMetrics]:
         """Synchronous method for backward compatibility.
-        
+
         Returns:
             List of PricingMetrics for Together AI models
         """

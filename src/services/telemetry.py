@@ -2,7 +2,6 @@
 import logging
 from datetime import datetime, UTC
 from typing import Dict, List, Optional, Set
-from collections import defaultdict
 import threading
 from dataclasses import dataclass, asdict, field
 
@@ -21,14 +20,14 @@ class EndpointMetric:
     max_response_time_ms: float = 0.0
     last_called: Optional[str] = None
     first_called: Optional[str] = None
-    
+
     @property
     def avg_response_time_ms(self) -> float:
         """Calculate average response time."""
         if self.call_count == 0:
             return 0.0
         return round(self.total_response_time_ms / self.call_count, 2)
-    
+
     @property
     def success_rate(self) -> float:
         """Calculate success rate as percentage."""
@@ -36,15 +35,15 @@ class EndpointMetric:
             return 0.0
         success_count = self.call_count - self.error_count
         return round((success_count / self.call_count) * 100, 2)
-    
+
     def to_dict(self) -> dict:
         """Convert to dictionary, including computed properties."""
         d = asdict(self)
         d['avg_response_time_ms'] = self.avg_response_time_ms
         d['success_rate'] = self.success_rate
         d['min_response_time_ms'] = (
-            self.min_response_time_ms 
-            if self.min_response_time_ms != float('inf') 
+            self.min_response_time_ms
+            if self.min_response_time_ms != float('inf')
             else 0.0
         )
         return d
@@ -58,12 +57,12 @@ class ProviderAdoption:
     total_cost_estimated: float = 0.0
     last_requested: Optional[str] = None
     unique_models_requested: set = field(default_factory=set)
-    
+
     @property
     def model_count(self) -> int:
         """Return count of unique models requested."""
         return len(self.unique_models_requested)
-    
+
     def to_dict(self) -> dict:
         """Convert to dictionary."""
         return {
@@ -90,7 +89,7 @@ class ClientLocation:
     country_code: str
     request_count: int = 0
     unique_clients: Set[str] = field(default_factory=set)
-    
+
     def to_dict(self) -> dict:
         """Convert to dictionary."""
         return {
@@ -107,7 +106,7 @@ class BrowserUsage:
     browser_name: str
     request_count: int = 0
     unique_clients: Set[str] = field(default_factory=set)
-    
+
     def to_dict(self) -> dict:
         """Convert to dictionary."""
         return {
@@ -119,7 +118,7 @@ class BrowserUsage:
 
 class TelemetryService:
     """Service for tracking API usage and adoption metrics."""
-    
+
     def __init__(self):
         """Initialize telemetry service."""
         self.endpoints: Dict[str, EndpointMetric] = {}
@@ -133,7 +132,7 @@ class TelemetryService:
         self.start_time: str = datetime.now(UTC).isoformat()
         self._lock = threading.Lock()
         logger.info("Telemetry service initialized")
-    
+
     def track_endpoint_request(
         self,
         path: str,
@@ -147,7 +146,7 @@ class TelemetryService:
     ) -> None:
         """
         Track an endpoint request with optional client information.
-        
+
         Args:
             path: Request path
             method: HTTP method
@@ -160,32 +159,32 @@ class TelemetryService:
         """
         with self._lock:
             endpoint_key = f"{method} {path}"
-            
+
             if endpoint_key not in self.endpoints:
                 self.endpoints[endpoint_key] = EndpointMetric(
                     path=path,
                     method=method,
                     first_called=datetime.now(UTC).isoformat()
                 )
-            
+
             metric = self.endpoints[endpoint_key]
             metric.call_count += 1
             metric.last_called = datetime.now(UTC).isoformat()
             metric.total_response_time_ms += response_time_ms
             metric.min_response_time_ms = min(metric.min_response_time_ms, response_time_ms)
             metric.max_response_time_ms = max(metric.max_response_time_ms, response_time_ms)
-            
+
             # Track errors (4xx, 5xx)
             if status_code >= 400:
                 metric.error_count += 1
                 self.total_errors += 1
-            
+
             self.total_requests += 1
-            
+
             # Track client information
             if client_ip:
                 self.unique_clients.add(client_ip)
-            
+
             # Track geolocation
             if country_code and country:
                 if country_code not in self.client_locations:
@@ -197,7 +196,7 @@ class TelemetryService:
                 loc.request_count += 1
                 if client_ip:
                     loc.unique_clients.add(client_ip)
-            
+
             # Track browser usage
             if browser and browser != "Unknown":
                 if browser not in self.browser_usage:
@@ -206,7 +205,7 @@ class TelemetryService:
                 usage.request_count += 1
                 if client_ip:
                     usage.unique_clients.add(client_ip)
-    
+
     def track_provider_usage(
         self,
         provider_name: str,
@@ -215,7 +214,7 @@ class TelemetryService:
     ) -> None:
         """
         Track provider adoption and usage.
-        
+
         Args:
             provider_name: Name of the provider
             model_name: Name of the model used
@@ -224,28 +223,28 @@ class TelemetryService:
         with self._lock:
             if provider_name not in self.providers:
                 self.providers[provider_name] = ProviderAdoption(provider_name=provider_name)
-            
+
             provider = self.providers[provider_name]
             provider.model_requests += 1
             provider.total_cost_estimated += estimated_cost
             provider.unique_models_requested.add(model_name)
             provider.last_requested = datetime.now(UTC).isoformat()
-    
+
     def track_feature_usage(self, feature_name: str) -> None:
         """
         Track usage of specific features.
-        
+
         Args:
             feature_name: Name of the feature used
         """
         with self._lock:
             if feature_name not in self.features:
                 self.features[feature_name] = FeatureUsage(feature_name=feature_name)
-            
+
             feature = self.features[feature_name]
             feature.usage_count += 1
             feature.last_used = datetime.now(UTC).isoformat()
-    
+
     def get_endpoint_stats(self) -> List[dict]:
         """Get statistics for all endpoints."""
         with self._lock:
@@ -256,7 +255,7 @@ class TelemetryService:
                 }
                 for endpoint_key, metric in sorted(self.endpoints.items())
             ]
-    
+
     def get_provider_adoption(self) -> List[dict]:
         """Get adoption statistics for all providers."""
         with self._lock:
@@ -268,7 +267,7 @@ class TelemetryService:
                     reverse=True
                 )
             ]
-    
+
     def get_feature_usage(self) -> List[dict]:
         """Get usage statistics for all features."""
         with self._lock:
@@ -284,7 +283,7 @@ class TelemetryService:
                     reverse=True
                 )
             ]
-    
+
     def get_overall_stats(self) -> dict:
         """Get overall telemetry statistics."""
         with self._lock:
@@ -295,7 +294,7 @@ class TelemetryService:
                 round(total_response_time / self.total_requests, 2)
                 if self.total_requests > 0 else 0.0
             )
-            
+
             return {
                 "total_requests": self.total_requests,
                 "total_errors": self.total_errors,
@@ -312,14 +311,14 @@ class TelemetryService:
                 "uptime_since": self.start_time,
                 "timestamp": datetime.now(UTC).isoformat()
             }
-    
+
     def get_client_locations(self, limit: int = 10) -> List[dict]:
         """
         Get client locations sorted by request count.
-        
+
         Args:
             limit: Max number of locations to return
-            
+
         Returns:
             List of client location dicts
         """
@@ -332,14 +331,14 @@ class TelemetryService:
                     reverse=True
                 )[:limit]
             ]
-    
+
     def get_browser_stats(self, limit: int = 10) -> List[dict]:
         """
         Get browser usage stats sorted by request count.
-        
+
         Args:
             limit: Max number of browsers to return
-            
+
         Returns:
             List of browser stats dicts
         """
@@ -352,7 +351,7 @@ class TelemetryService:
                     reverse=True
                 )[:limit]
             ]
-    
+
     def reset_telemetry(self) -> None:
         """Reset all telemetry data (useful for testing)."""
         with self._lock:

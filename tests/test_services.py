@@ -9,7 +9,7 @@ def test_openai_pricing_service():
     """Test OpenAI pricing service returns data."""
     service = OpenAIPricingService()
     pricing_data = service.get_pricing_data()
-    
+
     assert len(pricing_data) > 0
     assert all(model.provider == "OpenAI" for model in pricing_data)
     assert all(model.cost_per_input_token > 0 for model in pricing_data)
@@ -20,7 +20,7 @@ def test_anthropic_pricing_service():
     """Test Anthropic pricing service returns data."""
     service = AnthropicPricingService()
     pricing_data = service.get_pricing_data()
-    
+
     assert len(pricing_data) > 0
     assert all(model.provider == "Anthropic" for model in pricing_data)
     assert all(model.cost_per_input_token > 0 for model in pricing_data)
@@ -31,9 +31,9 @@ def test_pricing_aggregator_all_pricing():
     """Test pricing aggregator returns all pricing data."""
     aggregator = PricingAggregatorService()
     all_pricing = aggregator.get_all_pricing()
-    
+
     assert len(all_pricing) > 0
-    
+
     # Should have both OpenAI and Anthropic models
     providers = set(model.provider for model in all_pricing)
     assert "OpenAI" in providers
@@ -43,17 +43,17 @@ def test_pricing_aggregator_all_pricing():
 def test_pricing_aggregator_by_provider():
     """Test pricing aggregator filtering by provider."""
     aggregator = PricingAggregatorService()
-    
+
     # Test OpenAI filter
     openai_pricing = aggregator.get_pricing_by_provider("openai")
     assert len(openai_pricing) > 0
     assert all(model.provider == "OpenAI" for model in openai_pricing)
-    
+
     # Test Anthropic filter
     anthropic_pricing = aggregator.get_pricing_by_provider("anthropic")
     assert len(anthropic_pricing) > 0
     assert all(model.provider == "Anthropic" for model in anthropic_pricing)
-    
+
     # Test case insensitivity
     openai_pricing_upper = aggregator.get_pricing_by_provider("OPENAI")
     assert len(openai_pricing_upper) == len(openai_pricing)
@@ -63,7 +63,7 @@ def test_pricing_aggregator_invalid_provider():
     """Test pricing aggregator with invalid provider."""
     aggregator = PricingAggregatorService()
     invalid_pricing = aggregator.get_pricing_by_provider("invalid_provider")
-    
+
     assert len(invalid_pricing) == 0
 
 
@@ -71,15 +71,15 @@ def test_pricing_aggregator_invalid_provider():
 async def test_find_model_pricing():
     """Test finding pricing for a specific model."""
     aggregator = PricingAggregatorService()
-    
+
     # Get all pricing first to find a valid model
     all_pricing = aggregator.get_all_pricing()
     assert len(all_pricing) > 0
-    
+
     # Test finding an existing model
     test_model = all_pricing[0].model_name
     found_pricing = await aggregator.find_model_pricing(test_model)
-    
+
     assert found_pricing is not None
     assert found_pricing.model_name == test_model
     assert found_pricing.cost_per_input_token > 0
@@ -90,14 +90,14 @@ async def test_find_model_pricing():
 async def test_find_model_pricing_case_insensitive():
     """Test that model finding is case-insensitive."""
     aggregator = PricingAggregatorService()
-    
+
     all_pricing = aggregator.get_all_pricing()
     test_model = all_pricing[0].model_name
-    
+
     # Test with uppercase
     found_pricing = await aggregator.find_model_pricing(test_model.upper())
     assert found_pricing is not None
-    
+
     # Test with lowercase
     found_pricing = await aggregator.find_model_pricing(test_model.lower())
     assert found_pricing is not None
@@ -107,6 +107,6 @@ async def test_find_model_pricing_case_insensitive():
 async def test_find_model_pricing_nonexistent():
     """Test finding pricing for a non-existent model."""
     aggregator = PricingAggregatorService()
-    
+
     found_pricing = await aggregator.find_model_pricing("nonexistent-model-xyz")
     assert found_pricing is None
