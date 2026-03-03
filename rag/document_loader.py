@@ -1,7 +1,10 @@
 """Document loader for RAG pipeline - loads markdown docs and pricing data."""
+import logging
 from pathlib import Path
 from typing import List
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -39,8 +42,9 @@ def load_markdown_docs(docs_path: str) -> List[Document]:
                 source=str(md_file),
                 doc_type="markdown",
             ))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Skipping unreadable file {md_file}: {e}")
+            continue
 
     return documents
 
