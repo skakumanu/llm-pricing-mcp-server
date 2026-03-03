@@ -219,25 +219,42 @@ jobs:
         HEALTH_RESPONSE=$(curl -s "$STAGING_URL/health/detailed")
         ACTUAL_VERSION=$(echo "$HEALTH_RESPONSE" | grep -oP '"version":"?\K[^,"]*')
         
-        echo "Actual version on staging: $ACTUAL_VERSION"
-        echo "Expected version from git: ${{ github.ref }}"
+        # Extract expected version from src/__init__.py
+        EXPECTED_VERSION=$(grep -oP '__version__ = "\K[^"]*' src/__init__.py)
         
-        # Extract version from src/__init__.py (this is what the app should report)
-        # For now, just verify version field exists and is non-empty
+        echo "Actual version on staging: $ACTUAL_VERSION"
+        echo "Expected version from code: $EXPECTED_VERSION"
+        
+        # Verify version field exists and is non-empty
         if [ -z "$ACTUAL_VERSION" ]; then
-          echo "ERROR: Could not extract version from response"
+          echo "ERROR: Could not extract version from staging response"
           echo "Full response: $HEALTH_RESPONSE"
           exit 1
         fi
         
-        # Verify version is not still showing old version (indicates stale container)
-        # This is a safety check to catch image deployment failures
-        if echo "$ACTUAL_VERSION" | grep -qE "^[0-9]+\.[0-9]+\.[0-9]+$"; then
-          echo "OK: Version is in correct format: $ACTUAL_VERSION"
-        else
+        # Verify version format is semantic (X.Y.Z)
+        if ! echo "$ACTUAL_VERSION" | grep -qE "^[0-9]+\.[0-9]+\.[0-9]+$"; then
           echo "ERROR: Version format invalid: $ACTUAL_VERSION"
           exit 1
         fi
+        
+        # CRITICAL: Compare actual vs expected version
+        if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
+          echo "ERROR: Version mismatch detected!"
+          echo "  Expected: $EXPECTED_VERSION"
+          echo "  Actual:   $ACTUAL_VERSION"
+          echo ""
+          echo "This indicates the Docker image failed to deploy correctly."
+          echo "Possible causes:"
+          echo "  - Docker image build/push failed"
+          echo "  - Azure failed to pull new image"
+          echo "  - Container restart used old cached image"
+          echo ""
+          echo "Aborting swap to prevent stale deployment."
+          exit 1
+        fi
+        
+        echo "✓ Version verification passed: $ACTUAL_VERSION"
 
     - name: Swap Staging to Production
       run: |
