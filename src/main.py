@@ -29,10 +29,13 @@ from src.models.deployment import (  # noqa: E402
     HealthCheckResponse, DeploymentReadiness, DeploymentMetadata, ApiVersionInfo,
     GracefulShutdownRequest, GracefulShutdownStatus
 )
+from pydantic import BaseModel, Field  # noqa: E402
 from src.services.pricing_aggregator import PricingAggregatorService  # noqa: E402
 from src.services.telemetry import get_telemetry_service  # noqa: E402
 from src.services.deployment import get_deployment_manager  # noqa: E402
 from src.services.geolocation import GeolocationService  # noqa: E402
+from agent.pricing_agent import PricingAgent  # noqa: E402
+from mcp.tools.tool_manager import ToolManager  # noqa: E402
 
 # Configure logging after settings are available
 logging.basicConfig(
@@ -313,6 +316,82 @@ async def get_pricing_aggregator() -> PricingAggregatorService:
 
 logger.info("Application initialization complete")
 
+# ------------------------------------------------------------------
+# Agent / RAG — request & response models
+# ------------------------------------------------------------------
+
+
+class AgentChatRequest(BaseModel):
+    """Request body for POST /agent/chat."""
+
+    message: str = Field(
+        ..., min_length=1, max_length=10_000,
+        description="Natural language question or task (max 10,000 characters)"
+    )
+    conversation_id: Optional[str] = Field(
+        None, max_length=128,
+        description="UUID of an existing conversation to continue (optional)"
+    )
+    autonomous: bool = Field(False, description="Run as autonomous multi-step task (no history)")
+
+
+class AgentChatResponse(BaseModel):
+    """Response body for POST /agent/chat."""
+
+    reply: str
+    conversation_id: str
+    tool_calls: list = []
+    sources: list = []
+
+
+# Global PricingAgent instance (lazy initialized)
+_pricing_agent: Optional[PricingAgent] = None
+_agent_lock = asyncio.Lock()
+_tool_manager: Optional[ToolManager] = None
+
+
+async def get_pricing_agent() -> PricingAgent:
+    """Lazy-initialize and return the singleton PricingAgent.
+
+    Raises ValueError if the required API key is not configured.
+    Raises RuntimeError if the server is in graceful-shutdown mode.
+    """
+    global _pricing_agent, _tool_manager
+
+    if deployment_manager.is_shutting_down():
+        raise RuntimeError("Service is shutting down; agent requests are not accepted.")
+
+    if _pricing_agent is None:
+        async with _agent_lock:
+            if _pricing_agent is None:
+                logger.info("Initializing PricingAgent...")
+                try:
+                    from src.models.deployment import DeploymentStatus
+                    _tool_manager = ToolManager()
+                    _pricing_agent = PricingAgent(tool_manager=_tool_manager)
+                    await _pricing_agent.initialize()
+                    _tool_manager.set_pricing_agent(_pricing_agent)
+                    # Surface agent and RAG health to the deployment health system
+                    deployment_manager.register_service_health(
+                        "agent_service", DeploymentStatus.HEALTHY
+                    )
+                    deployment_manager.register_service_health(
+                        "rag_pipeline", DeploymentStatus.HEALTHY
+                    )
+                    deployment_manager.set_component_ready("agent_initialized", True)
+                    logger.info("PricingAgent initialized successfully")
+                except ValueError:
+                    # Missing API key — report degraded; server remains up for other endpoints
+                    from src.models.deployment import DeploymentStatus
+                    deployment_manager.register_service_health(
+                        "agent_service", DeploymentStatus.DEGRADED,
+                        error_message="API key not configured"
+                    )
+                    deployment_manager.set_component_ready("agent_initialized", False)
+                    raise
+
+    return _pricing_agent
+
 
 @app.get("/", response_model=ServerInfo)
 async def root():
@@ -388,6 +467,14 @@ async def root():
                 method="GET",
                 description="Get telemetry data including endpoint usage, provider adoption, and feature usage"
             ),
+            EndpointInfo(
+                path="/agent/chat",
+                method="POST",
+                description=(
+                    "Natural language interface: ask questions about LLM pricing "
+                    "and get AI-sourced answers"
+                )
+            ),
         ],
         sample_models=[
             "gpt-4", "gpt-4-turbo", "gpt-3.5-turbo",
@@ -400,7 +487,8 @@ async def root():
             "1. GET /models to see all available models | "
             "2. GET /pricing to see pricing data | "
             "3. POST /cost-estimate with JSON body to calculate costs | "
-            "4. Visit /docs for interactive testing"
+            "4. POST /agent/chat with JSON body to ask natural language questions | "
+            "5. Visit /docs for interactive testing"
         )
     )
 
@@ -1105,6 +1193,57 @@ async def get_telemetry():
             for browser in browser_stats
         ],
         timestamp=datetime.now()
+    )
+
+
+# ------------------------------------------------------------------
+# Agent chat endpoint
+# ------------------------------------------------------------------
+
+
+@app.post("/agent/chat", response_model=AgentChatResponse)
+async def agent_chat(request: AgentChatRequest):
+    """
+    Natural language interface to the LLM Pricing Agent.
+
+    The agent uses RAG (indexed docs + live pricing) and existing pricing tools
+    to answer questions about LLM costs, capabilities, and use cases.
+
+    - Set `autonomous: true` to run a multi-step autonomous workflow (no history).
+    - Provide `conversation_id` from a previous response to continue a conversation.
+    """
+    try:
+        agent = await get_pricing_agent()
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    try:
+        if request.autonomous:
+            response = await asyncio.wait_for(
+                agent.run_task(request.message), timeout=120.0
+            )
+        else:
+            response = await asyncio.wait_for(
+                agent.chat(request.message, request.conversation_id), timeout=120.0
+            )
+    except asyncio.TimeoutError:
+        logger.warning("Agent request timed out after 120s")
+        raise HTTPException(
+            status_code=504,
+            detail="The agent request timed out. Please try a simpler query or try again later.",
+        )
+    except Exception as exc:
+        logger.exception("PricingAgent error")
+        raise HTTPException(
+            status_code=500,
+            detail="The agent encountered an internal error. Check server logs for details.",
+        ) from exc
+
+    return AgentChatResponse(
+        reply=response.reply,
+        conversation_id=response.conversation_id,
+        tool_calls=response.tool_calls,
+        sources=response.sources,
     )
 
 
