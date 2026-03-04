@@ -137,7 +137,9 @@ async def test_openai_api_key_verification_failure():
     mock_response.status_code = 401
 
     with patch('httpx.AsyncClient') as mock_client:
-        mock_get = AsyncMock(side_effect=httpx.HTTPStatusError("Unauthorized", request=MagicMock(), response=mock_response))
+        mock_get = AsyncMock(side_effect=httpx.HTTPStatusError(
+            "Unauthorized", request=MagicMock(), response=mock_response
+        ))
         mock_client.return_value.__aenter__.return_value.get = mock_get
 
         with pytest.raises(Exception, match="Invalid OpenAI API key"):

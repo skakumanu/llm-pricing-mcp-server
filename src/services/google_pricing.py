@@ -57,7 +57,10 @@ class GooglePricingService(BasePricingProvider):
             "input": 0.0000375,
             "output": 0.00015,
             "context_window": 1048576,
-            "use_cases": ["Ultra-high-volume tasks", "Real-time inference", "Edge deployment", "Cost-sensitive workloads"],
+            "use_cases": [
+                "Ultra-high-volume tasks", "Real-time inference",
+                "Edge deployment", "Cost-sensitive workloads"
+            ],
             "strengths": ["Lowest cost", "Very fast", "1M context", "Compact model"],
             "best_for": "High-throughput applications with strict budget constraints"
         },

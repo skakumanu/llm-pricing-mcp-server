@@ -20,7 +20,10 @@ class MistralPricingService(BasePricingProvider):
             "input": 0.003,
             "output": 0.009,
             "context_window": 128000,
-            "use_cases": ["Complex reasoning", "Advanced code generation", "Multi-step planning", "128K context tasks"],
+            "use_cases": [
+                "Complex reasoning", "Advanced code generation",
+                "Multi-step planning", "128K context tasks"
+            ],
             "strengths": ["Latest flagship", "Enhanced reasoning", "128K context", "Function calling"],
             "best_for": "Complex tasks with long context requiring best reasoning"
         },

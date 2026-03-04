@@ -52,7 +52,10 @@ class GroqPricingService(BasePricingProvider):
             "input": 0.00059,
             "output": 0.00079,
             "context_window": 131072,
-            "use_cases": ["Complex reasoning", "Long context analysis", "Advanced research", "Multi-turn conversations"],
+            "use_cases": [
+                "Complex reasoning", "Long context analysis",
+                "Advanced research", "Multi-turn conversations"
+            ],
             "strengths": ["Largest Llama model", "Excellent reasoning", "Very fast on Groq"],
             "best_for": (
                 "Complex tasks requiring state-of-the-art reasoning "

@@ -130,7 +130,10 @@ class DeploymentManager:
 
             if elapsed % 5 == 0:
                 async with self._request_lock:
-                    logger.info(f"Waiting for {self.active_requests} requests... ({elapsed}s/{drain_timeout_seconds}s)")
+                    logger.info(
+                        f"Waiting for {self.active_requests} requests... "
+                        f"({elapsed}s/{drain_timeout_seconds}s)"
+                    )
 
         async with self._request_lock:
             logger.warning(

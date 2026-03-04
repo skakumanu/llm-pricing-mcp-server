@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 # Must set API key before importing app
 os.environ["MCP_API_KEY"] = "test-secret-key"
 
-from src.main import app
+from src.main import app  # noqa: E402
 
 client = TestClient(app)
 

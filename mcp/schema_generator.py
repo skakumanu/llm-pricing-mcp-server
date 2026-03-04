@@ -6,7 +6,7 @@ import sys
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.models.pricing import (
+from src.models.pricing import (  # noqa: E402
     PricingMetrics, PricingResponse, CostEstimateRequest, CostEstimateResponse,
     BatchCostEstimateRequest, BatchCostEstimateResponse, PerformanceMetrics,
     PerformanceResponse, ModelUseCase, UseCaseResponse, ProviderStatusInfo,
@@ -18,7 +18,7 @@ def generate_schemas():
     """Generate JSON schemas for all models and save to schemas folder."""
     schemas_dir = Path(__file__).parent / "schemas"
     schemas_dir.mkdir(exist_ok=True)
-    
+
     # Define models to export with their schema file names
     models_to_export = {
         "pricing_metrics.json": PricingMetrics,
@@ -37,22 +37,22 @@ def generate_schemas():
         "endpoint_info.json": EndpointInfo,
         "server_info.json": ServerInfo,
     }
-    
+
     for filename, model_cls in models_to_export.items():
         schema = model_cls.model_json_schema()
-        
+
         # Ensure the schema is serializable by converting datetime references
         # Remove the $defs key as it's not needed and replace with simplified versions
         if "$defs" in schema:
             del schema["$defs"]
-        
+
         # Save the schema
         schema_path = schemas_dir / filename
         with open(schema_path, "w") as f:
             json.dump(schema, f, indent=2)
-        
+
         print(f"✓ Generated {filename}")
-    
+
     print(f"\nSchemas generated in {schemas_dir}")
 
 

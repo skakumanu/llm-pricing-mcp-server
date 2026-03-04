@@ -189,7 +189,9 @@ class PerformanceMetrics(BaseModel):
     context_window: Optional[int] = Field(None, description="Maximum context window size")
     cost_per_input_token: float = Field(..., description="Cost per input token in USD")
     cost_per_output_token: float = Field(..., description="Cost per output token in USD")
-    performance_score: Optional[float] = Field(None, description="Calculated performance score (throughput/cost ratio)")
+    performance_score: Optional[float] = Field(
+        None, description="Calculated performance score (throughput/cost ratio)"
+    )
     value_score: Optional[float] = Field(None, description="Value score (context_window/cost ratio)")
 
 

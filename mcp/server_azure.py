@@ -5,7 +5,7 @@ hosted on Azure instead of using local tool implementations.
 
 Usage:
     python -m mcp.server_azure
-    
+
 Environment variables:
     API_BASE_URL: Base URL for the pricing API (default: Azure endpoint)
     API_TIMEOUT: Request timeout in seconds (default: 30)
@@ -15,12 +15,11 @@ import sys
 import json
 import asyncio
 import logging
-import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from mcp.client_azure import AzurePricingAPIClient
+from mcp.client_azure import AzurePricingAPIClient  # noqa: E402
 
 # Configure logging
 logging.basicConfig(
@@ -32,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 class AzureMCPServer:
     """MCP Server that proxies to Azure REST API."""
-    
+
     def __init__(self):
         """Initialize the Azure MCP server."""
         self.version = "1.1.0"
@@ -40,12 +39,12 @@ class AzureMCPServer:
         self.api_client = AzurePricingAPIClient()
         self.request_counter = 0
         logger.info(f"Initialized {self.name}")
-    
+
     async def run(self):
         """Run the MCP server in STDIO mode."""
         logger.info("MCP Server starting (STDIO mode with Azure backend)")
         print(json.dumps(self._get_initialization_response()), flush=True)
-        
+
         try:
             loop = asyncio.get_event_loop()
             while True:
@@ -54,11 +53,11 @@ class AzureMCPServer:
                     if not line:
                         logger.info("EOF reached, shutting down")
                         break
-                    
+
                     line = line.strip()
                     if not line:
                         continue
-                    
+
                     try:
                         request = json.loads(line)
                         response = await self._handle_request(request)
@@ -66,41 +65,41 @@ class AzureMCPServer:
                     except json.JSONDecodeError as e:
                         logger.error(f"Invalid JSON: {e}")
                         print(json.dumps(self._error_response(-32700, "Parse error")), flush=True)
-                    
+
                 except KeyboardInterrupt:
                     logger.info("Interrupted by user")
                     break
                 except Exception as e:
                     logger.error(f"Error reading from stdin: {e}")
                     break
-        
+
         finally:
             await self.api_client.close()
-    
+
     async def _handle_request(self, request: dict) -> dict:
         """Handle an incoming JSON-RPC request."""
         try:
             method = request.get("method")
             params = request.get("params", {})
             req_id = request.get("id")
-            
+
             if method == "initialize":
                 return self._get_initialization_response(req_id)
-            
+
             elif method == "tools/list":
                 return await self._list_tools(req_id)
-            
+
             elif method == "tools/call":
                 return await self._call_tool(params, req_id)
-            
+
             else:
                 logger.warning(f"Unknown method: {method}")
                 return self._error_response(req_id, -32601, "Method not found")
-        
+
         except Exception as e:
             logger.error(f"Request handling error: {e}")
             return self._error_response(req_id, -32603, f"Internal error: {str(e)}")
-    
+
     def _get_initialization_response(self, req_id: int = None) -> dict:
         """Get server initialization response."""
         return {
@@ -119,7 +118,7 @@ class AzureMCPServer:
                 }
             }
         }
-    
+
     async def _list_tools(self, req_id: int) -> dict:
         """List available tools."""
         tools = [
@@ -216,52 +215,52 @@ class AzureMCPServer:
                 }
             }
         ]
-        
+
         return {
             "jsonrpc": "2.0",
             "id": req_id,
             "result": {"tools": tools}
         }
-    
+
     async def _call_tool(self, params: dict, req_id: int) -> dict:
         """Call a tool via the Azure API."""
         try:
             tool_name = params.get("name")
             args = params.get("arguments", {})
-            
+
             if tool_name == "get_all_pricing":
                 result = await self.api_client.get_all_pricing(
                     provider=args.get("provider")
                 )
-            
+
             elif tool_name == "estimate_cost":
                 result = await self.api_client.estimate_cost(
                     model_name=args.get("model_name"),
                     input_tokens=args.get("input_tokens"),
                     output_tokens=args.get("output_tokens")
                 )
-            
+
             elif tool_name == "compare_costs":
                 result = await self.api_client.compare_costs(
                     model_names=args.get("model_names", []),
                     input_tokens=args.get("input_tokens"),
                     output_tokens=args.get("output_tokens")
                 )
-            
+
             elif tool_name == "get_performance_metrics":
                 result = await self.api_client.get_performance_metrics(
                     provider=args.get("provider"),
                     model_name=args.get("model_name")
                 )
-            
+
             elif tool_name == "get_use_cases":
                 result = await self.api_client.get_use_cases(
                     model_name=args.get("model_name")
                 )
-            
+
             else:
                 return self._error_response(req_id, -32601, f"Unknown tool: {tool_name}")
-            
+
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
@@ -270,7 +269,7 @@ class AzureMCPServer:
                     "text": json.dumps(result, indent=2)
                 }
             }
-        
+
         except Exception as e:
             logger.error(f"Tool execution error: {e}")
             return {
@@ -281,7 +280,7 @@ class AzureMCPServer:
                     "text": f"Error: {str(e)}"
                 }
             }
-    
+
     def _error_response(self, req_id: int, code: int, message: str) -> dict:
         """Generate a JSON-RPC error response."""
         return {

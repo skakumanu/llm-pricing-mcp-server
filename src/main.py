@@ -12,27 +12,27 @@ UTC = timezone.utc
 # Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from fastapi import FastAPI, Query, HTTPException, Request
-from fastapi.responses import JSONResponse
-from typing import Optional, Deque, Dict
-import asyncio
-import time
-from src.config.settings import settings
-from src.models.pricing import (
+from fastapi import FastAPI, Query, HTTPException, Request  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+from typing import Optional, Deque, Dict  # noqa: E402
+import asyncio  # noqa: E402
+import time  # noqa: E402
+from src.config.settings import settings  # noqa: E402
+from src.models.pricing import (  # noqa: E402
     PricingResponse, ServerInfo, EndpointInfo, CostEstimateRequest, CostEstimateResponse,
     BatchCostEstimateRequest, BatchCostEstimateResponse, ModelCostComparison,
     PerformanceResponse, PerformanceMetrics, ModelUseCase, UseCaseResponse, TelemetryResponse,
     EndpointMetricResponse, ProviderAdoptionResponse, FeatureUsageResponse, TelemetryOverallStats,
     ClientLocationStats, BrowserStats
 )
-from src.models.deployment import (
+from src.models.deployment import (  # noqa: E402
     HealthCheckResponse, DeploymentReadiness, DeploymentMetadata, ApiVersionInfo,
     GracefulShutdownRequest, GracefulShutdownStatus
 )
-from src.services.pricing_aggregator import PricingAggregatorService
-from src.services.telemetry import get_telemetry_service
-from src.services.deployment import get_deployment_manager
-from src.services.geolocation import GeolocationService
+from src.services.pricing_aggregator import PricingAggregatorService  # noqa: E402
+from src.services.telemetry import get_telemetry_service  # noqa: E402
+from src.services.deployment import get_deployment_manager  # noqa: E402
+from src.services.geolocation import GeolocationService  # noqa: E402
 
 # Configure logging after settings are available
 logging.basicConfig(
@@ -335,12 +335,18 @@ async def root():
             EndpointInfo(
                 path="/pricing",
                 method="GET",
-                description="Get pricing data for all models (optional ?provider=openai|anthropic|google|cohere|mistral filter)"
+                description=(
+                    "Get pricing data for all models "
+                    "(optional ?provider=openai|anthropic|google|cohere|mistral filter)"
+                )
             ),
             EndpointInfo(
                 path="/models",
                 method="GET",
-                description="List all available model names (optional ?provider=openai|anthropic|google|cohere|mistral filter)"
+                description=(
+                    "List all available model names "
+                    "(optional ?provider=openai|anthropic|google|cohere|mistral filter)"
+                )
             ),
             EndpointInfo(
                 path="/cost-estimate",
@@ -900,10 +906,22 @@ async def get_performance(
     models_with_context = [m for m in performance_metrics if m.context_window]
     models_with_value = [m for m in performance_metrics if m.value_score]
 
-    best_throughput = max(models_with_throughput, key=lambda x: x.throughput).model_name if models_with_throughput else None
-    lowest_latency = min(models_with_latency, key=lambda x: x.latency_ms).model_name if models_with_latency else None
-    largest_context = max(models_with_context, key=lambda x: x.context_window).model_name if models_with_context else None
-    best_value = max(models_with_value, key=lambda x: x.value_score).model_name if models_with_value else None
+    best_throughput = (
+        max(models_with_throughput, key=lambda x: x.throughput).model_name
+        if models_with_throughput else None
+    )
+    lowest_latency = (
+        min(models_with_latency, key=lambda x: x.latency_ms).model_name
+        if models_with_latency else None
+    )
+    largest_context = (
+        max(models_with_context, key=lambda x: x.context_window).model_name
+        if models_with_context else None
+    )
+    best_value = (
+        max(models_with_value, key=lambda x: x.value_score).model_name
+        if models_with_value else None
+    )
 
     # Track telemetry
     telemetry = get_telemetry_service()
