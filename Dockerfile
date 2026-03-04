@@ -20,6 +20,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY src/ ./src/
+COPY agent/ ./agent/
+COPY rag/ ./rag/
+COPY mcp/ ./mcp/
+COPY docs/ ./docs/
 COPY Procfile .
 COPY runtime.txt .
 
