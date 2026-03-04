@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class GroqPricingService(BasePricingProvider):
     """Service to fetch and manage Groq model pricing."""
-    
+
     # Groq pricing data (per 1k tokens in USD)
     # Source: https://groq.com/pricing/
     STATIC_PRICING = {
@@ -52,9 +52,15 @@ class GroqPricingService(BasePricingProvider):
             "input": 0.00059,
             "output": 0.00079,
             "context_window": 131072,
-            "use_cases": ["Complex reasoning", "Long context analysis", "Advanced research", "Multi-turn conversations"],
+            "use_cases": [
+                "Complex reasoning", "Long context analysis",
+                "Advanced research", "Multi-turn conversations"
+            ],
             "strengths": ["Largest Llama model", "Excellent reasoning", "Very fast on Groq"],
-            "best_for": "Complex tasks requiring state-of-the-art reasoning with ultra-fast inference"
+            "best_for": (
+                "Complex tasks requiring state-of-the-art reasoning "
+                "with ultra-fast inference"
+            )
         },
         "llama-3.1-70b": {
             "input": 0.00059,
@@ -105,37 +111,36 @@ class GroqPricingService(BasePricingProvider):
             "best_for": "Next-gen Gemma applications with speed requirements"
         }
     }
-    
+
     def __init__(self, api_key: Optional[str] = None):
         """Initialize the Groq pricing service.
-        
+
         Args:
             api_key: Optional Groq API key for authenticated requests
         """
         super().__init__("Groq")
         self.api_key = api_key or getattr(settings, 'groq_api_key', None)
-    
+
     async def fetch_pricing_data(self) -> List[PricingMetrics]:
         """
         Fetch Groq model pricing data.
-        
+
         This method attempts to fetch live data from:
         1. Groq API to get available models
         2. Groq pricing website for current pricing
-        
+
         Falls back to curated static pricing data if live fetch fails.
-        
+
         Returns:
             List of PricingMetrics for Groq models
-            
+
         Raises:
             Exception: If unable to fetch or parse pricing data
         """
         try:
             # Fetch available models from API (live data)
-            models_list = None
             if self.api_key:
-                models_list = await DataFetcher.fetch_with_cache(
+                _ = await DataFetcher.fetch_with_cache(
                     cache_key="groq_models",
                     fetch_func=lambda: DataFetcher.fetch_api_models(
                         api_endpoint=PRICING_SOURCES["Groq"].api_endpoint,
@@ -144,9 +149,9 @@ class GroqPricingService(BasePricingProvider):
                     ),
                     ttl_seconds=PRICING_SOURCES["Groq"].cache_ttl_seconds
                 )
-            
+
             # Fetch pricing from website (live data)
-            live_pricing_data = await DataFetcher.fetch_with_cache(
+            _ = await DataFetcher.fetch_with_cache(
                 cache_key="groq_pricing_web",
                 fetch_func=lambda: DataFetcher.fetch_pricing_from_website(
                     url=PRICING_SOURCES["Groq"].pricing_url
@@ -154,28 +159,28 @@ class GroqPricingService(BasePricingProvider):
                 ttl_seconds=PRICING_SOURCES["Groq"].cache_ttl_seconds,
                 fallback_data=None
             )
-            
+
             # Fetch performance metrics
             performance_data = await self._fetch_performance_metrics()
-            
+
             # Use static pricing as base (most reliable)
             # TODO: Parse live_pricing_data when available
             pricing_list = self._get_static_pricing_data(performance_data)
-            
+
             return pricing_list
-            
+
         except Exception as e:
             logger.warning(f"Error fetching Groq pricing data: {e}")
             # Fall back to static data without performance metrics
             return self._get_static_pricing_data({})
-    
+
     def _get_static_pricing_data(self, performance_data: dict) -> List[PricingMetrics]:
         """
         Get static pricing metrics with optional performance data.
-        
+
         Args:
             performance_data: Dictionary of performance metrics by model
-            
+
         Returns:
             List of PricingMetrics with static pricing data
         """
@@ -200,11 +205,11 @@ class GroqPricingService(BasePricingProvider):
                 )
             )
         return pricing_list
-    
+
     async def _fetch_performance_metrics(self) -> dict:
         """
         Fetch performance metrics for Groq models.
-        
+
         Returns:
             Dictionary mapping model names to performance data
         """
@@ -218,9 +223,9 @@ class GroqPricingService(BasePricingProvider):
                 ttl_seconds=PERFORMANCE_SOURCES["Groq"].cache_ttl_seconds,
                 fallback_data={"status": "unknown", "latency_ms": None}
             )
-            
+
             latency = health_data.get("latency_ms", 100.0)
-            
+
             # Groq is known for extremely fast inference
             # Default: 500 tok/s, adjusted by latency
             performance_dict = {}
@@ -229,17 +234,17 @@ class GroqPricingService(BasePricingProvider):
                     "throughput": 500.0 if latency and latency < 200 else 400.0,
                     "latency_ms": latency if latency else 100.0
                 }
-            
+
             return performance_dict
-            
+
         except Exception as e:
             logger.warning(f"Error fetching Groq performance metrics: {e}")
             return {}
-    
+
     @staticmethod
     def get_pricing_data() -> List[PricingMetrics]:
         """Synchronous method for backward compatibility.
-        
+
         Returns:
             List of PricingMetrics for Groq models
         """

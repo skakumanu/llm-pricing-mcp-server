@@ -1,5 +1,5 @@
 """Tool management for MCP server."""
-from typing import Dict, Any, Callable
+from typing import Dict, Any
 from mcp.tools.get_all_pricing import GetAllPricingTool
 from mcp.tools.estimate_cost import EstimateCostTool
 from mcp.tools.compare_costs import CompareCostsTool
@@ -10,12 +10,12 @@ from mcp.tools.get_telemetry import GetTelemetryTool
 
 class ToolManager:
     """Manages all MCP tools and their metadata."""
-    
+
     def __init__(self):
         """Initialize all tools."""
         self.tools: Dict[str, Any] = {}
         self._register_tools()
-    
+
     def _register_tools(self):
         """Register all available tools."""
         self.tools = {
@@ -118,7 +118,10 @@ class ToolManager:
             "get_telemetry": {
                 "instance": GetTelemetryTool(),
                 "name": "get_telemetry",
-                "description": "Get MCP server telemetry and usage statistics including tool usage, response times, and error rates",
+                "description": (
+                    "Get MCP server telemetry and usage statistics including "
+                    "tool usage, response times, and error rates"
+                ),
                 "input_schema": {
                     "type": "object",
                     "properties": {
@@ -139,11 +142,11 @@ class ToolManager:
                 },
             },
         }
-    
+
     def get_tool(self, name: str) -> Dict[str, Any]:
         """Get tool metadata by name."""
         return self.tools.get(name)
-    
+
     def list_tools(self):
         """List all available tools with their metadata."""
         return [
@@ -154,7 +157,7 @@ class ToolManager:
             }
             for tool in self.tools.values()
         ]
-    
+
     async def execute_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a tool by name with given arguments."""
         tool = self.tools.get(name)
@@ -163,7 +166,7 @@ class ToolManager:
                 "success": False,
                 "error": f"Tool '{name}' not found",
             }
-        
+
         try:
             result = await tool["instance"].execute(arguments)
             return result

@@ -15,7 +15,7 @@ class DeploymentStatus(str, Enum):
 
 class EnvironmentInfo(BaseModel):
     """Information about the deployment environment."""
-    
+
     environment: str = Field(..., description="Deployment environment (e.g., production, staging)")
     region: Optional[str] = Field(None, description="Geographic region or deployment region")
     availability_zone: Optional[str] = Field(None, description="Availability zone or datacenter")
@@ -26,7 +26,7 @@ class EnvironmentInfo(BaseModel):
 
 class ServiceHealth(BaseModel):
     """Health status of a service/dependency."""
-    
+
     name: str = Field(..., description="Name of the service")
     status: DeploymentStatus = Field(..., description="Health status")
     response_time_ms: Optional[float] = Field(None, description="Response time in milliseconds")
@@ -36,7 +36,7 @@ class ServiceHealth(BaseModel):
 
 class DeploymentReadiness(BaseModel):
     """Deployment readiness check response."""
-    
+
     ready: bool = Field(..., description="Whether the service is ready to receive traffic")
     reason: Optional[str] = Field(None, description="Reason if not ready")
     checks: Dict[str, bool] = Field(default_factory=dict, description="Individual readiness checks")
@@ -45,7 +45,7 @@ class DeploymentReadiness(BaseModel):
 
 class HealthCheckResponse(BaseModel):
     """Comprehensive health check response for load balancers and orchestrators."""
-    
+
     status: DeploymentStatus = Field(..., description="Overall service status")
     version: str = Field(..., description="Application version")
     uptime_seconds: float = Field(..., description="Uptime in seconds")
@@ -61,7 +61,7 @@ class HealthCheckResponse(BaseModel):
 
 class DeploymentMetadata(BaseModel):
     """Metadata about the current deployment for blue-green awareness."""
-    
+
     version: str = Field(..., description="Application version")
     build_date: Optional[datetime] = Field(None, description="Build timestamp")
     deployment_date: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -81,7 +81,7 @@ class DeploymentMetadata(BaseModel):
 
 class ApiVersionInfo(BaseModel):
     """Information about API versioning."""
-    
+
     current_version: str = Field(..., description="Current stable API version")
     all_versions: List[str] = Field(..., description="All available API versions")
     deprecated_versions: List[str] = Field(
@@ -96,7 +96,7 @@ class ApiVersionInfo(BaseModel):
 
 class GracefulShutdownRequest(BaseModel):
     """Request to initiate graceful shutdown."""
-    
+
     drain_timeout_seconds: int = Field(
         default=30,
         description="Time to wait for in-flight requests to complete"
@@ -105,7 +105,7 @@ class GracefulShutdownRequest(BaseModel):
 
 class GracefulShutdownStatus(BaseModel):
     """Status of graceful shutdown process."""
-    
+
     shutting_down: bool = Field(..., description="Whether shutdown is in progress")
     active_requests: int = Field(..., description="Number of active requests")
     drain_timeout_seconds: int = Field(..., description="Drain timeout configured")

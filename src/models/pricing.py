@@ -6,7 +6,7 @@ from datetime import datetime, UTC
 
 class TokenVolumePrice(BaseModel):
     """Price breakdown for a specific token volume."""
-    
+
     input_cost: float = Field(..., description="Cost for input tokens in USD")
     output_cost: float = Field(..., description="Cost for output tokens in USD")
     total_cost: float = Field(..., description="Total cost (50/50 input/output split) in USD")
@@ -14,9 +14,9 @@ class TokenVolumePrice(BaseModel):
 
 class PricingMetrics(BaseModel):
     """Metrics for a specific LLM model."""
-    
+
     model_config = ConfigDict(protected_namespaces=())
-    
+
     model_name: str = Field(..., description="Name of the LLM model")
     provider: str = Field(..., description="Provider of the model (e.g., OpenAI, Anthropic)")
     cost_per_input_token: float = Field(..., description="Cost per input token in USD")
@@ -32,7 +32,7 @@ class PricingMetrics(BaseModel):
     use_cases: Optional[List[str]] = Field(None, description="List of ideal use cases for this model")
     strengths: Optional[List[str]] = Field(None, description="Key strengths of this model")
     best_for: Optional[str] = Field(None, description="Quick summary of what this model is best for")
-    
+
     @computed_field
     @property
     def cost_at_10k_tokens(self) -> TokenVolumePrice:
@@ -45,7 +45,7 @@ class PricingMetrics(BaseModel):
             output_cost=round(output_cost, 4),
             total_cost=round(total_cost, 4)
         )
-    
+
     @computed_field
     @property
     def cost_at_100k_tokens(self) -> TokenVolumePrice:
@@ -58,7 +58,7 @@ class PricingMetrics(BaseModel):
             output_cost=round(output_cost, 4),
             total_cost=round(total_cost, 4)
         )
-    
+
     @computed_field
     @property
     def cost_at_1m_tokens(self) -> TokenVolumePrice:
@@ -71,7 +71,7 @@ class PricingMetrics(BaseModel):
             output_cost=round(output_cost, 2),
             total_cost=round(total_cost, 2)
         )
-    
+
     @computed_field
     @property
     def estimated_time_1m_tokens(self) -> Optional[float]:
@@ -83,7 +83,7 @@ class PricingMetrics(BaseModel):
 
 class ProviderStatusInfo(BaseModel):
     """Provider availability status information."""
-    
+
     provider_name: str = Field(..., description="Name of the provider")
     is_available: bool = Field(..., description="Whether the provider is currently available")
     error_message: Optional[str] = Field(None, description="Error message if provider is unavailable")
@@ -92,7 +92,7 @@ class ProviderStatusInfo(BaseModel):
 
 class PricingResponse(BaseModel):
     """Response model for pricing endpoint."""
-    
+
     models: List[PricingMetrics] = Field(..., description="List of model pricing information")
     total_models: int = Field(..., description="Total number of models returned")
     provider_status: List[ProviderStatusInfo] = Field(default_factory=list, description="Status of each provider")
@@ -101,26 +101,29 @@ class PricingResponse(BaseModel):
 
 class EndpointInfo(BaseModel):
     """Endpoint information with method and description."""
-    
+
     path: str = Field(..., description="Endpoint path")
     method: str = Field(..., description="HTTP method (GET, POST, etc.)")
     description: str = Field(..., description="Brief description of endpoint")
-    
+
 
 class ServerInfo(BaseModel):
     """Server information model."""
-    
+
     name: str = Field(..., description="Server name")
     version: str = Field(..., description="Server version")
     description: str = Field(..., description="Server description")
     endpoints: List[EndpointInfo] = Field(..., description="Available API endpoints with methods")
     sample_models: List[str] = Field(default_factory=list, description="Sample model names for testing")
-    quick_start_guide: str = Field(default="Visit /docs for interactive API documentation", description="Quick start guidance")
+    quick_start_guide: str = Field(
+        default="Visit /docs for interactive API documentation",
+        description="Quick start guidance"
+    )
 
 
 class CostEstimateRequest(BaseModel):
     """Request model for cost estimation endpoint."""
-    
+
     model_name: str = Field(..., description="Name of the LLM model")
     input_tokens: int = Field(..., ge=0, description="Number of input tokens")
     output_tokens: int = Field(..., ge=0, description="Number of output tokens")
@@ -128,7 +131,7 @@ class CostEstimateRequest(BaseModel):
 
 class CostEstimateResponse(BaseModel):
     """Response model for cost estimation endpoint."""
-    
+
     model_name: str = Field(..., description="Name of the LLM model")
     provider: str = Field(..., description="Provider of the model")
     input_tokens: int = Field(..., description="Number of input tokens")
@@ -142,7 +145,7 @@ class CostEstimateResponse(BaseModel):
 
 class BatchCostEstimateRequest(BaseModel):
     """Request model for batch cost estimation (compare multiple models)."""
-    
+
     model_names: List[str] = Field(..., description="List of LLM model names to compare")
     input_tokens: int = Field(..., ge=0, description="Number of input tokens")
     output_tokens: int = Field(..., ge=0, description="Number of output tokens")
@@ -150,7 +153,7 @@ class BatchCostEstimateRequest(BaseModel):
 
 class ModelCostComparison(BaseModel):
     """Cost comparison for a single model."""
-    
+
     model_name: str = Field(..., description="Name of the LLM model")
     provider: str = Field(..., description="Provider of the model")
     input_cost: float = Field(..., description="Cost for input tokens in USD")
@@ -163,7 +166,7 @@ class ModelCostComparison(BaseModel):
 
 class BatchCostEstimateResponse(BaseModel):
     """Response model for batch cost estimation endpoint."""
-    
+
     input_tokens: int = Field(..., description="Number of input tokens used for comparison")
     output_tokens: int = Field(..., description="Number of output tokens used for comparison")
     models: List[ModelCostComparison] = Field(..., description="Cost comparison for each model")
@@ -176,9 +179,9 @@ class BatchCostEstimateResponse(BaseModel):
 
 class PerformanceMetrics(BaseModel):
     """Performance metrics for an LLM model."""
-    
+
     model_config = ConfigDict(protected_namespaces=())
-    
+
     model_name: str = Field(..., description="Name of the LLM model")
     provider: str = Field(..., description="Provider of the model")
     throughput: Optional[float] = Field(None, description="Tokens per second throughput")
@@ -186,13 +189,15 @@ class PerformanceMetrics(BaseModel):
     context_window: Optional[int] = Field(None, description="Maximum context window size")
     cost_per_input_token: float = Field(..., description="Cost per input token in USD")
     cost_per_output_token: float = Field(..., description="Cost per output token in USD")
-    performance_score: Optional[float] = Field(None, description="Calculated performance score (throughput/cost ratio)")
+    performance_score: Optional[float] = Field(
+        None, description="Calculated performance score (throughput/cost ratio)"
+    )
     value_score: Optional[float] = Field(None, description="Value score (context_window/cost ratio)")
 
 
 class PerformanceResponse(BaseModel):
     """Response model for performance comparison endpoint."""
-    
+
     models: List[PerformanceMetrics] = Field(..., description="Performance metrics for each model")
     total_models: int = Field(..., description="Total number of models")
     best_throughput: Optional[str] = Field(None, description="Model with best throughput")
@@ -205,9 +210,9 @@ class PerformanceResponse(BaseModel):
 
 class ModelUseCase(BaseModel):
     """Use case information for a specific LLM model."""
-    
+
     model_config = ConfigDict(protected_namespaces=())
-    
+
     model_name: str = Field(..., description="Name of the LLM model")
     provider: str = Field(..., description="Provider of the model")
     best_for: str = Field(..., description="Quick summary of what this model is best for")
@@ -219,7 +224,7 @@ class ModelUseCase(BaseModel):
 
 class UseCaseResponse(BaseModel):
     """Response model for use cases endpoint."""
-    
+
     models: List[ModelUseCase] = Field(..., description="Use case information for each model")
     total_models: int = Field(..., description="Total number of models")
     providers: List[str] = Field(..., description="List of providers included")
@@ -228,9 +233,9 @@ class UseCaseResponse(BaseModel):
 
 class EndpointMetricResponse(BaseModel):
     """Metrics for a single endpoint."""
-    
+
     model_config = ConfigDict(protected_namespaces=())
-    
+
     endpoint: str = Field(..., description="Endpoint path and method (method path)")
     path: str = Field(..., description="Request path")
     method: str = Field(..., description="HTTP method")
@@ -246,7 +251,7 @@ class EndpointMetricResponse(BaseModel):
 
 class ProviderAdoptionResponse(BaseModel):
     """Adoption metrics for a provider."""
-    
+
     provider_name: str = Field(..., description="Name of the provider")
     model_requests: int = Field(..., description="Total number of model requests for this provider")
     unique_models_requested: int = Field(..., description="Number of unique models requested")
@@ -256,7 +261,7 @@ class ProviderAdoptionResponse(BaseModel):
 
 class FeatureUsageResponse(BaseModel):
     """Usage metrics for a feature."""
-    
+
     feature_name: str = Field(..., description="Name of the feature")
     usage_count: int = Field(..., description="Total number of times feature was used")
     last_used: Optional[str] = Field(None, description="ISO timestamp of last usage")
@@ -264,7 +269,7 @@ class FeatureUsageResponse(BaseModel):
 
 class ClientLocationStats(BaseModel):
     """Statistics about client locations."""
-    
+
     country: str = Field(..., description="Country name")
     country_code: str = Field(..., description="ISO country code")
     request_count: int = Field(..., description="Number of requests from this country")
@@ -273,7 +278,7 @@ class ClientLocationStats(BaseModel):
 
 class BrowserStats(BaseModel):
     """Statistics about browsers used by clients."""
-    
+
     browser_name: str = Field(..., description="Browser name (e.g., Chrome, Firefox)")
     request_count: int = Field(..., description="Number of requests from this browser")
     unique_clients: int = Field(..., description="Number of unique clients using this browser")
@@ -281,7 +286,7 @@ class BrowserStats(BaseModel):
 
 class ClientInfo(BaseModel):
     """Information about a client request."""
-    
+
     ip_address: str = Field(..., description="Client IP address")
     browser: Optional[str] = Field(None, description="Browser name")
     browser_version: Optional[str] = Field(None, description="Browser version")
@@ -297,7 +302,7 @@ class ClientInfo(BaseModel):
 
 class TelemetryOverallStats(BaseModel):
     """Overall telemetry statistics."""
-    
+
     total_requests: int = Field(..., description="Total API requests since startup")
     total_errors: int = Field(..., description="Total failed requests")
     error_rate: float = Field(..., description="Error rate as percentage")
@@ -313,11 +318,17 @@ class TelemetryOverallStats(BaseModel):
 
 class TelemetryResponse(BaseModel):
     """Complete telemetry data response."""
-    
+
     overall_stats: TelemetryOverallStats = Field(..., description="Overall statistics")
     endpoints: List[EndpointMetricResponse] = Field(..., description="Per-endpoint metrics")
     provider_adoption: List[ProviderAdoptionResponse] = Field(..., description="Provider adoption metrics")
     features: List[FeatureUsageResponse] = Field(..., description="Feature usage metrics")
-    client_locations: List[ClientLocationStats] = Field(default_factory=list, description="Geographic distribution of requests")
-    top_browsers: List[BrowserStats] = Field(default_factory=list, description="Top browsers used by clients")
+    client_locations: List[ClientLocationStats] = Field(
+        default_factory=list,
+        description="Geographic distribution of requests"
+    )
+    top_browsers: List[BrowserStats] = Field(
+        default_factory=list,
+        description="Top browsers used by clients"
+    )
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Response timestamp")

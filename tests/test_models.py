@@ -1,7 +1,7 @@
 """Tests for Pydantic models."""
 import pytest
 from datetime import datetime
-from src.models.pricing import PricingMetrics, PricingResponse, ServerInfo
+from src.models.pricing import PricingMetrics, PricingResponse
 
 
 def test_pricing_metrics_creation():
@@ -15,7 +15,7 @@ def test_pricing_metrics_creation():
         latency_ms=2500.0,
         context_window=8192
     )
-    
+
     assert metrics.model_name == "gpt-4"
     assert metrics.provider == "OpenAI"
     assert metrics.cost_per_input_token == 0.00003
@@ -34,7 +34,7 @@ def test_pricing_metrics_optional_fields():
         cost_per_input_token=0.001,
         cost_per_output_token=0.002
     )
-    
+
     assert metrics.model_name == "test-model"
     assert metrics.provider == "TestProvider"
     assert metrics.throughput is None
@@ -58,12 +58,12 @@ def test_pricing_response_creation():
             cost_per_output_token=0.004
         )
     ]
-    
+
     response = PricingResponse(
         models=metrics_list,
         total_models=2
     )
-    
+
     assert len(response.models) == 2
     assert response.total_models == 2
     assert isinstance(response.timestamp, datetime)

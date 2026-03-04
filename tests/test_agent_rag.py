@@ -7,7 +7,6 @@ from src.main import app
 client = TestClient(app)
 
 
-
 def _contains_any_keyword(model: dict, keywords: tuple[str, ...]) -> bool:
     searchable_parts = []
     searchable_parts.extend(model.get("use_cases", []))
@@ -18,7 +17,6 @@ def _contains_any_keyword(model: dict, keywords: tuple[str, ...]) -> bool:
 
     searchable_text = " ".join(searchable_parts).lower()
     return any(keyword in searchable_text for keyword in keywords)
-
 
 
 def test_use_cases_contains_rag_models():
@@ -37,7 +35,6 @@ def test_use_cases_contains_rag_models():
     assert len(rag_models) > 0, "Expected at least one RAG-capable model"
 
 
-
 def test_use_cases_contains_agent_models():
     """At least one model should include agent/agentic workflow support."""
     response = client.get("/use-cases")
@@ -52,7 +49,6 @@ def test_use_cases_contains_agent_models():
     ]
 
     assert len(agent_models) > 0, "Expected at least one agent-capable model"
-
 
 
 def test_rag_and_agent_models_have_pricing_entries():
@@ -85,7 +81,6 @@ def test_rag_and_agent_models_have_pricing_entries():
         "Use-case models missing from pricing endpoint: "
         f"{missing_from_pricing}"
     )
-
 
 
 def test_agent_rag_candidates_include_context_window_info():

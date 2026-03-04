@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class AnthropicPricingService(BasePricingProvider):
     """Service to fetch and manage Anthropic model pricing."""
-    
+
     # Anthropic pricing data (per 1k tokens in USD) - updated from their official pricing page
     # Source: https://www.anthropic.com/api
     STATIC_PRICING = {
@@ -36,7 +36,12 @@ class AnthropicPricingService(BasePricingProvider):
             "input": 0.001,
             "output": 0.005,
             "context_window": 200000,
-            "use_cases": ["Fast responses", "High-volume processing", "Real-time applications", "Cost-effective intelligence"],
+            "use_cases": [
+                "Fast responses",
+                "High-volume processing",
+                "Real-time applications",
+                "Cost-effective intelligence"
+            ],
             "strengths": ["Fastest Claude", "Improved intelligence", "Affordable", "Large context"],
             "best_for": "High-speed intelligent applications with cost constraints"
         },
@@ -73,29 +78,29 @@ class AnthropicPricingService(BasePricingProvider):
             "best_for": "Production systems requiring stability"
         },
     }
-    
+
     def __init__(self, api_key: Optional[str] = None):
         """Initialize the Anthropic pricing service.
-        
+
         Args:
             api_key: Optional Anthropic API key for authenticated requests
         """
         super().__init__("Anthropic")
         self.api_key = api_key or settings.anthropic_api_key
-    
+
     async def fetch_pricing_data(self) -> List[PricingMetrics]:
         """
         Fetch Anthropic model pricing data.
-        
+
         This method attempts to fetch live data from:
         1. Anthropic API to get available models
         2. Anthropic pricing website for current pricing
-        
+
         Falls back to curated static pricing data if live fetch fails.
-        
+
         Returns:
             List of PricingMetrics for Anthropic models
-            
+
         Raises:
             Exception: If unable to fetch or parse pricing data
         """
@@ -112,7 +117,7 @@ class AnthropicPricingService(BasePricingProvider):
                     ),
                     ttl_seconds=PRICING_SOURCES["Anthropic"].cache_ttl_seconds
                 )
-            
+
             # Fetch pricing from website (live data)
             live_pricing_data = await DataFetcher.fetch_with_cache(
                 cache_key="anthropic_pricing_web",
@@ -122,16 +127,16 @@ class AnthropicPricingService(BasePricingProvider):
                 ttl_seconds=PRICING_SOURCES["Anthropic"].cache_ttl_seconds,
                 fallback_data=None
             )
-            
+
             # Fetch performance metrics
             performance_data = await self._fetch_performance_metrics()
-            
+
             # Build pricing list
             pricing_list = []
-            
+
             # Use models from API if available, otherwise use static list keys
             models_to_price = models_list if models_list else list(self.STATIC_PRICING.keys())
-            
+
             for model_name in models_to_price:
                 # Try live pricing data first, fall back to static pricing
                 if live_pricing_data and model_name in live_pricing_data:
@@ -146,16 +151,16 @@ class AnthropicPricingService(BasePricingProvider):
                     source = "Anthropic Official Pricing (Cached)"
                 else:
                     continue
-                
+
                 # Get performance metrics
                 metrics = performance_data.get(model_name, {
                     "throughput": 75.0,
                     "latency_ms": 350.0
                 })
-                
+
                 # Get metadata from static data if available
                 static_info = self.STATIC_PRICING.get(model_name, {})
-                
+
                 pricing_list.append(
                     PricingMetrics(
                         model_name=model_name,
@@ -173,22 +178,22 @@ class AnthropicPricingService(BasePricingProvider):
                         best_for=static_info.get("best_for")
                     )
                 )
-            
+
             if not pricing_list:
                 raise Exception("No pricing data available from live sources or cache")
-            
+
             return pricing_list
-            
+
         except Exception as e:
             logger.error(f"Error fetching Anthropic pricing: {str(e)}, falling back to static data")
             # Fall back to static pricing
             return self._get_static_pricing_data()
-    
+
     async def _fetch_performance_metrics(self) -> dict:
         """Fetch live performance metrics from Anthropic status page.
-        
+
         Uses public status page when no API key available.
-        
+
         Returns:
             Dict with model names as keys and {throughput, latency_ms} as values
         """
@@ -203,7 +208,7 @@ class AnthropicPricingService(BasePricingProvider):
                 ),
                 ttl_seconds=perf_source.cache_ttl_seconds
             )
-            
+
             if health_data and health_data.get("healthy"):
                 latency = health_data.get("latency_ms", 350.0)
                 return {
@@ -215,16 +220,16 @@ class AnthropicPricingService(BasePricingProvider):
                 }
         except Exception as e:
             logger.warning(f"Failed to fetch Anthropic performance metrics: {str(e)}")
-        
+
         # Return default estimated metrics
         return {
             model: {"throughput": 75.0, "latency_ms": 350.0}
             for model in self.STATIC_PRICING.keys()
         }
-    
+
     def _get_static_pricing_data(self) -> List[PricingMetrics]:
         """Get fallback static pricing data when live fetch fails.
-        
+
         Returns:
             List of PricingMetrics with static data
         """
@@ -248,17 +253,17 @@ class AnthropicPricingService(BasePricingProvider):
                 )
             )
         return pricing_list
-    
+
     async def _verify_api_key(self) -> bool:
         """
         Verify that the API key is valid by making a lightweight request.
-        
+
         Returns:
             True if the API key is valid, False otherwise
         """
         if not self.api_key:
             return False
-        
+
         try:
             # Anthropic doesn't have a models endpoint, so we'll just check if the key format is valid
             # In a real implementation, you might make a minimal API call
@@ -268,12 +273,12 @@ class AnthropicPricingService(BasePricingProvider):
         except Exception:
             # Verification failures are silently ignored
             return False
-    
+
     @staticmethod
     def get_pricing_data() -> List[PricingMetrics]:
         """
         Synchronous method for backward compatibility.
-        
+
         Returns:
             List of PricingMetrics for Anthropic models
         """

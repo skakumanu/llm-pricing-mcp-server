@@ -1,5 +1,4 @@
 """Tests for API endpoints."""
-import pytest
 from fastapi.testclient import TestClient
 from src.main import app
 
@@ -11,13 +10,13 @@ def test_root_endpoint():
     response = client.get("/")
     assert response.status_code == 200
     data = response.json()
-    
+
     assert "name" in data
     assert "version" in data
     assert "description" in data
     assert "endpoints" in data
     assert data["name"] == "LLM Pricing MCP Server"
-    
+
     # Endpoints is now a list of EndpointInfo objects
     endpoint_paths = [e["path"] for e in data["endpoints"]]
     assert "/" in endpoint_paths
@@ -29,7 +28,7 @@ def test_pricing_endpoint():
     response = client.get("/pricing")
     assert response.status_code == 200
     data = response.json()
-    
+
     assert "models" in data
     assert "total_models" in data
     assert "timestamp" in data
@@ -45,7 +44,7 @@ def test_pricing_endpoint_with_provider_filter():
     assert response.status_code == 200
     data = response.json()
     assert all(model["provider"] == "OpenAI" for model in data["models"])
-    
+
     # Test Anthropic filter
     response = client.get("/pricing?provider=anthropic")
     assert response.status_code == 200
@@ -58,7 +57,7 @@ def test_pricing_model_structure():
     response = client.get("/pricing")
     assert response.status_code == 200
     data = response.json()
-    
+
     if data["models"]:
         model = data["models"][0]
         required_fields = [
@@ -77,7 +76,7 @@ def test_health_endpoint():
     response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
-    
+
     assert "status" in data
     assert "service" in data
     assert "version" in data
@@ -88,7 +87,7 @@ def test_openapi_docs():
     """Test that OpenAPI documentation is available."""
     response = client.get("/docs")
     assert response.status_code == 200
-    
+
     response = client.get("/openapi.json")
     assert response.status_code == 200
 
@@ -100,21 +99,21 @@ def test_cost_estimate_endpoint():
     assert pricing_response.status_code == 200
     models = pricing_response.json()["models"]
     assert len(models) > 0
-    
+
     # Use the first model for cost estimation
     test_model = models[0]["model_name"]
-    
+
     # Test cost estimation
     request_data = {
         "model_name": test_model,
         "input_tokens": 1000,
         "output_tokens": 500
     }
-    
+
     response = client.post("/cost-estimate", json=request_data)
     assert response.status_code == 200
     data = response.json()
-    
+
     # Verify response structure
     assert "model_name" in data
     assert "provider" in data
@@ -125,7 +124,7 @@ def test_cost_estimate_endpoint():
     assert "total_cost" in data
     assert "currency" in data
     assert "timestamp" in data
-    
+
     # Verify values
     assert data["model_name"] == test_model
     assert data["input_tokens"] == 1000
@@ -139,17 +138,17 @@ def test_cost_estimate_with_zero_tokens():
     pricing_response = client.get("/pricing")
     models = pricing_response.json()["models"]
     test_model = models[0]["model_name"]
-    
+
     request_data = {
         "model_name": test_model,
         "input_tokens": 0,
         "output_tokens": 0
     }
-    
+
     response = client.post("/cost-estimate", json=request_data)
     assert response.status_code == 200
     data = response.json()
-    
+
     assert data["input_cost"] == 0.0
     assert data["output_cost"] == 0.0
     assert data["total_cost"] == 0.0
@@ -162,7 +161,7 @@ def test_cost_estimate_nonexistent_model():
         "input_tokens": 1000,
         "output_tokens": 500
     }
-    
+
     response = client.post("/cost-estimate", json=request_data)
     assert response.status_code == 404
     data = response.json()
@@ -176,18 +175,18 @@ def test_cost_estimate_case_insensitive():
     pricing_response = client.get("/pricing")
     models = pricing_response.json()["models"]
     test_model = models[0]["model_name"]
-    
+
     # Test with uppercase version
     request_data = {
         "model_name": test_model.upper(),
         "input_tokens": 100,
         "output_tokens": 50
     }
-    
+
     response = client.post("/cost-estimate", json=request_data)
     assert response.status_code == 200
     data = response.json()
-    
+
     # Should return the original model name from pricing data
     assert data["model_name"].lower() == test_model.lower()
 
@@ -197,13 +196,13 @@ def test_cost_estimate_negative_tokens():
     pricing_response = client.get("/pricing")
     models = pricing_response.json()["models"]
     test_model = models[0]["model_name"]
-    
+
     request_data = {
         "model_name": test_model,
         "input_tokens": -100,
         "output_tokens": 500
     }
-    
+
     response = client.post("/cost-estimate", json=request_data)
     assert response.status_code == 422  # Validation error
 
@@ -215,20 +214,20 @@ def test_batch_cost_estimate_endpoint():
     assert pricing_response.status_code == 200
     models = pricing_response.json()["models"]
     assert len(models) >= 2
-    
+
     # Use first few models for batch estimation
     test_models = [m["model_name"] for m in models[:3]]
-    
+
     request_data = {
         "model_names": test_models,
         "input_tokens": 1000,
         "output_tokens": 500
     }
-    
+
     response = client.post("/cost-estimate/batch", json=request_data)
     assert response.status_code == 200
     data = response.json()
-    
+
     # Verify response structure
     assert "input_tokens" in data
     assert "output_tokens" in data
@@ -238,13 +237,13 @@ def test_batch_cost_estimate_endpoint():
     assert "cost_range" in data
     assert "currency" in data
     assert "timestamp" in data
-    
+
     # Verify values
     assert data["input_tokens"] == 1000
     assert data["output_tokens"] == 500
     assert len(data["models"]) == len(test_models)
     assert data["currency"] == "USD"
-    
+
     # Verify cost range
     if data["cost_range"]:
         assert "min" in data["cost_range"]
@@ -257,17 +256,17 @@ def test_batch_cost_estimate_model_comparison():
     pricing_response = client.get("/pricing")
     models = pricing_response.json()["models"]
     test_models = [m["model_name"] for m in models[:3]]
-    
+
     request_data = {
         "model_names": test_models,
         "input_tokens": 1000,
         "output_tokens": 500
     }
-    
+
     response = client.post("/cost-estimate/batch", json=request_data)
     assert response.status_code == 200
     data = response.json()
-    
+
     # Verify each model comparison
     for model_comparison in data["models"]:
         assert "model_name" in model_comparison
@@ -277,11 +276,11 @@ def test_batch_cost_estimate_model_comparison():
         assert "total_cost" in model_comparison
         assert "cost_per_1m_tokens" in model_comparison
         assert "is_available" in model_comparison
-        
+
         if model_comparison["is_available"]:
             # Total cost should equal sum of input and output costs
             assert abs(
-                model_comparison["total_cost"] - 
+                model_comparison["total_cost"] -
                 (model_comparison["input_cost"] + model_comparison["output_cost"])
             ) < 0.0001
 
@@ -291,24 +290,24 @@ def test_batch_cost_estimate_with_nonexistent_model():
     pricing_response = client.get("/pricing")
     models = pricing_response.json()["models"]
     valid_model = models[0]["model_name"]
-    
+
     request_data = {
         "model_names": [valid_model, "nonexistent-model-1", "nonexistent-model-2"],
         "input_tokens": 1000,
         "output_tokens": 500
     }
-    
+
     response = client.post("/cost-estimate/batch", json=request_data)
     assert response.status_code == 200
     data = response.json()
-    
+
     # Should return all models with availability status
     assert len(data["models"]) == 3
-    
+
     # Check that unavailable models are marked correctly
     unavailable = [m for m in data["models"] if not m["is_available"]]
     assert len(unavailable) == 2
-    
+
     for model in unavailable:
         assert "error_message" in model
         assert model["error_message"] is not None
@@ -319,7 +318,7 @@ def test_performance_endpoint():
     response = client.get("/performance")
     assert response.status_code == 200
     data = response.json()
-    
+
     # Verify response structure
     assert "models" in data
     assert "total_models" in data
@@ -329,7 +328,7 @@ def test_performance_endpoint():
     assert "best_value" in data
     assert "provider_status" in data
     assert "timestamp" in data
-    
+
     assert isinstance(data["models"], list)
     assert data["total_models"] > 0
     assert len(data["models"]) == data["total_models"]
@@ -340,7 +339,7 @@ def test_performance_model_structure():
     response = client.get("/performance")
     assert response.status_code == 200
     data = response.json()
-    
+
     if data["models"]:
         model = data["models"][0]
         required_fields = [
@@ -351,7 +350,7 @@ def test_performance_model_structure():
         ]
         for field in required_fields:
             assert field in model
-        
+
         # Optional fields should exist but may be None
         optional_fields = [
             "throughput",
@@ -369,7 +368,7 @@ def test_performance_with_provider_filter():
     response = client.get("/performance?provider=openai")
     assert response.status_code == 200
     data = response.json()
-    
+
     # All models should be from OpenAI
     assert all(model["provider"] == "OpenAI" for model in data["models"])
 
@@ -380,19 +379,19 @@ def test_performance_with_sorting():
     response = client.get("/performance?sort_by=cost")
     assert response.status_code == 200
     data = response.json()
-    
+
     # Verify models are sorted by cost (ascending)
     costs = [
-        (m["cost_per_input_token"] + m["cost_per_output_token"]) / 2 
+        (m["cost_per_input_token"] + m["cost_per_output_token"]) / 2
         for m in data["models"]
     ]
     assert costs == sorted(costs)
-    
+
     # Test sorting by context_window
     response = client.get("/performance?sort_by=context_window")
     assert response.status_code == 200
     data = response.json()
-    
+
     # Verify sorting (models without context_window will be at the end)
     context_windows = [m["context_window"] or 0 for m in data["models"]]
     assert context_windows == sorted(context_windows, reverse=True)
@@ -403,13 +402,13 @@ def test_performance_score_calculation():
     response = client.get("/performance")
     assert response.status_code == 200
     data = response.json()
-    
+
     for model in data["models"]:
         # If model has throughput, it should have a performance score
         if model["throughput"] and model["cost_per_input_token"] > 0:
             assert model["performance_score"] is not None
             assert model["performance_score"] > 0
-        
+
         # If model has context_window, it should have a value score
         if model["context_window"] and model["cost_per_input_token"] > 0:
             assert model["value_score"] is not None
@@ -421,23 +420,23 @@ def test_root_endpoint_includes_new_endpoints():
     response = client.get("/")
     assert response.status_code == 200
     data = response.json()
-    
+
     # Check that endpoints is now a list of EndpointInfo objects
     assert "endpoints" in data
     assert isinstance(data["endpoints"], list)
-    
+
     # Check that each endpoint has method and description
     for endpoint in data["endpoints"]:
         assert "path" in endpoint
         assert "method" in endpoint
         assert "description" in endpoint
-    
+
     # Check for specific endpoints
     endpoint_paths = [e["path"] for e in data["endpoints"]]
     assert "/cost-estimate/batch" in endpoint_paths
     assert "/performance" in endpoint_paths
     assert "/models" in endpoint_paths
-    
+
     # Check that sample_models and quick_start_guide are present
     assert "sample_models" in data
     assert isinstance(data["sample_models"], list)
@@ -450,23 +449,23 @@ def test_models_endpoint():
     response = client.get("/models")
     assert response.status_code == 200
     data = response.json()
-    
+
     # Verify response structure
     assert "total_models" in data
     assert "providers" in data
     assert "models_by_provider" in data
     assert "all_models" in data
-    
+
     # Verify data types
     assert isinstance(data["total_models"], int)
     assert isinstance(data["providers"], list)
     assert isinstance(data["models_by_provider"], dict)
     assert isinstance(data["all_models"], list)
-    
+
     # Verify consistency
     assert data["total_models"] == len(data["all_models"])
     assert data["total_models"] > 0
-    
+
     # Verify providers have model lists
     for provider in data["providers"]:
         assert provider in data["models_by_provider"]
@@ -480,16 +479,16 @@ def test_models_endpoint_with_provider_filter():
     response = client.get("/models?provider=openai")
     assert response.status_code == 200
     data = response.json()
-    
+
     # Should only have OpenAI provider
     assert len(data["providers"]) == 1
     assert "OpenAI" in data["providers"]
-    
+
     # Test Anthropic filter
     response = client.get("/models?provider=anthropic")
     assert response.status_code == 200
     data = response.json()
-    
+
     # Should only have Anthropic provider
     assert len(data["providers"]) == 1
     assert "Anthropic" in data["providers"]
@@ -500,15 +499,15 @@ def test_endpoint_methods_are_clear():
     response = client.get("/")
     assert response.status_code == 200
     data = response.json()
-    
+
     # Find POST endpoints
     post_endpoints = [e for e in data["endpoints"] if e["method"] == "POST"]
     assert len(post_endpoints) >= 2  # At least /cost-estimate and /cost-estimate/batch
-    
+
     # Find GET endpoints
     get_endpoints = [e for e in data["endpoints"] if e["method"] == "GET"]
     assert len(get_endpoints) >= 6  # /, /pricing, /models, /performance, /health, /docs, /redoc
-    
+
     # Verify specific endpoints have correct methods
     endpoint_methods = {e["path"]: e["method"] for e in data["endpoints"]}
     assert endpoint_methods["/cost-estimate"] == "POST"
@@ -524,7 +523,7 @@ def test_use_cases_endpoint():
     response = client.get("/use-cases")
     assert response.status_code == 200
     data = response.json()
-    
+
     # Verify response structure
     assert "models" in data
     assert "total_models" in data
@@ -532,7 +531,7 @@ def test_use_cases_endpoint():
     assert isinstance(data["models"], list)
     assert data["total_models"] > 0
     assert len(data["models"]) == data["total_models"]
-    
+
     # Verify each model has use case information
     for model in data["models"]:
         assert "model_name" in model
@@ -554,11 +553,11 @@ def test_use_cases_with_provider_filter():
     assert response.status_code == 200
     data = response.json()
     assert all(model["provider"] == "OpenAI" for model in data["models"])
-    
+
     # Verify OpenAI models have proper use cases
     model_names = [m["model_name"] for m in data["models"]]
     assert "gpt-4" in model_names
-    
+
     # Check gpt-4 specific strengths
     gpt4 = next(m for m in data["models"] if m["model_name"] == "gpt-4")
     assert "Complex reasoning" in gpt4["use_cases"]
@@ -570,18 +569,18 @@ def test_use_cases_cost_tier():
     response = client.get("/use-cases")
     assert response.status_code == 200
     data = response.json()
-    
+
     # Verify cost tiers exist
     cost_tiers = {model["cost_tier"] for model in data["models"]}
     valid_tiers = {"ultra-low", "low", "medium", "high"}
     assert cost_tiers.issubset(valid_tiers)
-    
+
     # Check that budget models (gpt-3.5) are in ultra-low tier
     # gpt-3.5-turbo: $0.0005-0.0015 per 1k tokens = ultra-low per-token cost
     gpt35 = next((m for m in data["models"] if m["model_name"] == "gpt-3.5-turbo"), None)
     if gpt35:
         assert gpt35["cost_tier"] in ["ultra-low"]
-    
+
     # Check that premium models (gpt-4) are in low tier
     # gpt-4: $0.03-0.06 per 1k tokens = low per-token cost
     gpt4 = next((m for m in data["models"] if m["model_name"] == "gpt-4"), None)
@@ -594,7 +593,7 @@ def test_use_cases_quick_recommendations():
     response = client.get("/use-cases")
     assert response.status_code == 200
     data = response.json()
-    
+
     # Verify each model has a meaningful best_for recommendation
     for model in data["models"]:
         assert model["best_for"], f"Model {model['model_name']} missing best_for"
@@ -608,16 +607,15 @@ def test_use_cases_context_window_included():
     response = client.get("/use-cases")
     assert response.status_code == 200
     data = response.json()
-    
+
     # Find models with known large context windows
     large_context_models = [m for m in data["models"] if m.get("context_window", 0) > 100000]
     assert len(large_context_models) > 0, "Should have models with large context windows"
-    
+
     # Check Gemini 1.5 Pro has 2M context
     gemini_pro = next((m for m in data["models"] if m["model_name"] == "gemini-1.5-pro"), None)
     if gemini_pro:
         assert gemini_pro["context_window"] == 2097152
-
 
 
 def test_new_providers_in_pricing():
@@ -625,18 +623,18 @@ def test_new_providers_in_pricing():
     response = client.get("/pricing")
     assert response.status_code == 200
     data = response.json()
-    
+
     # Get all provider names
     providers = set(model["provider"] for model in data["models"])
-    
+
     # Check that we now have 5 providers
     assert len(providers) >= 5, f"Expected at least 5 providers, got {len(providers)}: {providers}"
-    
+
     # Verify each new provider is present
     assert "Google" in providers
     assert "Cohere" in providers
     assert "Mistral AI" in providers
-    
+
     # Verify we still have the original providers
     assert "OpenAI" in providers
     assert "Anthropic" in providers
@@ -647,10 +645,10 @@ def test_google_provider_filter():
     response = client.get("/pricing?provider=google")
     assert response.status_code == 200
     data = response.json()
-    
+
     # All models should be from Google
     assert all(model["provider"] == "Google" for model in data["models"])
-    
+
     # Should have Gemini models
     model_names = [model["model_name"] for model in data["models"]]
     assert "gemini-1.5-pro" in model_names
@@ -662,10 +660,10 @@ def test_cohere_provider_filter():
     response = client.get("/pricing?provider=cohere")
     assert response.status_code == 200
     data = response.json()
-    
+
     # All models should be from Cohere
     assert all(model["provider"] == "Cohere" for model in data["models"])
-    
+
     # Should have Command models
     model_names = [model["model_name"] for model in data["models"]]
     assert "command-r-plus" in model_names
@@ -677,10 +675,10 @@ def test_mistral_provider_filter():
     response = client.get("/pricing?provider=mistral")
     assert response.status_code == 200
     data = response.json()
-    
+
     # All models should be from Mistral AI
     assert all(model["provider"] == "Mistral AI" for model in data["models"])
-    
+
     # Should have Mistral models
     model_names = [model["model_name"] for model in data["models"]]
     assert "mistral-large-latest" in model_names
@@ -692,13 +690,13 @@ def test_models_endpoint_includes_new_providers():
     response = client.get("/models")
     assert response.status_code == 200
     data = response.json()
-    
+
     # Should have 5 providers
     assert len(data["providers"]) >= 5
     assert "Google" in data["providers"]
     assert "Cohere" in data["providers"]
     assert "Mistral AI" in data["providers"]
-    
+
     # Verify total model count increased
     assert data["total_models"] >= 20  # At least 20 models across all providers
 
@@ -717,7 +715,7 @@ def test_cost_estimate_with_new_provider_models():
     assert data["model_name"] == "gemini-1.5-flash"
     assert data["provider"] == "Google"
     assert data["total_cost"] > 0
-    
+
     # Test with Cohere model
     request_data["model_name"] = "command-r"
     response = client.post("/cost-estimate", json=request_data)
@@ -725,7 +723,7 @@ def test_cost_estimate_with_new_provider_models():
     data = response.json()
     assert data["model_name"] == "command-r"
     assert data["provider"] == "Cohere"
-    
+
     # Test with Mistral model
     request_data["model_name"] = "mistral-small-latest"
     response = client.post("/cost-estimate", json=request_data)
@@ -748,21 +746,20 @@ def test_batch_cost_estimate_with_mixed_providers():
         "input_tokens": 1000,
         "output_tokens": 500
     }
-    
+
     response = client.post("/cost-estimate/batch", json=request_data)
     assert response.status_code == 200
     data = response.json()
-    
+
     # Should have 5 model comparisons
     assert len(data["models"]) == 5
-    
+
     # Verify all models are available
     assert all(model["is_available"] for model in data["models"])
-    
+
     # Verify different providers
     providers = set(model["provider"] for model in data["models"])
     assert len(providers) == 5
     assert "Google" in providers
     assert "Cohere" in providers
     assert "Mistral AI" in providers
-

@@ -4,7 +4,7 @@ import logging
 from src.models.pricing import PricingMetrics
 from src.services.base_provider import BasePricingProvider
 from src.services.data_fetcher import DataFetcher
-from src.services.data_sources import PRICING_SOURCES, PERFORMANCE_SOURCES
+from src.services.data_sources import PRICING_SOURCES
 from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class BedrockPricingService(BasePricingProvider):
     """Service to fetch and manage Amazon Bedrock model pricing."""
-    
+
     # Amazon Bedrock pricing data (per 1k tokens in USD) - us-east-1 region
     # Source: https://aws.amazon.com/bedrock/pricing/
     STATIC_PRICING = {
@@ -129,36 +129,36 @@ class BedrockPricingService(BasePricingProvider):
             "best_for": "High-volume AWS workloads requiring minimal cost"
         },
     }
-    
+
     def __init__(self, api_key: Optional[str] = None):
         """Initialize the Amazon Bedrock pricing service.
-        
+
         Args:
             api_key: Optional AWS credentials (not used for pricing fetch, but for context)
         """
         super().__init__("Amazon Bedrock")
         self.api_key = api_key or getattr(settings, 'aws_access_key', None)
-    
+
     async def fetch_pricing_data(self) -> List[PricingMetrics]:
         """
         Fetch Amazon Bedrock model pricing data.
-        
+
         This method attempts to fetch live data from:
         1. AWS Bedrock pricing page
         2. AWS pricing API
-        
+
         Falls back to curated static pricing data if live fetch fails.
-        
+
         Returns:
             List of PricingMetrics for Bedrock models
-            
+
         Raises:
             Exception: If unable to fetch or parse pricing data
         """
         try:
             # Get pricing source for Bedrock
             bedrock_source = PRICING_SOURCES.get("Amazon Bedrock")
-            
+
             # Fetch pricing from AWS pricing page (live data)
             live_pricing_data = None
             if bedrock_source and bedrock_source.pricing_url:
@@ -173,13 +173,13 @@ class BedrockPricingService(BasePricingProvider):
                     )
                 except Exception as e:
                     logger.warning(f"Failed to fetch live Bedrock pricing: {e}")
-            
+
             # Fetch performance metrics
             performance_data = await self._fetch_performance_metrics()
-            
+
             # Build pricing list
             pricing_list = []
-            
+
             for model_id, pricing_info in self.STATIC_PRICING.items():
                 # Try live pricing data first, fall back to static pricing
                 if live_pricing_data and model_id in live_pricing_data:
@@ -191,13 +191,13 @@ class BedrockPricingService(BasePricingProvider):
                     input_cost = pricing_info["input"] / 1000
                     output_cost = pricing_info["output"] / 1000
                     source = "AWS Bedrock Official Pricing (Cached)"
-                
+
                 # Get performance metrics
                 metrics = performance_data.get(model_id, {
                     "throughput": 50.0,
                     "latency_ms": 600.0
                 })
-                
+
                 pricing_list.append(
                     PricingMetrics(
                         model_name=model_id,
@@ -215,21 +215,21 @@ class BedrockPricingService(BasePricingProvider):
                         best_for=pricing_info.get("best_for")
                     )
                 )
-            
+
             if not pricing_list:
                 raise Exception("No pricing data available for Bedrock models")
-            
+
             return pricing_list
-            
+
         except Exception as e:
             logger.error(f"Error fetching pricing data for {self.provider_name}: {e}")
             # Last resort: return static data
             return self._get_static_pricing()
-    
+
     def _get_static_pricing(self) -> List[PricingMetrics]:
         """Convert static pricing dictionary to PricingMetrics objects."""
         metrics_list = []
-        
+
         for model_id, pricing_info in self.STATIC_PRICING.items():
             try:
                 metrics = PricingMetrics(
@@ -251,9 +251,9 @@ class BedrockPricingService(BasePricingProvider):
             except Exception as e:
                 logger.error(f"Error creating metrics for model {model_id}: {e}")
                 continue
-        
+
         return metrics_list
-    
+
     def _estimate_throughput(self, model_id: str) -> Optional[float]:
         """Estimate throughput based on model size and Bedrock infrastructure."""
         if "haiku" in model_id or "8b" in model_id or "express" in model_id:
@@ -263,10 +263,10 @@ class BedrockPricingService(BasePricingProvider):
         elif "405b" in model_id or "opus" in model_id or "plus" in model_id:
             return 30.0  # Large models
         return 45.0  # Default
-    
+
     async def _fetch_performance_metrics(self) -> dict:
         """Fetch live performance metrics for Bedrock models.
-        
+
         Returns:
             Dict with model names as keys and {throughput, latency_ms} as values
         """
@@ -287,15 +287,15 @@ class BedrockPricingService(BasePricingProvider):
                 model_id: {"throughput": 50.0, "latency_ms": 600.0}
                 for model_id in self.STATIC_PRICING.keys()
             }
-    
+
     def _estimate_latency(self, model_id: str) -> Optional[float]:
         """Estimate latency based on model size and Bedrock infrastructure."""
         base_latency = 600.0  # Base latency in ms
-        
+
         # Adjust based on model size
         if "haiku" in model_id or "8b" in model_id or "express" in model_id:
             return base_latency * 0.6  # Faster for small models
         elif "405b" in model_id or "opus" in model_id:
             return base_latency * 1.5  # Slower for large models
-        
+
         return base_latency
