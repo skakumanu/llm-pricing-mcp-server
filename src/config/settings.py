@@ -37,9 +37,18 @@ class Settings(BaseSettings):
     app_name: str = "LLM Pricing MCP Server"
     app_version: str = __version__
     app_description: str = (
-        "Dynamic pricing comparison server for LLM models across 12 major providers "
-        "with geolocation and health checks"
+        "Dynamic pricing comparison server for LLM models across 12 major providers"
+        " with geolocation and health checks"
     )
+
+    # Agent / RAG
+    agent_llm_provider: str = "anthropic"        # "anthropic" | "openai"
+    agent_model: str = "claude-sonnet-4-6"       # model name for the chosen provider
+    agent_max_history_turns: int = 10            # max conversation turns to keep
+    agent_max_iterations: int = 5               # max ReAct loop iterations
+    rag_top_k: int = 5                          # number of chunks to retrieve
+    rag_docs_path: str = "docs"                 # path to markdown docs folder
+    rag_use_embeddings: bool = False            # True = use OpenAI embeddings; False = TF-IDF
 
     model_config = {
         "env_file": ".env",
