@@ -157,7 +157,7 @@ async def security_middleware(request: Request, call_next):
     global _auth_warning_logged
 
     path = request.url.path
-    if path.startswith("/chat"):
+    if path.startswith("/chat") or request.method == "OPTIONS":
         return await call_next(request)
     if path in _sensitive_paths:
         if not settings.mcp_api_key:
