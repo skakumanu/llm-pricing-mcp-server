@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from fastapi import FastAPI, Query, HTTPException, Request  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from typing import Optional, Deque, Dict  # noqa: E402
 import asyncio  # noqa: E402
 import time  # noqa: E402
@@ -54,6 +55,13 @@ app = FastAPI(
 )
 
 logger.info(f"FastAPI app created: {app.title} v{app.version}")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "x-api-key"],
+)
 
 # Initialize deployment manager for blue-green deployment support
 deployment_manager = get_deployment_manager(version=settings.app_version)
