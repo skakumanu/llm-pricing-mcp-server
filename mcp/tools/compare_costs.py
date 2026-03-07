@@ -1,7 +1,27 @@
 """MCP Tool: Compare Costs for Multiple Models"""
-from typing import Any, Dict
+import asyncio
+from typing import Any, Dict, List
 
 from src.services.pricing_aggregator import PricingAggregatorService
+
+# Default number of models processed in each parallel sub-task.
+DEFAULT_CHUNK_SIZE = 10
+
+
+def split_models_into_chunks(model_names: List[str], chunk_size: int = DEFAULT_CHUNK_SIZE) -> List[List[str]]:
+    """
+    Split a list of model names into smaller chunks for parallel processing.
+
+    Args:
+        model_names: Full list of model names to compare.
+        chunk_size: Maximum number of models per chunk (must be >= 1).
+
+    Returns:
+        List of model-name sub-lists, each at most ``chunk_size`` long.
+    """
+    if chunk_size < 1:
+        raise ValueError("chunk_size must be at least 1")
+    return [model_names[i: i + chunk_size] for i in range(0, len(model_names), chunk_size)]
 
 
 class CompareCostsTool:
@@ -10,6 +30,51 @@ class CompareCostsTool:
     def __init__(self):
         """Initialize the tool with the pricing service."""
         self.service = PricingAggregatorService()
+
+    async def _compare_chunk(
+        self,
+        chunk: List[str],
+        pricing_map: Dict[str, Any],
+        input_tokens: int,
+        output_tokens: int,
+    ) -> Dict[str, Any]:
+        """
+        Process one chunk of model names against a pre-fetched pricing map.
+
+        Returns a dict with ``comparisons`` (list) and ``costs`` (list of tuples).
+        """
+        comparisons: List[Dict[str, Any]] = []
+        costs: List[tuple] = []
+
+        for model_name in chunk:
+            pricing = pricing_map.get(model_name.lower())
+
+            if not pricing:
+                comparisons.append({
+                    "model_name": model_name,
+                    "is_available": False,
+                    "error": f"Model '{model_name}' not found",
+                })
+                continue
+
+            input_cost = (pricing.cost_per_input_token / 1000) * input_tokens
+            output_cost = (pricing.cost_per_output_token / 1000) * output_tokens
+            total_cost = input_cost + output_cost
+            costs.append((model_name, total_cost, input_cost, output_cost))
+
+            comparisons.append({
+                "model_name": pricing.model_name,
+                "provider": pricing.provider,
+                "input_cost": round(input_cost, 6),
+                "output_cost": round(output_cost, 6),
+                "total_cost": round(total_cost, 6),
+                "cost_per_1m_tokens": round(
+                    (total_cost / (input_tokens + output_tokens)) * 1_000_000, 2
+                ) if (input_tokens + output_tokens) > 0 else 0,
+                "is_available": True,
+            })
+
+        return {"comparisons": comparisons, "costs": costs}
 
     async def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -48,7 +113,7 @@ class CompareCostsTool:
                     "error": "input_tokens and output_tokens must be non-negative",
                 }
 
-            # Fetch all pricing to find models
+            # Fetch all pricing once to build lookup map
             all_pricing, _ = await self.service.get_all_pricing_async()
 
             # Create a map for easy lookup
@@ -56,38 +121,19 @@ class CompareCostsTool:
                 p.model_name.lower(): p for p in all_pricing
             }
 
-            # Estimate costs for each model
+            # Split model list into chunks and process all chunks in parallel
+            chunk_size = arguments.get("chunk_size", DEFAULT_CHUNK_SIZE)
+            chunks = split_models_into_chunks(model_names, chunk_size)
+            chunk_results = await asyncio.gather(
+                *[self._compare_chunk(chunk, pricing_map, input_tokens, output_tokens) for chunk in chunks]
+            )
+
+            # Merge results from all chunks (preserve original order)
             comparisons = []
             costs = []
-
-            for model_name in model_names:
-                pricing = pricing_map.get(model_name.lower())
-
-                if not pricing:
-                    comparisons.append({
-                        "model_name": model_name,
-                        "is_available": False,
-                        "error": f"Model '{model_name}' not found",
-                    })
-                    continue
-
-                # Calculate costs
-                input_cost = (pricing.cost_per_input_token / 1000) * input_tokens
-                output_cost = (pricing.cost_per_output_token / 1000) * output_tokens
-                total_cost = input_cost + output_cost
-                costs.append((model_name, total_cost, input_cost, output_cost))
-
-                comparisons.append({
-                    "model_name": pricing.model_name,
-                    "provider": pricing.provider,
-                    "input_cost": round(input_cost, 6),
-                    "output_cost": round(output_cost, 6),
-                    "total_cost": round(total_cost, 6),
-                    "cost_per_1m_tokens": round(
-                        (total_cost / (input_tokens + output_tokens)) * 1_000_000, 2
-                    ) if (input_tokens + output_tokens) > 0 else 0,
-                    "is_available": True,
-                })
+            for chunk_result in chunk_results:
+                comparisons.extend(chunk_result["comparisons"])
+                costs.extend(chunk_result["costs"])
 
             # Find cheapest and most expensive
             cheapest = None
