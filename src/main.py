@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from fastapi import FastAPI, Query, HTTPException, Request  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
 from typing import Optional, Deque, Dict  # noqa: E402
 import asyncio  # noqa: E402
 import time  # noqa: E402
@@ -55,6 +56,10 @@ app = FastAPI(
 )
 
 logger.info(f"FastAPI app created: {app.title} v{app.version}")
+
+_static_dir = Path(__file__).parent.parent / "static"
+if _static_dir.exists():
+    app.mount("/chat", StaticFiles(directory=str(_static_dir), html=True), name="static")
 
 app.add_middleware(
     CORSMiddleware,
