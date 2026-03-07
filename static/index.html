@@ -315,7 +315,8 @@
       }
     } catch (err) {
       removeTyping();
-      addMessage("agent", `<span class="error">Connection error. Is the server running?</span>`);
+      addMessage("agent", `<span class="error">Error: ${err.message}</span>`);
+      console.error("Fetch error:", err);
     }
 
     busy = false;
