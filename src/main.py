@@ -106,6 +106,7 @@ _unauthenticated_paths = {
     "/docs",
     "/redoc",
     "/openapi.json",
+    "/chat",
 }
 
 _sensitive_paths = {
@@ -156,6 +157,8 @@ async def security_middleware(request: Request, call_next):
     global _auth_warning_logged
 
     path = request.url.path
+    if path.startswith("/chat"):
+        return await call_next(request)
     if path in _sensitive_paths:
         if not settings.mcp_api_key:
             return JSONResponse(
