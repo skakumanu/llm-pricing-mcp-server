@@ -25,7 +25,8 @@ from src.models.pricing import (  # noqa: E402
     BatchCostEstimateRequest, BatchCostEstimateResponse, ModelCostComparison,
     PerformanceResponse, PerformanceMetrics, ModelUseCase, UseCaseResponse, TelemetryResponse,
     EndpointMetricResponse, ProviderAdoptionResponse, FeatureUsageResponse, TelemetryOverallStats,
-    ClientLocationStats, BrowserStats
+    ClientLocationStats, BrowserStats,
+    CompareRequest, JobSubmitResponse, JobStatusResponse,
 )
 from src.models.deployment import (  # noqa: E402
     HealthCheckResponse, DeploymentReadiness, DeploymentMetadata, ApiVersionInfo,
@@ -38,6 +39,8 @@ from src.services.deployment import get_deployment_manager  # noqa: E402
 from src.services.geolocation import GeolocationService  # noqa: E402
 from agent.pricing_agent import PricingAgent  # noqa: E402
 from mcp.tools.tool_manager import ToolManager  # noqa: E402
+from mcp.tools.compare_costs import CompareCostsTool, split_models_into_chunks  # noqa: E402
+from src.services.job_manager import get_job_manager, JobStatus  # noqa: E402
 
 # Configure logging after settings are available
 logging.basicConfig(
@@ -311,6 +314,10 @@ logger.info("Middleware registered: deployment tracking and telemetry")
 # Global pricing aggregator instance (lazy initialized)
 pricing_aggregator: Optional[PricingAggregatorService] = None
 _aggregator_lock = asyncio.Lock()
+
+# Set that holds references to background asyncio tasks to prevent
+# premature garbage collection.
+_background_tasks: set = set()
 
 
 async def get_pricing_aggregator() -> PricingAggregatorService:
@@ -1261,6 +1268,153 @@ async def agent_chat(request: AgentChatRequest):
         tool_calls=response.tool_calls,
         sources=response.sources,
     )
+
+
+# ------------------------------------------------------------------
+# Chunked compare endpoint
+# ------------------------------------------------------------------
+
+
+@app.post("/compare", response_model=BatchCostEstimateResponse)
+async def compare_costs_chunked(request: CompareRequest):
+    """
+    Compare cost estimates across multiple models using parallel chunk processing.
+
+    Large model lists are automatically split into chunks of ``chunk_size`` and
+    processed concurrently with ``asyncio.gather``, reducing latency for big
+    comparisons.
+
+    Args:
+        request: CompareRequest with model names, token counts, and optional chunk_size
+
+    Returns:
+        BatchCostEstimateResponse: Cost comparison across all requested models
+    """
+    tool = CompareCostsTool()
+    result = await tool.execute({
+        "model_names": request.model_names,
+        "input_tokens": request.input_tokens,
+        "output_tokens": request.output_tokens,
+        "chunk_size": request.chunk_size,
+    })
+
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Comparison failed"))
+
+    # Convert raw dicts returned by the tool to the Pydantic response model.
+    comparisons = []
+    for m in result.get("models", []):
+        comparisons.append(ModelCostComparison(
+            model_name=m["model_name"],
+            provider=m.get("provider", "unknown"),
+            input_cost=m.get("input_cost", 0.0),
+            output_cost=m.get("output_cost", 0.0),
+            total_cost=m.get("total_cost", 0.0),
+            cost_per_1m_tokens=m.get("cost_per_1m_tokens", 0.0),
+            is_available=m.get("is_available", False),
+            error_message=m.get("error"),
+        ))
+
+    cost_range = result.get("cost_range")
+
+    telemetry = get_telemetry_service()
+    telemetry.track_feature_usage("compare_costs_chunked")
+
+    return BatchCostEstimateResponse(
+        input_tokens=result["input_tokens"],
+        output_tokens=result["output_tokens"],
+        models=comparisons,
+        cheapest_model=result.get("cheapest_model"),
+        most_expensive_model=result.get("most_expensive_model"),
+        cost_range=cost_range,
+    )
+
+
+# ------------------------------------------------------------------
+# Background compare endpoint
+# ------------------------------------------------------------------
+
+async def _run_compare_background(job_id: str, request_data: dict) -> None:
+    """Coroutine executed as a background task for /background/compare."""
+    job_manager = get_job_manager()
+    await job_manager.update_job(job_id, JobStatus.RUNNING)
+    try:
+        tool = CompareCostsTool()
+        result = await tool.execute(request_data)
+        if result.get("success"):
+            await job_manager.update_job(job_id, JobStatus.COMPLETED, result=result)
+        else:
+            await job_manager.update_job(
+                job_id, JobStatus.FAILED, error=result.get("error", "Unknown error")
+            )
+    except Exception as exc:  # pragma: no cover
+        logger.exception("Background compare job %s failed", job_id)
+        await job_manager.update_job(job_id, JobStatus.FAILED, error=str(exc))
+
+
+@app.post("/background/compare", response_model=JobSubmitResponse)
+async def background_compare(request: CompareRequest):
+    """
+    Submit a long-running cost-comparison job to a background worker.
+
+    Returns a Job ID immediately.  Poll ``GET /job/{job_id}`` to check
+    progress and retrieve results when the job is complete.
+
+    Args:
+        request: CompareRequest with model names, token counts, and optional chunk_size
+
+    Returns:
+        JobSubmitResponse: Job ID and initial status
+    """
+    job_manager = get_job_manager()
+    job = job_manager.create_job()
+
+    request_data = {
+        "model_names": request.model_names,
+        "input_tokens": request.input_tokens,
+        "output_tokens": request.output_tokens,
+        "chunk_size": request.chunk_size,
+    }
+    task = asyncio.create_task(_run_compare_background(job.job_id, request_data))
+    # Keep a strong reference so the task is not garbage-collected before it finishes.
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+    telemetry = get_telemetry_service()
+    telemetry.track_feature_usage("background_compare_submitted")
+
+    return JobSubmitResponse(
+        job_id=job.job_id,
+        status=job.status,
+        message=f"Job {job.job_id} submitted. Poll GET /job/{job.job_id} for status.",
+    )
+
+
+@app.get("/job/{job_id}", response_model=JobStatusResponse)
+async def get_job_status(job_id: str):
+    """
+    Poll the status of a previously submitted background job.
+
+    Returns the current status and, once the job is complete, the full
+    comparison result.
+
+    Args:
+        job_id: UUID returned by ``POST /background/compare``
+
+    Returns:
+        JobStatusResponse: Current job status and result (if completed)
+
+    Raises:
+        HTTPException: 404 if the job_id is not found
+    """
+    job_manager = get_job_manager()
+    job = job_manager.get_job(job_id)
+
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+
+    job_dict = job.to_dict()
+    return JobStatusResponse(**job_dict)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 """Pydantic models for pricing data validation."""
 from pydantic import BaseModel, Field, ConfigDict, computed_field
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime, UTC
 
 
@@ -332,3 +332,39 @@ class TelemetryResponse(BaseModel):
         description="Top browsers used by clients"
     )
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Response timestamp")
+
+
+# ---------------------------------------------------------------------------
+# Models for chunked compare and background-job endpoints
+# ---------------------------------------------------------------------------
+
+
+class CompareRequest(BaseModel):
+    """Request model for the chunked /compare endpoint."""
+
+    model_names: List[str] = Field(..., description="List of LLM model names to compare")
+    input_tokens: int = Field(..., ge=0, description="Number of input tokens")
+    output_tokens: int = Field(..., ge=0, description="Number of output tokens")
+    chunk_size: int = Field(
+        default=10, ge=1,
+        description="Number of models to process per parallel sub-task (default: 10)"
+    )
+
+
+class JobSubmitResponse(BaseModel):
+    """Response returned immediately when a background job is submitted."""
+
+    job_id: str = Field(..., description="Unique identifier for the submitted job")
+    status: str = Field(..., description="Initial job status (always 'pending')")
+    message: str = Field(..., description="Human-readable confirmation message")
+
+
+class JobStatusResponse(BaseModel):
+    """Response for GET /job/{job_id} – reports current job state."""
+
+    job_id: str = Field(..., description="Unique identifier for the job")
+    status: str = Field(..., description="Current job status: pending | running | completed | failed")
+    result: Optional[Any] = Field(None, description="Job result payload (populated when completed)")
+    error: Optional[str] = Field(None, description="Error message (populated when failed)")
+    created_at: str = Field(..., description="ISO timestamp when job was created")
+    updated_at: str = Field(..., description="ISO timestamp of last status update")
