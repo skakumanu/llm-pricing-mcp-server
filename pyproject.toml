@@ -4,6 +4,11 @@ python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
 addopts = "-v --strict-markers"
+filterwarnings = [
+    # AsyncMock._execute_mock_call is a known benign false positive when AsyncMock
+    # is awaited inside asyncio.wait_for() under anyio (used by TestClient).
+    "ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning",
+]
 asyncio_mode = "auto"
 markers = [
     "slow: marks tests as slow",

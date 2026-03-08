@@ -35,7 +35,11 @@ def _patch_agent(agent_response=None, side_effect=None):
     else:
         mock_agent.chat = AsyncMock(return_value=agent_response or _fake_agent_response())
         mock_agent.run_task = AsyncMock(return_value=agent_response or _fake_agent_response())
-    return patch("src.main.get_pricing_agent", AsyncMock(return_value=mock_agent)), mock_agent
+
+    async def _fake_get_pricing_agent():
+        return mock_agent
+
+    return patch("src.main.get_pricing_agent", _fake_get_pricing_agent), mock_agent
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +89,7 @@ class TestAgentChatValidation:
     def test_non_json_body_rejected(self):
         response = client.post(
             "/agent/chat",
-            data="not json",
+            content=b"not json",
             headers={"Content-Type": "application/json"},
         )
         assert response.status_code == 422
@@ -250,7 +254,7 @@ class TestAskAgentTool:
         import asyncio
 
         tool = AskAgentTool(pricing_agent=MagicMock())
-        result = asyncio.get_event_loop().run_until_complete(tool.execute({}))
+        result = asyncio.run(tool.execute({}))
         assert result["success"] is False
         assert "message" in result["error"]
 
@@ -259,7 +263,7 @@ class TestAskAgentTool:
         import asyncio
 
         tool = AskAgentTool(pricing_agent=MagicMock())
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             tool.execute({"message": "x" * 10_001})
         )
         assert result["success"] is False
@@ -270,7 +274,7 @@ class TestAskAgentTool:
         import asyncio
 
         tool = AskAgentTool()
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             tool.execute({"message": "hello"})
         )
         assert result["success"] is False
@@ -285,7 +289,7 @@ class TestAskAgentTool:
         mock_agent.chat = AsyncMock(return_value=mock_response)
 
         tool = AskAgentTool(pricing_agent=mock_agent)
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             tool.execute({"message": "What is cheapest?"})
         )
         assert result["success"] is True
@@ -301,7 +305,7 @@ class TestAskAgentTool:
         mock_agent.chat = AsyncMock(return_value=_fake_agent_response())
 
         tool = AskAgentTool(pricing_agent=mock_agent)
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             tool.execute({"message": "task", "autonomous": True})
         )
         mock_agent.run_task.assert_called_once_with("task")
@@ -316,7 +320,7 @@ class TestAskAgentTool:
 
         tool = AskAgentTool(pricing_agent=mock_agent)
         long_id = "a" * 300
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             tool.execute({"message": "hi", "conversation_id": long_id})
         )
         call_args = mock_agent.chat.call_args[0]
@@ -332,7 +336,7 @@ class TestAskAgentTool:
         mock_agent.chat = AsyncMock(return_value=_fake_agent_response())
         tool.set_agent(mock_agent)
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             tool.execute({"message": "hello after late bind"})
         )
         assert result["success"] is True
