@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from agent.conversation import ConversationHistory, ConversationStore  # noqa: E402
+from agent.conversation import ConversationHistory, ConversationStore, SQLiteConversationStore  # noqa: E402
 from agent.tools import AgentTool  # noqa: E402
 from agent.react_loop import ReActLoop  # noqa: E402
 from agent.llm_backend import LLMResponse, create_llm_backend  # noqa: E402
@@ -111,58 +111,149 @@ class TestConversationHistory:
 # ---------------------------------------------------------------------------
 
 class TestConversationStore:
-    def test_creates_new_conversation_with_generated_id(self):
+    @pytest.mark.asyncio
+    async def test_creates_new_conversation_with_generated_id(self):
         store = ConversationStore()
-        conv_id, history = store.get_or_create()
+        conv_id, history = await store.get_or_create()
         assert conv_id is not None
         assert len(conv_id) > 0
         assert isinstance(history, ConversationHistory)
 
-    def test_returns_same_history_for_same_id(self):
+    @pytest.mark.asyncio
+    async def test_returns_same_history_for_same_id(self):
         store = ConversationStore()
-        conv_id, history1 = store.get_or_create()
+        conv_id, history1 = await store.get_or_create()
         history1.add("user", "Hello")
 
-        _, history2 = store.get_or_create(conv_id)
+        _, history2 = await store.get_or_create(conv_id)
         assert len(history2) == 1
         assert history2.to_messages()[0]["content"] == "Hello"
 
-    def test_different_ids_give_independent_histories(self):
+    @pytest.mark.asyncio
+    async def test_different_ids_give_independent_histories(self):
         store = ConversationStore()
-        id1, h1 = store.get_or_create()
-        id2, h2 = store.get_or_create()
+        id1, h1 = await store.get_or_create()
+        id2, h2 = await store.get_or_create()
         assert id1 != id2
 
         h1.add("user", "only in h1")
         assert len(h2) == 0
 
-    def test_custom_id_is_preserved(self):
+    @pytest.mark.asyncio
+    async def test_custom_id_is_preserved(self):
         store = ConversationStore()
-        conv_id, _ = store.get_or_create("my-custom-uuid")
+        conv_id, _ = await store.get_or_create("my-custom-uuid")
         assert conv_id == "my-custom-uuid"
 
-    def test_unknown_id_creates_new_conversation(self):
+    @pytest.mark.asyncio
+    async def test_unknown_id_creates_new_conversation(self):
         store = ConversationStore()
-        conv_id, history = store.get_or_create("brand-new-id")
+        conv_id, history = await store.get_or_create("brand-new-id")
         assert conv_id == "brand-new-id"
         assert len(history) == 0
 
-    def test_delete_removes_conversation(self):
+    @pytest.mark.asyncio
+    async def test_delete_removes_conversation(self):
         store = ConversationStore()
-        conv_id, h = store.get_or_create()
+        conv_id, h = await store.get_or_create()
         h.add("user", "message")
         store.delete(conv_id)
 
         # After deletion, same ID creates a fresh history
-        _, new_h = store.get_or_create(conv_id)
+        _, new_h = await store.get_or_create(conv_id)
         assert len(new_h) == 0
 
-    def test_max_turns_propagated_to_history(self):
+    @pytest.mark.asyncio
+    async def test_max_turns_propagated_to_history(self):
         store = ConversationStore(max_turns=1)
-        _, history = store.get_or_create()
+        _, history = await store.get_or_create()
         for i in range(4):
             history.add("user" if i % 2 == 0 else "assistant", f"msg {i}")
         assert len(history.to_messages()) == 2  # 1 pair = 2 messages
+
+
+# ---------------------------------------------------------------------------
+# SQLiteConversationStore
+# ---------------------------------------------------------------------------
+
+class TestSQLiteConversationStore:
+    @pytest.mark.asyncio
+    async def test_creates_and_retrieves_new_conversation(self, tmp_path):
+        db = str(tmp_path / "conv.db")
+        store = SQLiteConversationStore(db_path=db, max_turns=10)
+        await store.initialize()
+
+        conv_id, history = await store.get_or_create()
+        assert conv_id is not None
+        assert isinstance(history, ConversationHistory)
+
+    @pytest.mark.asyncio
+    async def test_persists_across_store_instances(self, tmp_path):
+        db = str(tmp_path / "conv.db")
+
+        store1 = SQLiteConversationStore(db_path=db, max_turns=10)
+        await store1.initialize()
+        conv_id, h1 = await store1.get_or_create()
+        h1.add("user", "persisted message")
+        await store1.save(conv_id, h1)
+
+        # New store instance simulates server restart
+        store2 = SQLiteConversationStore(db_path=db, max_turns=10)
+        await store2.initialize()
+        _, h2 = await store2.get_or_create(conv_id)
+        assert len(h2) == 1
+        assert h2.to_messages()[0]["content"] == "persisted message"
+
+    @pytest.mark.asyncio
+    async def test_unknown_id_returns_empty_history(self, tmp_path):
+        db = str(tmp_path / "conv.db")
+        store = SQLiteConversationStore(db_path=db, max_turns=10)
+        await store.initialize()
+
+        _, history = await store.get_or_create("no-such-id")
+        assert len(history) == 0
+
+    @pytest.mark.asyncio
+    async def test_cache_avoids_repeated_db_reads(self, tmp_path):
+        db = str(tmp_path / "conv.db")
+        store = SQLiteConversationStore(db_path=db, max_turns=10)
+        await store.initialize()
+
+        conv_id, h1 = await store.get_or_create()
+        h1.add("user", "hello")
+        # Second call returns same object from cache (no save needed)
+        _, h2 = await store.get_or_create(conv_id)
+        assert h1 is h2
+
+    @pytest.mark.asyncio
+    async def test_save_updates_existing_record(self, tmp_path):
+        db = str(tmp_path / "conv.db")
+        store = SQLiteConversationStore(db_path=db, max_turns=10)
+        await store.initialize()
+
+        conv_id, history = await store.get_or_create()
+        history.add("user", "first")
+        await store.save(conv_id, history)
+
+        history.add("assistant", "second")
+        await store.save(conv_id, history)
+
+        store2 = SQLiteConversationStore(db_path=db, max_turns=10)
+        await store2.initialize()
+        _, h2 = await store2.get_or_create(conv_id)
+        assert len(h2) == 2
+        assert h2.to_messages()[1]["content"] == "second"
+
+    @pytest.mark.asyncio
+    async def test_delete_evicts_cache(self, tmp_path):
+        db = str(tmp_path / "conv.db")
+        store = SQLiteConversationStore(db_path=db, max_turns=10)
+        await store.initialize()
+
+        conv_id, h = await store.get_or_create()
+        h.add("user", "msg")
+        store.delete(conv_id)
+        assert conv_id not in store._cache
 
 
 # ---------------------------------------------------------------------------
