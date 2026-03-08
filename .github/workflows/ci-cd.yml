@@ -123,11 +123,12 @@ jobs:
         subscription-id: faa433ef-c9e9-48c8-842b-42986d4be235
 
     - name: Get Deployment Secrets from Key Vault
-      uses: azure/get-keyvault-secrets@v1
-      with:
-        keyvault: llm-pricing-vault
-        secrets: 'azure-webapp-name,azure-resource-group'
       id: kvsecrets
+      run: |
+        WEBAPP=$(az keyvault secret show --vault-name llm-pricing-vault --name azure-webapp-name --query value -o tsv)
+        RG=$(az keyvault secret show --vault-name llm-pricing-vault --name azure-resource-group --query value -o tsv)
+        echo "azure-webapp-name=$WEBAPP" >> "$GITHUB_OUTPUT"
+        echo "azure-resource-group=$RG" >> "$GITHUB_OUTPUT"
 
     - name: ACR Login
       run: |
@@ -150,7 +151,7 @@ jobs:
           --resource-group "${{ steps.kvsecrets.outputs.azure-resource-group }}" \
           --name "${{ steps.kvsecrets.outputs.azure-webapp-name }}" \
           --slot staging \
-          --docker-custom-image-name "DOCKER|$IMAGE_SHA"
+          --container-image-name "DOCKER|$IMAGE_SHA"
 
     - name: Restart Staging Slot
       run: |
