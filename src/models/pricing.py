@@ -360,6 +360,39 @@ class PricingTrendsResponse(BaseModel):
     days: int = Field(..., description="Look-back window in days")
 
 
+class PricingAlertRequest(BaseModel):
+    """Request body for POST /pricing/alerts."""
+
+    url: str = Field(..., description="Webhook URL to POST when the alert fires")
+    threshold_pct: float = Field(
+        5.0, gt=0, description="Minimum absolute % price change that triggers the alert"
+    )
+    provider: Optional[str] = Field(None, description="Limit to a specific provider (None = all)")
+    model_name: Optional[str] = Field(
+        None, description="Limit to a specific model name (None = all)"
+    )
+
+
+class PricingAlertRecord(BaseModel):
+    """A stored price-change alert."""
+
+    model_config = ConfigDict(protected_namespaces=())
+
+    id: int = Field(..., description="Unique alert ID")
+    url: str = Field(..., description="Webhook URL")
+    threshold_pct: float = Field(..., description="Trigger threshold in percentage")
+    provider: Optional[str] = Field(None, description="Provider filter (None = all)")
+    model_name: Optional[str] = Field(None, description="Model filter (None = all)")
+    created_at: float = Field(..., description="Unix timestamp when the alert was registered")
+
+
+class PricingAlertListResponse(BaseModel):
+    """Response for GET /pricing/alerts."""
+
+    alerts: List[PricingAlertRecord] = Field(..., description="All registered alerts")
+    total: int = Field(..., description="Number of registered alerts")
+
+
 class TelemetryResponse(BaseModel):
     """Complete telemetry data response."""
 
