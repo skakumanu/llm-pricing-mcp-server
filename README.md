@@ -42,7 +42,7 @@ A production-ready Python-based **Model Context Protocol (MCP)** server for LLM 
 - **Security Baseline**: API key authentication (x-api-key header), rate limiting (60 req/min per IP), request size validation (1MB), safe logging, container hardening
 - **Secrets Management**: Secure integration with Azure Key Vault via managed identity
 - **Data Validation**: Robust validation using Pydantic models
-- **Comprehensive Testing**: 183 passing tests (109 REST API + 50 MCP tools + 24 Agent/RAG) with 83% code coverage
+- **Comprehensive Testing**: 189 passing tests (109 REST API + 50 MCP tools + 30 Agent/RAG) with 83% code coverage
 - **CI/CD**: Automated testing and deployment via GitHub Actions with branch protection
 - **Git Flow**: Master branch protection with linear history enforcement
 
@@ -51,8 +51,9 @@ A production-ready Python-based **Model Context Protocol (MCP)** server for LLM 
 - **RAG Pipeline**: TF-IDF vector store over pricing docs with top-k retrieval for grounded answers
 - **Conversation Memory**: Per-session history with configurable turn limit (default 10 turns)
 - **MCP Tool Integration**: Agent has access to all 7 MCP tools via `ask_agent` bridge
-- **Chat UI**: Browser-based interface served at `/chat` — no API key management needed in browser
-- **REST Endpoint**: `POST /agent/chat` with `message` + optional `conversation_id`
+- **Chat UI**: Browser-based interface served at `/chat` — streams ReAct progress in real time (thinking → tool calls → answer)
+- **REST Endpoint**: `POST /agent/chat` — blocking JSON response with `message` + optional `conversation_id`
+- **Streaming Endpoint**: `POST /agent/chat/stream` — SSE stream of `thinking` / `tool_call` / `tool_result` / `answer` / `done` events
 
 ### Architecture & Extensibility
 - **Extensible Architecture**: Easy-to-use base provider interface for adding new providers
@@ -173,7 +174,7 @@ No headers or API keys needed — the UI handles authentication automatically.
 
 ### Agent API (REST)
 
-Chat with the pricing agent via REST:
+Chat with the pricing agent via REST (blocking — waits for the full answer):
 ```bash
 curl -X POST http://localhost:8000/agent/chat \
   -H "Content-Type: application/json" \
@@ -187,6 +188,26 @@ curl -X POST http://localhost:8000/agent/chat \
   -H "Content-Type: application/json" \
   -H "x-api-key: $MCP_API_KEY" \
   -d '{"message": "What about latency?", "conversation_id": "abc123"}'
+```
+
+### Agent API (Streaming)
+
+Stream ReAct loop progress as Server-Sent Events:
+```bash
+curl -X POST http://localhost:8000/agent/chat/stream \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $MCP_API_KEY" \
+  -d '{"message": "Compare GPT-4o vs Claude Sonnet pricing"}' \
+  --no-buffer
+```
+
+Each line is a JSON event:
+```
+data: {"type": "thinking", "iteration": 1}
+data: {"type": "tool_call", "tool": "get_all_pricing", "args": {}}
+data: {"type": "tool_result", "tool": "get_all_pricing", "ok": true}
+data: {"type": "answer", "text": "...", "conversation_id": "abc123", "sources": [...]}
+data: {"type": "done"}
 ```
 
 ### Interactive API Documentation
@@ -1062,7 +1083,7 @@ pytest tests/test_api.py -v
 - `tests/test_models.py`: Tests for Pydantic models
 - `tests/test_services.py`: Tests for pricing services
 - `tests/test_agent.py`: Unit tests for the ReAct agent and conversation memory
-- `tests/test_agent_endpoint.py`: Integration tests for the `POST /agent/chat` endpoint
+- `tests/test_agent_endpoint.py`: Integration tests for `POST /agent/chat` and `POST /agent/chat/stream`
 - `tests/test_rag.py`: Tests for TF-IDF RAG pipeline (chunker, vector store, retrieval)
 
 ## Deployment
