@@ -7,7 +7,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 from agent.llm_backend import LLMBackend, create_llm_backend
 from agent.tools import build_agent_tools
-from agent.conversation import ConversationStore
+from agent.conversation import ConversationStore, SQLiteConversationStore
 from agent.react_loop import ReActLoop
 from rag.pipeline import RAGPipeline
 
@@ -51,9 +51,18 @@ class PricingAgent:
         # Lazy import to avoid circular imports
         from src.config.settings import settings
 
-        self._conversation_store = ConversationStore(
-            max_turns=settings.agent_max_history_turns
-        )
+        if settings.conversation_db_path:
+            self._conversation_store = SQLiteConversationStore(
+                db_path=settings.conversation_db_path,
+                max_turns=settings.agent_max_history_turns,
+            )
+            await self._conversation_store.initialize()
+            logger.info("Conversation store: SQLite at %s", settings.conversation_db_path)
+        else:
+            self._conversation_store = ConversationStore(
+                max_turns=settings.agent_max_history_turns
+            )
+            logger.info("Conversation store: in-memory")
 
         # LLM backend
         api_key = self._get_api_key(settings)
@@ -135,7 +144,7 @@ class PricingAgent:
         await self._ensure_initialized()
 
         message = self._sanitize_input(message)
-        conv_id, history = self._conversation_store.get_or_create(conversation_id)
+        conv_id, history = await self._conversation_store.get_or_create(conversation_id)
         history.add("user", message)
 
         from src.config.settings import settings
@@ -147,6 +156,7 @@ class PricingAgent:
         result = await loop.run(history.to_messages())
 
         history.add("assistant", result.final_answer)
+        await self._conversation_store.save(conv_id, history)
 
         return AgentResponse(
             reply=result.final_answer,
@@ -162,7 +172,7 @@ class PricingAgent:
         await self._ensure_initialized()
 
         message = self._sanitize_input(message)
-        conv_id, history = self._conversation_store.get_or_create(conversation_id)
+        conv_id, history = await self._conversation_store.get_or_create(conversation_id)
         history.add("user", message)
 
         from src.config.settings import settings
@@ -188,6 +198,7 @@ class PricingAgent:
 
         if final_answer:
             history.add("assistant", final_answer)
+            await self._conversation_store.save(conv_id, history)
 
     async def run_task(self, task: str) -> AgentResponse:
         """Run an autonomous multi-step task without conversation history."""

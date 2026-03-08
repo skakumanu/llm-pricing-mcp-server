@@ -41,6 +41,9 @@ class Settings(BaseSettings):
         " with geolocation and health checks"
     )
 
+    # Conversation persistence (None = in-memory only; path = SQLite file)
+    conversation_db_path: Optional[str] = None   # e.g. "conversations.db"
+
     # Agent / RAG
     agent_llm_provider: str = "anthropic"        # "anthropic" | "openai"
     agent_model: str = "claude-sonnet-4-6"       # model name for the chosen provider
