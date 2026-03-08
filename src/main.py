@@ -28,8 +28,10 @@ from src.models.pricing import (  # noqa: E402
     EndpointMetricResponse, ProviderAdoptionResponse, FeatureUsageResponse, TelemetryOverallStats,
     ClientLocationStats, BrowserStats,
     PricingHistoryResponse, PricingTrendsResponse,
+    PricingAlertRequest, PricingAlertRecord, PricingAlertListResponse,
 )
 from src.services.pricing_history import init_pricing_history_service, get_pricing_history_service  # noqa: E402
+from src.services.pricing_alerts import init_pricing_alert_service, get_pricing_alert_service  # noqa: E402
 from src.models.deployment import (  # noqa: E402
     HealthCheckResponse, DeploymentReadiness, DeploymentMetadata, ApiVersionInfo,
     GracefulShutdownRequest, GracefulShutdownStatus
@@ -417,15 +419,21 @@ async def get_pricing_agent() -> PricingAgent:
 # ---------------------------------------------------------------------------
 
 async def _pricing_snapshot_loop() -> None:
-    """Background task: record a pricing snapshot every N hours."""
+    """Background task: record a pricing snapshot every N hours and fire price-change alerts."""
     interval = settings.pricing_snapshot_interval_hours * 3600
     history_service = get_pricing_history_service()
+    alert_service = get_pricing_alert_service()
     pricing_service = PricingAggregatorService()
     while True:
         try:
             models, _ = await pricing_service.get_all_pricing_async()
             count = await history_service.record_snapshot(models)
             logger.info("Pricing snapshot recorded: %d models", count)
+            # Check alerts against same-day price changes
+            trends = await history_service.get_trends(days=1)
+            fired = await alert_service.check_and_fire(trends)
+            if fired:
+                logger.info("Price-change alerts fired: %d", fired)
         except Exception as exc:
             logger.warning("Pricing snapshot failed: %s", exc)
         await asyncio.sleep(interval)
@@ -433,9 +441,11 @@ async def _pricing_snapshot_loop() -> None:
 
 @app.on_event("startup")
 async def startup_pricing_history() -> None:
-    """Initialize the pricing history DB and launch the background snapshot loop."""
+    """Initialize the pricing history/alerts DBs and launch the background snapshot loop."""
     await init_pricing_history_service(settings.pricing_history_db_path)
     logger.info("Pricing history service initialized at %s", settings.pricing_history_db_path)
+    await init_pricing_alert_service(settings.pricing_history_db_path)
+    logger.info("Pricing alert service initialized")
     asyncio.create_task(_pricing_snapshot_loop())
     logger.info(
         "Pricing snapshot loop started (interval=%dh)", settings.pricing_snapshot_interval_hours
@@ -1364,6 +1374,48 @@ async def pricing_trends(
     svc = get_pricing_history_service()
     trends = await svc.get_trends(days=days, limit=limit)
     return PricingTrendsResponse(trends=trends, days=days)
+
+
+# ---------------------------------------------------------------------------
+# Pricing alert endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/pricing/alerts", response_model=PricingAlertRecord, status_code=201)
+async def create_pricing_alert(request: PricingAlertRequest):
+    """
+    Register a webhook alert for price changes.
+
+    The webhook URL will receive a `POST` request with a JSON body whenever a
+    pricing snapshot detects that a model's input or output price has changed by
+    more than `threshold_pct` percent since the previous snapshot taken on the
+    same day.  Use `provider` and `model_name` to limit the alert to specific
+    models.
+    """
+    svc = get_pricing_alert_service()
+    record = await svc.register(
+        url=request.url,
+        threshold_pct=request.threshold_pct,
+        provider=request.provider,
+        model_name=request.model_name,
+    )
+    return PricingAlertRecord(**record)
+
+
+@app.get("/pricing/alerts", response_model=PricingAlertListResponse)
+async def list_pricing_alerts():
+    """Return all registered price-change alert webhooks."""
+    svc = get_pricing_alert_service()
+    alerts = await svc.list_alerts()
+    return PricingAlertListResponse(alerts=alerts, total=len(alerts))
+
+
+@app.delete("/pricing/alerts/{alert_id}", status_code=204)
+async def delete_pricing_alert(alert_id: int):
+    """Delete a registered alert by ID."""
+    svc = get_pricing_alert_service()
+    deleted = await svc.delete(alert_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Alert {alert_id} not found")
 
 
 if __name__ == "__main__":
