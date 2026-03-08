@@ -17,7 +17,7 @@ import json  # noqa: E402
 from fastapi.responses import JSONResponse, StreamingResponse  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
-from typing import Optional, Deque, Dict  # noqa: E402
+from typing import Optional, Deque, Dict, List, Any  # noqa: E402
 import asyncio  # noqa: E402
 import time  # noqa: E402
 from src.config.settings import settings  # noqa: E402
@@ -32,6 +32,8 @@ from src.models.pricing import (  # noqa: E402
 )
 from src.services.pricing_history import init_pricing_history_service, get_pricing_history_service  # noqa: E402
 from src.services.pricing_alerts import init_pricing_alert_service, get_pricing_alert_service  # noqa: E402
+from src.services.background_tasks import get_background_task_service, JobStatus  # noqa: E402
+from mcp.tools.compare_costs import split_into_chunks, _compare_chunk, DEFAULT_CHUNK_SIZE  # noqa: E402
 from src.models.deployment import (  # noqa: E402
     HealthCheckResponse, DeploymentReadiness, DeploymentMetadata, ApiVersionInfo,
     GracefulShutdownRequest, GracefulShutdownStatus
@@ -1416,6 +1418,174 @@ async def delete_pricing_alert(alert_id: int):
     deleted = await svc.delete(alert_id)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Alert {alert_id} not found")
+
+
+# ---------------------------------------------------------------------------
+# Long-running request handling: /compare, /background/compare, /job/{job_id}
+# ---------------------------------------------------------------------------
+
+class CompareRequest(BaseModel):
+    """Request body for the /compare and /background/compare endpoints."""
+
+    model_names: List[str] = Field(
+        ..., min_length=1, description="Non-empty list of model names to compare"
+    )
+    input_tokens: int = Field(..., ge=0, description="Number of input tokens")
+    output_tokens: int = Field(..., ge=0, description="Number of output tokens")
+    chunk_size: int = Field(
+        DEFAULT_CHUNK_SIZE, ge=1, description="Models per parallel chunk (default: 10)"
+    )
+
+
+class JobResponse(BaseModel):
+    """Response returned when a background job is submitted or polled."""
+
+    job_id: str = Field(..., description="Unique job identifier (UUID)")
+    status: str = Field(..., description="Current job status")
+    result: Optional[Any] = Field(None, description="Job result once completed")
+    error: Optional[str] = Field(None, description="Error message if the job failed")
+    created_at: Optional[datetime] = Field(None, description="UTC timestamp of job submission")
+    updated_at: Optional[datetime] = Field(None, description="UTC timestamp of last status change")
+
+
+async def _run_compare(
+    model_names: List[str],
+    input_tokens: int,
+    output_tokens: int,
+    chunk_size: int,
+) -> dict:
+    """Core compare logic shared by /compare and /background/compare."""
+    aggregator = await get_pricing_aggregator()
+    all_pricing, _ = await aggregator.get_all_pricing_async()
+    pricing_map = {p.model_name.lower(): p for p in all_pricing}
+
+    chunks = split_into_chunks(model_names, chunk_size)
+    chunk_results = await asyncio.gather(
+        *[_compare_chunk(chunk, input_tokens, output_tokens, pricing_map) for chunk in chunks]
+    )
+
+    comparisons: list = []
+    costs: list = []
+    for cr in chunk_results:
+        comparisons.extend(cr["comparisons"])
+        costs.extend(cr["costs"])
+
+    cheapest = None
+    most_expensive = None
+    cost_range = None
+    if costs:
+        costs_sorted = sorted(costs, key=lambda x: x[1])
+        cheapest = costs_sorted[0][0]
+        most_expensive = costs_sorted[-1][0]
+        min_cost = costs_sorted[0][1]
+        max_cost = costs_sorted[-1][1]
+        cost_range = {
+            "min": round(min_cost, 6),
+            "max": round(max_cost, 6),
+            "difference": round(max_cost - min_cost, 6),
+        }
+
+    telemetry = get_telemetry_service()
+    telemetry.track_feature_usage("compare_costs")
+
+    return {
+        "success": True,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": input_tokens + output_tokens,
+        "models": comparisons,
+        "cheapest_model": cheapest,
+        "most_expensive_model": most_expensive,
+        "cost_range": cost_range,
+        "currency": "USD",
+    }
+
+
+@app.post("/compare")
+async def compare_costs(request: CompareRequest):
+    """
+    Compare costs across multiple models with automatic request splitting.
+
+    Large model lists are split into parallel chunks (controlled by ``chunk_size``)
+    and processed concurrently using :func:`asyncio.gather`.  The endpoint blocks
+    until all chunks are complete and returns the merged comparison result.
+
+    Args:
+        request: CompareRequest with model names, token counts, and optional chunk_size.
+
+    Returns:
+        dict: Merged cost comparison result across all requested models.
+    """
+    return await _run_compare(
+        request.model_names,
+        request.input_tokens,
+        request.output_tokens,
+        request.chunk_size,
+    )
+
+
+@app.post("/background/compare", response_model=JobResponse, status_code=202)
+async def background_compare(request: CompareRequest):
+    """
+    Submit a cost-comparison request to run as an async background job.
+
+    The endpoint returns immediately with a job ID.  Clients can poll
+    ``GET /job/{job_id}`` to check progress and retrieve the result once
+    the job is ``completed``.
+
+    Args:
+        request: CompareRequest with model names, token counts, and optional chunk_size.
+
+    Returns:
+        JobResponse: Initial job record with status ``pending``.
+    """
+    svc = get_background_task_service()
+    job_id = await svc.submit_job(
+        _run_compare(
+            request.model_names,
+            request.input_tokens,
+            request.output_tokens,
+            request.chunk_size,
+        )
+    )
+    record = await svc.get_job(job_id)
+    return JobResponse(
+        job_id=record.job_id,
+        status=record.status.value,
+        result=record.result,
+        error=record.error,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
+@app.get("/job/{job_id}", response_model=JobResponse)
+async def get_job_status(job_id: str):
+    """
+    Poll the status of a previously submitted background job.
+
+    Args:
+        job_id: The UUID returned by ``POST /background/compare``.
+
+    Returns:
+        JobResponse: Current job state.  ``result`` is populated once the
+        job reaches ``completed`` status.
+
+    Raises:
+        HTTPException 404: If the job ID is not found.
+    """
+    svc = get_background_task_service()
+    record = await svc.get_job(job_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+    return JobResponse(
+        job_id=record.job_id,
+        status=record.status.value,
+        result=record.result,
+        error=record.error,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
 
 
 if __name__ == "__main__":
