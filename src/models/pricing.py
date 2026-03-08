@@ -316,6 +316,50 @@ class TelemetryOverallStats(BaseModel):
     timestamp: str = Field(..., description="ISO timestamp of this response")
 
 
+class PricingSnapshotRecord(BaseModel):
+    """A single pricing snapshot row."""
+
+    model_config = ConfigDict(protected_namespaces=())
+
+    model_name: str = Field(..., description="LLM model name")
+    provider: str = Field(..., description="Provider name")
+    cost_per_input_token: float = Field(..., description="Input token cost in USD")
+    cost_per_output_token: float = Field(..., description="Output token cost in USD")
+    captured_at: float = Field(..., description="Unix timestamp of the snapshot")
+
+
+class PricingHistoryResponse(BaseModel):
+    """Response for GET /pricing/history."""
+
+    snapshots: List[PricingSnapshotRecord] = Field(..., description="Snapshot rows")
+    total: int = Field(..., description="Total matching rows (before limit)")
+
+
+class PricingTrendRecord(BaseModel):
+    """Price trend for a single model over a time period."""
+
+    model_config = ConfigDict(protected_namespaces=())
+
+    model_name: str = Field(..., description="LLM model name")
+    provider: str = Field(..., description="Provider name")
+    input_change_pct: float = Field(..., description="Input price change percentage")
+    output_change_pct: float = Field(..., description="Output price change percentage")
+    direction: str = Field(..., description="'increased', 'decreased', or 'unchanged'")
+    first_seen: float = Field(..., description="Unix timestamp of first snapshot in range")
+    last_seen: float = Field(..., description="Unix timestamp of most recent snapshot")
+    first_input: float = Field(..., description="Input price at first snapshot")
+    last_input: float = Field(..., description="Input price at most recent snapshot")
+    first_output: float = Field(..., description="Output price at first snapshot")
+    last_output: float = Field(..., description="Output price at most recent snapshot")
+
+
+class PricingTrendsResponse(BaseModel):
+    """Response for GET /pricing/trends."""
+
+    trends: List[PricingTrendRecord] = Field(..., description="Models with largest price changes")
+    days: int = Field(..., description="Look-back window in days")
+
+
 class TelemetryResponse(BaseModel):
     """Complete telemetry data response."""
 

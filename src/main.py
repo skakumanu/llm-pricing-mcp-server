@@ -26,8 +26,10 @@ from src.models.pricing import (  # noqa: E402
     BatchCostEstimateRequest, BatchCostEstimateResponse, ModelCostComparison,
     PerformanceResponse, PerformanceMetrics, ModelUseCase, UseCaseResponse, TelemetryResponse,
     EndpointMetricResponse, ProviderAdoptionResponse, FeatureUsageResponse, TelemetryOverallStats,
-    ClientLocationStats, BrowserStats
+    ClientLocationStats, BrowserStats,
+    PricingHistoryResponse, PricingTrendsResponse,
 )
+from src.services.pricing_history import init_pricing_history_service, get_pricing_history_service  # noqa: E402
 from src.models.deployment import (  # noqa: E402
     HealthCheckResponse, DeploymentReadiness, DeploymentMetadata, ApiVersionInfo,
     GracefulShutdownRequest, GracefulShutdownStatus
@@ -408,6 +410,36 @@ async def get_pricing_agent() -> PricingAgent:
                     raise
 
     return _pricing_agent
+
+
+# ---------------------------------------------------------------------------
+# Pricing history — background snapshot loop + startup
+# ---------------------------------------------------------------------------
+
+async def _pricing_snapshot_loop() -> None:
+    """Background task: record a pricing snapshot every N hours."""
+    interval = settings.pricing_snapshot_interval_hours * 3600
+    history_service = get_pricing_history_service()
+    pricing_service = PricingAggregatorService()
+    while True:
+        try:
+            models, _ = await pricing_service.get_all_pricing_async()
+            count = await history_service.record_snapshot(models)
+            logger.info("Pricing snapshot recorded: %d models", count)
+        except Exception as exc:
+            logger.warning("Pricing snapshot failed: %s", exc)
+        await asyncio.sleep(interval)
+
+
+@app.on_event("startup")
+async def startup_pricing_history() -> None:
+    """Initialize the pricing history DB and launch the background snapshot loop."""
+    await init_pricing_history_service(settings.pricing_history_db_path)
+    logger.info("Pricing history service initialized at %s", settings.pricing_history_db_path)
+    asyncio.create_task(_pricing_snapshot_loop())
+    logger.info(
+        "Pricing snapshot loop started (interval=%dh)", settings.pricing_snapshot_interval_hours
+    )
 
 
 @app.get("/", response_model=ServerInfo)
@@ -1290,6 +1322,48 @@ async def agent_chat_stream(request: AgentChatRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ---------------------------------------------------------------------------
+# Historical pricing endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/pricing/history", response_model=PricingHistoryResponse)
+async def pricing_history(
+    model_name: Optional[str] = Query(None, description="Filter by model name"),
+    provider: Optional[str] = Query(None, description="Filter by provider"),
+    days: int = Query(30, ge=1, le=365, description="Look-back window in days"),
+    limit: int = Query(100, ge=1, le=1000, description="Max rows to return"),
+):
+    """
+    Return historical pricing snapshots.
+
+    Snapshots are captured automatically every `pricing_snapshot_interval_hours` hours
+    and stored locally in SQLite.  Use `days`, `model_name`, and `provider` to narrow
+    the results.
+    """
+    svc = get_pricing_history_service()
+    result = await svc.get_history(
+        model_name=model_name, provider=provider, days=days, limit=limit
+    )
+    return PricingHistoryResponse(**result)
+
+
+@app.get("/pricing/trends", response_model=PricingTrendsResponse)
+async def pricing_trends(
+    days: int = Query(30, ge=1, le=365, description="Look-back window in days"),
+    limit: int = Query(20, ge=1, le=100, description="Max models to return"),
+):
+    """
+    Return models with the largest price change over the last `days` days.
+
+    The response is sorted by absolute percentage change (largest first) and
+    includes both input and output price deltas along with a human-readable
+    `direction` field (`'increased'`, `'decreased'`, or `'unchanged'`).
+    """
+    svc = get_pricing_history_service()
+    trends = await svc.get_trends(days=days, limit=limit)
+    return PricingTrendsResponse(trends=trends, days=days)
 
 
 if __name__ == "__main__":
