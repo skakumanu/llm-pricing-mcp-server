@@ -1,9 +1,10 @@
 """LLM backend abstraction: Anthropic and OpenAI implementations."""
 import json
 import logging
+import types
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,24 @@ class LLMBackend(ABC):
         system: Optional[str] = None,
     ) -> LLMResponse:
         """Send messages to the LLM and return a normalized response."""
+
+    async def complete_stream(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]],
+        system: Optional[str] = None,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Stream an LLM response, yielding token and response events.
+
+        Yields dicts of two types:
+          {"type": "token",    "text": str}          — one per text delta
+          {"type": "response", "response": LLMResponse} — exactly once at the end
+
+        Default implementation: no token events, just the final response.
+        Backends override this for real token-level streaming.
+        """
+        response = await self.complete(messages, tools, system)
+        yield {"type": "response", "response": response}
 
     def append_assistant_turn(
         self, messages: List[Dict[str, Any]], response: LLMResponse
@@ -100,6 +119,51 @@ class AnthropicBackend(LLMBackend):
             stop_reason=response.stop_reason or "end_turn",
             _raw_content=response.content,
         )
+
+    async def complete_stream(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]],
+        system: Optional[str] = None,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Stream Claude's response token by token via the Anthropic streaming API."""
+        kwargs: Dict[str, Any] = {
+            "model": self._model,
+            "max_tokens": 4096,
+            "messages": messages,
+        }
+        if system:
+            kwargs["system"] = system
+        if tools:
+            kwargs["tools"] = tools
+
+        final_message = None
+        async with self._client.messages.stream(timeout=60.0, **kwargs) as stream:
+            async for text_chunk in stream.text_stream:
+                yield {"type": "token", "text": text_chunk}
+            final_message = await stream.get_final_message()
+
+        text_content = ""
+        tool_calls: List[Dict[str, Any]] = []
+        for block in final_message.content:
+            if block.type == "text":
+                text_content += block.text
+            elif block.type == "tool_use":
+                tool_calls.append({
+                    "id": block.id,
+                    "tool": block.name,
+                    "args": block.input,
+                })
+
+        yield {
+            "type": "response",
+            "response": LLMResponse(
+                content=text_content,
+                tool_calls=tool_calls,
+                stop_reason=final_message.stop_reason or "end_turn",
+                _raw_content=final_message.content,
+            ),
+        }
 
     def append_assistant_turn(
         self, messages: List[Dict[str, Any]], response: LLMResponse
@@ -191,6 +255,106 @@ class OpenAIBackend(LLMBackend):
             stop_reason=choice.finish_reason or "stop",
             _raw_content=message,
         )
+
+    async def complete_stream(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]],
+        system: Optional[str] = None,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Stream GPT's response token by token via the OpenAI streaming API."""
+        all_messages: List[Dict[str, Any]] = []
+        if system:
+            all_messages.append({"role": "system", "content": system})
+        all_messages.extend(messages)
+
+        kwargs: Dict[str, Any] = {
+            "model": self._model,
+            "messages": all_messages,
+            "stream": True,
+        }
+        if tools:
+            kwargs["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t["name"],
+                        "description": t.get("description", ""),
+                        "parameters": t.get("input_schema", {"type": "object", "properties": {}}),
+                    },
+                }
+                for t in tools
+            ]
+
+        accumulated_text = ""
+        accumulated_tool_calls: Dict[int, Dict[str, str]] = {}
+        finish_reason = "stop"
+
+        stream = await self._client.chat.completions.create(timeout=60.0, **kwargs)
+        async for chunk in stream:
+            if not chunk.choices:
+                continue
+            choice = chunk.choices[0]
+            delta = choice.delta
+
+            if delta.content:
+                accumulated_text += delta.content
+                yield {"type": "token", "text": delta.content}
+
+            if delta.tool_calls:
+                for tc_delta in delta.tool_calls:
+                    idx = tc_delta.index
+                    if idx not in accumulated_tool_calls:
+                        accumulated_tool_calls[idx] = {"id": "", "name": "", "args": ""}
+                    if tc_delta.id:
+                        accumulated_tool_calls[idx]["id"] = tc_delta.id
+                    if tc_delta.function:
+                        if tc_delta.function.name:
+                            accumulated_tool_calls[idx]["name"] += tc_delta.function.name
+                        if tc_delta.function.arguments:
+                            accumulated_tool_calls[idx]["args"] += tc_delta.function.arguments
+
+            if choice.finish_reason:
+                finish_reason = choice.finish_reason
+
+        # Build normalised tool_calls list
+        tool_calls: List[Dict[str, Any]] = []
+        for idx in sorted(accumulated_tool_calls.keys()):
+            tc = accumulated_tool_calls[idx]
+            try:
+                args = json.loads(tc["args"]) if tc["args"] else {}
+            except json.JSONDecodeError:
+                logger.warning(
+                    "OpenAI streaming: malformed tool args for '%s': %r",
+                    tc["name"], tc["args"],
+                )
+                args = {}
+            tool_calls.append({"id": tc["id"], "tool": tc["name"], "args": args})
+
+        # Build _raw_content compatible with append_assistant_turn
+        raw_tool_calls = [
+            types.SimpleNamespace(
+                id=accumulated_tool_calls[idx]["id"],
+                function=types.SimpleNamespace(
+                    name=accumulated_tool_calls[idx]["name"],
+                    arguments=accumulated_tool_calls[idx]["args"],
+                ),
+            )
+            for idx in sorted(accumulated_tool_calls.keys())
+        ] or None
+
+        yield {
+            "type": "response",
+            "response": LLMResponse(
+                content=accumulated_text,
+                tool_calls=tool_calls,
+                stop_reason=finish_reason,
+                _raw_content=types.SimpleNamespace(
+                    content=accumulated_text,
+                    tool_calls=raw_tool_calls,
+                ),
+            ),
+        }
 
     def append_assistant_turn(
         self, messages: List[Dict[str, Any]], response: LLMResponse

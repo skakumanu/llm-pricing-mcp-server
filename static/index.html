@@ -318,6 +318,7 @@
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
+        let streamingText = "";
 
         outer: while (true) {
           const { done, value } = await reader.read();
@@ -330,8 +331,13 @@
             const event = JSON.parse(line.slice(6));
             if (event.type === "thinking") {
               bubble.innerHTML = `<em>Thinking\u2026 (step ${event.iteration})</em>`;
+              streamingText = "";
             } else if (event.type === "tool_call") {
               bubble.innerHTML += ` <code>🔧 ${escapeHtml(event.tool)}</code>`;
+            } else if (event.type === "token") {
+              if (streamingText === "") bubble.textContent = "";
+              streamingText += event.text;
+              bubble.textContent = streamingText;
             } else if (event.type === "answer") {
               conversationId = event.conversation_id;
               bubble.innerHTML = formatReply(event.text);
