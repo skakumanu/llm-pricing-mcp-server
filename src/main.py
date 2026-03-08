@@ -13,7 +13,8 @@ UTC = timezone.utc
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from fastapi import FastAPI, Query, HTTPException, Request  # noqa: E402
-from fastapi.responses import JSONResponse  # noqa: E402
+import json  # noqa: E402
+from fastapi.responses import JSONResponse, StreamingResponse  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from typing import Optional, Deque, Dict  # noqa: E402
@@ -1260,6 +1261,34 @@ async def agent_chat(request: AgentChatRequest):
         conversation_id=response.conversation_id,
         tool_calls=response.tool_calls,
         sources=response.sources,
+    )
+
+
+@app.post("/agent/chat/stream")
+async def agent_chat_stream(request: AgentChatRequest):
+    """SSE streaming version of /agent/chat. Emits progress events as the ReAct loop runs."""
+    async def generate():
+        try:
+            agent = await get_pricing_agent()
+        except (ValueError, RuntimeError) as exc:
+            yield f"data: {json.dumps({'type': 'error', 'detail': str(exc)})}\n\n"
+            return
+
+        try:
+            async with asyncio.timeout(120.0):
+                async for event in agent.chat_stream(request.message, request.conversation_id):
+                    yield f"data: {json.dumps(event)}\n\n"
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        except asyncio.TimeoutError:
+            yield f"data: {json.dumps({'type': 'error', 'detail': 'Request timed out after 120s'})}\n\n"
+        except Exception as exc:
+            logger.error("Stream error: %s", exc)
+            yield f"data: {json.dumps({'type': 'error', 'detail': 'Internal server error'})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

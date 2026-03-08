@@ -1,7 +1,7 @@
 """ReAct (Reasoning + Acting) loop for multi-step agent workflows."""
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, AsyncIterator, Dict, List
 
 from agent.llm_backend import LLMBackend
 from agent.tools import AgentTool
@@ -149,3 +149,62 @@ class ReActLoop:
             final_answer=final_response.content,
             tool_calls=all_tool_calls,
         )
+
+    async def stream(self, messages: List[Dict[str, Any]]) -> AsyncIterator[Dict[str, Any]]:
+        """Run the ReAct loop, yielding progress events as each iteration runs."""
+        all_tool_calls: List[Dict[str, Any]] = []
+        working_messages = list(messages)
+
+        for iteration in range(self._max_iterations):
+            yield {"type": "thinking", "iteration": iteration + 1}
+
+            response = await self._llm.complete(
+                messages=working_messages,
+                tools=self._tool_schemas,
+                system=SYSTEM_PROMPT,
+            )
+
+            if not response.tool_calls:
+                yield {"type": "answer", "text": response.content, "tool_calls": all_tool_calls}
+                return
+
+            self._llm.append_assistant_turn(working_messages, response)
+
+            iteration_results: List[Dict[str, Any]] = []
+            for tc in response.tool_calls:
+                tool_name = tc["tool"]
+                tool_args = _sanitize_tool_args(tc["args"])
+                tool_id = tc.get("id", "")
+                yield {"type": "tool_call", "tool": tool_name, "args": tool_args}
+
+                tool = self._tool_index.get(tool_name)
+                if tool:
+                    try:
+                        result = await tool.execute(tool_args)
+                    except Exception as exc:
+                        logger.warning("Tool '%s' raised: %s", tool_name, exc)
+                        result = {"success": False, "error": "Tool execution failed"}
+                else:
+                    result = {"success": False, "error": f"Unknown tool: {tool_name}"}
+
+                entry = {"id": tool_id, "tool": tool_name, "args": tool_args, "result": result}
+                all_tool_calls.append(entry)
+                iteration_results.append(entry)
+                yield {"type": "tool_result", "tool": tool_name, "ok": result.get("success", True)}
+
+            self._llm.append_tool_results(working_messages, iteration_results)
+
+        # Max iterations reached — request a final answer without tools
+        logger.warning("ReAct stream hit max_iterations=%d; requesting final answer.", self._max_iterations)
+        yield {"type": "thinking", "iteration": self._max_iterations + 1}
+        final_response = await self._llm.complete(
+            messages=working_messages + [
+                {
+                    "role": "user",
+                    "content": "Please provide your final answer based on the information gathered so far.",
+                }
+            ],
+            tools=[],
+            system=SYSTEM_PROMPT,
+        )
+        yield {"type": "answer", "text": final_response.content, "tool_calls": all_tool_calls}

@@ -1,4 +1,5 @@
 """Tests for the POST /agent/chat endpoint: validation, auth, response shape, and security."""
+import json
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -409,3 +410,92 @@ class TestEndpointInputHardening:
                 json={"message": "hello", "conversation_id": "a" * 129},
             )
         assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# SSE streaming endpoint /agent/chat/stream
+# ---------------------------------------------------------------------------
+
+def _parse_sse(text: str) -> list:
+    """Parse SSE response body into a list of event dicts."""
+    events = []
+    for line in text.splitlines():
+        if line.startswith("data: "):
+            events.append(json.loads(line[6:]))
+    return events
+
+
+async def _fake_chat_stream(*events):
+    """Async generator that yields the given event dicts."""
+    for event in events:
+        yield event
+
+
+class TestAgentChatStream:
+    def test_stream_returns_event_stream_content_type(self):
+        mock_agent = MagicMock()
+        mock_agent.chat_stream = MagicMock(return_value=_fake_chat_stream(
+            {"type": "thinking", "iteration": 1},
+            {"type": "answer", "text": "hi", "tool_calls": [], "conversation_id": "c1", "sources": []},
+        ))
+
+        async def _fake_get():
+            return mock_agent
+
+        with patch("src.main.get_pricing_agent", _fake_get):
+            response = client.post("/agent/chat/stream", json={"message": "hello"})
+
+        assert "text/event-stream" in response.headers["content-type"]
+
+    def test_stream_emits_thinking_and_answer_events(self):
+        mock_agent = MagicMock()
+        mock_agent.chat_stream = MagicMock(return_value=_fake_chat_stream(
+            {"type": "thinking", "iteration": 1},
+            {"type": "answer", "text": "The answer", "tool_calls": [], "conversation_id": "c1", "sources": []},
+        ))
+
+        async def _fake_get():
+            return mock_agent
+
+        with patch("src.main.get_pricing_agent", _fake_get):
+            response = client.post("/agent/chat/stream", json={"message": "hello"})
+
+        events = _parse_sse(response.text)
+        types = [e["type"] for e in events]
+        assert "thinking" in types
+        assert "answer" in types
+        assert "done" in types
+        answer = next(e for e in events if e["type"] == "answer")
+        assert answer["text"] == "The answer"
+
+    def test_stream_returns_422_on_invalid_input(self):
+        response = client.post("/agent/chat/stream", json={"message": ""})
+        assert response.status_code == 422
+
+    def test_stream_returns_401_on_missing_api_key(self):
+        import src.main as main_module
+        original = main_module.settings.mcp_api_key
+        try:
+            main_module.settings.mcp_api_key = "test-secret-key"
+            response = client.post(
+                "/agent/chat/stream",
+                json={"message": "hello"},
+                headers={"x-api-key": "wrong-key"},
+            )
+        finally:
+            main_module.settings.mcp_api_key = original
+        assert response.status_code == 401
+
+    def test_stream_emits_error_event_on_503(self):
+        with patch(
+            "src.main.get_pricing_agent",
+            side_effect=ValueError("API key for provider 'anthropic' is not configured"),
+        ):
+            response = client.post("/agent/chat/stream", json={"message": "hello"})
+
+        # The response itself is 200 (SSE), but carries an error event
+        assert response.status_code == 200
+        events = _parse_sse(response.text)
+        error_events = [e for e in events if e["type"] == "error"]
+        assert len(error_events) == 1
+        assert "API key" in error_events[0]["detail"]
