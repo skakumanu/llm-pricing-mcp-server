@@ -3,12 +3,12 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A production-ready Python-based **Model Context Protocol (MCP)** server for LLM pricing data with zero-downtime deployment support. This server provides both a RESTful API (via FastAPI) and an MCP protocol interface with 6 tools for querying pricing data from **12 major LLM providers** including OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Anyscale, and Amazon Bedrock. Features Claude Desktop integration, telemetry tracking, geolocation analytics, and blue-green deployment support.
+A production-ready Python-based **Model Context Protocol (MCP)** server for LLM pricing data with zero-downtime deployment support. This server provides a RESTful API (via FastAPI), an MCP protocol interface with 7 tools, a **conversational Agent + RAG pipeline**, and a **browser-based Chat UI** for querying pricing data from **12 major LLM providers** including OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Anyscale, and Amazon Bedrock. Features Claude Desktop integration, telemetry tracking, geolocation analytics, and blue-green deployment support.
 
 ## Features
 
 ### Model Context Protocol (MCP) Interface
-- **6 MCP Tools**: `estimate_cost`, `get_all_pricing`, `compare_costs`, `get_performance_metrics`, `get_use_cases`, `get_telemetry`
+- **7 MCP Tools**: `estimate_cost`, `get_all_pricing`, `compare_costs`, `get_performance_metrics`, `get_use_cases`, `get_telemetry`, `ask_agent`
 - **STDIO JSON-RPC 2.0**: Standard MCP protocol for Claude Desktop and other MCP clients
 - **Tool Discovery**: Automatic tool registration with JSON schemas
 - **Session Management**: Isolated sessions with state tracking
@@ -42,9 +42,17 @@ A production-ready Python-based **Model Context Protocol (MCP)** server for LLM 
 - **Security Baseline**: API key authentication (x-api-key header), rate limiting (60 req/min per IP), request size validation (1MB), safe logging, container hardening
 - **Secrets Management**: Secure integration with Azure Key Vault via managed identity
 - **Data Validation**: Robust validation using Pydantic models
-- **Comprehensive Testing**: 159 passing tests (109 REST API + 50 MCP tools) with 83% code coverage
+- **Comprehensive Testing**: 183 passing tests (109 REST API + 50 MCP tools + 24 Agent/RAG) with 83% code coverage
 - **CI/CD**: Automated testing and deployment via GitHub Actions with branch protection
 - **Git Flow**: Master branch protection with linear history enforcement
+
+### Agent + RAG Pipeline
+- **Conversational Agent**: ReAct-loop agent backed by Anthropic Claude or OpenAI models
+- **RAG Pipeline**: TF-IDF vector store over pricing docs with top-k retrieval for grounded answers
+- **Conversation Memory**: Per-session history with configurable turn limit (default 10 turns)
+- **MCP Tool Integration**: Agent has access to all 7 MCP tools via `ask_agent` bridge
+- **Chat UI**: Browser-based interface served at `/chat` — no API key management needed in browser
+- **REST Endpoint**: `POST /agent/chat` with `message` + optional `conversation_id`
 
 ### Architecture & Extensibility
 - **Extensible Architecture**: Easy-to-use base provider interface for adding new providers
@@ -153,6 +161,32 @@ The server will be available at `http://localhost:8000`
 For protected endpoints, send the API key:
 ```bash
 curl -H "x-api-key: $MCP_API_KEY" http://localhost:8000/pricing
+```
+
+### Chat UI
+
+Open the browser-based chat interface at:
+- **Local**: `http://localhost:8000/chat`
+- **Production**: `https://llm-pricing-api.azurewebsites.net/chat`
+
+No headers or API keys needed — the UI handles authentication automatically.
+
+### Agent API (REST)
+
+Chat with the pricing agent via REST:
+```bash
+curl -X POST http://localhost:8000/agent/chat \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $MCP_API_KEY" \
+  -d '{"message": "What is the cheapest model for RAG pipelines?"}'
+```
+
+Continue a conversation by passing the returned `conversation_id`:
+```bash
+curl -X POST http://localhost:8000/agent/chat \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $MCP_API_KEY" \
+  -d '{"message": "What about latency?", "conversation_id": "abc123"}'
 ```
 
 ### Interactive API Documentation
@@ -1027,6 +1061,9 @@ pytest tests/test_api.py -v
 - `tests/test_api.py`: Tests for API endpoints
 - `tests/test_models.py`: Tests for Pydantic models
 - `tests/test_services.py`: Tests for pricing services
+- `tests/test_agent.py`: Unit tests for the ReAct agent and conversation memory
+- `tests/test_agent_endpoint.py`: Integration tests for the `POST /agent/chat` endpoint
+- `tests/test_rag.py`: Tests for TF-IDF RAG pipeline (chunker, vector store, retrieval)
 
 ## Deployment
 
