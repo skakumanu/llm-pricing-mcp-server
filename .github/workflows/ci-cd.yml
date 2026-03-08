@@ -116,7 +116,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Azure Login with OIDC
-      uses: azure/login@v1
+      uses: azure/login@v2
       with:
         client-id: 8c36eab2-8e8a-40eb-aef2-69ca6655fdcf
         tenant-id: 61deb976-deca-4bb6-8118-55936023b8fc
