@@ -3,7 +3,7 @@ import logging
 import unicodedata
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from agent.llm_backend import LLMBackend, create_llm_backend
 from agent.tools import build_agent_tools
@@ -154,6 +154,40 @@ class PricingAgent:
             tool_calls=result.tool_calls,
             sources=self._extract_sources(result.tool_calls),
         )
+
+    async def chat_stream(
+        self, message: str, conversation_id: Optional[str] = None
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Stream ReAct loop events for a conversational message."""
+        await self._ensure_initialized()
+
+        message = self._sanitize_input(message)
+        conv_id, history = self._conversation_store.get_or_create(conversation_id)
+        history.add("user", message)
+
+        from src.config.settings import settings
+        loop = ReActLoop(
+            llm_backend=self._llm_backend,
+            tools=self._tools,
+            max_iterations=settings.agent_max_iterations,
+        )
+
+        final_answer = ""
+        all_tool_calls: List[Dict[str, Any]] = []
+        async for event in loop.stream(history.to_messages()):
+            if event["type"] == "answer":
+                final_answer = event["text"]
+                all_tool_calls = event.get("tool_calls", [])
+                yield {
+                    **event,
+                    "conversation_id": conv_id,
+                    "sources": self._extract_sources(all_tool_calls),
+                }
+            else:
+                yield event
+
+        if final_answer:
+            history.add("assistant", final_answer)
 
     async def run_task(self, task: str) -> AgentResponse:
         """Run an autonomous multi-step task without conversation history."""

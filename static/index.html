@@ -217,7 +217,7 @@
 </div>
 
 <script>
-  const API_URL = "/agent/chat";
+  const API_URL = "/agent/chat/stream";
   const API_KEY = "Y2Q0MTIwM2EtNTQ0OC00MjViLTljYjEtOTZlOWI2MThlYzdi";
 
   let conversationId = null;
@@ -264,22 +264,6 @@
     return div;
   }
 
-  function addTyping() {
-    const msgs = document.getElementById("messages");
-    const div = document.createElement("div");
-    div.className = "message agent";
-    div.id = "typing";
-    div.innerHTML = `<div class="avatar">🤖</div>
-      <div class="typing"><span></span><span></span><span></span></div>`;
-    msgs.appendChild(div);
-    msgs.scrollTop = msgs.scrollHeight;
-  }
-
-  function removeTyping() {
-    const t = document.getElementById("typing");
-    if (t) t.remove();
-  }
-
   async function send(text) {
     if (busy) return;
     const input = document.getElementById("input");
@@ -292,7 +276,11 @@
     document.getElementById("sendBtn").disabled = true;
 
     addMessage("user", message);
-    addTyping();
+
+    // Create agent bubble immediately for streaming updates
+    const agentDiv = addMessage("agent", "");
+    const bubble = agentDiv.querySelector(".bubble");
+    bubble.innerHTML = "<em>Thinking\u2026 (step 1)</em>";
 
     try {
       const res = await fetch(API_URL, {
@@ -304,19 +292,42 @@
         body: JSON.stringify({ message, conversation_id: conversationId })
       });
 
-      const data = await res.json();
-      removeTyping();
-
       if (!res.ok) {
-        addMessage("agent", `<span class="error">Error ${res.status}: ${data.detail || "Unknown error"}</span>`);
+        const data = await res.json().catch(() => ({}));
+        bubble.innerHTML = `<span class="error">Error ${res.status}: ${escapeHtml(data.detail || "Unknown error")}</span>`;
       } else {
-        conversationId = data.conversation_id;
-        addMessage("agent", data.reply);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        outer: while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop(); // keep incomplete line
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const event = JSON.parse(line.slice(6));
+            if (event.type === "thinking") {
+              bubble.innerHTML = `<em>Thinking\u2026 (step ${event.iteration})</em>`;
+            } else if (event.type === "tool_call") {
+              bubble.innerHTML += ` <code>🔧 ${escapeHtml(event.tool)}</code>`;
+            } else if (event.type === "answer") {
+              conversationId = event.conversation_id;
+              bubble.innerHTML = formatReply(event.text);
+            } else if (event.type === "error") {
+              bubble.innerHTML = `<span class="error">${escapeHtml(event.detail || "Unknown error")}</span>`;
+            } else if (event.type === "done") {
+              break outer;
+            }
+            document.getElementById("messages").scrollTop = document.getElementById("messages").scrollHeight;
+          }
+        }
       }
     } catch (err) {
-      removeTyping();
-      addMessage("agent", `<span class="error">Error: ${err.message}</span>`);
-      console.error("Fetch error:", err);
+      bubble.innerHTML = `<span class="error">Error: ${escapeHtml(err.message)}</span>`;
+      console.error("Stream error:", err);
     }
 
     busy = false;
