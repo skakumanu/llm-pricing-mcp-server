@@ -151,23 +151,40 @@ class ReActLoop:
         )
 
     async def stream(self, messages: List[Dict[str, Any]]) -> AsyncIterator[Dict[str, Any]]:
-        """Run the ReAct loop, yielding progress events as each iteration runs."""
+        """Run the ReAct loop, yielding progress events as each iteration runs.
+
+        Token-level streaming: text tokens are buffered during tool-call iterations
+        (where the model is deciding which tools to use) and emitted immediately
+        on the final answer iteration for a live typing effect.
+        """
         all_tool_calls: List[Dict[str, Any]] = []
         working_messages = list(messages)
 
         for iteration in range(self._max_iterations):
             yield {"type": "thinking", "iteration": iteration + 1}
 
-            response = await self._llm.complete(
+            # Collect streaming events; buffer tokens until we know if this is
+            # a final answer (no tool calls) or another tool-call round.
+            token_buffer: List[str] = []
+            response = None
+            async for ev in self._llm.complete_stream(
                 messages=working_messages,
                 tools=self._tool_schemas,
                 system=SYSTEM_PROMPT,
-            )
+            ):
+                if ev["type"] == "token":
+                    token_buffer.append(ev["text"])
+                elif ev["type"] == "response":
+                    response = ev["response"]
 
             if not response.tool_calls:
+                # Final answer: emit buffered tokens then the full answer event.
+                for token in token_buffer:
+                    yield {"type": "token", "text": token}
                 yield {"type": "answer", "text": response.content, "tool_calls": all_tool_calls}
                 return
 
+            # Tool-call round: discard buffered tokens, process each tool.
             self._llm.append_assistant_turn(working_messages, response)
 
             iteration_results: List[Dict[str, Any]] = []
@@ -194,17 +211,24 @@ class ReActLoop:
 
             self._llm.append_tool_results(working_messages, iteration_results)
 
-        # Max iterations reached — request a final answer without tools
+        # Max iterations reached — stream the final answer (tools=[] so no tool calls possible).
         logger.warning("ReAct stream hit max_iterations=%d; requesting final answer.", self._max_iterations)
         yield {"type": "thinking", "iteration": self._max_iterations + 1}
-        final_response = await self._llm.complete(
-            messages=working_messages + [
-                {
-                    "role": "user",
-                    "content": "Please provide your final answer based on the information gathered so far.",
-                }
-            ],
+        final_messages = working_messages + [
+            {
+                "role": "user",
+                "content": "Please provide your final answer based on the information gathered so far.",
+            }
+        ]
+        final_response = None
+        async for ev in self._llm.complete_stream(
+            messages=final_messages,
             tools=[],
             system=SYSTEM_PROMPT,
-        )
+        ):
+            if ev["type"] == "token":
+                yield {"type": "token", "text": ev["text"]}
+            elif ev["type"] == "response":
+                final_response = ev["response"]
+
         yield {"type": "answer", "text": final_response.content, "tool_calls": all_tool_calls}

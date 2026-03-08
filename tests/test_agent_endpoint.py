@@ -486,6 +486,28 @@ class TestAgentChatStream:
             main_module.settings.mcp_api_key = original
         assert response.status_code == 401
 
+    def test_stream_emits_token_events(self):
+        mock_agent = MagicMock()
+        mock_agent.chat_stream = MagicMock(return_value=_fake_chat_stream(
+            {"type": "thinking", "iteration": 1},
+            {"type": "token", "text": "The "},
+            {"type": "token", "text": "cheapest"},
+            {"type": "token", "text": " model is Haiku."},
+            {"type": "answer", "text": "The cheapest model is Haiku.", "tool_calls": [],
+             "conversation_id": "c1", "sources": []},
+        ))
+
+        async def _fake_get():
+            return mock_agent
+
+        with patch("src.main.get_pricing_agent", _fake_get):
+            response = client.post("/agent/chat/stream", json={"message": "cheapest?"})
+
+        events = _parse_sse(response.text)
+        token_events = [e for e in events if e["type"] == "token"]
+        assert len(token_events) == 3
+        assert "".join(e["text"] for e in token_events) == "The cheapest model is Haiku."
+
     def test_stream_emits_error_event_on_503(self):
         with patch(
             "src.main.get_pricing_agent",
