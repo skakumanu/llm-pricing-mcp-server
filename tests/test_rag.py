@@ -231,21 +231,25 @@ class TestLoadMarkdownDocs:
         assert len(docs) == 1
         assert "Hello world" in docs[0].content
 
-    @pytest.mark.skipif(sys.platform == "win32", reason="Symlinks require elevated privileges on Windows")
     def test_symlink_escaping_docs_dir_is_blocked(self, tmp_path):
-        outside = tmp_path.parent / "_outside_secret.md"
-        outside.write_text("# Secret\nDo not expose.")
-        link = tmp_path / "evil.md"
-        try:
-            link.symlink_to(outside)
-        except (OSError, NotImplementedError):
-            pytest.skip("Symlink creation not supported")
+        from unittest.mock import patch
 
-        docs = load_markdown_docs(str(tmp_path))
+        evil_file = tmp_path / "evil.md"
+        evil_file.write_text("# Secret\nDo not expose.")
+        outside = tmp_path.parent / "_outside_secret.md"
+
+        original_resolve = Path.resolve
+
+        def patched_resolve(self, strict=False):
+            if self.name == "evil.md":
+                return outside
+            return original_resolve(self, strict=strict)
+
+        with patch.object(Path, "resolve", patched_resolve):
+            docs = load_markdown_docs(str(tmp_path))
+
         sources = [d.source for d in docs]
         assert not any("evil" in s or "_outside_secret" in s for s in sources)
-
-        outside.unlink(missing_ok=True)
 
     def test_file_is_within_docs_dir(self, tmp_path):
         (tmp_path / "readme.md").write_text("# README")
