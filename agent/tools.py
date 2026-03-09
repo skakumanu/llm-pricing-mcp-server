@@ -50,6 +50,20 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
             "get_use_cases",
             "Get recommended use cases and key strengths for LLM models",
         ),
+        (
+            "get_pricing_history",
+            (
+                "Query historical pricing snapshots to look up past prices for a model or "
+                "provider and see how prices have changed over time"
+            ),
+        ),
+        (
+            "get_pricing_trends",
+            (
+                "Find models whose prices changed the most recently. Use for questions like "
+                "'which models got cheaper this month?' or 'which providers raised prices?'"
+            ),
+        ),
     ]
 
     for tool_name, description in _mcp_tool_specs:
