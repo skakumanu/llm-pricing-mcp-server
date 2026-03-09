@@ -128,7 +128,6 @@ async def cleanup_stale_rate_limit_entries():
     now = time.time()
     if now - _last_rate_limit_cleanup > 3600:  # Cleanup every hour
         async with _rate_limit_lock:
-            # Remove IPs with empty buckets or no requests in the last hour
             stale_threshold = now - 3600
             to_remove = [
                 ip for ip, bucket in _rate_limit_store.items()
@@ -167,16 +166,13 @@ async def deployment_middleware(request: Request, call_next):
     Middleware to track active requests for graceful shutdown support.
     Rejects new requests if graceful shutdown is in progress.
     """
-    # Check if we're shutting down
     if deployment_manager.is_shutting_down():
-        # Still allow health check endpoints during shutdown
         if request.url.path not in ["/health", "/health/live", "/health/ready", "/health/detailed"]:
             return HTTPException(
                 status_code=503,
                 detail="Service is shutting down",
             )
 
-    # Track request start
     try:
         await deployment_manager.track_request_start()
     except RuntimeError as e:
