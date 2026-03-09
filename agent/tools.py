@@ -86,6 +86,21 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
                 "Use when the user asks to export, download, or save pricing data."
             ),
         ),
+        (
+            "list_conversations",
+            (
+                "List stored chat conversation sessions with IDs, timestamps, turn counts, "
+                "and message previews. Use when the user asks to see their chat history or "
+                "past conversations."
+            ),
+        ),
+        (
+            "delete_conversation",
+            (
+                "Delete a specific past conversation by its ID. Use list_conversations first "
+                "to find the ID. Use when the user asks to delete or clear a past conversation."
+            ),
+        ),
     ]
 
     for tool_name, description in _mcp_tool_specs:
