@@ -1,4 +1,7 @@
 """Pricing alert service: register webhooks that fire when prices change beyond a threshold."""
+import hashlib
+import hmac
+import json
 import logging
 import time
 from typing import Any, Dict, List, Optional
@@ -91,13 +94,18 @@ class PricingAlertService:
             await db.commit()
         return True
 
-    async def check_and_fire(self, trends: List[Dict[str, Any]]) -> int:
+    async def check_and_fire(
+        self, trends: List[Dict[str, Any]], secret: Optional[str] = None
+    ) -> int:
         """
         Compare each trend against registered alerts and fire matching webhooks.
 
         An alert matches a trend when:
         - The alert's provider/model_name filters match (None = wildcard)
         - The absolute change in input OR output price exceeds threshold_pct
+
+        When ``secret`` is provided the POST body is signed with HMAC-SHA256 and
+        the digest is included as ``X-LLM-Pricing-Signature: sha256=<hex>``.
 
         Returns the number of webhooks fired.
         """
@@ -117,7 +125,7 @@ class PricingAlertService:
                         continue
                     if max_change < alert["threshold_pct"]:
                         continue
-                    fired += await self._fire(client, alert, trend)
+                    fired += await self._fire(client, alert, trend, secret=secret)
         return fired
 
     @staticmethod
@@ -133,6 +141,8 @@ class PricingAlertService:
         client: httpx.AsyncClient,
         alert: Dict[str, Any],
         trend: Dict[str, Any],
+        *,
+        secret: Optional[str] = None,
     ) -> int:
         payload = {
             "alert_id": alert["id"],
@@ -145,8 +155,13 @@ class PricingAlertService:
             "first_seen": trend["first_seen"],
             "last_seen": trend["last_seen"],
         }
+        body = json.dumps(payload, separators=(",", ":")).encode()
+        headers = {"Content-Type": "application/json"}
+        if secret:
+            sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+            headers["X-LLM-Pricing-Signature"] = f"sha256={sig}"
         try:
-            resp = await client.post(alert["url"], json=payload)
+            resp = await client.post(alert["url"], content=body, headers=headers)
             logger.info(
                 "Alert %d fired to %s — %s (HTTP %d)",
                 alert["id"], alert["url"], trend["model_name"], resp.status_code,
@@ -177,3 +192,46 @@ async def init_pricing_alert_service(db_path: str) -> PricingAlertService:
     _alert_service = PricingAlertService(db_path)
     await _alert_service.initialize()
     return _alert_service
+
+
+# ---------------------------------------------------------------------------
+# Receiver-side helper
+# ---------------------------------------------------------------------------
+
+def verify_webhook_signature(
+    secret: str,
+    body: bytes,
+    signature_header: str,
+) -> bool:
+    """Verify an ``X-LLM-Pricing-Signature`` header value.
+
+    Use this on the **receiving** end of a webhook to confirm the POST
+    originated from this server and has not been tampered with.
+
+    Args:
+        secret:           The shared ``WEBHOOK_SECRET`` value.
+        body:             The raw request body bytes (read before any JSON parsing).
+        signature_header: The full value of the ``X-LLM-Pricing-Signature`` header
+                          (e.g. ``"sha256=abc123..."``).
+
+    Returns:
+        ``True`` if the signature is valid, ``False`` otherwise.
+
+    Example::
+
+        from src.services.pricing_alerts import verify_webhook_signature
+
+        @app.post("/webhook")
+        async def receive_alert(request: Request):
+            body = await request.body()
+            sig  = request.headers.get("X-LLM-Pricing-Signature", "")
+            if not verify_webhook_signature(SECRET, body, sig):
+                raise HTTPException(status_code=401, detail="Invalid signature")
+            payload = json.loads(body)
+            ...
+    """
+    if not signature_header.startswith("sha256="):
+        return False
+    expected_hex = signature_header[len("sha256="):]
+    computed = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(computed, expected_hex)
