@@ -96,6 +96,13 @@ if _static_dir.exists():
             StaticFiles(directory=str(_compare_dir), html=True),
             name="compare_static",
         )
+    _widget_dir = _static_dir / "widget"
+    if _widget_dir.exists():
+        app.mount(
+            "/widget",
+            StaticFiles(directory=str(_widget_dir), html=True),
+            name="widget_static",
+        )
 
 app.add_middleware(
     CORSMiddleware,
@@ -121,7 +128,6 @@ async def cleanup_stale_rate_limit_entries():
     now = time.time()
     if now - _last_rate_limit_cleanup > 3600:  # Cleanup every hour
         async with _rate_limit_lock:
-            # Remove IPs with empty buckets or no requests in the last hour
             stale_threshold = now - 3600
             to_remove = [
                 ip for ip, bucket in _rate_limit_store.items()
@@ -160,16 +166,13 @@ async def deployment_middleware(request: Request, call_next):
     Middleware to track active requests for graceful shutdown support.
     Rejects new requests if graceful shutdown is in progress.
     """
-    # Check if we're shutting down
     if deployment_manager.is_shutting_down():
-        # Still allow health check endpoints during shutdown
         if request.url.path not in ["/health", "/health/live", "/health/ready", "/health/detailed"]:
             return HTTPException(
                 status_code=503,
                 detail="Service is shutting down",
             )
 
-    # Track request start
     try:
         await deployment_manager.track_request_start()
     except RuntimeError as e:
@@ -193,7 +196,7 @@ async def security_middleware(request: Request, call_next):
     global _auth_warning_logged
 
     path = request.url.path
-    if path.startswith("/chat") or path.startswith("/history") or path.startswith("/trends") or path.startswith("/conversations") or path.startswith("/calculator") or path.startswith("/compare") or request.method == "OPTIONS":
+    if path.startswith("/chat") or path.startswith("/history") or path.startswith("/trends") or path.startswith("/conversations") or path.startswith("/calculator") or path.startswith("/compare") or path.startswith("/widget") or path == "/pricing/public" or request.method == "OPTIONS":
         return await call_next(request)
     if path in _sensitive_paths:
         if not settings.mcp_api_key:
@@ -1602,6 +1605,56 @@ async def webhook_signing_info():
             else "Verify signatures using verify_webhook_signature() from src.services.pricing_alerts."
         ),
     }
+
+
+@app.get("/pricing/public")
+async def get_public_pricing(
+    models: Optional[str] = Query(
+        None,
+        description="Comma-separated model names to include (omit for all models)",
+    ),
+    provider: Optional[str] = Query(
+        None,
+        description="Filter by provider name",
+    ),
+):
+    """
+    Public pricing endpoint — no API key required.
+
+    Returns a simplified list of models with per-1M-token prices suitable for
+    embedding in third-party pages via the LLM Pricing widget.
+
+    Args:
+        models:   Comma-separated model names to include (e.g. ``gpt-4o,claude-sonnet-4-6``).
+                  When omitted all available models are returned.
+        provider: Optional provider filter (e.g. ``openai``).
+
+    Returns:
+        JSON with ``models`` list and ``updated_at`` timestamp.
+    """
+    aggregator = await get_pricing_aggregator()
+    if provider:
+        all_models, _ = await aggregator.get_pricing_by_provider_async(provider)
+    else:
+        all_models, _ = await aggregator.get_all_pricing_async()
+
+    # Filter by model names if requested
+    if models:
+        requested = {m.strip().lower() for m in models.split(",") if m.strip()}
+        all_models = [m for m in all_models if m.model_name.lower() in requested]
+
+    result = [
+        {
+            "model_name": m.model_name,
+            "provider": m.provider,
+            "input_per_1m_usd": round(m.cost_per_input_token * 1_000_000, 6),
+            "output_per_1m_usd": round(m.cost_per_output_token * 1_000_000, 6),
+            "context_window": m.context_window,
+        }
+        for m in all_models
+    ]
+    result.sort(key=lambda x: (x["provider"], x["model_name"]))
+    return {"models": result, "total": len(result), "updated_at": datetime.now(UTC).isoformat()}
 
 
 if __name__ == "__main__":
