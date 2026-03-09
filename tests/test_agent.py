@@ -157,7 +157,7 @@ class TestConversationStore:
         store = ConversationStore()
         conv_id, h = await store.get_or_create()
         h.add("user", "message")
-        store.delete(conv_id)
+        await store.delete(conv_id)
 
         # After deletion, same ID creates a fresh history
         _, new_h = await store.get_or_create(conv_id)
@@ -252,7 +252,7 @@ class TestSQLiteConversationStore:
 
         conv_id, h = await store.get_or_create()
         h.add("user", "msg")
-        store.delete(conv_id)
+        await store.delete(conv_id)
         assert conv_id not in store._cache
 
 
