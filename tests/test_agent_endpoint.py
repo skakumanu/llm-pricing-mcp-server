@@ -528,13 +528,14 @@ class TestAgentChatStream:
         mock_agent = MagicMock()
         mock_agent.chat_stream = MagicMock(return_value=_fake_chat_stream(
             {"type": "thinking", "iteration": 1},
+            {"type": "tool_call", "tool": "get_all_pricing", "args": {}},
+            {"type": "tool_result", "tool": "get_all_pricing", "ok": True},
             {
                 "type": "answer",
                 "text": "Here is the pricing.",
                 "tool_calls": [
                     {"tool": "get_all_pricing",
-                     "result": {"last_updated": dt.datetime(2026, 1, 1, 12, 0, 0)}},
-                ],
+                     "result": {"last_updated": dt.datetime(2026, 1, 1, 12, 0, 0)}},                ],
                 "conversation_id": "c1",
                 "sources": [],
             },
