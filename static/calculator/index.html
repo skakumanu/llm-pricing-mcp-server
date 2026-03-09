@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cost Calculator — LLM Pricing</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .header-icon { font-size: 22px; }
+    .header-text h1 { font-size: 16px; font-weight: 600; }
+    .header-text p  { font-size: 12px; color: #aab; margin-top: 2px; }
+    .nav-links { margin-left: auto; display: flex; gap: 8px; }
+    .nav-link {
+      color: #aab; text-decoration: none; font-size: 13px;
+      border: 1px solid #444; padding: 5px 12px; border-radius: 6px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .nav-link:hover { color: #fff; border-color: #888; }
+
+    /* Layout */
+    .main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px 20px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 760px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    /* Card */
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 22px 24px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 16px;
+    }
+
+    /* Form */
+    .form-group { margin-bottom: 16px; }
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: #666;
+      margin-bottom: 5px;
+    }
+    .form-control {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid #d0d4da;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s;
+      background: #fff;
+    }
+    .form-control:focus { border-color: #4f6ef7; }
+    select.form-control { cursor: pointer; }
+
+    .token-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .preset-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+    .preset-btn {
+      padding: 4px 10px;
+      font-size: 11px;
+      border: 1px solid #d0d4da;
+      border-radius: 5px;
+      background: #f5f6fa;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .preset-btn:hover { background: #e8eaf0; }
+
+    /* Cost breakdown */
+    .breakdown {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .breakdown-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+    }
+    .breakdown-label { color: #666; }
+    .breakdown-value { font-weight: 600; color: #222; font-size: 15px; }
+    .breakdown-value.total { font-size: 22px; color: #4f6ef7; }
+
+    .divider {
+      height: 1px;
+      background: #eee;
+      margin: 10px 0;
+    }
+
+    /* Scale cards */
+    .scale-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .scale-card {
+      background: #f5f6fa;
+      border-radius: 8px;
+      padding: 12px 14px;
+      text-align: center;
+    }
+    .scale-label { font-size: 11px; color: #888; margin-bottom: 4px; }
+    .scale-value { font-size: 16px; font-weight: 700; color: #1a1a2e; }
+
+    /* Tokens per dollar */
+    .tpd-box {
+      background: #eef2ff;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-top: 16px;
+      text-align: center;
+    }
+    .tpd-label { font-size: 11px; color: #4f6ef7; margin-bottom: 4px; }
+    .tpd-value { font-size: 20px; font-weight: 700; color: #3051d3; }
+
+    /* Empty / loading */
+    .placeholder {
+      text-align: center;
+      padding: 32px 16px;
+      color: #aaa;
+      font-size: 14px;
+    }
+    .placeholder .icon { font-size: 36px; margin-bottom: 8px; }
+
+    /* Comparison table */
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 20px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      background: #f5f6fa;
+      padding: 10px 12px;
+      text-align: left;
+      font-weight: 600;
+      color: #555;
+      border-bottom: 2px solid #e8eaf0;
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    th:hover { background: #eceef5; }
+    td {
+      padding: 9px 12px;
+      border-bottom: 1px solid #f0f0f0;
+      color: #333;
+    }
+    tr.selected td { background: #eef2ff; font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-cheapest { background: #c6f6d5; color: #276749; }
+    .badge-selected { background: #bee3f8; color: #2c5282; }
+
+    .sort-arrow { margin-left: 4px; color: #aaa; font-size: 10px; }
+
+    .loading-row td { text-align: center; color: #aaa; padding: 24px; }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <span class="header-icon">🧮</span>
+  <div class="header-text">
+    <h1>Cost Calculator</h1>
+    <p>Estimate and compare LLM costs for your token usage</p>
+  </div>
+  <nav class="nav-links">
+    <a class="nav-link" href="/chat">Chat</a>
+    <a class="nav-link" href="/history">History</a>
+    <a class="nav-link" href="/trends">Trends</a>
+    <a class="nav-link" href="/conversations">Sessions</a>
+  </nav>
+</header>
+
+<main class="main">
+  <div class="layout">
+
+    <!-- Left: Controls + Breakdown -->
+    <div>
+      <!-- Model selector -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">Model & Tokens</div>
+
+        <div class="form-group">
+          <label class="form-label" for="model-select">Model</label>
+          <select class="form-control" id="model-select" onchange="calculate()">
+            <option value="">Loading models…</option>
+          </select>
+        </div>
+
+        <div class="token-row">
+          <div class="form-group">
+            <label class="form-label" for="input-tokens">Input tokens</label>
+            <input class="form-control" id="input-tokens" type="number"
+                   min="0" value="1000" oninput="calculate()" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="output-tokens">Output tokens</label>
+            <input class="form-control" id="output-tokens" type="number"
+                   min="0" value="500" oninput="calculate()" />
+          </div>
+        </div>
+
+        <div class="form-label" style="margin-bottom:5px">Quick presets</div>
+        <div class="preset-row">
+          <button class="preset-btn" onclick="setPreset(500,200)">Small (500/200)</button>
+          <button class="preset-btn" onclick="setPreset(1000,500)">Medium (1K/500)</button>
+          <button class="preset-btn" onclick="setPreset(4000,1000)">Large (4K/1K)</button>
+          <button class="preset-btn" onclick="setPreset(8000,2000)">XL (8K/2K)</button>
+          <button class="preset-btn" onclick="setPreset(32000,8000)">32K ctx</button>
+          <button class="preset-btn" onclick="setPreset(100000,20000)">100K ctx</button>
+        </div>
+      </div>
+
+      <!-- Cost breakdown -->
+      <div class="card">
+        <div class="card-title">Cost Breakdown</div>
+        <div id="breakdown-panel">
+          <div class="placeholder">
+            <div class="icon">💡</div>
+            Select a model above to see costs
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Comparison table -->
+    <div class="card">
+      <div class="card-title">All Models — Cost Comparison
+        <span style="font-size:11px;font-weight:400;color:#aaa;margin-left:8px" id="table-subtitle"></span>
+      </div>
+      <div class="table-wrap">
+        <table id="compare-table">
+          <thead>
+            <tr>
+              <th onclick="sortTable('model_name')">Model <span class="sort-arrow" id="sort-model_name"></span></th>
+              <th onclick="sortTable('provider')">Provider <span class="sort-arrow" id="sort-provider"></span></th>
+              <th onclick="sortTable('input_cost')">Input cost <span class="sort-arrow" id="sort-input_cost"></span></th>
+              <th onclick="sortTable('output_cost')">Output cost <span class="sort-arrow" id="sort-output_cost"></span></th>
+              <th onclick="sortTable('total_cost')">Total <span class="sort-arrow" id="sort-total_cost">▲</span></th>
+            </tr>
+          </thead>
+          <tbody id="compare-tbody">
+            <tr class="loading-row"><td colspan="5">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+  const API_KEY = "Y2Q0MTIwM2EtNTQ0OC00MjViLTljYjEtOTZlOWI2MThlYzdi";
+  const HEADERS = { "x-api-key": API_KEY };
+
+  let allModels = [];      // raw pricing data
+  let selectedModel = null;
+  let sortKey = "total_cost";
+  let sortAsc = true;
+
+  // ---------------------------------------------------------------------------
+  // Boot: load pricing
+  // ---------------------------------------------------------------------------
+  async function init() {
+    try {
+      const res = await fetch("/pricing", { headers: HEADERS });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      allModels = data.models || [];
+      populateSelect();
+      calculate();
+    } catch (err) {
+      document.getElementById("compare-tbody").innerHTML =
+        `<tr class="loading-row"><td colspan="5">Failed to load: ${err.message}</td></tr>`;
+    }
+  }
+
+  function populateSelect() {
+    const sel = document.getElementById("model-select");
+    // Group by provider
+    const byProvider = {};
+    for (const m of allModels) {
+      if (!byProvider[m.provider]) byProvider[m.provider] = [];
+      byProvider[m.provider].push(m);
+    }
+    sel.innerHTML = "";
+    for (const [prov, models] of Object.entries(byProvider).sort()) {
+      const grp = document.createElement("optgroup");
+      grp.label = prov;
+      for (const m of models.sort((a, b) => a.model_name.localeCompare(b.model_name))) {
+        const opt = document.createElement("option");
+        opt.value = m.model_name;
+        opt.textContent = m.model_name;
+        grp.appendChild(opt);
+      }
+      sel.appendChild(grp);
+    }
+    // Default to gpt-4o or first model
+    const preferred = ["gpt-4o", "claude-3-5-sonnet-20241022", "gemini-1.5-pro"];
+    for (const p of preferred) {
+      const found = allModels.find(m => m.model_name === p);
+      if (found) { sel.value = p; break; }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Calculate
+  // ---------------------------------------------------------------------------
+  function calculate() {
+    const modelName = document.getElementById("model-select").value;
+    const inputTok = Math.max(0, parseInt(document.getElementById("input-tokens").value) || 0);
+    const outputTok = Math.max(0, parseInt(document.getElementById("output-tokens").value) || 0);
+
+    selectedModel = allModels.find(m => m.model_name === modelName) || null;
+
+    renderBreakdown(selectedModel, inputTok, outputTok);
+    renderTable(inputTok, outputTok);
+  }
+
+  function renderBreakdown(model, inputTok, outputTok) {
+    const panel = document.getElementById("breakdown-panel");
+    if (!model) {
+      panel.innerHTML = `<div class="placeholder"><div class="icon">💡</div>Select a model above</div>`;
+      return;
+    }
+
+    const inputCost  = inputTok  * model.cost_per_input_token;
+    const outputCost = outputTok * model.cost_per_output_token;
+    const total      = inputCost + outputCost;
+
+    // Tokens per dollar (combined)
+    const totalTok = inputTok + outputTok;
+    const tpd = total > 0 ? Math.round(totalTok / total) : null;
+
+    panel.innerHTML = `
+      <div class="breakdown">
+        <div class="breakdown-row">
+          <span class="breakdown-label">Input (${fmt(inputTok)} tokens)</span>
+          <span class="breakdown-value">${fmtUSD(inputCost)}</span>
+        </div>
+        <div class="breakdown-row">
+          <span class="breakdown-label">Output (${fmt(outputTok)} tokens)</span>
+          <span class="breakdown-value">${fmtUSD(outputCost)}</span>
+        </div>
+        <div class="divider"></div>
+        <div class="breakdown-row">
+          <span class="breakdown-label">Total per request</span>
+          <span class="breakdown-value total">${fmtUSD(total)}</span>
+        </div>
+      </div>
+
+      <div class="card-title">Cost at Scale (per-request × N)</div>
+      <div class="scale-grid">
+        ${scaleCard("1K requests",  total * 1_000)}
+        ${scaleCard("10K requests", total * 10_000)}
+        ${scaleCard("100K req",     total * 100_000)}
+        ${scaleCard("1M requests",  total * 1_000_000)}
+      </div>
+
+      ${tpd !== null ? `
+      <div class="tpd-box">
+        <div class="tpd-label">Tokens per dollar (combined)</div>
+        <div class="tpd-value">${fmt(tpd)}</div>
+      </div>` : ""}
+
+      <div style="margin-top:14px;font-size:11px;color:#aaa">
+        Rates: \$${fmtRate(model.cost_per_input_token)}/token input &nbsp;·&nbsp;
+        \$${fmtRate(model.cost_per_output_token)}/token output
+        &nbsp;·&nbsp; (\$${fmtUSD(model.cost_per_input_token * 1e6)}/1M input,
+        \$${fmtUSD(model.cost_per_output_token * 1e6)}/1M output)
+      </div>`;
+  }
+
+  function scaleCard(label, cost) {
+    return `<div class="scale-card">
+      <div class="scale-label">${label}</div>
+      <div class="scale-value">${fmtUSD(cost)}</div>
+    </div>`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Comparison table
+  // ---------------------------------------------------------------------------
+  function renderTable(inputTok, outputTok) {
+    if (allModels.length === 0) return;
+
+    document.getElementById("table-subtitle").textContent =
+      `${fmt(inputTok)} input + ${fmt(outputTok)} output tokens`;
+
+    const rows = allModels.map(m => ({
+      model_name:  m.model_name,
+      provider:    m.provider,
+      input_cost:  inputTok  * m.cost_per_input_token,
+      output_cost: outputTok * m.cost_per_output_token,
+      total_cost:  (inputTok * m.cost_per_input_token) + (outputTok * m.cost_per_output_token),
+    }));
+
+    rows.sort((a, b) => {
+      const av = a[sortKey], bv = b[sortKey];
+      if (typeof av === "string") return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+      return sortAsc ? av - bv : bv - av;
+    });
+
+    const cheapest = rows.reduce((best, r) => r.total_cost < best.total_cost ? r : best, rows[0]);
+    const selName = selectedModel ? selectedModel.model_name : null;
+
+    document.getElementById("compare-tbody").innerHTML = rows.map(r => {
+      const isSelected = r.model_name === selName;
+      const isCheapest = r.model_name === cheapest.model_name;
+      const badge = isSelected
+        ? `<span class="badge badge-selected">selected</span>`
+        : isCheapest
+          ? `<span class="badge badge-cheapest">cheapest</span>`
+          : "";
+      return `<tr class="${isSelected ? "selected" : ""}">
+        <td>${escHtml(r.model_name)} ${badge}</td>
+        <td>${escHtml(r.provider)}</td>
+        <td>${fmtUSD(r.input_cost)}</td>
+        <td>${fmtUSD(r.output_cost)}</td>
+        <td>${fmtUSD(r.total_cost)}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  function sortTable(key) {
+    if (sortKey === key) {
+      sortAsc = !sortAsc;
+    } else {
+      sortKey = key;
+      sortAsc = true;
+    }
+    // Update arrows
+    document.querySelectorAll(".sort-arrow").forEach(el => el.textContent = "");
+    const arrow = document.getElementById("sort-" + key);
+    if (arrow) arrow.textContent = sortAsc ? "▲" : "▼";
+    calculate();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Presets
+  // ---------------------------------------------------------------------------
+  function setPreset(input, output) {
+    document.getElementById("input-tokens").value  = input;
+    document.getElementById("output-tokens").value = output;
+    calculate();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Formatters
+  // ---------------------------------------------------------------------------
+  function fmtUSD(n) {
+    if (n === 0) return "$0.00";
+    if (n < 0.000001) return `$${n.toExponential(2)}`;
+    if (n < 0.01)     return `$${n.toFixed(6)}`;
+    if (n < 1)        return `$${n.toFixed(4)}`;
+    if (n < 100)      return `$${n.toFixed(2)}`;
+    return `$${n.toLocaleString("en-US", {maximumFractionDigits:0})}`;
+  }
+
+  function fmtRate(n) {
+    if (n === 0) return "0";
+    if (n < 0.000001) return n.toExponential(2);
+    return n.toPrecision(4);
+  }
+
+  function fmt(n) {
+    return n.toLocaleString("en-US");
+  }
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  init();
+</script>
+</body>
+</html>
