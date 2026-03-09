@@ -8,6 +8,10 @@ from mcp.tools.get_use_cases import GetUseCasesTool
 from mcp.tools.get_telemetry import GetTelemetryTool
 from mcp.tools.get_pricing_history import GetPricingHistoryTool
 from mcp.tools.get_pricing_trends import GetPricingTrendsTool
+from mcp.tools.register_price_alert import RegisterPriceAlertTool
+from mcp.tools.list_price_alerts import ListPriceAlertsTool
+from mcp.tools.delete_price_alert import DeletePriceAlertTool
+from mcp.tools.get_pricing_export_url import GetPricingExportUrlTool
 
 
 class ToolManager:
@@ -206,6 +210,107 @@ class ToolManager:
                             "default": 20,
                             "minimum": 1,
                             "maximum": 100,
+                        },
+                    },
+                    "required": [],
+                },
+            },
+            "register_price_alert": {
+                "instance": RegisterPriceAlertTool(),
+                "name": "register_price_alert",
+                "description": (
+                    "Register a webhook URL to receive notifications when a model's price "
+                    "changes by more than a specified percentage. Optionally scope the alert "
+                    "to a specific provider or model. Returns the alert ID."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "Webhook URL to POST when the alert fires",
+                        },
+                        "threshold_pct": {
+                            "type": "number",
+                            "description": "Minimum absolute % price change to trigger the alert (default: 5.0)",
+                            "default": 5.0,
+                        },
+                        "provider": {
+                            "type": "string",
+                            "description": "Limit to a specific provider (e.g. 'openai'). Omit for all.",
+                        },
+                        "model_name": {
+                            "type": "string",
+                            "description": "Limit to a specific model name. Omit for all models.",
+                        },
+                    },
+                    "required": ["url"],
+                },
+            },
+            "list_price_alerts": {
+                "instance": ListPriceAlertsTool(),
+                "name": "list_price_alerts",
+                "description": "List all registered price-change webhook alerts with their IDs and settings.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+            "delete_price_alert": {
+                "instance": DeletePriceAlertTool(),
+                "name": "delete_price_alert",
+                "description": "Delete a registered price-change alert by its ID.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "alert_id": {
+                            "type": "integer",
+                            "description": "The ID of the alert to delete (from list_price_alerts or register_price_alert)",
+                        },
+                    },
+                    "required": ["alert_id"],
+                },
+            },
+            "get_pricing_export_url": {
+                "instance": GetPricingExportUrlTool(),
+                "name": "get_pricing_export_url",
+                "description": (
+                    "Generate a download URL for the pricing history export. "
+                    "Returns a URL the user can open in their browser to download "
+                    "snapshot history as CSV (for spreadsheets) or JSON (for code). "
+                    "Use this when the user asks to export, download, or save pricing data."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "format": {
+                            "type": "string",
+                            "description": "Output format: 'csv' (default) or 'json'",
+                            "enum": ["csv", "json"],
+                            "default": "csv",
+                        },
+                        "model_name": {
+                            "type": "string",
+                            "description": "Filter by model name (optional)",
+                        },
+                        "provider": {
+                            "type": "string",
+                            "description": "Filter by provider (optional)",
+                        },
+                        "days": {
+                            "type": "integer",
+                            "description": "Look-back window in days (default: 30, max: 365)",
+                            "default": 30,
+                            "minimum": 1,
+                            "maximum": 365,
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Max rows to export (default: 10000, max: 100000)",
+                            "default": 10000,
+                            "minimum": 1,
+                            "maximum": 100000,
                         },
                     },
                     "required": [],
