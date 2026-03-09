@@ -1358,7 +1358,7 @@ async def agent_chat_stream(request: AgentChatRequest):
         try:
             async with asyncio.timeout(120.0):
                 async for event in agent.chat_stream(request.message, request.conversation_id):
-                    yield f"data: {json.dumps(event)}\n\n"
+                    yield f"data: {json.dumps(event, default=str)}\n\n"
                 yield f"data: {json.dumps({'type': 'done'})}\n\n"
         except asyncio.TimeoutError:
             yield f"data: {json.dumps({'type': 'error', 'detail': 'Request timed out after 120s'})}\n\n"

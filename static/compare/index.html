@@ -458,7 +458,8 @@ async function loadData() {
           provider:   m.provider,
           input_usd:  inp * 1e6,   // convert per-token → per-1M-token USD
           output_usd: out * 1e6,
-        });      }
+        });
+      }
     }
     _allModels.sort((a, b) => a.provider.localeCompare(b.provider) || a.model_name.localeCompare(b.model_name));
 
