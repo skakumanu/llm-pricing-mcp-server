@@ -447,16 +447,18 @@ async function loadData() {
       fetch(API_USE_CASES,   { headers }).then(r => r.json()),
     ]);
 
-    // Flatten pricing data
+    // Flatten pricing data — API returns {models: [{model_name, provider, cost_per_input_token, ...}]}
     _allModels = [];
-    if (priceRes.providers) {
-      for (const [provider, info] of Object.entries(priceRes.providers)) {
-        if (!info.models) continue;
-        for (const [model_name, mdata] of Object.entries(info.models)) {
-          const inp  = mdata.input_cost_per_token  || 0;
-          const out  = mdata.output_cost_per_token || 0;
-          _allModels.push({ model_name, provider, input_usd: inp * 1e6, output_usd: out * 1e6 });
-        }
+    if (priceRes.models) {
+      for (const m of priceRes.models) {
+        const inp = m.cost_per_input_token  || 0;
+        const out = m.cost_per_output_token || 0;
+        _allModels.push({
+          model_name: m.model_name,
+          provider:   m.provider,
+          input_usd:  inp * 1e6,   // convert per-token → per-1M-token USD
+          output_usd: out * 1e6,
+        });
       }
     }
     _allModels.sort((a, b) => a.provider.localeCompare(b.provider) || a.model_name.localeCompare(b.model_name));
