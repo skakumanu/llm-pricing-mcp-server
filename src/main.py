@@ -455,7 +455,7 @@ async def _pricing_snapshot_loop() -> None:
             logger.info("Pricing snapshot recorded: %d models", count)
             # Check alerts against same-day price changes
             trends = await history_service.get_trends(days=1)
-            fired = await alert_service.check_and_fire(trends)
+            fired = await alert_service.check_and_fire(trends, secret=settings.webhook_secret)
             if fired:
                 logger.info("Price-change alerts fired: %d", fired)
         except Exception as exc:
@@ -1563,6 +1563,38 @@ async def delete_conversation(conversation_id: str):
             status_code=404,
             detail=f"Conversation '{conversation_id}' not found",
         )
+
+
+# ---------------------------------------------------------------------------
+# Webhook signing info endpoint
+# ---------------------------------------------------------------------------
+
+
+@app.get("/pricing/alerts/signing-info")
+async def webhook_signing_info():
+    """
+    Return information about webhook payload signing.
+
+    When ``WEBHOOK_SECRET`` is configured, every price-change webhook POST will
+    carry an ``X-LLM-Pricing-Signature: sha256=<hex>`` header.  Use the
+    ``verify_webhook_signature`` helper (from
+    ``src.services.pricing_alerts``) on the receiving end to verify it.
+
+    Returns whether signing is active and the header name to look for.
+    Intentionally never returns the secret itself.
+    """
+    signing_enabled = bool(settings.webhook_secret)
+    return {
+        "signing_enabled": signing_enabled,
+        "algorithm": "hmac-sha256" if signing_enabled else None,
+        "header": "X-LLM-Pricing-Signature" if signing_enabled else None,
+        "format": "sha256=<hex_digest>" if signing_enabled else None,
+        "note": (
+            "Set WEBHOOK_SECRET in your environment to enable payload signing."
+            if not signing_enabled
+            else "Verify signatures using verify_webhook_signature() from src.services.pricing_alerts."
+        ),
+    }
 
 
 if __name__ == "__main__":
