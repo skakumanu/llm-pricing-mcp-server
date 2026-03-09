@@ -31,9 +31,11 @@ from src.models.pricing import (  # noqa: E402
     ClientLocationStats, BrowserStats,
     PricingHistoryResponse, PricingTrendsResponse,
     PricingAlertRequest, PricingAlertRecord, PricingAlertListResponse,
+    ConversationSummary, ConversationListResponse,
 )
 from src.services.pricing_history import init_pricing_history_service, get_pricing_history_service  # noqa: E402
 from src.services.pricing_alerts import init_pricing_alert_service, get_pricing_alert_service  # noqa: E402
+from agent.conversation import init_conversation_store, get_conversation_store  # noqa: E402
 from src.models.deployment import (  # noqa: E402
     HealthCheckResponse, DeploymentReadiness, DeploymentMetadata, ApiVersionInfo,
     GracefulShutdownRequest, GracefulShutdownStatus
@@ -449,11 +451,16 @@ async def _pricing_snapshot_loop() -> None:
 
 @app.on_event("startup")
 async def startup_pricing_history() -> None:
-    """Initialize the pricing history/alerts DBs and launch the background snapshot loop."""
+    """Initialize the pricing history/alerts/conversation DBs and launch the background snapshot loop."""
     await init_pricing_history_service(settings.pricing_history_db_path)
     logger.info("Pricing history service initialized at %s", settings.pricing_history_db_path)
     await init_pricing_alert_service(settings.pricing_history_db_path)
     logger.info("Pricing alert service initialized")
+    await init_conversation_store(settings.conversation_db_path, settings.agent_max_history_turns)
+    logger.info(
+        "Conversation store initialized (%s)",
+        settings.conversation_db_path or "in-memory",
+    )
     asyncio.create_task(_pricing_snapshot_loop())
     logger.info(
         "Pricing snapshot loop started (interval=%dh)", settings.pricing_snapshot_interval_hours
@@ -1502,6 +1509,46 @@ async def delete_pricing_alert(alert_id: int):
     deleted = await svc.delete(alert_id)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Alert {alert_id} not found")
+
+
+# ---------------------------------------------------------------------------
+# Conversation management endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/agent/conversations", response_model=ConversationListResponse)
+async def list_conversations():
+    """
+    List all stored chat conversations with metadata.
+
+    Returns each conversation's ID, last-updated timestamp, turn count, and a
+    short preview of the most recent user message.  Conversations are sorted
+    newest first.  When the conversation store is in-memory (no
+    ``CONVERSATION_DB_PATH`` configured) the list reflects only conversations
+    created since the server started.
+    """
+    store = get_conversation_store()
+    conversations = await store.list_conversations()
+    items = [ConversationSummary(**c) for c in conversations]
+    return ConversationListResponse(conversations=items, total=len(items))
+
+
+@app.delete("/agent/conversations/{conversation_id}", status_code=204)
+async def delete_conversation(conversation_id: str):
+    """
+    Delete a stored conversation by its ID.
+
+    Removes the conversation from both the in-process cache and the persistent
+    SQLite database (if configured).  Returns **204 No Content** on success and
+    **404 Not Found** if the conversation does not exist.
+    """
+    store = get_conversation_store()
+    deleted = await store.delete(conversation_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Conversation '{conversation_id}' not found",
+        )
 
 
 if __name__ == "__main__":

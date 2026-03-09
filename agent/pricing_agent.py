@@ -7,7 +7,10 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 from agent.llm_backend import LLMBackend, create_llm_backend
 from agent.tools import build_agent_tools
-from agent.conversation import ConversationStore, SQLiteConversationStore
+from agent.conversation import (
+    ConversationStore, SQLiteConversationStore,
+    init_conversation_store, get_conversation_store,
+)
 from agent.react_loop import ReActLoop
 from rag.pipeline import RAGPipeline
 
@@ -51,18 +54,16 @@ class PricingAgent:
         # Lazy import to avoid circular imports
         from src.config.settings import settings
 
-        if settings.conversation_db_path:
-            self._conversation_store = SQLiteConversationStore(
-                db_path=settings.conversation_db_path,
-                max_turns=settings.agent_max_history_turns,
+        try:
+            self._conversation_store = get_conversation_store()
+            logger.info("Conversation store: using shared singleton")
+        except RuntimeError:
+            # Not yet initialized (e.g. tests that bypass startup) — create one here
+            await init_conversation_store(
+                settings.conversation_db_path, settings.agent_max_history_turns
             )
-            await self._conversation_store.initialize()
-            logger.info("Conversation store: SQLite at %s", settings.conversation_db_path)
-        else:
-            self._conversation_store = ConversationStore(
-                max_turns=settings.agent_max_history_turns
-            )
-            logger.info("Conversation store: in-memory")
+            self._conversation_store = get_conversation_store()
+            logger.info("Conversation store: initialized by agent")
 
         # LLM backend
         api_key = self._get_api_key(settings)
