@@ -198,7 +198,7 @@ async def security_middleware(request: Request, call_next):
     global _auth_warning_logged
 
     path = request.url.path
-    if path.startswith("/chat") or path.startswith("/history") or path.startswith("/trends") or path.startswith("/conversations") or path.startswith("/calculator") or path.startswith("/compare") or path.startswith("/widget") or path == "/admin" or path == "/pricing/public" or request.method == "OPTIONS":
+    if path.startswith("/chat") or path.startswith("/agent/chat") or path.startswith("/history") or path.startswith("/trends") or path.startswith("/conversations") or path.startswith("/calculator") or path.startswith("/compare") or path.startswith("/widget") or path == "/admin" or path == "/pricing/public" or request.method == "OPTIONS":
         return await call_next(request)
     if path in _sensitive_paths:
         if not settings.mcp_api_key:
@@ -423,28 +423,13 @@ async def get_pricing_agent() -> PricingAgent:
             if _pricing_agent is None:
                 logger.info("Initializing PricingAgent...")
                 try:
-                    from src.models.deployment import DeploymentStatus
                     _tool_manager = ToolManager()
                     _pricing_agent = PricingAgent(tool_manager=_tool_manager)
                     await _pricing_agent.initialize()
                     _tool_manager.set_pricing_agent(_pricing_agent)
-                    # Surface agent and RAG health to the deployment health system
-                    deployment_manager.register_service_health(
-                        "agent_service", DeploymentStatus.HEALTHY
-                    )
-                    deployment_manager.register_service_health(
-                        "rag_pipeline", DeploymentStatus.HEALTHY
-                    )
-                    deployment_manager.set_component_ready("agent_initialized", True)
                     logger.info("PricingAgent initialized successfully")
                 except ValueError:
-                    # Missing API key — report degraded; server remains up for other endpoints
-                    from src.models.deployment import DeploymentStatus
-                    deployment_manager.register_service_health(
-                        "agent_service", DeploymentStatus.DEGRADED,
-                        error_message="API key not configured"
-                    )
-                    deployment_manager.set_component_ready("agent_initialized", False)
+                    logger.warning("PricingAgent init failed: API key not configured")
                     raise
 
     return _pricing_agent
@@ -1377,8 +1362,17 @@ async def agent_chat_stream(request: AgentChatRequest):
         except asyncio.TimeoutError:
             yield f"data: {json.dumps({'type': 'error', 'detail': 'Request timed out after 120s'})}\n\n"
         except Exception as exc:
-            logger.error("Stream error: %s", exc)
-            yield f"data: {json.dumps({'type': 'error', 'detail': 'Internal server error'})}\n\n"
+            logger.error("Stream error: %s", exc, exc_info=True)
+            exc_type = type(exc).__name__
+            if any(k in exc_type for k in ("ConnectionError", "ConnectError", "TimeoutError")):
+                detail = "Could not reach the AI provider — please try again"
+            elif "RateLimit" in exc_type:
+                detail = "AI provider rate limit reached — please wait a moment and try again"
+            elif "AuthenticationError" in exc_type or "PermissionDenied" in exc_type:
+                detail = "AI provider authentication error — check server configuration"
+            else:
+                detail = f"Internal server error ({exc_type})"
+            yield f"data: {json.dumps({'type': 'error', 'detail': detail})}\n\n"
 
     return StreamingResponse(
         generate(),
