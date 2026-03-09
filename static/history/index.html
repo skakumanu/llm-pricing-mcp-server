@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLM Pricing History</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-icon { font-size: 22px; }
+    .header-text h1 { font-size: 16px; font-weight: 600; }
+    .header-text p  { font-size: 12px; color: #aab; margin-top: 2px; }
+
+    .nav-link {
+      margin-left: auto;
+      color: #aab;
+      text-decoration: none;
+      font-size: 13px;
+      border: 1px solid #444;
+      padding: 5px 12px;
+      border-radius: 6px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .nav-link:hover { color: #fff; border-color: #888; }
+
+    .main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 24px 20px;
+    }
+
+    /* Controls */
+    .controls {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px 24px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: flex-end;
+    }
+
+    .field { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 140px; }
+    .field label { font-size: 12px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+
+    input, select {
+      height: 38px;
+      padding: 0 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+    input:focus, select:focus { border-color: #1a73e8; }
+
+    .btn {
+      height: 38px;
+      padding: 0 20px;
+      background: #1a1a2e;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s;
+      align-self: flex-end;
+    }
+    .btn:hover { background: #2d2d50; }
+    .btn:disabled { background: #999; cursor: not-allowed; }
+
+    /* Status / error */
+    .status {
+      margin-top: 16px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      display: none;
+    }
+    .status.error   { background: #fdecea; color: #c62828; display: block; }
+    .status.info    { background: #e8f0fe; color: #1a56db; display: block; }
+
+    /* Stats bar */
+    .stats {
+      margin-top: 20px;
+      display: none;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .stats.visible { display: flex; }
+
+    .stat-card {
+      flex: 1;
+      min-width: 140px;
+      background: #fff;
+      border-radius: 10px;
+      padding: 14px 18px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    }
+    .stat-card .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+    .stat-card .value { font-size: 20px; font-weight: 700; color: #1a1a2e; }
+    .stat-card .sub   { font-size: 12px; margin-top: 3px; }
+    .sub.up   { color: #c62828; }
+    .sub.down { color: #2e7d32; }
+    .sub.flat { color: #888; }
+
+    /* Chart */
+    .chart-wrap {
+      margin-top: 20px;
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+      display: none;
+      position: relative;
+    }
+    .chart-wrap.visible { display: block; }
+    .chart-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 16px;
+    }
+    .chart-subtitle { font-size: 12px; color: #888; font-weight: 400; margin-left: 6px; }
+
+    canvas { width: 100% !important; }
+
+    /* Table */
+    .table-wrap {
+      margin-top: 20px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+      overflow: hidden;
+      display: none;
+    }
+    .table-wrap.visible { display: block; }
+    .table-header {
+      padding: 14px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #333;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .table-count { font-size: 12px; color: #888; font-weight: 400; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      padding: 10px 16px;
+      text-align: left;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #888;
+      background: #fafafa;
+      border-bottom: 1px solid #eee;
+    }
+    td {
+      padding: 10px 16px;
+      border-bottom: 1px solid #f4f4f4;
+      color: #333;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-blue  { background: #e8f0fe; color: #1a73e8; }
+    .badge-green { background: #e6f4ea; color: #2e7d32; }
+
+    @media (max-width: 600px) {
+      .controls { flex-direction: column; }
+      .btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <span class="header-icon">📈</span>
+  <div class="header-text">
+    <h1>LLM Pricing History</h1>
+    <p>Track how model prices change over time</p>
+  </div>
+  <a href="/chat" class="nav-link">💬 Chat</a>
+</div>
+
+<div class="main">
+  <div class="controls">
+    <div class="field">
+      <label for="modelInput">Model name</label>
+      <input id="modelInput" type="text" placeholder="e.g. gpt-4o" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label for="providerInput">Provider</label>
+      <input id="providerInput" type="text" placeholder="e.g. openai" autocomplete="off" />
+    </div>
+    <div class="field" style="max-width:130px">
+      <label for="daysSelect">Window</label>
+      <select id="daysSelect">
+        <option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option>
+        <option value="90">Last 90 days</option>
+        <option value="365">Last year</option>
+      </select>
+    </div>
+    <button class="btn" id="loadBtn" onclick="loadHistory()">Load Chart</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="stats" id="stats">
+    <div class="stat-card">
+      <div class="label">Latest Input Price</div>
+      <div class="value" id="statInputNow">—</div>
+      <div class="sub" id="statInputChg"></div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Latest Output Price</div>
+      <div class="value" id="statOutputNow">—</div>
+      <div class="sub" id="statOutputChg"></div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Snapshots</div>
+      <div class="value" id="statCount">—</div>
+      <div class="sub flat" id="statRange"></div>
+    </div>
+  </div>
+
+  <div class="chart-wrap" id="chartWrap">
+    <div class="chart-title">
+      Price over time <span class="chart-subtitle">USD per 1M tokens</span>
+    </div>
+    <canvas id="priceChart"></canvas>
+  </div>
+
+  <div class="table-wrap" id="tableWrap">
+    <div class="table-header">
+      Snapshot data
+      <span class="table-count" id="tableCount"></span>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Model</th>
+            <th>Provider</th>
+            <th>Input ($/1M)</th>
+            <th>Output ($/1M)</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API_KEY = "Y2Q0MTIwM2EtNTQ0OC00MjViLTljYjEtOTZlOWI2MThlYzdi";
+  let chart = null;
+
+  function fmt1M(perToken) {
+    const val = perToken * 1_000_000;
+    return "$" + val.toFixed(2);
+  }
+
+  function fmtDate(ts) {
+    return new Date(ts * 1000).toLocaleString(undefined, {
+      month: "short", day: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  }
+
+  function fmtDateShort(ts) {
+    return new Date(ts * 1000).toLocaleDateString(undefined, {
+      month: "short", day: "numeric",
+    });
+  }
+
+  function pct(oldVal, newVal) {
+    if (!oldVal) return null;
+    return ((newVal - oldVal) / oldVal * 100).toFixed(1);
+  }
+
+  function setStatus(msg, type) {
+    const el = document.getElementById("status");
+    el.textContent = msg;
+    el.className = "status " + (type || "info");
+  }
+
+  function clearStatus() {
+    const el = document.getElementById("status");
+    el.className = "status";
+    el.textContent = "";
+  }
+
+  function setVisible(id, on) {
+    const el = document.getElementById(id);
+    if (on) el.classList.add("visible");
+    else el.classList.remove("visible");
+  }
+
+  function renderStats(snapshots) {
+    if (!snapshots.length) return;
+    const sorted = [...snapshots].sort((a, b) => a.captured_at - b.captured_at);
+    const first = sorted[0], last = sorted[sorted.length - 1];
+
+    document.getElementById("statInputNow").textContent = fmt1M(last.cost_per_input_token);
+    document.getElementById("statOutputNow").textContent = fmt1M(last.cost_per_output_token);
+    document.getElementById("statCount").textContent = snapshots.length;
+    document.getElementById("statRange").textContent =
+      fmtDateShort(first.captured_at) + " – " + fmtDateShort(last.captured_at);
+
+    const inChg  = pct(first.cost_per_input_token,  last.cost_per_input_token);
+    const outChg = pct(first.cost_per_output_token, last.cost_per_output_token);
+
+    function chgEl(id, val) {
+      const el = document.getElementById(id);
+      if (val === null || first === last) { el.textContent = ""; return; }
+      const sign = val > 0 ? "▲" : val < 0 ? "▼" : "";
+      const cls  = val > 0 ? "up" : val < 0 ? "down" : "flat";
+      el.textContent = sign + " " + Math.abs(val) + "% vs first snapshot";
+      el.className = "sub " + cls;
+    }
+    chgEl("statInputChg",  inChg);
+    chgEl("statOutputChg", outChg);
+
+    setVisible("stats", true);
+  }
+
+  function renderChart(snapshots) {
+    const sorted = [...snapshots].sort((a, b) => a.captured_at - b.captured_at);
+    const labels = sorted.map(s => fmtDate(s.captured_at));
+    const inputData  = sorted.map(s => +(s.cost_per_input_token  * 1_000_000).toFixed(4));
+    const outputData = sorted.map(s => +(s.cost_per_output_token * 1_000_000).toFixed(4));
+
+    if (chart) { chart.destroy(); chart = null; }
+
+    const ctx = document.getElementById("priceChart").getContext("2d");
+    chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "Input price ($/1M tokens)",
+            data: inputData,
+            borderColor: "#1a73e8",
+            backgroundColor: "rgba(26,115,232,0.08)",
+            tension: 0.3,
+            pointRadius: snapshots.length < 30 ? 4 : 2,
+            fill: true,
+          },
+          {
+            label: "Output price ($/1M tokens)",
+            data: outputData,
+            borderColor: "#2e7d32",
+            backgroundColor: "rgba(46,125,50,0.08)",
+            tension: 0.3,
+            pointRadius: snapshots.length < 30 ? 4 : 2,
+            fill: true,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { position: "top", labels: { font: { size: 12 } } },
+          tooltip: {
+            callbacks: {
+              label: ctx => ctx.dataset.label + ": $" + ctx.parsed.y.toFixed(4),
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: { maxTicksLimit: 8, font: { size: 11 } },
+            grid: { color: "#f0f0f0" },
+          },
+          y: {
+            ticks: {
+              font: { size: 11 },
+              callback: v => "$" + v.toFixed(2),
+            },
+            grid: { color: "#f0f0f0" },
+          },
+        },
+      },
+    });
+    setVisible("chartWrap", true);
+  }
+
+  function renderTable(snapshots) {
+    const sorted = [...snapshots].sort((a, b) => b.captured_at - a.captured_at);
+    const tbody = document.getElementById("tableBody");
+    tbody.innerHTML = "";
+    sorted.forEach(s => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${fmtDate(s.captured_at)}</td>
+        <td>${escHtml(s.model_name)}</td>
+        <td><span class="badge badge-blue">${escHtml(s.provider)}</span></td>
+        <td>${fmt1M(s.cost_per_input_token)}</td>
+        <td><span class="badge badge-green">${fmt1M(s.cost_per_output_token)}</span></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    document.getElementById("tableCount").textContent = sorted.length + " rows";
+    setVisible("tableWrap", true);
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  async function loadHistory() {
+    const model    = document.getElementById("modelInput").value.trim();
+    const provider = document.getElementById("providerInput").value.trim();
+    const days     = document.getElementById("daysSelect").value;
+    const btn      = document.getElementById("loadBtn");
+
+    if (!model && !provider) {
+      setStatus("Enter a model name or provider to load history.", "error");
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "Loading…";
+    clearStatus();
+    setVisible("stats", false);
+    setVisible("chartWrap", false);
+    setVisible("tableWrap", false);
+
+    try {
+      const params = new URLSearchParams({ days, limit: 500 });
+      if (model)    params.set("model_name", model);
+      if (provider) params.set("provider", provider);
+
+      const resp = await fetch("/pricing/history?" + params, {
+        headers: { "x-api-key": API_KEY },
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || "HTTP " + resp.status);
+      }
+
+      const data = await resp.json();
+
+      if (!data.snapshots || data.snapshots.length === 0) {
+        setStatus(
+          "No snapshots found for the selected filters. Snapshots are recorded automatically every few hours — check back later or adjust the filters.",
+          "info"
+        );
+        return;
+      }
+
+      renderStats(data.snapshots);
+      renderChart(data.snapshots);
+      renderTable(data.snapshots);
+
+    } catch (err) {
+      setStatus("Error: " + err.message, "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Load Chart";
+    }
+  }
+
+  // Allow Enter key to trigger load from inputs
+  ["modelInput", "providerInput"].forEach(id => {
+    document.getElementById(id).addEventListener("keydown", e => {
+      if (e.key === "Enter") loadHistory();
+    });
+  });
+</script>
+</body>
+</html>

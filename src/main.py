@@ -65,6 +65,9 @@ logger.info(f"FastAPI app created: {app.title} v{app.version}")
 _static_dir = Path(__file__).parent.parent / "static"
 if _static_dir.exists():
     app.mount("/chat", StaticFiles(directory=str(_static_dir), html=True), name="static")
+    _history_dir = _static_dir / "history"
+    if _history_dir.exists():
+        app.mount("/history", StaticFiles(directory=str(_history_dir), html=True), name="history_static")
 
 app.add_middleware(
     CORSMiddleware,
@@ -162,7 +165,7 @@ async def security_middleware(request: Request, call_next):
     global _auth_warning_logged
 
     path = request.url.path
-    if path.startswith("/chat") or request.method == "OPTIONS":
+    if path.startswith("/chat") or path.startswith("/history") or request.method == "OPTIONS":
         return await call_next(request)
     if path in _sensitive_paths:
         if not settings.mcp_api_key:
