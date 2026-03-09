@@ -64,6 +64,28 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
                 "'which models got cheaper this month?' or 'which providers raised prices?'"
             ),
         ),
+        (
+            "register_price_alert",
+            (
+                "Register a webhook URL to be notified when a model's price changes beyond "
+                "a threshold. Use when the user asks to set up a price alert or notification."
+            ),
+        ),
+        (
+            "list_price_alerts",
+            "List all registered price-change webhook alerts with their IDs and settings.",
+        ),
+        (
+            "delete_price_alert",
+            "Delete a registered price-change alert by its ID.",
+        ),
+        (
+            "get_pricing_export_url",
+            (
+                "Generate a download URL for pricing history as CSV or JSON. "
+                "Use when the user asks to export, download, or save pricing data."
+            ),
+        ),
     ]
 
     for tool_name, description in _mcp_tool_specs:
