@@ -521,3 +521,33 @@ class TestAgentChatStream:
         error_events = [e for e in events if e["type"] == "error"]
         assert len(error_events) == 1
         assert "API key" in error_events[0]["detail"]
+
+    def test_stream_survives_non_serializable_tool_result(self):
+        """Regression: datetime in tool results must not crash the stream."""
+        import datetime as dt
+        mock_agent = MagicMock()
+        mock_agent.chat_stream = MagicMock(return_value=_fake_chat_stream(
+            {"type": "thinking", "iteration": 1},
+            {
+                "type": "answer",
+                "text": "Here is the pricing.",
+                "tool_calls": [
+                    {"tool": "get_all_pricing",
+                     "result": {"last_updated": dt.datetime(2026, 1, 1, 12, 0, 0)}},
+                ],
+                "conversation_id": "c1",
+                "sources": [],
+            },
+        ))
+
+        async def _fake_get():
+            return mock_agent
+
+        with patch("src.main.get_pricing_agent", _fake_get):
+            response = client.post("/agent/chat/stream", json={"message": "pricing?"})
+
+        assert response.status_code == 200
+        events = _parse_sse(response.text)
+        assert not any(e["type"] == "error" for e in events)
+        answer = next(e for e in events if e["type"] == "answer")
+        assert answer["text"] == "Here is the pricing."
