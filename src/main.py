@@ -70,6 +70,9 @@ if _static_dir.exists():
     _history_dir = _static_dir / "history"
     if _history_dir.exists():
         app.mount("/history", StaticFiles(directory=str(_history_dir), html=True), name="history_static")
+    _trends_dir = _static_dir / "trends"
+    if _trends_dir.exists():
+        app.mount("/trends", StaticFiles(directory=str(_trends_dir), html=True), name="trends_static")
 
 app.add_middleware(
     CORSMiddleware,
@@ -167,7 +170,7 @@ async def security_middleware(request: Request, call_next):
     global _auth_warning_logged
 
     path = request.url.path
-    if path.startswith("/chat") or path.startswith("/history") or request.method == "OPTIONS":
+    if path.startswith("/chat") or path.startswith("/history") or path.startswith("/trends") or request.method == "OPTIONS":
         return await call_next(request)
     if path in _sensitive_paths:
         if not settings.mcp_api_key:

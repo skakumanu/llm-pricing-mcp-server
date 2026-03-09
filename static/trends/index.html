@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLM Pricing Trends</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .header-icon { font-size: 22px; }
+    .header-text h1 { font-size: 16px; font-weight: 600; }
+    .header-text p  { font-size: 12px; color: #aab; margin-top: 2px; }
+
+    .nav-links {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+    }
+    .nav-link {
+      color: #aab;
+      text-decoration: none;
+      font-size: 13px;
+      border: 1px solid #444;
+      padding: 5px 12px;
+      border-radius: 6px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .nav-link:hover { color: #fff; border-color: #888; }
+
+    .main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px 20px;
+    }
+
+    /* Controls */
+    .controls {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px 20px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: flex-end;
+    }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label { font-size: 12px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+    select {
+      height: 36px;
+      padding: 0 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      min-width: 140px;
+    }
+    .btn {
+      height: 36px;
+      padding: 0 18px;
+      background: #1a1a2e;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: #2d2d50; }
+    .btn:disabled { background: #999; cursor: not-allowed; }
+    .btn-outline {
+      background: transparent;
+      color: #1a1a2e;
+      border: 1px solid #ccc;
+    }
+    .btn-outline:hover { background: #f5f5f5; border-color: #999; }
+
+    /* Status */
+    .status {
+      margin-top: 16px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      display: none;
+    }
+    .status.error { background: #fdecea; color: #c62828; display: block; }
+    .status.info  { background: #e8f0fe; color: #1a56db; display: block; }
+
+    /* Summary cards */
+    .summary {
+      margin-top: 20px;
+      display: none;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .summary.visible { display: flex; }
+    .stat-card {
+      flex: 1;
+      min-width: 150px;
+      background: #fff;
+      border-radius: 10px;
+      padding: 14px 18px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    }
+    .stat-card .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+    .stat-card .value { font-size: 18px; font-weight: 700; color: #1a1a2e; word-break: break-word; }
+    .stat-card .sub   { font-size: 12px; color: #888; margin-top: 3px; }
+
+    /* Table */
+    .table-wrap {
+      margin-top: 20px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+      overflow: hidden;
+      display: none;
+    }
+    .table-wrap.visible { display: block; }
+    .table-header {
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #eee;
+    }
+    .table-title { font-size: 14px; font-weight: 600; color: #333; }
+    .table-meta  { font-size: 12px; color: #888; }
+
+    .table-scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #888;
+      background: #fafafa;
+      border-bottom: 1px solid #eee;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+    }
+    th:hover { color: #333; }
+    th.sorted-asc::after  { content: " ▲"; color: #1a73e8; }
+    th.sorted-desc::after { content: " ▼"; color: #1a73e8; }
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #f4f4f4;
+      color: #333;
+      white-space: nowrap;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+
+    .rank { color: #aaa; font-weight: 600; font-size: 12px; }
+
+    /* Direction badges */
+    .badge {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .badge-up       { background: #fdecea; color: #c62828; }
+    .badge-down     { background: #e6f4ea; color: #2e7d32; }
+    .badge-flat     { background: #f5f5f5; color: #888; }
+    .badge-provider { background: #e8f0fe; color: #1a73e8; }
+
+    /* Pct change colouring */
+    .pct-up   { color: #c62828; font-weight: 600; }
+    .pct-down { color: #2e7d32; font-weight: 600; }
+    .pct-flat { color: #aaa; }
+
+    .empty-state {
+      padding: 48px 20px;
+      text-align: center;
+      color: #888;
+      font-size: 14px;
+    }
+
+    @media (max-width: 600px) {
+      .controls { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <span class="header-icon">🔥</span>
+  <div class="header-text">
+    <h1>LLM Pricing Trends</h1>
+    <p>Models with the biggest price changes</p>
+  </div>
+  <div class="nav-links">
+    <a href="/history" class="nav-link">📈 History</a>
+    <a href="/chat"    class="nav-link">💬 Chat</a>
+  </div>
+</div>
+
+<div class="main">
+  <div class="controls">
+    <div class="field">
+      <label for="daysSelect">Time window</label>
+      <select id="daysSelect">
+        <option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option>
+        <option value="90">Last 90 days</option>
+        <option value="365">Last year</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="limitSelect">Show top</label>
+      <select id="limitSelect">
+        <option value="10">Top 10</option>
+        <option value="25" selected>Top 25</option>
+        <option value="50">Top 50</option>
+        <option value="100">Top 100</option>
+      </select>
+    </div>
+    <button class="btn" id="loadBtn" onclick="loadTrends()">Refresh</button>
+    <button class="btn btn-outline" id="exportBtn" onclick="exportCsv()" style="display:none">
+      ↓ Export CSV
+    </button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="summary" id="summary">
+    <div class="stat-card">
+      <div class="label">Models tracked</div>
+      <div class="value" id="statTotal">—</div>
+      <div class="sub" id="statWindow"></div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Biggest gainer</div>
+      <div class="value pct-up" id="statGainer">—</div>
+      <div class="sub" id="statGainerName"></div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Biggest drop</div>
+      <div class="value pct-down" id="statLoser">—</div>
+      <div class="sub" id="statLoserName"></div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Price cuts</div>
+      <div class="value" id="statCuts">—</div>
+      <div class="sub">models decreased</div>
+    </div>
+  </div>
+
+  <div class="table-wrap" id="tableWrap">
+    <div class="table-header">
+      <span class="table-title">Price change leaderboard</span>
+      <span class="table-meta" id="tableMeta"></span>
+    </div>
+    <div class="table-scroll">
+      <table id="trendsTable">
+        <thead>
+          <tr>
+            <th data-col="rank">#</th>
+            <th data-col="model_name">Model</th>
+            <th data-col="provider">Provider</th>
+            <th data-col="direction">Direction</th>
+            <th data-col="input_change_pct">Input Δ%</th>
+            <th data-col="output_change_pct">Output Δ%</th>
+            <th data-col="last_input">Input now ($/1M)</th>
+            <th data-col="last_output">Output now ($/1M)</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="emptyState" style="display:none">
+      No price changes detected in this window.<br>
+      Snapshots are captured automatically every few hours — check back later.
+    </div>
+  </div>
+</div>
+
+<script>
+  const API_KEY = "Y2Q0MTIwM2EtNTQ0OC00MjViLTljYjEtOTZlOWI2MThlYzdi";
+
+  let _trends   = [];   // current data
+  let _sortCol  = "input_change_pct";
+  let _sortAsc  = false;  // biggest change first
+
+  function fmt(perToken) {
+    return "$" + (perToken * 1_000_000).toFixed(2);
+  }
+
+  function fmtPct(v) {
+    if (v === null || v === undefined) return "—";
+    const sign = v > 0 ? "+" : "";
+    return sign + v.toFixed(2) + "%";
+  }
+
+  function pctClass(v) {
+    if (Math.abs(v) < 0.1) return "pct-flat";
+    return v > 0 ? "pct-up" : "pct-down";
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  function setStatus(msg, type) {
+    const el = document.getElementById("status");
+    el.textContent = msg;
+    el.className = "status " + type;
+  }
+  function clearStatus() {
+    const el = document.getElementById("status");
+    el.className = "status"; el.textContent = "";
+  }
+
+  function setVisible(id, on) {
+    const el = document.getElementById(id);
+    if (on) el.classList.add("visible");
+    else    el.classList.remove("visible");
+  }
+
+  function renderSummary(trends, days) {
+    document.getElementById("statTotal").textContent   = trends.length;
+    document.getElementById("statWindow").textContent  = "in the last " + days + " days";
+
+    const gained = trends.filter(t => t.direction === "increased");
+    const lost   = trends.filter(t => t.direction === "decreased");
+
+    document.getElementById("statCuts").textContent = lost.length;
+
+    const gainer = gained.sort((a, b) =>
+      Math.max(Math.abs(b.input_change_pct), Math.abs(b.output_change_pct)) -
+      Math.max(Math.abs(a.input_change_pct), Math.abs(a.output_change_pct))
+    )[0];
+    const loser = lost.sort((a, b) =>
+      Math.max(Math.abs(b.input_change_pct), Math.abs(b.output_change_pct)) -
+      Math.max(Math.abs(a.input_change_pct), Math.abs(a.output_change_pct))
+    )[0];
+
+    if (gainer) {
+      const maxChg = Math.max(Math.abs(gainer.input_change_pct), Math.abs(gainer.output_change_pct));
+      document.getElementById("statGainer").textContent     = "+" + maxChg.toFixed(1) + "%";
+      document.getElementById("statGainerName").textContent = gainer.model_name + " (" + gainer.provider + ")";
+    } else {
+      document.getElementById("statGainer").textContent     = "—";
+      document.getElementById("statGainerName").textContent = "no increases";
+    }
+
+    if (loser) {
+      const maxChg = Math.max(Math.abs(loser.input_change_pct), Math.abs(loser.output_change_pct));
+      document.getElementById("statLoser").textContent     = "-" + maxChg.toFixed(1) + "%";
+      document.getElementById("statLoserName").textContent = loser.model_name + " (" + loser.provider + ")";
+    } else {
+      document.getElementById("statLoser").textContent     = "—";
+      document.getElementById("statLoserName").textContent = "no decreases";
+    }
+
+    setVisible("summary", true);
+  }
+
+  function sortedTrends() {
+    return [..._trends].sort((a, b) => {
+      let va = a[_sortCol], vb = b[_sortCol];
+      // For "rank" sort by absolute max change
+      if (_sortCol === "rank") {
+        va = Math.max(Math.abs(a.input_change_pct), Math.abs(a.output_change_pct));
+        vb = Math.max(Math.abs(b.input_change_pct), Math.abs(b.output_change_pct));
+        [va, vb] = [vb, va]; // default: descending
+      }
+      if (typeof va === "string") va = va.toLowerCase();
+      if (typeof vb === "string") vb = vb.toLowerCase();
+      if (va < vb) return _sortAsc ? -1 : 1;
+      if (va > vb) return _sortAsc ?  1 : -1;
+      return 0;
+    });
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById("tableBody");
+    const empty = document.getElementById("emptyState");
+    tbody.innerHTML = "";
+
+    const data = sortedTrends();
+
+    if (!data.length) {
+      empty.style.display = "block";
+      document.getElementById("trendsTable").querySelector("thead").style.display = "none";
+      return;
+    }
+    empty.style.display = "none";
+    document.getElementById("trendsTable").querySelector("thead").style.display = "";
+
+    data.forEach((t, i) => {
+      const dirBadge =
+        t.direction === "increased" ? '<span class="badge badge-up">▲ Up</span>' :
+        t.direction === "decreased" ? '<span class="badge badge-down">▼ Down</span>' :
+                                      '<span class="badge badge-flat">— Flat</span>';
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td class="rank">${i + 1}</td>
+        <td>${esc(t.model_name)}</td>
+        <td><span class="badge badge-provider">${esc(t.provider)}</span></td>
+        <td>${dirBadge}</td>
+        <td class="${pctClass(t.input_change_pct)}">${fmtPct(t.input_change_pct)}</td>
+        <td class="${pctClass(t.output_change_pct)}">${fmtPct(t.output_change_pct)}</td>
+        <td>${fmt(t.last_input)}</td>
+        <td>${fmt(t.last_output)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    // Update sort indicators
+    document.querySelectorAll("th[data-col]").forEach(th => {
+      th.classList.remove("sorted-asc", "sorted-desc");
+      if (th.dataset.col === _sortCol) {
+        th.classList.add(_sortAsc ? "sorted-asc" : "sorted-desc");
+      }
+    });
+
+    setVisible("tableWrap", true);
+  }
+
+  async function loadTrends() {
+    const days  = document.getElementById("daysSelect").value;
+    const limit = document.getElementById("limitSelect").value;
+    const btn   = document.getElementById("loadBtn");
+
+    btn.disabled = true;
+    btn.textContent = "Loading…";
+    clearStatus();
+    setVisible("summary", false);
+    setVisible("tableWrap", false);
+    document.getElementById("exportBtn").style.display = "none";
+
+    try {
+      const resp = await fetch(`/pricing/trends?days=${days}&limit=${limit}`, {
+        headers: { "x-api-key": API_KEY },
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || "HTTP " + resp.status);
+      }
+
+      const data = await resp.json();
+      _trends = data.trends || [];
+
+      if (!_trends.length) {
+        setStatus(
+          "No price changes detected for the selected window. Snapshots are recorded every few hours — check back later.",
+          "info"
+        );
+        return;
+      }
+
+      renderSummary(_trends, days);
+      renderTable();
+
+      const meta = `${_trends.length} model${_trends.length !== 1 ? "s" : ""} · last ${days} days`;
+      document.getElementById("tableMeta").textContent = meta;
+      document.getElementById("exportBtn").style.display = "";
+    } catch (err) {
+      setStatus("Error: " + err.message, "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Refresh";
+    }
+  }
+
+  function exportCsv() {
+    const days = document.getElementById("daysSelect").value;
+    window.location.href = `/pricing/history/export?format=csv&days=${days}&limit=10000`;
+  }
+
+  // Column sort
+  document.querySelectorAll("th[data-col]").forEach(th => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.col;
+      if (_sortCol === col) {
+        _sortAsc = !_sortAsc;
+      } else {
+        _sortCol = col;
+        _sortAsc = col === "model_name" || col === "provider" || col === "direction";
+      }
+      renderTable();
+    });
+  });
+
+  // Auto-load on open
+  loadTrends();
+</script>
+</body>
+</html>
