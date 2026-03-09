@@ -472,19 +472,23 @@ class TestAgentChatStream:
         response = client.post("/agent/chat/stream", json={"message": ""})
         assert response.status_code == 422
 
-    def test_stream_returns_401_on_missing_api_key(self):
+    def test_stream_accessible_without_api_key(self):
+        """The chat stream endpoint is public (bypassed in auth middleware) so the
+        chat UI works without users needing to supply an API key."""
         import src.main as main_module
         original = main_module.settings.mcp_api_key
         try:
             main_module.settings.mcp_api_key = "test-secret-key"
+            # Even with an MCP_API_KEY configured, /agent/chat/stream is bypassed
             response = client.post(
                 "/agent/chat/stream",
                 json={"message": "hello"},
-                headers={"x-api-key": "wrong-key"},
+                # No x-api-key header
             )
         finally:
             main_module.settings.mcp_api_key = original
-        assert response.status_code == 401
+        # Should NOT be 401 — the endpoint is in the auth bypass
+        assert response.status_code != 401
 
     def test_stream_emits_token_events(self):
         mock_agent = MagicMock()
