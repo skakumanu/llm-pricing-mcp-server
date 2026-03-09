@@ -3,7 +3,7 @@ import json
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 
 @dataclass
@@ -59,8 +59,30 @@ class ConversationStore:
     async def save(self, conversation_id: str, history: ConversationHistory) -> None:
         """No-op: in-memory store doesn't need explicit persistence."""
 
-    def delete(self, conversation_id: str) -> None:
+    async def delete(self, conversation_id: str) -> bool:
+        """Remove a conversation. Returns True if it existed."""
+        existed = conversation_id in self._conversations
         self._conversations.pop(conversation_id, None)
+        return existed
+
+    async def list_conversations(self) -> List[Dict[str, Any]]:
+        """Return metadata for all in-memory conversations, newest first."""
+        result = []
+        for conv_id, history in self._conversations.items():
+            turns = history.to_messages()
+            preview: Optional[str] = None
+            for msg in reversed(turns):
+                if msg["role"] == "user":
+                    content = msg["content"]
+                    preview = content[:120] + ("…" if len(content) > 120 else "")
+                    break
+            result.append({
+                "id": conv_id,
+                "updated_at": 0.0,
+                "turn_count": len(turns),
+                "preview": preview,
+            })
+        return result
 
 
 class SQLiteConversationStore:
@@ -131,5 +153,77 @@ class SQLiteConversationStore:
             )
             await db.commit()
 
-    def delete(self, conversation_id: str) -> None:
+    async def delete(self, conversation_id: str) -> bool:
+        """Remove a conversation from cache and DB. Returns True if it existed."""
+        import aiosqlite
         self._cache.pop(conversation_id, None)
+        async with aiosqlite.connect(self._db_path) as db:
+            cursor = await db.execute(
+                "DELETE FROM conversations WHERE id = ?", (conversation_id,)
+            )
+            await db.commit()
+            return cursor.rowcount > 0
+
+    async def list_conversations(self) -> List[Dict[str, Any]]:
+        """Return metadata for all stored conversations, newest first."""
+        import aiosqlite
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT id, messages, updated_at FROM conversations ORDER BY updated_at DESC"
+            ) as cur:
+                rows = await cur.fetchall()
+
+        result = []
+        for row in rows:
+            messages = json.loads(row["messages"])
+            preview: Optional[str] = None
+            for msg in reversed(messages):
+                if msg["role"] == "user":
+                    content = msg["content"]
+                    preview = content[:120] + ("…" if len(content) > 120 else "")
+                    break
+            result.append({
+                "id": row["id"],
+                "updated_at": row["updated_at"],
+                "turn_count": len(messages),
+                "preview": preview,
+            })
+        return result
+
+
+# ---------------------------------------------------------------------------
+# Module-level singleton
+# ---------------------------------------------------------------------------
+
+_conversation_store: Optional[Union[ConversationStore, "SQLiteConversationStore"]] = None
+
+
+async def init_conversation_store(
+    db_path: Optional[str] = None, max_turns: int = 10
+) -> None:
+    """Create and initialize the module-level conversation store singleton.
+
+    Call this once at application startup before the agent is initialized.
+    If ``db_path`` is None the store is in-memory (conversations lost on restart).
+    """
+    global _conversation_store
+    if db_path:
+        store = SQLiteConversationStore(db_path=db_path, max_turns=max_turns)
+        await store.initialize()
+        _conversation_store = store
+    else:
+        _conversation_store = ConversationStore(max_turns=max_turns)
+
+
+def get_conversation_store() -> Union[ConversationStore, "SQLiteConversationStore"]:
+    """Return the module-level conversation store singleton.
+
+    Raises ``RuntimeError`` if ``init_conversation_store`` has not been called.
+    """
+    if _conversation_store is None:
+        raise RuntimeError(
+            "Conversation store has not been initialized. "
+            "Call init_conversation_store() first."
+        )
+    return _conversation_store

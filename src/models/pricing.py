@@ -393,6 +393,22 @@ class PricingAlertListResponse(BaseModel):
     total: int = Field(..., description="Number of registered alerts")
 
 
+class ConversationSummary(BaseModel):
+    """Metadata summary for a single stored conversation."""
+
+    id: str = Field(..., description="Unique conversation ID (UUID)")
+    updated_at: float = Field(..., description="Unix timestamp of the last update (0.0 for in-memory)")
+    turn_count: int = Field(..., description="Total number of messages (user + assistant turns)")
+    preview: Optional[str] = Field(None, description="First 120 chars of the most recent user message")
+
+
+class ConversationListResponse(BaseModel):
+    """Response for GET /agent/conversations."""
+
+    conversations: List[ConversationSummary] = Field(..., description="Stored conversations, newest first")
+    total: int = Field(..., description="Total number of stored conversations")
+
+
 class TelemetryResponse(BaseModel):
     """Complete telemetry data response."""
 
