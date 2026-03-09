@@ -13,8 +13,10 @@ UTC = timezone.utc
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from fastapi import FastAPI, Query, HTTPException, Request  # noqa: E402
+import csv  # noqa: E402
 import json  # noqa: E402
-from fastapi.responses import JSONResponse, StreamingResponse  # noqa: E402
+from io import StringIO  # noqa: E402
+from fastapi.responses import JSONResponse, Response, StreamingResponse  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from typing import Optional, Deque, Dict  # noqa: E402
@@ -1377,6 +1379,84 @@ async def pricing_trends(
     svc = get_pricing_history_service()
     trends = await svc.get_trends(days=days, limit=limit)
     return PricingTrendsResponse(trends=trends, days=days)
+
+
+# ---------------------------------------------------------------------------
+# Pricing history export endpoint
+# ---------------------------------------------------------------------------
+
+@app.get("/pricing/history/export")
+async def pricing_history_export(
+    format: str = Query("csv", pattern="^(csv|json)$", description="Output format: 'csv' or 'json'"),
+    model_name: Optional[str] = Query(None, description="Filter by model name"),
+    provider: Optional[str] = Query(None, description="Filter by provider"),
+    days: int = Query(30, ge=1, le=365, description="Look-back window in days"),
+    limit: int = Query(10_000, ge=1, le=100_000, description="Max rows to export"),
+):
+    """
+    Export pricing snapshot history as CSV or JSON.
+
+    Returns a downloadable file with all snapshot rows matching the supplied
+    filters.  The CSV variant includes a computed `cost_per_*_per_1m_usd`
+    column for convenience.  Set `format=json` for a machine-readable export
+    with metadata (`exported_at`, `filters`, `count`).
+    """
+    svc = get_pricing_history_service()
+    result = await svc.get_history(
+        model_name=model_name, provider=provider, days=days, limit=limit
+    )
+    snapshots = result["snapshots"]
+
+    parts = []
+    if model_name:
+        parts.append(model_name.replace(" ", "_"))
+    if provider:
+        parts.append(provider)
+    parts.append(f"{days}d")
+    base_name = "pricing_history_" + "_".join(parts)
+
+    if format == "csv":
+        buf = StringIO()
+        writer = csv.writer(buf)
+        writer.writerow([
+            "captured_at",
+            "captured_at_iso",
+            "model_name",
+            "provider",
+            "cost_per_input_token",
+            "cost_per_output_token",
+            "cost_per_input_per_1m_usd",
+            "cost_per_output_per_1m_usd",
+        ])
+        for s in snapshots:
+            writer.writerow([
+                s["captured_at"],
+                datetime.fromtimestamp(s["captured_at"], tz=UTC).isoformat(),
+                s["model_name"],
+                s["provider"],
+                s["cost_per_input_token"],
+                s["cost_per_output_token"],
+                round(s["cost_per_input_token"] * 1_000_000, 6),
+                round(s["cost_per_output_token"] * 1_000_000, 6),
+            ])
+        return Response(
+            content=buf.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{base_name}.csv"'},
+        )
+
+    # JSON export
+    export_payload = {
+        "exported_at": datetime.now(UTC).isoformat(),
+        "filters": {"model_name": model_name, "provider": provider, "days": days},
+        "count": len(snapshots),
+        "snapshots": snapshots,
+    }
+    return Response(
+        content=json.dumps(export_payload, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{base_name}.json"'},
+    )
 
 
 # ---------------------------------------------------------------------------
