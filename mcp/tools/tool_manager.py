@@ -6,6 +6,8 @@ from mcp.tools.compare_costs import CompareCostsTool
 from mcp.tools.get_performance_metrics import GetPerformanceMetricsTool
 from mcp.tools.get_use_cases import GetUseCasesTool
 from mcp.tools.get_telemetry import GetTelemetryTool
+from mcp.tools.get_pricing_history import GetPricingHistoryTool
+from mcp.tools.get_pricing_trends import GetPricingTrendsTool
 
 
 class ToolManager:
@@ -136,6 +138,74 @@ class ToolManager:
                             "default": 10,
                             "minimum": 1,
                             "maximum": 50,
+                        },
+                    },
+                    "required": [],
+                },
+            },
+            "get_pricing_history": {
+                "instance": GetPricingHistoryTool(),
+                "name": "get_pricing_history",
+                "description": (
+                    "Query historical pricing snapshots recorded over time. "
+                    "Use this to look up past prices for a model or provider, "
+                    "or to see how prices have changed over a given number of days."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "model_name": {
+                            "type": "string",
+                            "description": "Filter by model name (e.g. 'gpt-4o'). Omit for all models.",
+                        },
+                        "provider": {
+                            "type": "string",
+                            "description": "Filter by provider (e.g. 'openai'). Omit for all providers.",
+                        },
+                        "days": {
+                            "type": "integer",
+                            "description": "Look-back window in days (default: 30, max: 365)",
+                            "default": 30,
+                            "minimum": 1,
+                            "maximum": 365,
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of snapshot rows to return (default: 50, max: 500)",
+                            "default": 50,
+                            "minimum": 1,
+                            "maximum": 500,
+                        },
+                    },
+                    "required": [],
+                },
+            },
+            "get_pricing_trends": {
+                "instance": GetPricingTrendsTool(),
+                "name": "get_pricing_trends",
+                "description": (
+                    "Find models whose prices changed the most over a given period. "
+                    "Returns models sorted by absolute percentage price change with a "
+                    "direction label ('increased', 'decreased', or 'unchanged'). "
+                    "Use this to answer questions like 'which models got cheaper this month?' "
+                    "or 'which providers raised prices recently?'"
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "days": {
+                            "type": "integer",
+                            "description": "Look-back window in days (default: 30, max: 365)",
+                            "default": 30,
+                            "minimum": 1,
+                            "maximum": 365,
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum models to return (default: 20, max: 100)",
+                            "default": 20,
+                            "minimum": 1,
+                            "maximum": 100,
                         },
                     },
                     "required": [],
