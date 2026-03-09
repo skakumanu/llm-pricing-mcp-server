@@ -454,6 +454,15 @@ async def get_pricing_agent() -> PricingAgent:
 # Pricing history — background snapshot loop + startup
 # ---------------------------------------------------------------------------
 
+async def _prewarm_agent() -> None:
+    """Background task: initialize the PricingAgent at startup to avoid cold-start latency."""
+    try:
+        await get_pricing_agent()
+        logger.info("PricingAgent pre-warm complete")
+    except Exception as exc:
+        logger.warning("PricingAgent pre-warm failed (will retry on first request): %s", exc)
+
+
 async def _pricing_snapshot_loop() -> None:
     """Background task: record a pricing snapshot every N hours and fire price-change alerts."""
     interval = settings.pricing_snapshot_interval_hours * 3600
@@ -491,6 +500,9 @@ async def startup_pricing_history() -> None:
     logger.info(
         "Pricing snapshot loop started (interval=%dh)", settings.pricing_snapshot_interval_hours
     )
+    # Pre-warm the PricingAgent so the first /chat request isn't penalised by
+    # cold-start initialization (RAG index build + provider pricing fetch).
+    asyncio.create_task(_prewarm_agent())
 
 
 @app.get("/", response_model=ServerInfo)
