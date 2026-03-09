@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Model Comparison — LLM Pricing</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3347;
+      --accent: #7c6af7;
+      --accent2: #4ecdc4;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --danger: #f56565;
+      --success: #48bb78;
+      --warn: #ed8936;
+      --radius: 10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    header h1 { font-size: 18px; font-weight: 700; color: var(--text); }
+    header .subtitle { color: var(--muted); font-size: 13px; }
+    header .nav-links { margin-left: auto; display: flex; gap: 12px; }
+    header .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      transition: all .15s;
+    }
+    header .nav-links a:hover { color: var(--text); border-color: var(--accent); }
+    header .nav-links a.active { color: var(--accent); border-color: var(--accent); }
+
+    /* ── Layout ── */
+    .page { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+    /* ── Model Selector Bar ── */
+    .selector-bar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      margin-bottom: 24px;
+    }
+    .selector-bar h2 { font-size: 14px; font-weight: 600; color: var(--muted); margin-bottom: 14px; text-transform: uppercase; letter-spacing: .05em; }
+    .selector-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+    .model-slot { display: flex; flex-direction: column; gap: 6px; min-width: 200px; flex: 1; }
+    .model-slot label { font-size: 12px; color: var(--muted); font-weight: 500; }
+    .model-slot select {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 8px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      width: 100%;
+    }
+    .model-slot select:focus { outline: none; border-color: var(--accent); }
+    .slot-remove {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 7px;
+      padding: 8px 10px;
+      cursor: pointer;
+      font-size: 13px;
+      align-self: flex-end;
+      transition: all .15s;
+    }
+    .slot-remove:hover { border-color: var(--danger); color: var(--danger); }
+    .btn-add-model {
+      background: none;
+      border: 1px dashed var(--border);
+      color: var(--muted);
+      border-radius: 7px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 13px;
+      align-self: flex-end;
+      transition: all .15s;
+      white-space: nowrap;
+    }
+    .btn-add-model:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .btn-add-model:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-compare {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 9px 20px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      align-self: flex-end;
+      transition: opacity .15s;
+      white-space: nowrap;
+    }
+    .btn-compare:hover:not(:disabled) { opacity: .85; }
+    .btn-compare:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── Token volume tabs ── */
+    .volume-tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .volume-tab {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 7px;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all .15s;
+    }
+    .volume-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .volume-tab:hover:not(.active) { border-color: var(--accent); color: var(--text); }
+
+    /* ── Comparison grid ── */
+    #compare-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .model-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .model-card.best-cost { border-color: var(--success); }
+    .model-card.best-perf { border-color: var(--accent); }
+
+    .card-header {
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-header .provider-badge {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--accent2);
+      margin-bottom: 4px;
+    }
+    .card-header .model-name { font-size: 15px; font-weight: 700; color: var(--text); }
+    .card-header .badge-row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+    .badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .badge-cost { background: rgba(72,187,120,.15); color: var(--success); }
+    .badge-perf { background: rgba(124,106,247,.15); color: var(--accent); }
+    .badge-tier-low { background: rgba(72,187,120,.12); color: var(--success); }
+    .badge-tier-medium { background: rgba(237,137,54,.12); color: var(--warn); }
+    .badge-tier-high { background: rgba(245,101,101,.12); color: var(--danger); }
+
+    /* ── Cost section ── */
+    .card-section { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+    .card-section:last-child { border-bottom: none; flex: 1; }
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .cost-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .cost-label { color: var(--muted); font-size: 12px; }
+    .cost-value { font-size: 13px; font-weight: 600; font-family: monospace; }
+    .cost-value.highlight { color: var(--accent2); font-size: 16px; }
+
+    /* ── Metrics ── */
+    .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .metric-item { background: var(--surface2); border-radius: 7px; padding: 8px 10px; }
+    .metric-label { font-size: 10px; color: var(--muted); margin-bottom: 2px; text-transform: uppercase; letter-spacing: .05em; }
+    .metric-value { font-size: 13px; font-weight: 700; color: var(--text); }
+    .metric-value.best { color: var(--success); }
+    .metric-na { color: var(--border); }
+
+    /* ── Use cases ── */
+    .use-case-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+    .use-case-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text);
+    }
+    .use-case-item::before { content: "✦"; color: var(--accent); font-size: 8px; margin-top: 3px; flex-shrink: 0; }
+    .strengths-list { display: flex; flex-wrap: wrap; gap: 5px; }
+    .strength-tag {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 5px;
+      padding: 2px 7px;
+      font-size: 11px;
+    }
+    .best-for-text { font-size: 12px; color: var(--accent2); font-style: italic; margin-bottom: 10px; }
+
+    /* ── Cost comparison table ── */
+    .comparison-table-wrapper {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 28px;
+    }
+    .table-header-bar {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .comp-table { width: 100%; border-collapse: collapse; }
+    .comp-table th {
+      background: var(--surface2);
+      color: var(--muted);
+      text-align: left;
+      padding: 8px 14px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+    }
+    .comp-table td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--text);
+    }
+    .comp-table tr:last-child td { border-bottom: none; }
+    .comp-table tr:hover td { background: var(--surface2); }
+    .comp-table .cell-model { font-weight: 600; }
+    .comp-table .cell-provider { color: var(--muted); font-size: 12px; }
+    .comp-table .cell-cost { font-family: monospace; font-weight: 600; }
+    .comp-table .cell-cost.cheapest { color: var(--success); }
+    .comp-table .cell-cost.most-expensive { color: var(--danger); }
+
+    /* ── Bar chart ── */
+    .bar-chart { margin-bottom: 28px; }
+    .bar-chart-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-bottom: 14px;
+    }
+    .bar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .bar-model-label { width: 160px; font-size: 12px; color: var(--text); text-align: right; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar-track { flex: 1; background: var(--surface2); border-radius: 4px; height: 20px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 4px; transition: width .4s ease; display: flex; align-items: center; padding-left: 8px; }
+    .bar-fill-label { font-size: 11px; font-weight: 600; color: #fff; white-space: nowrap; }
+
+    /* ── States ── */
+    .placeholder {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+    .placeholder .icon { font-size: 40px; margin-bottom: 12px; }
+    .placeholder p { font-size: 14px; }
+    .loading-spinner {
+      display: inline-block;
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-msg { color: var(--danger); text-align: center; padding: 24px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 700px) {
+      header { flex-wrap: wrap; }
+      .selector-row { flex-direction: column; }
+      .model-slot { min-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Model Comparison</h1>
+    <div class="subtitle">Side-by-side cost, performance &amp; use-case analysis</div>
+  </div>
+  <nav class="nav-links">
+    <a href="/chat">Chat</a>
+    <a href="/history">History</a>
+    <a href="/calculator">Calculator</a>
+    <a href="/compare" class="active">Compare</a>
+    <a href="/conversations">Sessions</a>
+  </nav>
+</header>
+
+<div class="page">
+
+  <!-- ── Model Selector ── -->
+  <div class="selector-bar">
+    <h2>Select Models to Compare (2–4)</h2>
+    <div class="selector-row" id="slot-row">
+      <!-- slots injected by JS -->
+    </div>
+  </div>
+
+  <!-- ── Token Volume Tabs ── -->
+  <div class="volume-tabs" id="volume-tabs">
+    <button class="volume-tab active" data-tokens="1000" data-label="1K tokens">1K tokens</button>
+    <button class="volume-tab" data-tokens="10000" data-label="10K tokens">10K tokens</button>
+    <button class="volume-tab" data-tokens="100000" data-label="100K tokens">100K tokens</button>
+    <button class="volume-tab" data-tokens="1000000" data-label="1M tokens">1M tokens</button>
+  </div>
+
+  <!-- ── Compare Cards ── -->
+  <div id="compare-grid">
+    <div class="placeholder">
+      <div class="icon">⚖️</div>
+      <p>Select 2–4 models and click <strong>Compare</strong> to get started.</p>
+    </div>
+  </div>
+
+  <!-- ── Cost at Volume Bar Chart ── -->
+  <div id="bar-chart-section" style="display:none">
+    <div class="bar-chart">
+      <div class="bar-chart-title" id="bar-chart-title">Cost per 1K tokens (input + output combined)</div>
+      <div id="bar-chart-rows"></div>
+    </div>
+  </div>
+
+  <!-- ── Cost Table ── -->
+  <div id="table-section" style="display:none">
+    <div class="comparison-table-wrapper">
+      <div class="table-header-bar">Cost at Different Volumes (50% input / 50% output split)</div>
+      <table class="comp-table" id="cost-table">
+        <thead>
+          <tr>
+            <th>Model</th>
+            <th>Provider</th>
+            <th>Input $/1M</th>
+            <th>Output $/1M</th>
+            <th id="th-v1">1K tokens</th>
+            <th id="th-v2">10K tokens</th>
+            <th id="th-v3">100K tokens</th>
+            <th id="th-v4">1M tokens</th>
+          </tr>
+        </thead>
+        <tbody id="cost-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+"use strict";
+
+const API_PRICING     = "/pricing";
+const API_PERFORMANCE = "/pricing/performance";
+const API_USE_CASES   = "/pricing/use-cases";
+const API_KEY_HEADER  = "x-api-key";
+
+// Try to grab key from local storage (same as calculator page)
+let _apiKey = localStorage.getItem("llm_api_key") || "test-key";
+
+// ── State ──────────────────────────────────────────────────────────────────
+let _allModels   = [];       // [{model_name, provider, input_usd, output_usd}]
+let _perfMap     = {};       // model_name → PerformanceMetrics
+let _useCaseMap  = {};       // model_name → ModelUseCase
+let _slotCount   = 2;
+let _slotValues  = ["", ""];  // selected model keys per slot
+let _compared    = [];        // model objects currently compared
+let _activeVol   = 1000;     // active token volume
+
+// ── Init ───────────────────────────────────────────────────────────────────
+async function init() {
+  renderSlots();
+  attachVolumeTabs();
+  await loadData();
+  populateSlots();
+  // Pre-select two popular models if available
+  const defaults = ["gpt-4o", "claude-sonnet-4-6", "gemini-1.5-pro", "gpt-4o-mini"];
+  let picked = 0;
+  for (const name of defaults) {
+    if (picked >= 2) break;
+    const idx = _allModels.findIndex(m => m.model_name === name);
+    if (idx >= 0) {
+      setSlotValue(picked, modelKey(_allModels[idx]));
+      picked++;
+    }
+  }
+  if (picked === 2) runCompare();
+}
+
+// ── Data loading ───────────────────────────────────────────────────────────
+async function loadData() {
+  const headers = { [API_KEY_HEADER]: _apiKey };
+  try {
+    const [priceRes, perfRes, ucRes] = await Promise.all([
+      fetch(API_PRICING,     { headers }).then(r => r.json()),
+      fetch(API_PERFORMANCE, { headers }).then(r => r.json()),
+      fetch(API_USE_CASES,   { headers }).then(r => r.json()),
+    ]);
+
+    // Flatten pricing data
+    _allModels = [];
+    if (priceRes.providers) {
+      for (const [provider, info] of Object.entries(priceRes.providers)) {
+        if (!info.models) continue;
+        for (const [model_name, mdata] of Object.entries(info.models)) {
+          const inp  = mdata.input_cost_per_token  || 0;
+          const out  = mdata.output_cost_per_token || 0;
+          _allModels.push({ model_name, provider, input_usd: inp * 1e6, output_usd: out * 1e6 });
+        }
+      }
+    }
+    _allModels.sort((a, b) => a.provider.localeCompare(b.provider) || a.model_name.localeCompare(b.model_name));
+
+    // Performance map
+    if (perfRes.models) {
+      for (const m of perfRes.models) {
+        _perfMap[m.model_name] = m;
+      }
+    }
+
+    // Use-case map
+    if (ucRes.models) {
+      for (const m of ucRes.models) {
+        _useCaseMap[m.model_name] = m;
+      }
+    }
+  } catch (e) {
+    console.error("Failed to load pricing data:", e);
+  }
+}
+
+// ── Model key (unique per provider+model) ──────────────────────────────────
+function modelKey(m) { return `${m.provider}||${m.model_name}`; }
+function keyToModel(key) {
+  const [provider, model_name] = key.split("||");
+  return _allModels.find(m => m.provider === provider && m.model_name === model_name);
+}
+
+// ── Slots ──────────────────────────────────────────────────────────────────
+function renderSlots() {
+  const row = document.getElementById("slot-row");
+  row.innerHTML = "";
+
+  for (let i = 0; i < _slotCount; i++) {
+    const slot = document.createElement("div");
+    slot.className = "model-slot";
+    slot.id = `slot-${i}`;
+    slot.innerHTML = `
+      <label>Model ${i + 1}</label>
+      <select id="sel-${i}" onchange="onSlotChange(${i}, this.value)">
+        <option value="">— pick a model —</option>
+      </select>
+    `;
+    if (_slotCount > 2) {
+      const rmBtn = document.createElement("button");
+      rmBtn.className = "slot-remove";
+      rmBtn.title = "Remove slot";
+      rmBtn.textContent = "✕";
+      rmBtn.onclick = () => removeSlot(i);
+      slot.appendChild(rmBtn);
+    }
+    row.appendChild(slot);
+  }
+
+  // Add / Compare buttons
+  const addBtn = document.createElement("button");
+  addBtn.className = "btn-add-model";
+  addBtn.id = "btn-add";
+  addBtn.textContent = "+ Add Model";
+  addBtn.disabled = _slotCount >= 4;
+  addBtn.onclick = addSlot;
+  row.appendChild(addBtn);
+
+  const cmpBtn = document.createElement("button");
+  cmpBtn.className = "btn-compare";
+  cmpBtn.textContent = "Compare →";
+  cmpBtn.onclick = runCompare;
+  row.appendChild(cmpBtn);
+
+  // Re-populate selects with current model list & values
+  populateSlots();
+}
+
+function populateSlots() {
+  for (let i = 0; i < _slotCount; i++) {
+    const sel = document.getElementById(`sel-${i}`);
+    if (!sel) continue;
+    const cur = _slotValues[i] || "";
+    sel.innerHTML = `<option value="">— pick a model —</option>`;
+
+    // Group by provider
+    const byProvider = {};
+    for (const m of _allModels) {
+      if (!byProvider[m.provider]) byProvider[m.provider] = [];
+      byProvider[m.provider].push(m);
+    }
+    for (const [prov, models] of Object.entries(byProvider)) {
+      const grp = document.createElement("optgroup");
+      grp.label = prov;
+      for (const m of models) {
+        const opt = document.createElement("option");
+        opt.value = modelKey(m);
+        opt.textContent = m.model_name;
+        if (modelKey(m) === cur) opt.selected = true;
+        grp.appendChild(opt);
+      }
+      sel.appendChild(grp);
+    }
+  }
+}
+
+function setSlotValue(i, key) {
+  _slotValues[i] = key;
+  const sel = document.getElementById(`sel-${i}`);
+  if (sel) sel.value = key;
+}
+
+function onSlotChange(i, val) {
+  _slotValues[i] = val;
+}
+
+function addSlot() {
+  if (_slotCount >= 4) return;
+  _slotValues.push("");
+  _slotCount++;
+  renderSlots();
+}
+
+function removeSlot(i) {
+  _slotValues.splice(i, 1);
+  _slotCount--;
+  renderSlots();
+  if (_compared.length > 0) runCompare();
+}
+
+// ── Volume tabs ────────────────────────────────────────────────────────────
+function attachVolumeTabs() {
+  document.querySelectorAll(".volume-tab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".volume-tab").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      _activeVol = parseInt(btn.dataset.tokens, 10);
+      if (_compared.length > 0) renderResults(_compared);
+    });
+  });
+}
+
+// ── Compare ────────────────────────────────────────────────────────────────
+function runCompare() {
+  const selected = _slotValues
+    .filter(v => v)
+    .map(k => keyToModel(k))
+    .filter(Boolean);
+
+  // Deduplicate by key
+  const seen = new Set();
+  _compared = selected.filter(m => {
+    const k = modelKey(m);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
+  if (_compared.length < 2) {
+    document.getElementById("compare-grid").innerHTML = `
+      <div class="placeholder">
+        <div class="icon">⚠️</div>
+        <p>Please select at least <strong>2 different models</strong> to compare.</p>
+      </div>`;
+    document.getElementById("bar-chart-section").style.display = "none";
+    document.getElementById("table-section").style.display = "none";
+    return;
+  }
+
+  renderResults(_compared);
+}
+
+// ── Cost calc ──────────────────────────────────────────────────────────────
+// tokens = total tokens; assume 50/50 input/output split
+function calcCost(m, tokens) {
+  const half = tokens / 2;
+  return (m.input_usd * half + m.output_usd * half) / 1e6;
+}
+
+function fmtCost(usd) {
+  if (usd === 0) return "$0.000000";
+  if (usd < 0.000001) return `$${usd.toExponential(2)}`;
+  if (usd < 0.001) return `$${usd.toFixed(6)}`;
+  if (usd < 1) return `$${usd.toFixed(4)}`;
+  return `$${usd.toFixed(2)}`;
+}
+
+function fmtNum(n, decimals = 0) {
+  if (n === null || n === undefined) return null;
+  return n.toLocaleString(undefined, { maximumFractionDigits: decimals });
+}
+
+// ── Render results ─────────────────────────────────────────────────────────
+function renderResults(models) {
+  // Find best values for highlighting
+  const costs = models.map(m => calcCost(m, _activeVol));
+  const minCost = Math.min(...costs);
+
+  const throughputs = models.map(m => _perfMap[m.model_name]?.throughput).filter(Boolean);
+  const maxThroughput = throughputs.length ? Math.max(...throughputs) : null;
+
+  const latencies = models.map(m => _perfMap[m.model_name]?.latency_ms).filter(Boolean);
+  const minLatency = latencies.length ? Math.min(...latencies) : null;
+
+  const contexts = models.map(m => _perfMap[m.model_name]?.context_window || _useCaseMap[m.model_name]?.context_window).filter(Boolean);
+  const maxContext = contexts.length ? Math.max(...contexts) : null;
+
+  // ── Cards ──
+  const grid = document.getElementById("compare-grid");
+  grid.innerHTML = "";
+  grid.style.gridTemplateColumns = `repeat(${Math.min(models.length, 4)}, minmax(240px, 1fr))`;
+
+  models.forEach((m, idx) => {
+    const cost = costs[idx];
+    const perf = _perfMap[m.model_name] || {};
+    const uc   = _useCaseMap[m.model_name] || {};
+    const isCheapest = cost === minCost;
+
+    const tierClass = ({low:"badge-tier-low", medium:"badge-tier-medium", high:"badge-tier-high"})[uc.cost_tier] || "";
+    const tierLabel = uc.cost_tier ? uc.cost_tier.charAt(0).toUpperCase() + uc.cost_tier.slice(1) + " Cost" : "";
+
+    // Metrics
+    const ctx = perf.context_window || uc.context_window;
+    const thr = perf.throughput;
+    const lat = perf.latency_ms;
+
+    const card = document.createElement("div");
+    card.className = "model-card" + (isCheapest ? " best-cost" : "");
+    card.innerHTML = `
+      <div class="card-header">
+        <div class="provider-badge">${m.provider}</div>
+        <div class="model-name">${m.model_name}</div>
+        <div class="badge-row">
+          ${isCheapest ? '<span class="badge badge-cost">Cheapest</span>' : ""}
+          ${tierLabel ? `<span class="badge ${tierClass}">${tierLabel}</span>` : ""}
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">Cost at ${fmtVolLabel(_activeVol)}</div>
+        <div class="cost-row">
+          <span class="cost-label">Total (50/50 split)</span>
+          <span class="cost-value highlight">${fmtCost(cost)}</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label">Input price</span>
+          <span class="cost-value">$${m.input_usd.toFixed(4)}/1M</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label">Output price</span>
+          <span class="cost-value">$${m.output_usd.toFixed(4)}/1M</span>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">Performance</div>
+        <div class="metric-grid">
+          <div class="metric-item">
+            <div class="metric-label">Context Window</div>
+            <div class="metric-value${ctx && ctx === maxContext ? " best" : ""}">
+              ${ctx ? fmtCtx(ctx) : '<span class="metric-na">—</span>'}
+            </div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">Throughput</div>
+            <div class="metric-value${thr && thr === maxThroughput ? " best" : ""}">
+              ${thr ? `${fmtNum(thr, 0)} tok/s` : '<span class="metric-na">—</span>'}
+            </div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">Latency</div>
+            <div class="metric-value${lat && lat === minLatency ? " best" : ""}">
+              ${lat ? `${fmtNum(lat, 0)} ms` : '<span class="metric-na">—</span>'}
+            </div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-label">Tokens / $1</div>
+            <div class="metric-value">
+              ${m.input_usd > 0 ? fmtNum(1e6 / m.input_usd, 0) : '<span class="metric-na">—</span>'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      ${renderUseCaseSection(uc)}
+    `;
+    grid.appendChild(card);
+  });
+
+  // ── Bar chart ──
+  renderBarChart(models, costs);
+
+  // ── Table ──
+  renderCostTable(models);
+
+  document.getElementById("bar-chart-section").style.display = "";
+  document.getElementById("table-section").style.display = "";
+}
+
+function fmtVolLabel(n) {
+  if (n >= 1e6) return `${n / 1e6}M tokens`;
+  if (n >= 1e3) return `${n / 1e3}K tokens`;
+  return `${n} tokens`;
+}
+
+function fmtCtx(n) {
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(0)}K`;
+  return String(n);
+}
+
+function renderUseCaseSection(uc) {
+  if (!uc.use_cases && !uc.best_for) return "";
+  const useCasesHtml = (uc.use_cases || []).slice(0, 5).map(u =>
+    `<li class="use-case-item">${u}</li>`
+  ).join("");
+  const strengthsHtml = (uc.strengths || []).slice(0, 4).map(s =>
+    `<span class="strength-tag">${s}</span>`
+  ).join("");
+  return `
+    <div class="card-section">
+      <div class="section-title">Best For</div>
+      ${uc.best_for ? `<p class="best-for-text">${uc.best_for}</p>` : ""}
+      ${useCasesHtml ? `<ul class="use-case-list">${useCasesHtml}</ul>` : ""}
+      ${strengthsHtml ? `<div class="strengths-list" style="margin-top:10px">${strengthsHtml}</div>` : ""}
+    </div>
+  `;
+}
+
+// ── Bar chart ──────────────────────────────────────────────────────────────
+const BAR_COLORS = ["#7c6af7", "#4ecdc4", "#ed8936", "#f56565"];
+
+function renderBarChart(models, costs) {
+  const max = Math.max(...costs);
+  const title = document.getElementById("bar-chart-title");
+  title.textContent = `Cost at ${fmtVolLabel(_activeVol)} (50% input / 50% output)`;
+
+  const container = document.getElementById("bar-chart-rows");
+  container.innerHTML = "";
+
+  models.forEach((m, i) => {
+    const pct = max > 0 ? (costs[i] / max) * 100 : 0;
+    const row = document.createElement("div");
+    row.className = "bar-row";
+    row.innerHTML = `
+      <div class="bar-model-label" title="${m.provider} / ${m.model_name}">${m.model_name}</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${pct.toFixed(1)}%;background:${BAR_COLORS[i % BAR_COLORS.length]}">
+          <span class="bar-fill-label">${fmtCost(costs[i])}</span>
+        </div>
+      </div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+// ── Cost table ─────────────────────────────────────────────────────────────
+const VOLUMES = [1000, 10000, 100000, 1000000];
+const VOL_LABELS = ["1K", "10K", "100K", "1M"];
+
+function renderCostTable(models) {
+  // Update th labels
+  VOL_LABELS.forEach((label, i) => {
+    const th = document.getElementById(`th-v${i + 1}`);
+    if (th) th.textContent = label + " tokens";
+  });
+
+  // Compute costs per volume
+  const rows = models.map(m => ({
+    m,
+    costs: VOLUMES.map(v => calcCost(m, v)),
+  }));
+
+  // Find cheapest per volume col
+  const cheapestIdx = VOLUMES.map((_, vi) => {
+    const volCosts = rows.map(r => r.costs[vi]);
+    const minVal = Math.min(...volCosts);
+    return volCosts.map(c => c === minVal);
+  });
+
+  const tbody = document.getElementById("cost-table-body");
+  tbody.innerHTML = "";
+
+  rows.forEach((row, ri) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="cell-model">${row.m.model_name}</td>
+      <td class="cell-provider">${row.m.provider}</td>
+      <td class="cell-cost">$${row.m.input_usd.toFixed(4)}</td>
+      <td class="cell-cost">$${row.m.output_usd.toFixed(4)}</td>
+      ${row.costs.map((c, vi) => `
+        <td class="cell-cost${cheapestIdx[vi][ri] ? " cheapest" : ""}">
+          ${fmtCost(c)}
+        </td>
+      `).join("")}
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ── Bootstrap ──────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
