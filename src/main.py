@@ -16,7 +16,7 @@ from fastapi import FastAPI, Query, HTTPException, Request  # noqa: E402
 import csv  # noqa: E402
 import json  # noqa: E402
 from io import StringIO  # noqa: E402
-from fastapi.responses import JSONResponse, Response, StreamingResponse  # noqa: E402
+from fastapi.responses import JSONResponse, Response, StreamingResponse, FileResponse  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from typing import Optional, Deque, Dict  # noqa: E402
@@ -103,6 +103,8 @@ if _static_dir.exists():
             StaticFiles(directory=str(_widget_dir), html=True),
             name="widget_static",
         )
+    # Admin page served directly (not as a static mount) so /admin/stats
+    # and /admin/rate-limits API routes are not shadowed by StaticFiles.
 
 app.add_middleware(
     CORSMiddleware,
@@ -196,7 +198,7 @@ async def security_middleware(request: Request, call_next):
     global _auth_warning_logged
 
     path = request.url.path
-    if path.startswith("/chat") or path.startswith("/history") or path.startswith("/trends") or path.startswith("/conversations") or path.startswith("/calculator") or path.startswith("/compare") or path.startswith("/widget") or path == "/pricing/public" or request.method == "OPTIONS":
+    if path.startswith("/chat") or path.startswith("/history") or path.startswith("/trends") or path.startswith("/conversations") or path.startswith("/calculator") or path.startswith("/compare") or path.startswith("/widget") or path == "/admin" or path == "/pricing/public" or request.method == "OPTIONS":
         return await call_next(request)
     if path in _sensitive_paths:
         if not settings.mcp_api_key:
@@ -1655,6 +1657,95 @@ async def get_public_pricing(
     ]
     result.sort(key=lambda x: (x["provider"], x["model_name"]))
     return {"models": result, "total": len(result), "updated_at": datetime.now(UTC).isoformat()}
+
+
+# ---------------------------------------------------------------------------
+# Admin endpoints (require API key via standard middleware)
+# ---------------------------------------------------------------------------
+
+@app.get("/admin", include_in_schema=False)
+async def admin_index():
+    """Serve the admin dashboard HTML page (no auth required for the static page)."""
+    html_path = _static_dir / "admin" / "index.html"
+    return FileResponse(str(html_path), media_type="text/html")
+
+
+@app.get("/admin/stats")
+async def admin_stats():
+    """
+    Aggregated server statistics for the admin dashboard.
+
+    Returns overall telemetry, per-endpoint metrics, provider health,
+    feature usage counts, deployment uptime, and the server version.
+    Requires a valid ``x-api-key`` header when ``MCP_API_KEY`` is configured.
+    """
+    telemetry = get_telemetry_service()
+    overall = telemetry.get_overall_stats()
+    endpoints = telemetry.get_endpoint_stats()
+    features = telemetry.get_feature_usage()
+
+    # Provider health — fetch latest status snapshot
+    try:
+        aggregator = await get_pricing_aggregator()
+        _, provider_statuses = await aggregator.get_all_pricing_async()
+        providers = [
+            {
+                "provider_name": ps.provider_name,
+                "is_available": ps.is_available,
+                "models_count": ps.models_count,
+                "error_message": ps.error_message,
+            }
+            for ps in provider_statuses
+        ]
+    except Exception:
+        providers = []
+
+    # Deployment metadata
+    deploy_meta = deployment_manager.get_deployment_metadata()
+    uptime_seconds = deployment_manager.get_uptime_seconds()
+
+    # Normalise uptime_since to a plain string
+    uptime_since = overall.get("uptime_since")
+    if hasattr(uptime_since, "isoformat"):
+        uptime_since = uptime_since.isoformat()
+
+    return {
+        "version": settings.app_version,
+        "overall": {**overall, "uptime_since": uptime_since},
+        "endpoints": endpoints,
+        "providers": providers,
+        "features": features,
+        "deployment": {
+            "version": deploy_meta.version if deploy_meta else None,
+            "uptime_seconds": uptime_seconds,
+        },
+    }
+
+
+@app.get("/admin/rate-limits")
+async def admin_rate_limits():
+    """
+    Current rate-limit consumer snapshot.
+
+    Returns the number of tracked IPs and the top consumers ranked by
+    requests in the last 60 seconds.  Requires a valid ``x-api-key`` header.
+    """
+    now = time.time()
+    window = 60.0
+    async with _rate_limit_lock:
+        consumers = []
+        for ip, bucket in _rate_limit_store.items():
+            recent = sum(1 for t in bucket if now - t < window)
+            if recent > 0:
+                consumers.append({"ip": ip, "requests_last_minute": recent})
+
+    consumers.sort(key=lambda c: c["requests_last_minute"], reverse=True)
+    return {
+        "tracked_ips": len(consumers),
+        "limit_per_minute": settings.rate_limit_per_minute,
+        "top_consumers": consumers[:20],
+        "snapshot_at": datetime.now(UTC).isoformat(),
+    }
 
 
 if __name__ == "__main__":
