@@ -12,6 +12,8 @@ from mcp.tools.register_price_alert import RegisterPriceAlertTool
 from mcp.tools.list_price_alerts import ListPriceAlertsTool
 from mcp.tools.delete_price_alert import DeletePriceAlertTool
 from mcp.tools.get_pricing_export_url import GetPricingExportUrlTool
+from mcp.tools.list_conversations import ListConversationsTool
+from mcp.tools.delete_conversation import DeleteConversationTool
 
 
 class ToolManager:
@@ -314,6 +316,47 @@ class ToolManager:
                         },
                     },
                     "required": [],
+                },
+            },
+            "list_conversations": {
+                "instance": ListConversationsTool(),
+                "name": "list_conversations",
+                "description": (
+                    "List stored chat conversation sessions with their IDs, last-updated "
+                    "timestamp, turn count, and a preview of the most recent user message. "
+                    "Use this when the user asks to see their past conversations or chat history."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of conversations to return (default: 20, max: 100)",
+                            "default": 20,
+                            "minimum": 1,
+                            "maximum": 100,
+                        },
+                    },
+                    "required": [],
+                },
+            },
+            "delete_conversation": {
+                "instance": DeleteConversationTool(),
+                "name": "delete_conversation",
+                "description": (
+                    "Delete a specific chat conversation by its ID. "
+                    "Use when the user asks to delete, clear, or remove a past conversation. "
+                    "Use list_conversations first to find the conversation ID."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "conversation_id": {
+                            "type": "string",
+                            "description": "The ID of the conversation to delete",
+                        },
+                    },
+                    "required": ["conversation_id"],
                 },
             },
         }
