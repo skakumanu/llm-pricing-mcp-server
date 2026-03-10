@@ -1370,6 +1370,9 @@ async def agent_chat_stream(request: AgentChatRequest):
                 detail = "AI provider rate limit reached — please wait a moment and try again"
             elif "AuthenticationError" in exc_type or "PermissionDenied" in exc_type:
                 detail = "AI provider authentication error — check server configuration"
+            elif "BadRequestError" in exc_type:
+                # Include the Anthropic error message for diagnosability (no sensitive data in 400 errors)
+                detail = f"Bad request to AI provider: {str(exc)[:300]}"
             else:
                 detail = f"Internal server error ({exc_type})"
             yield f"data: {json.dumps({'type': 'error', 'detail': detail})}\n\n"

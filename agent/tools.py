@@ -12,11 +12,18 @@ class AgentTool:
     execute: Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]
 
     def to_llm_schema(self) -> Dict[str, Any]:
-        """Return the tool definition in the format expected by LLM backends."""
+        """Return the tool definition in the format expected by LLM backends.
+
+        Strips ``required: []`` (empty list) from the input_schema — Anthropic's
+        API rejects schemas where ``required`` is present but empty.
+        """
+        schema = dict(self.input_schema)
+        if "required" in schema and not schema["required"]:
+            del schema["required"]
         return {
             "name": self.name,
             "description": self.description,
-            "input_schema": self.input_schema,
+            "input_schema": schema,
         }
 
 
