@@ -1371,8 +1371,12 @@ async def agent_chat_stream(request: AgentChatRequest):
             elif "AuthenticationError" in exc_type or "PermissionDenied" in exc_type:
                 detail = "AI provider authentication error — check server configuration"
             elif "BadRequestError" in exc_type:
-                # Include the Anthropic error message for diagnosability (no sensitive data in 400 errors)
-                detail = f"Bad request to AI provider: {str(exc)[:300]}"
+                exc_str = str(exc)
+                if "credit balance is too low" in exc_str or "billing" in exc_str.lower():
+                    detail = "AI provider account has insufficient credits — please contact the server administrator"
+                else:
+                    # Include the Anthropic message for other 400 errors (useful for debugging)
+                    detail = f"Bad request to AI provider: {exc_str[:300]}"
             else:
                 detail = f"Internal server error ({exc_type})"
             yield f"data: {json.dumps({'type': 'error', 'detail': detail})}\n\n"
