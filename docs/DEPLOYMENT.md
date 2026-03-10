@@ -48,8 +48,14 @@ az webapp identity assign --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME 
 PRINCIPAL_ID=$(az webapp identity show --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME --query principalId -o tsv)
 
 # Assign "Key Vault Secrets User" role to the managed identity
-az role assignment create --assignee-object-id $PRINCIPAL_ID --role "Key Vault Secrets User" \
-  --scope /subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.KeyVault/vaults/$KEY_VAULT_NAME
+# NOTE: If az role assignment create fails with "MissingSubscription", use az rest instead:
+SUBSCRIPTION=$(az account show --query id -o tsv)
+SCOPE="subscriptions/${SUBSCRIPTION}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.KeyVault/vaults/${KEY_VAULT_NAME}"
+ROLE_DEF_ID="4633458b-17de-408a-b874-0445c86b69e6"  # Key Vault Secrets User
+GUID=$(python3 -c "import uuid; print(uuid.uuid4())")
+az rest --method PUT \
+  --uri "https://management.azure.com/${SCOPE}/providers/Microsoft.Authorization/roleAssignments/${GUID}?api-version=2022-04-01" \
+  --body "{\"properties\":{\"roleDefinitionId\":\"/subscriptions/${SUBSCRIPTION}/providers/Microsoft.Authorization/roleDefinitions/${ROLE_DEF_ID}\",\"principalId\":\"${PRINCIPAL_ID}\",\"principalType\":\"ServicePrincipal\"}}"
 ```
 
 ### 3. Store Secrets in Key Vault
@@ -79,7 +85,13 @@ az webapp config appsettings set --resource-group $RESOURCE_GROUP --name $WEB_AP
   RATE_LIMIT_PER_MINUTE="60" \
   SERVER_HOST="0.0.0.0" \
   SERVER_PORT="8000" \
-  DEBUG="false"
+  DEBUG="false" \
+  AGENT_LLM_PROVIDER="openai" \
+  AGENT_MODEL="gpt-4o-mini"
+
+# To switch to Anthropic Claude instead:
+# AGENT_LLM_PROVIDER="anthropic"
+# AGENT_MODEL="claude-sonnet-4-6"
 ```
 
 ### 5. Deploy via Zip Deployment (Recommended)
@@ -201,7 +213,7 @@ Use the `/health` endpoint to verify the application is running:
 curl https://llm-pricing-mcp.azurewebsites.net/health
 
 # Should return:
-# {"status":"healthy","service":"LLM Pricing MCP Server","version":"1.4.2"}
+# {"status":"healthy","service":"LLM Pricing MCP Server","version":"1.33.0"}
 ```
 
 ## Scaling
