@@ -1,0 +1,37 @@
+# fly.toml — Fly.io app configuration for llm-pricing-api
+# Deploy: flyctl deploy --remote-only
+# Docs: https://fly.io/docs/reference/configuration/
+
+app = 'llm-pricing-api'
+primary_region = 'iad'
+
+[build]
+  # Uses the existing Dockerfile unchanged
+
+[env]
+  # SQLite DB stored on the persistent volume mounted at /app/data
+  PRICING_HISTORY_DB_PATH = "/app/data/pricing_history.db"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+  [[http_service.checks]]
+    interval = '30s'
+    timeout = '10s'
+    grace_period = '15s'
+    method = 'GET'
+    path = '/health'
+
+[[vm]]
+  memory = '512mb'
+  cpu_kind = 'shared'
+  cpus = 1
+
+[mounts]
+  source = 'llm_pricing_data'
+  destination = '/app/data'
