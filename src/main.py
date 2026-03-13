@@ -19,7 +19,7 @@ from io import StringIO  # noqa: E402
 from fastapi.responses import JSONResponse, Response, StreamingResponse, FileResponse  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
-from typing import Optional, Deque, Dict  # noqa: E402
+from typing import Optional, Deque, Dict, List  # noqa: E402
 import asyncio  # noqa: E402
 import time  # noqa: E402
 from src.config.settings import settings  # noqa: E402
@@ -32,9 +32,13 @@ from src.models.pricing import (  # noqa: E402
     PricingHistoryResponse, PricingTrendsResponse,
     PricingAlertRequest, PricingAlertRecord, PricingAlertListResponse,
     ConversationSummary, ConversationListResponse,
+    RouterRequest, RouterResponse, SavingsResponse, SavingsRecord,
 )
 from src.services.pricing_history import init_pricing_history_service, get_pricing_history_service  # noqa: E402
 from src.services.pricing_alerts import init_pricing_alert_service, get_pricing_alert_service  # noqa: E402
+from src.services.router import init_router, get_router  # noqa: E402
+from src.services.savings_tracker import init_savings_tracker, get_savings_tracker  # noqa: E402
+from src.services.benchmark_service import enrich_models, set_cache_ttl  # noqa: E402
 from agent.conversation import init_conversation_store, get_conversation_store  # noqa: E402
 from src.models.deployment import (  # noqa: E402
     HealthCheckResponse, DeploymentReadiness, DeploymentMetadata, ApiVersionInfo,
@@ -151,6 +155,7 @@ _unauthenticated_paths = {
     "/redoc",
     "/openapi.json",
     "/chat",
+    "/v1/chat/completions",
 }
 
 _sensitive_paths = {
@@ -476,11 +481,17 @@ async def startup_pricing_history() -> None:
     logger.info("Pricing history service initialized at %s", settings.pricing_history_db_path)
     await init_pricing_alert_service(settings.pricing_history_db_path)
     logger.info("Pricing alert service initialized")
+    await init_savings_tracker(settings.pricing_history_db_path)
+    logger.info("Savings tracker initialized")
+    set_cache_ttl(settings.benchmark_cache_ttl_hours)
     await init_conversation_store(settings.conversation_db_path, settings.agent_max_history_turns)
     logger.info(
         "Conversation store initialized (%s)",
         settings.conversation_db_path or "in-memory",
     )
+    aggregator = await get_pricing_aggregator()
+    init_router(aggregator)
+    logger.info("Model router initialized")
     asyncio.create_task(_pricing_snapshot_loop())
     logger.info(
         "Pricing snapshot loop started (interval=%dh)", settings.pricing_snapshot_interval_hours
@@ -1042,6 +1053,9 @@ async def get_performance(
     else:
         models, provider_status = await aggregator.get_all_pricing_async()
 
+    # Enrich with benchmark quality scores
+    models = await enrich_models(models)
+
     # Convert to performance metrics and calculate scores
     performance_metrics = []
     for model in models:
@@ -1067,7 +1081,8 @@ async def get_performance(
             cost_per_input_token=model.cost_per_input_token,
             cost_per_output_token=model.cost_per_output_token,
             performance_score=perf_score,
-            value_score=value_score
+            value_score=value_score,
+            quality_score=model.quality_score,
         ))
 
     # Sort if requested
@@ -1090,6 +1105,7 @@ async def get_performance(
     models_with_latency = [m for m in performance_metrics if m.latency_ms]
     models_with_context = [m for m in performance_metrics if m.context_window]
     models_with_value = [m for m in performance_metrics if m.value_score]
+    models_with_quality_score = [m for m in performance_metrics if m.quality_score]
 
     best_throughput = (
         max(models_with_throughput, key=lambda x: x.throughput).model_name
@@ -1107,6 +1123,15 @@ async def get_performance(
         max(models_with_value, key=lambda x: x.value_score).model_name
         if models_with_value else None
     )
+    # best quality/cost: use quality_score / avg_cost_per_1M
+    def _qv(m):
+        avg_cost_1m = (m.cost_per_input_token + m.cost_per_output_token) / 2 * 1_000_000
+        return m.quality_score / max(avg_cost_1m, 1e-9)
+
+    best_quality_value = (
+        max(models_with_quality_score, key=_qv).model_name
+        if models_with_quality_score else None
+    )
 
     # Track telemetry
     telemetry = get_telemetry_service()
@@ -1119,6 +1144,7 @@ async def get_performance(
         lowest_latency=lowest_latency,
         largest_context=largest_context,
         best_value=best_value,
+        best_quality_value=best_quality_value,
         provider_status=provider_status
     )
 
@@ -1185,6 +1211,100 @@ async def get_use_cases(
         models=use_cases,
         total_models=len(use_cases),
         providers=providers
+    )
+
+
+@app.post("/router/recommend", response_model=RouterResponse)
+async def router_recommend(req: RouterRequest, request: Request):
+    """
+    Recommend the optimal LLM model for the caller's constraints.
+
+    Fetches live pricing, enriches with benchmark quality scores, applies hard
+    filters (cost, quality, context window), and scores survivors by
+    quality_value_score.  Returns the best match and up to 3 alternatives.
+
+    Optionally pass `X-Organization-Id` and `X-Api-Key-Tier` headers to enable
+    per-org savings tracking.
+    """
+    from src.services.router import RouterConstraints
+    constraints = RouterConstraints(
+        max_cost_per_1m_tokens=req.max_cost_per_1m_tokens,
+        min_quality_score=req.min_quality_score,
+        min_context_window=req.min_context_window,
+        preferred_provider=req.preferred_provider,
+        task_type=req.task_type,
+    )
+    router = get_router()
+    result = await router.get_optimal_model(constraints)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No model matched the given constraints. Try relaxing cost or quality filters.",
+        )
+
+    # Record routing decision for telemetry/savings
+    try:
+        org_id = request.headers.get("X-Organization-Id")
+        api_key_tier = request.headers.get("X-Api-Key-Tier")
+        recommended_cost_1m = (
+            result.recommended.cost_per_input_token + result.recommended.cost_per_output_token
+        ) / 2 * 1_000_000
+        baseline_model = None
+        baseline_cost_1m = None
+        if result.alternatives:
+            # Use most expensive alternative as baseline
+            alts_with_cost = [
+                (a, (a.cost_per_input_token + a.cost_per_output_token) / 2 * 1_000_000)
+                for a in result.alternatives
+            ]
+            baseline_alt, baseline_cost_1m = max(alts_with_cost, key=lambda x: x[1])
+            baseline_model = baseline_alt.model_name
+        tracker = get_savings_tracker()
+        await tracker.record_routing(
+            recommended_model=result.recommended.model_name,
+            recommended_provider=result.recommended.provider,
+            recommended_cost_per_1m=recommended_cost_1m,
+            org_id=org_id,
+            api_key_tier=api_key_tier,
+            baseline_model=baseline_model,
+            baseline_cost_per_1m=baseline_cost_1m,
+            task_type=req.task_type,
+        )
+    except Exception as exc:
+        logger.warning("Failed to record routing savings: %s", exc)
+
+    get_telemetry_service().track_feature_usage("router_recommend")
+    return RouterResponse(
+        recommended=result.recommended,
+        score=result.score,
+        reason=result.reason,
+        alternatives=result.alternatives,
+    )
+
+
+@app.get("/telemetry/savings", response_model=SavingsResponse)
+async def telemetry_savings(
+    org_id: Optional[str] = Query(None, description="Filter by organisation ID"),
+    days: int = Query(30, ge=1, le=365, description="Look-back window in days"),
+    limit: int = Query(100, ge=1, le=1000, description="Max rows to return"),
+):
+    """
+    Return routing decisions and estimated cost savings per organisation.
+
+    Pass `X-Organization-Id` header (or `org_id` query param) when calling
+    `/router/recommend` to enable per-org tracking.  This endpoint aggregates
+    those records and computes the total savings vs. the most expensive
+    alternative considered at the time of each routing decision.
+    """
+    tracker = get_savings_tracker()
+    result = await tracker.get_savings(org_id=org_id, days=days, limit=limit)
+    records = [SavingsRecord(**r) for r in result["records"]]
+    return SavingsResponse(
+        records=records,
+        total=result["total"],
+        total_savings_per_1m=result["total_savings_per_1m"],
+        org_id=org_id,
+        days=days,
     )
 
 
@@ -1758,6 +1878,97 @@ async def admin_rate_limits():
         "limit_per_minute": settings.rate_limit_per_minute,
         "top_consumers": consumers[:20],
         "snapshot_at": datetime.now(UTC).isoformat(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# OpenAI-compatible proxy endpoint
+# ---------------------------------------------------------------------------
+
+class _ProxyRequest(BaseModel):
+    model: str
+    messages: List[dict]
+    max_tokens: Optional[int] = None
+
+
+def _infer_task_from_messages(messages: List[dict]) -> Optional[str]:
+    """Heuristically infer a task_type from the message content."""
+    text = " ".join(m.get("content", "") or "" for m in messages).lower()
+    if any(kw in text for kw in ("function", "code", "class", "def ", "import", "debug", "script")):
+        return "code"
+    if any(kw in text for kw in ("summarize", "summary", "tldr", "shorten", "abstract")):
+        return "summarization"
+    if any(kw in text for kw in ("analyze", "analyse", "research", "reason", "explain", "compare")):
+        return "analysis"
+    return "chat"
+
+
+def _format_routing_recommendation(requested_model: str, result) -> str:
+    """Build a human-readable routing recommendation text."""
+    if result is None:
+        return (
+            f"No model found matching your constraints for '{requested_model}'. "
+            "Try relaxing cost or quality filters."
+        )
+    rec = result.recommended
+    avg_cost = (rec.cost_per_input_token + rec.cost_per_output_token) / 2 * 1_000_000
+    lines = [
+        f"Routing recommendation for '{requested_model}':",
+        f"  Recommended model: {rec.model_name} ({rec.provider})",
+        f"  Quality score: {rec.quality_score if rec.quality_score is not None else 'N/A'}/100",
+        f"  Avg cost: ${avg_cost:.4f} / 1M tokens",
+        f"  Reason: {result.reason}",
+    ]
+    if result.alternatives:
+        alt_names = ", ".join(a.model_name for a in result.alternatives)
+        lines.append(f"  Alternatives: {alt_names}")
+    return "\n".join(lines)
+
+
+@app.post("/v1/chat/completions")
+async def openai_proxy(req: _ProxyRequest):
+    """
+    OpenAI-compatible routing proxy.
+
+    Accepts an OpenAI-format chat completions request and returns a routing
+    recommendation in OpenAI response format.  No live LLM call is made.
+    Point your OpenAI SDK ``base_url`` here to get intelligent model routing
+    without any code changes.
+
+    This endpoint is **unauthenticated** for broad client compatibility.
+    """
+    import uuid
+    from src.services.router import RouterConstraints
+    task_type = _infer_task_from_messages(req.messages)
+    constraints = RouterConstraints(task_type=task_type)
+    try:
+        router = get_router()
+        result = await router.get_optimal_model(constraints)
+    except RuntimeError:
+        result = None
+
+    recommendation_text = _format_routing_recommendation(req.model, result)
+    recommended_model = result.recommended.model_name if result else req.model
+
+    return {
+        "id": f"chatcmpl-routing-{uuid.uuid4().hex[:8]}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": recommended_model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": recommendation_text},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        "routing_metadata": {
+            "requested_model": req.model,
+            "recommended_model": recommended_model,
+            "actual_forwarding": False,
+            "task_type_inferred": task_type,
+        },
     }
 
 
