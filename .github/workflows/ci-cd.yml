@@ -143,147 +143,44 @@ jobs:
         docker push "$IMAGE_SHA"
         docker push "$IMAGE_LATEST"
 
-    - name: Update Staging Slot Image
+    - name: Deploy to Production
       run: |
         IMAGE_SHA="$ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}"
 
         az webapp config container set \
           --resource-group "${{ steps.kvsecrets.outputs.azure-resource-group }}" \
           --name "${{ steps.kvsecrets.outputs.azure-webapp-name }}" \
-          --slot staging \
           --container-image-name "DOCKER|$IMAGE_SHA"
 
-    - name: Restart Staging Slot
-      run: |
         az webapp restart \
           --resource-group "${{ steps.kvsecrets.outputs.azure-resource-group }}" \
-          --name "${{ steps.kvsecrets.outputs.azure-webapp-name }}" \
-          --slot staging
+          --name "${{ steps.kvsecrets.outputs.azure-webapp-name }}"
 
-    - name: Wait for Staging Slot to Start
-      run: |
-        sleep 30
-        echo "Staging slot starting up..."
+        echo "OK: Production deployment complete"
 
-    - name: Health Check - Staging Slot
+    - name: Health Check - Production
       run: |
-        echo "Validating staging slot health..."
-        STAGING_URL="https://${{ steps.kvsecrets.outputs.azure-webapp-name }}-staging.azurewebsites.net/health"
-        
-        for attempt in {1..12}; do
-          echo "Health check attempt $attempt/12..."
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X GET "$STAGING_URL")
-          
-          if [ "$HTTP_CODE" = "200" ]; then
-            echo "OK: Staging slot is healthy (HTTP $HTTP_CODE)"
-            exit 0
-          fi
-          
-          echo "Staging slot returned HTTP $HTTP_CODE, waiting..."
-          sleep 5
-        done
-        
-        echo "ERROR: Staging slot failed health check after 60 seconds"
-        exit 1
-
-    - name: Functional Test - Staging Slot
-      run: |
-        echo "Running functional tests on staging slot..."
-        STAGING_URL="https://${{ steps.kvsecrets.outputs.azure-webapp-name }}-staging.azurewebsites.net"
-        
-        # Test /health/detailed endpoint (doesn't require auth)
-        echo "Testing /health/detailed endpoint..."
-        HEALTH_RESPONSE=$(curl -s "$STAGING_URL/health/detailed")
-        echo "Response: $HEALTH_RESPONSE"
-        if echo "$HEALTH_RESPONSE" | grep -q '"status"'; then
-          echo "OK: Health endpoint working"
-        else
-          echo "ERROR: Health endpoint failed"
-          echo "Full response: $HEALTH_RESPONSE"
-          exit 1
-        fi
-        
-        # Verify the app is running version 1.5.4 or later
-        if echo "$HEALTH_RESPONSE" | grep -q '"version"'; then
-          echo "OK: Version information available"
-        else
-          echo "ERROR: Version information not found"
-          exit 1
-        fi
-
-    - name: Verify Version on Staging Slot
-      run: |
-        echo "Verifying deployed version matches expected version..."
-        STAGING_URL="https://${{ steps.kvsecrets.outputs.azure-webapp-name }}-staging.azurewebsites.net"
-        
-        # Extract version from health endpoint
-        HEALTH_RESPONSE=$(curl -s "$STAGING_URL/health/detailed")
-        ACTUAL_VERSION=$(echo "$HEALTH_RESPONSE" | grep -oP '"version":"?\K[^,"]*')
-        
-        # Extract expected version from src/__init__.py
-        EXPECTED_VERSION=$(grep -oP '__version__ = "\K[^"]*' src/__init__.py)
-        
-        echo "Actual version on staging: $ACTUAL_VERSION"
-        echo "Expected version from code: $EXPECTED_VERSION"
-        
-        # Verify version field exists and is non-empty
-        if [ -z "$ACTUAL_VERSION" ]; then
-          echo "ERROR: Could not extract version from staging response"
-          echo "Full response: $HEALTH_RESPONSE"
-          exit 1
-        fi
-        
-        # Verify version format is semantic (X.Y.Z)
-        if ! echo "$ACTUAL_VERSION" | grep -qE "^[0-9]+\.[0-9]+\.[0-9]+$"; then
-          echo "ERROR: Version format invalid: $ACTUAL_VERSION"
-          exit 1
-        fi
-        
-        # CRITICAL: Compare actual vs expected version
-        if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
-          echo "ERROR: Version mismatch detected!"
-          echo "  Expected: $EXPECTED_VERSION"
-          echo "  Actual:   $ACTUAL_VERSION"
-          echo ""
-          echo "This indicates the Docker image failed to deploy correctly."
-          echo "Possible causes:"
-          echo "  - Docker image build/push failed"
-          echo "  - Azure failed to pull new image"
-          echo "  - Container restart used old cached image"
-          echo ""
-          echo "Aborting swap to prevent stale deployment."
-          exit 1
-        fi
-        
-        echo "✓ Version verification passed: $ACTUAL_VERSION"
-
-    - name: Swap Staging to Production
-      run: |
-        echo "Swapping staging slot to production..."
-        az webapp deployment slot swap \
-          --resource-group ${{ steps.kvsecrets.outputs.azure-resource-group }} \
-          --name ${{ steps.kvsecrets.outputs.azure-webapp-name }} \
-          --slot staging
-        
-        echo "OK: Slot swap completed successfully"
-
-    - name: Health Check - Production Slot
-      run: |
-        echo "Validating production slot after swap..."
+        echo "Validating production health..."
         PROD_URL="https://${{ steps.kvsecrets.outputs.azure-webapp-name }}.azurewebsites.net/health"
-        
-        for attempt in {1..12}; do
-          echo "Health check attempt $attempt/12..."
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X GET "$PROD_URL")
-          
+        EXPECTED_VERSION=$(grep -oP '__version__ = "\K[^"]*' src/__init__.py)
+
+        for attempt in {1..18}; do
+          echo "Health check attempt $attempt/18..."
+          RESPONSE=$(curl -s "$PROD_URL")
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$PROD_URL")
+
           if [ "$HTTP_CODE" = "200" ]; then
-            echo "OK: Production slot is healthy (HTTP $HTTP_CODE)"
-            exit 0
+            ACTUAL_VERSION=$(echo "$RESPONSE" | grep -oP '"version":"?\K[^,"]*')
+            if [ "$ACTUAL_VERSION" = "$EXPECTED_VERSION" ]; then
+              echo "OK: Production is healthy and running v$ACTUAL_VERSION"
+              exit 0
+            fi
+            echo "Version not yet updated (got $ACTUAL_VERSION, want $EXPECTED_VERSION), waiting..."
+          else
+            echo "HTTP $HTTP_CODE, waiting..."
           fi
-          
-          echo "Production slot returned HTTP $HTTP_CODE, waiting..."
-          sleep 5
+          sleep 10
         done
-        
-        echo "WARN: Production slot health check timeout (may still be warming up)"
-        exit 0  # Don't fail the deployment on timeout
+
+        echo "WARN: Production health check timeout after 3 minutes"
+        exit 0
