@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -22,21 +23,30 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Sync develop from master
+      - name: Check if sync is needed
+        id: check
         run: |
           git fetch origin master develop
-          git checkout develop
-          git merge --no-edit origin/master
-          git push origin develop
+          MASTER_TREE=$(git show -s --format="%T" origin/master)
+          DEVELOP_TREE=$(git show -s --format="%T" origin/develop)
+          if [ "$MASTER_TREE" = "$DEVELOP_TREE" ]; then
+            echo "✅ develop already has the same content as master — no sync needed"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "⚠️ master has content not in develop — opening sync PR"
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Notify on sync
-        if: success()
+      - name: Create sync PR
+        if: steps.check.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "✅ Successfully synced develop from master"
-          echo "Develop branch is now up-to-date with master"
-
-      - name: Report sync failure
-        if: failure()
-        run: |
-          echo "❌ Failed to sync develop from master"
-          echo "Please manually review and merge master into develop"
+          BRANCH="ci/sync-develop-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH" origin/master
+          git push origin "$BRANCH"
+          gh pr create \
+            --base develop \
+            --head "$BRANCH" \
+            --title "chore: sync develop from master" \
+            --body "Automated sync of \`develop\` from \`master\`. This PR was opened because \`master\` contains commits (e.g. a hotfix) not yet in \`develop\`."
