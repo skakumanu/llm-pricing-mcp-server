@@ -160,16 +160,25 @@ All documentation in this directory follows these standards:
 
 ## Latest Updates
 
+- **March 2026** - v1.33.0: Switched default LLM backend to GPT-4o-mini (20× cheaper, 2× faster); both OpenAI and Anthropic fully supported via env vars
+- **March 2026** - v1.32.0: Friendly error message for exhausted AI provider credits
+- **March 2026** - v1.31.0: Fixed `BadRequestError` from Anthropic — empty `required: []` stripped from tool schemas
+- **March 2026** - v1.30.0: Fixed 401 Unauthorized on `/chat`; removed hardcoded API key from frontend
+- **March 2026** - v1.29.0: Reduced agent latency; pre-warm agent at startup to eliminate cold start
+- **March 2026** - v1.28.0: Admin dashboard at `/admin` with real-time stats and rate-limit monitoring
+- **February 2026** - v1.27.0: Pricing embed widget and public API (`/pricing/public`)
+- **February 2026** - v1.26.0: Model comparison UI at `/compare`
+- **February 2026** - v1.25.0: HMAC-SHA256 webhook payload signing
+- **February 2026** - v1.24.0: Cost calculator UI at `/calculator`
+- **February 2026** - v1.20.0–v1.23.0: Conversation management API + UI + agent tools
+- **February 2026** - v1.14.0–v1.19.0: Historical pricing, alert webhooks, trends UI, export
+- **February 2026** - v1.12.0–v1.13.1: SSE streaming, token streaming, SQLite conversation persistence
 - **February 20, 2026** - Added VS Code workspace configuration and integration guide
-- **February 20, 2026** - Added MCP testing scripts (quick_validate.py, validate_mcp_client.py, mcp_blue_green_deploy.py)
 - **February 20, 2026** - Completed MCP blue-green deployment with v1.6.0 production deployment
-- **February 20, 2026** - Updated documentation index with all MCP guides
 - **February 19, 2026** - Created documentation index and reorganized docs into dedicated folder
-- **February 19, 2026** - Added comprehensive blue-green deployment housekeeping procedures
-- **February 19, 2026** - Enhanced housekeeping with security and quality standards
 
 ---
 
-**Last Updated**: February 20, 2026  
-**Documentation Version**: 1.2  
-**Project Version**: 1.7.0
+**Last Updated**: March 2026
+**Documentation Version**: 1.3
+**Project Version**: 1.33.0

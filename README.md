@@ -3,7 +3,7 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A production-ready Python-based **Model Context Protocol (MCP)** server for LLM pricing data with zero-downtime deployment support. This server provides a RESTful API (via FastAPI), an MCP protocol interface with 7 tools, a **conversational Agent + RAG pipeline**, and a **browser-based Chat UI** for querying pricing data from **12 major LLM providers** including OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Anyscale, and Amazon Bedrock. Features Claude Desktop integration, telemetry tracking, geolocation analytics, and blue-green deployment support.
+A production-ready Python-based **Model Context Protocol (MCP)** server for LLM pricing data with zero-downtime deployment support. This server provides a RESTful API (via FastAPI), an MCP protocol interface with 14 tools, a **conversational Agent + RAG pipeline**, and a **browser-based Chat UI** for querying pricing data from **12 major LLM providers** including OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Anyscale, and Amazon Bedrock. Features a **configurable LLM backend** (OpenAI GPT-4o-mini default, Anthropic Claude, easily switchable via env vars), Claude Desktop integration, telemetry tracking, geolocation analytics, admin dashboard, and blue-green deployment support.
 
 ## Features
 
@@ -42,18 +42,20 @@ A production-ready Python-based **Model Context Protocol (MCP)** server for LLM 
 - **Security Baseline**: API key authentication (x-api-key header), rate limiting (60 req/min per IP), request size validation (1MB), safe logging, container hardening
 - **Secrets Management**: Secure integration with Azure Key Vault via managed identity
 - **Data Validation**: Robust validation using Pydantic models
-- **Comprehensive Testing**: 189 passing tests (109 REST API + 50 MCP tools + 30 Agent/RAG) with 83% code coverage
+- **Comprehensive Testing**: 515 passing tests with full coverage of REST API, MCP tools, Agent/RAG pipeline, and streaming endpoints
 - **CI/CD**: Automated testing and deployment via GitHub Actions with branch protection
 - **Git Flow**: Master branch protection with linear history enforcement
 
 ### Agent + RAG Pipeline
-- **Conversational Agent**: ReAct-loop agent backed by Anthropic Claude or OpenAI models
+- **Configurable LLM Backend**: Switch between OpenAI (default: `gpt-4o-mini`) and Anthropic Claude via `AGENT_LLM_PROVIDER` + `AGENT_MODEL` env vars — no code changes needed
+- **Conversational Agent**: ReAct-loop agent backed by OpenAI GPT-4o-mini (default) or Anthropic Claude
 - **RAG Pipeline**: TF-IDF vector store over pricing docs with top-k retrieval for grounded answers
-- **Conversation Memory**: Per-session history with configurable turn limit (default 10 turns)
-- **MCP Tool Integration**: Agent has access to all 7 MCP tools via `ask_agent` bridge
+- **Conversation Memory**: Per-session history with SQLite persistence and configurable turn limit (default 10 turns)
+- **MCP Tool Integration**: Agent has access to all 14 MCP tools
 - **Chat UI**: Browser-based interface served at `/chat` — streams ReAct progress in real time (thinking → tool calls → answer)
 - **REST Endpoint**: `POST /agent/chat` — blocking JSON response with `message` + optional `conversation_id`
 - **Streaming Endpoint**: `POST /agent/chat/stream` — SSE stream of `thinking` / `tool_call` / `tool_result` / `answer` / `done` events
+- **Admin Dashboard**: `/admin` — real-time server stats, rate-limit monitoring, and deployment metadata
 
 ### Architecture & Extensibility
 - **Extensible Architecture**: Easy-to-use base provider interface for adding new providers
@@ -938,15 +940,30 @@ Every model response now includes automatic cost projections at three usage scal
 Create a `.env` file in the root directory (use `.env.example` as template):
 
 ```env
-# API Keys (optional - for future authenticated endpoints)
-OPENAI_API_KEY=your_openai_api_key_here
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
+# LLM Backend (Agent)
+AGENT_LLM_PROVIDER=openai           # "openai" (default) or "anthropic"
+AGENT_MODEL=gpt-4o-mini             # Model name for the chosen provider
+OPENAI_API_KEY=your_openai_api_key  # Required when AGENT_LLM_PROVIDER=openai
+ANTHROPIC_API_KEY=your_anthropic_key # Required when AGENT_LLM_PROVIDER=anthropic
 
 # Server Configuration
 SERVER_HOST=0.0.0.0
 SERVER_PORT=8000
 DEBUG=false
+
+# Security
+MCP_API_KEY=your-strong-random-key  # Protects non-public endpoints
+RATE_LIMIT_PER_MINUTE=60
 ```
+
+**Switching LLM providers** requires only env var changes — no code modifications:
+
+| Provider | `AGENT_LLM_PROVIDER` | `AGENT_MODEL` | Cost (est.) |
+|---|---|---|---|
+| OpenAI (default) | `openai` | `gpt-4o-mini` | ~$0.73/mo |
+| OpenAI (powerful) | `openai` | `gpt-4o` | ~$8/mo |
+| Anthropic | `anthropic` | `claude-sonnet-4-6` | ~$15/mo |
+| Anthropic (fast) | `anthropic` | `claude-haiku-4-5-20251001` | ~$2/mo |
 
 ## Development
 
@@ -1269,47 +1286,126 @@ For issues, questions, or contributions, please open an issue on GitHub.
 
 ## Roadmap
 
-### Completed (v1.5.1) - Latest
-- [x] **MAJOR:** Expanded to 11 major LLM providers (from 5)
-- [x] **NEW:** Groq integration - Ultra-fast inference platform 
-- [x] **NEW:** Together AI integration - Open-source model hosting
-- [x] **NEW:** Fireworks AI integration - Fast inference platform
-- [x] **NEW:** Perplexity AI integration - Search-augmented models
-- [x] **NEW:** AI21 Labs integration - Jamba and enterprise models
-- [x] **NEW:** Anyscale integration - Ray-optimized inference
-- [x] 87+ models available across all providers
-- [x] Live data fetching for all 12 providers (no API keys required)
-- [x] Smart caching and fallback mechanisms for all providers
-- [x] Public status page integration for performance metrics
+### Completed (v1.33.0) - Latest
+- [x] **LLM Backend**: Switch default agent backend to GPT-4o-mini (20× cheaper, 2× faster than Claude Sonnet)
+- [x] Provider configurable via `AGENT_LLM_PROVIDER` + `AGENT_MODEL` env vars — no code changes needed
+- [x] Full OpenAI and Anthropic backends implemented with token-level streaming support
+
+### Completed (v1.32.0)
+- [x] Friendly error message when AI provider credits are exhausted
+- [x] Improved error classification for billing vs. authentication vs. rate-limit failures
+
+### Completed (v1.31.0)
+- [x] Fixed `BadRequestError` from Anthropic API caused by empty `required: []` in tool schemas
+- [x] `AgentTool.to_llm_schema()` now strips empty `required` arrays before sending to LLM
+
+### Completed (v1.30.0)
+- [x] Fixed 401 Unauthorized on `/chat` — chat endpoints bypassed from API key middleware
+- [x] Removed hardcoded API key from frontend HTML
+- [x] Fixed `AttributeError` from dead code in `PricingAgent` initialization
+
+### Completed (v1.29.0)
+- [x] Reduced agent chat latency — removed mandatory `rag_retrieve` for pure pricing questions
+- [x] Agent pre-warmed at server startup to eliminate cold-start penalty on first request
+
+### Completed (v1.28.0)
+- [x] Admin dashboard at `/admin` — real-time server stats, rate-limit monitoring, deployment metadata
+- [x] Fixed `StaticFiles` mount conflict with API routes (moved to `FileResponse`)
+
+### Completed (v1.27.0)
+- [x] Pricing embed widget — embeddable pricing tables for third-party sites
+- [x] Public API at `/pricing/public` — no authentication required
+
+### Completed (v1.26.0)
+- [x] Model comparison UI at `/compare` — side-by-side model comparison interface
+
+### Completed (v1.25.0)
+- [x] HMAC-SHA256 webhook payload signing for price-change alerts
+
+### Completed (v1.24.0)
+- [x] Cost calculator UI — interactive token cost estimator at `/calculator`
+
+### Completed (v1.23.0)
+- [x] `list_conversations` and `delete_conversation` agent tools
+- [x] Agent can manage its own conversation history via tool calls
+
+### Completed (v1.22.0)
+- [x] Conversation history UI — browse and manage past chat sessions at `/history-ui`
+
+### Completed (v1.21.0)
+- [x] Conversation management REST API — `GET/DELETE /conversations`
+
+### Completed (v1.20.0)
+- [x] Price-change alert webhooks and pricing export exposed as agent tools
+
+### Completed (v1.19.0)
+- [x] `/trends` price-change leaderboard UI with Chart.js visualizations
+
+### Completed (v1.18.0)
+- [x] CSV and JSON pricing history export via `GET /pricing/history/export`
+
+### Completed (v1.17.0)
+- [x] `/history` Chart.js price-history UI — interactive pricing trend charts
+
+### Completed (v1.16.0)
+- [x] Pricing history and trends exposed as agent tools (`get_pricing_history`, `get_pricing_trends`)
+
+### Completed (v1.15.0)
+- [x] Price-change alert webhooks — register URLs to be notified when model prices change
+
+### Completed (v1.14.0)
+- [x] Historical pricing snapshots — automatic 6-hour snapshots stored in SQLite
+
+### Completed (v1.13.0 – v1.13.1)
+- [x] Token-level streaming for agent final answer (real-time text rendering in Chat UI)
+- [x] SQLite-backed conversation persistence across server restarts
+
+### Completed (v1.12.0 – v1.12.2)
+- [x] SSE streaming endpoint `POST /agent/chat/stream` — live ReAct progress events
+- [x] RAG source citations rendered as chips below agent answer bubbles
+
+### Completed (v1.10.0 – v1.11.7)
+- [x] **MAJOR:** Agent + RAG pipeline with OWASP hardening
+- [x] ReAct loop with configurable max iterations and tool routing
+- [x] TF-IDF RAG pipeline over pricing documentation
+- [x] Conversation memory with configurable turn limit
+- [x] OpenAI and Anthropic LLM backends abstracted behind `LLMBackend` interface
+
+### Completed (v1.8.0 – v1.9.0)
+- [x] Azure-hosted MCP server for remote Claude Desktop connections
+- [x] Telemetry tracking, client analytics, geolocation and browser detection
+
+### Completed (v1.6.0)
+- [x] Full MCP protocol (STDIO JSON-RPC 2.0) with Claude Desktop integration
+- [x] Comprehensive MCP testing suite
+
+### Completed (v1.5.1)
+- [x] Expanded to 12 major LLM providers (87+ models)
+- [x] Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Anyscale, Amazon Bedrock
+- [x] Live data fetching for all providers (no API keys required)
 
 ### Completed (v1.4.2)
-- [x] Real-time pricing API integration with async fetching
-- [x] Graceful error handling and partial data support
-- [x] Provider status tracking and monitoring
-- [x] Extensible base provider interface for adding new providers
-- [x] Cost calculation endpoints (single and batch estimates)
-- [x] Initial 5 providers (OpenAI, Anthropic, Google, Cohere, Mistral AI)
-- [x] Models discovery endpoint (/models)
-- [x] Performance metrics endpoint (/performance) - throughput, latency, context windows
-- [x] Value-based recommendations (/use-cases) - organizing models by use cases
-- [x] Batch cost comparison across multiple models
-- [x] Azure App Service deployment ready
-- [x] Comprehensive API documentation
-- [x] Architecture documentation with diagrams
-- [x] Error handling with detailed status information
-- [x] Live data fetching from public pricing pages
-- [x] Smart caching with TTL (500x+ performance improvement)
-- [x] Comprehensive fallback mechanism with static data
-- [x] Public status page integration for performance metrics
+- [x] Real-time pricing API with async fetching and smart caching (500x+ faster cached)
+- [x] 5 initial providers (OpenAI, Anthropic, Google, Cohere, Mistral AI)
+- [x] Cost estimation endpoints (single and batch)
+- [x] Performance metrics, use-case recommendations, health checks
+- [x] Azure App Service deployment with blue-green support
 
-### Future Enhancements
-- [ ] Historical pricing data and trend analysis
-- [ ] WebSocket support for live price updates
-- [ ] Database integration for caching and persistence
-- [ ] Authentication and rate limiting
-- [ ] Additional specialized providers (Replicate, Hugging Face, etc.)
-- [ ] Web scraping for providers without public APIs
+---
+
+### Roadmap: Cost Optimization (Next Up)
+
+> Current hosting cost: ~$76/month. Target: ~$9/month or $0 with OSS credits.
+
+- [ ] **Migrate to Fly.io** — equivalent performance at $5–8/mo vs $69/mo Azure S1; existing `Dockerfile` works unchanged
+- [ ] **Apply for Fly.io OSS credits** — public repos qualify for $150/mo free compute at [fly.io/open-source](https://fly.io/open-source)
+- [ ] **Downgrade Azure S1 → B1** — if staying on Azure, save $56/mo by dropping deployment slots (Basic B1 = $13/mo)
+
+### Roadmap: Future Features
+
+- [ ] Support additional LLM backends (Google Gemini native, Groq direct, Ollama local)
+- [ ] WebSocket support for live price update subscriptions
 - [ ] GraphQL API support
-- [ ] Pricing alerts and notifications
 - [ ] Multi-region deployment support
 - [ ] Advanced filtering and custom comparison criteria
+- [ ] Additional specialized providers (Replicate, Hugging Face Inference)
