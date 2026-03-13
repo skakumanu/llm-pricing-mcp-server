@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     pricing_history_db_path: str = "pricing_history.db"
     pricing_snapshot_interval_hours: int = 6     # how often to snapshot live prices
 
+    # Benchmark / quality scores
+    benchmark_cache_ttl_hours: int = 24     # how long to cache HF leaderboard scores
+
     # Agent / RAG
     agent_llm_provider: str = "anthropic"        # "anthropic" | "openai"
     agent_model: str = "claude-sonnet-4-6"       # model name for the chosen provider
