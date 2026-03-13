@@ -435,7 +435,26 @@ class RouterResponse(BaseModel):
     alternatives: List[PricingMetrics] = Field(
         default_factory=list, description="Up to 3 alternative models"
     )
+    routing_id: str = Field(..., description="Unique routing decision ID (UUID4) for feedback")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class RouterFeedbackRequest(BaseModel):
+    """Request body for POST /router/feedback."""
+
+    routing_id: str = Field(..., description="routing_id from a prior /router/recommend response")
+    was_used: bool = Field(..., description="Whether the recommended model was actually used")
+    actual_model_used: Optional[str] = Field(
+        None, description="Model actually used if different from recommendation"
+    )
+    notes: Optional[str] = Field(None, description="Free-text notes about the routing decision")
+
+
+class RouterFeedbackResponse(BaseModel):
+    """Response body for POST /router/feedback."""
+
+    routing_id: str = Field(..., description="The routing ID feedback was recorded for")
+    recorded: bool = Field(..., description="Whether feedback was recorded successfully")
 
 
 class SavingsRecord(BaseModel):
@@ -464,6 +483,9 @@ class SavingsResponse(BaseModel):
     total_savings_per_1m: float = Field(..., description="Sum of savings_per_1m across records")
     org_id: Optional[str] = Field(None, description="Organisation filter applied")
     days: int = Field(..., description="Look-back window in days")
+    acceptance_rate: Optional[float] = Field(
+        None, description="Fraction of routing decisions where the recommendation was used (0-1)"
+    )
 
 
 class ConversationSummary(BaseModel):

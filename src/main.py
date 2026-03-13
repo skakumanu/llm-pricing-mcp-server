@@ -22,6 +22,7 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 from typing import Optional, Deque, Dict, List  # noqa: E402
 import asyncio  # noqa: E402
 import time  # noqa: E402
+import uuid  # noqa: E402
 from src.config.settings import settings  # noqa: E402
 from src.models.pricing import (  # noqa: E402
     PricingResponse, ServerInfo, EndpointInfo, CostEstimateRequest, CostEstimateResponse,
@@ -32,7 +33,8 @@ from src.models.pricing import (  # noqa: E402
     PricingHistoryResponse, PricingTrendsResponse,
     PricingAlertRequest, PricingAlertRecord, PricingAlertListResponse,
     ConversationSummary, ConversationListResponse,
-    RouterRequest, RouterResponse, SavingsResponse, SavingsRecord,
+    RouterRequest, RouterResponse, RouterFeedbackRequest, RouterFeedbackResponse,
+    SavingsResponse, SavingsRecord,
 )
 from src.services.pricing_history import init_pricing_history_service, get_pricing_history_service  # noqa: E402
 from src.services.pricing_alerts import init_pricing_alert_service, get_pricing_alert_service  # noqa: E402
@@ -156,6 +158,7 @@ _unauthenticated_paths = {
     "/openapi.json",
     "/chat",
     "/v1/chat/completions",
+    "/rate-limits/tiers",
 }
 
 _sensitive_paths = {
@@ -257,13 +260,21 @@ async def security_middleware(request: Request, call_next):
             or (request.client.host if request.client else None)
             or "unknown"
         )
+        tier = request.headers.get("X-Api-Key-Tier", "").lower()
+        _tier_limits = {
+            "free": settings.rate_limit_free,
+            "pro": settings.rate_limit_pro,
+            "enterprise": settings.rate_limit_enterprise,
+        }
+        tier_limit = _tier_limits.get(tier, settings.rate_limit_per_minute)
+        bucket_key = f"{client_ip}:{tier}"
         now = time.time()
         window_start = now - 60
         async with _rate_limit_lock:
-            bucket = _rate_limit_store[client_ip]
+            bucket = _rate_limit_store[bucket_key]
             while bucket and bucket[0] < window_start:
                 bucket.popleft()
-            if len(bucket) >= settings.rate_limit_per_minute:
+            if len(bucket) >= tier_limit:
                 return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
             bucket.append(now)
 
@@ -1242,6 +1253,8 @@ async def router_recommend(req: RouterRequest, request: Request):
             detail="No model matched the given constraints. Try relaxing cost or quality filters.",
         )
 
+    routing_id = str(uuid.uuid4())
+
     # Record routing decision for telemetry/savings
     try:
         org_id = request.headers.get("X-Organization-Id")
@@ -1269,6 +1282,7 @@ async def router_recommend(req: RouterRequest, request: Request):
             baseline_model=baseline_model,
             baseline_cost_per_1m=baseline_cost_1m,
             task_type=req.task_type,
+            routing_id=routing_id,
         )
     except Exception as exc:
         logger.warning("Failed to record routing savings: %s", exc)
@@ -1279,6 +1293,7 @@ async def router_recommend(req: RouterRequest, request: Request):
         score=result.score,
         reason=result.reason,
         alternatives=result.alternatives,
+        routing_id=routing_id,
     )
 
 
@@ -1305,7 +1320,170 @@ async def telemetry_savings(
         total_savings_per_1m=result["total_savings_per_1m"],
         org_id=org_id,
         days=days,
+        acceptance_rate=result.get("acceptance_rate"),
     )
+
+
+@app.post("/router/feedback", response_model=RouterFeedbackResponse)
+async def router_feedback(req: RouterFeedbackRequest):
+    """
+    Record feedback for a prior routing recommendation.
+
+    Pass the `routing_id` returned by `/router/recommend` along with whether
+    the recommended model was actually used.  Duplicate feedback for the same
+    `routing_id` is silently ignored.
+    """
+    tracker = get_savings_tracker()
+    await tracker.record_feedback(
+        routing_id=req.routing_id,
+        was_used=req.was_used,
+        actual_model_used=req.actual_model_used,
+        notes=req.notes,
+    )
+    get_telemetry_service().track_feature_usage("router_feedback")
+    return RouterFeedbackResponse(routing_id=req.routing_id, recorded=True)
+
+
+@app.post("/router/recommend/stream")
+async def router_recommend_stream(req: RouterRequest, request: Request):
+    """
+    Streaming version of /router/recommend — emits SSE progress events.
+
+    Events: start → fetching_models → models_loaded → enriching_quality →
+    quality_enriched → filtering → candidates_ready → recommendation →
+    alternatives → done.
+    """
+    def _event(type_: str, data: Optional[dict] = None) -> str:
+        payload: dict = {"type": type_}
+        if data:
+            payload.update(data)
+        return f"data: {json.dumps(payload, default=str)}\n\n"
+
+    # Task-type → use-case keywords (mirrors router.py)
+    _TASK_USE_CASES = {
+        "code": ["code", "coding", "programming", "developer"],
+        "chat": ["chat", "conversation", "general", "assistant"],
+        "analysis": ["analysis", "reasoning", "research", "data"],
+        "summarization": ["summar", "extract", "document"],
+    }
+
+    async def generate():
+        yield _event("start", {"constraints": req.model_dump(exclude_none=True)})
+        yield _event("fetching_models")
+        try:
+            aggregator = await get_pricing_aggregator()
+            models, _ = await aggregator.get_all_pricing_async()
+            yield _event("models_loaded", {"count": len(models)})
+            yield _event("enriching_quality", {"count": len(models)})
+            models = await enrich_models(models)
+            yield _event("quality_enriched")
+            yield _event("filtering")
+
+            # --- Hard filters (inline, mirrors router.py) ---
+            candidates = []
+            for m in models:
+                avg_cost_1m = (m.cost_per_input_token + m.cost_per_output_token) / 2 * 1_000_000
+                if req.max_cost_per_1m_tokens is not None and avg_cost_1m > req.max_cost_per_1m_tokens:
+                    continue
+                if req.min_quality_score is not None:
+                    if m.quality_score is None or m.quality_score < req.min_quality_score:
+                        continue
+                if req.min_context_window is not None:
+                    if m.context_window is None or m.context_window < req.min_context_window:
+                        continue
+                if req.task_type is not None:
+                    kws = _TASK_USE_CASES.get(req.task_type.lower(), [])
+                    if kws and m.use_cases:
+                        if not any(kw in " ".join(m.use_cases).lower() for kw in kws):
+                            continue
+                candidates.append(m)
+
+            if not candidates:
+                yield _event("error", {"detail": "No model matched constraints"})
+                yield _event("done")
+                return
+
+            yield _event("candidates_ready", {"count": len(candidates)})
+
+            # --- Scoring ---
+            def _score(m) -> float:
+                base = m.quality_value_score or 0.0
+                if req.preferred_provider and m.provider.lower() == req.preferred_provider.lower():
+                    base *= 1.10
+                return base
+
+            candidates.sort(key=_score, reverse=True)
+            best = candidates[0]
+            best_score = _score(best)
+            avg_cost_1m = (best.cost_per_input_token + best.cost_per_output_token) / 2 * 1_000_000
+            alternatives = candidates[1:4]
+
+            stream_routing_id = str(uuid.uuid4())
+            yield _event("recommendation", {
+                "model": best.model_name,
+                "provider": best.provider,
+                "score": round(best_score, 4),
+                "reason": (
+                    f"{best.model_name} ({best.provider}); "
+                    f"quality_value_score={best_score:.2f}; "
+                    f"cost=${avg_cost_1m:.2f}/1M tokens"
+                ),
+            })
+            yield _event("alternatives", {
+                "models": [
+                    {"model_name": a.model_name, "provider": a.provider}
+                    for a in alternatives
+                ],
+            })
+            yield _event("done", {"routing_id": stream_routing_id})
+
+            # Fire-and-forget: persist routing decision
+            try:
+                org_id = request.headers.get("X-Organization-Id")
+                api_key_tier = request.headers.get("X-Api-Key-Tier")
+                baseline_model = alternatives[0].model_name if alternatives else None
+                baseline_cost_1m = (
+                    (alternatives[0].cost_per_input_token + alternatives[0].cost_per_output_token)
+                    / 2 * 1_000_000
+                ) if alternatives else None
+                tracker = get_savings_tracker()
+                await tracker.record_routing(
+                    recommended_model=best.model_name,
+                    recommended_provider=best.provider,
+                    recommended_cost_per_1m=avg_cost_1m,
+                    org_id=org_id,
+                    api_key_tier=api_key_tier,
+                    baseline_model=baseline_model,
+                    baseline_cost_per_1m=baseline_cost_1m,
+                    task_type=req.task_type,
+                    routing_id=stream_routing_id,
+                )
+            except Exception as exc:
+                logger.warning("Failed to record stream routing savings: %s", exc)
+
+            get_telemetry_service().track_feature_usage("router_recommend_stream")
+
+        except Exception as exc:
+            logger.error("Stream router error: %s", exc, exc_info=True)
+            yield _event("error", {"detail": str(exc)})
+            yield _event("done")
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.get("/rate-limits/tiers")
+async def rate_limit_tiers():
+    """Return the rate limit (requests/minute) for each API key tier."""
+    return {
+        "free": settings.rate_limit_free,
+        "pro": settings.rate_limit_pro,
+        "enterprise": settings.rate_limit_enterprise,
+        "default": settings.rate_limit_per_minute,
+    }
 
 
 @app.get("/telemetry", response_model=TelemetryResponse)
