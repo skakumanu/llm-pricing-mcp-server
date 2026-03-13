@@ -32,6 +32,17 @@ class PricingMetrics(BaseModel):
     use_cases: Optional[List[str]] = Field(None, description="List of ideal use cases for this model")
     strengths: Optional[List[str]] = Field(None, description="Key strengths of this model")
     best_for: Optional[str] = Field(None, description="Quick summary of what this model is best for")
+    # Quality / value
+    quality_score: Optional[float] = Field(None, description="Benchmark quality score 0-100")
+
+    @computed_field
+    @property
+    def quality_value_score(self) -> Optional[float]:
+        """Quality per dollar: quality_score / average_cost_per_1M_tokens."""
+        if self.quality_score is None:
+            return None
+        cost_1m = (self.cost_per_input_token + self.cost_per_output_token) / 2 * 1_000_000
+        return round(self.quality_score / max(cost_1m, 1e-9), 4)
 
     @computed_field
     @property
@@ -193,6 +204,7 @@ class PerformanceMetrics(BaseModel):
         None, description="Calculated performance score (throughput/cost ratio)"
     )
     value_score: Optional[float] = Field(None, description="Value score (context_window/cost ratio)")
+    quality_score: Optional[float] = Field(None, description="Benchmark quality score 0-100")
 
 
 class PerformanceResponse(BaseModel):
@@ -204,6 +216,7 @@ class PerformanceResponse(BaseModel):
     lowest_latency: Optional[str] = Field(None, description="Model with lowest latency")
     largest_context: Optional[str] = Field(None, description="Model with largest context window")
     best_value: Optional[str] = Field(None, description="Model with best value score")
+    best_quality_value: Optional[str] = Field(None, description="Model with best quality/cost ratio")
     provider_status: List[ProviderStatusInfo] = Field(default_factory=list, description="Status of each provider")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Response timestamp")
 
@@ -391,6 +404,66 @@ class PricingAlertListResponse(BaseModel):
 
     alerts: List[PricingAlertRecord] = Field(..., description="All registered alerts")
     total: int = Field(..., description="Number of registered alerts")
+
+
+class RouterRequest(BaseModel):
+    """Request body for POST /router/recommend."""
+
+    max_cost_per_1m_tokens: Optional[float] = Field(
+        None, description="Maximum acceptable average cost per 1M tokens (USD)"
+    )
+    min_quality_score: Optional[float] = Field(
+        None, ge=0, le=100, description="Minimum required quality score (0-100)"
+    )
+    min_context_window: Optional[int] = Field(
+        None, ge=0, description="Minimum required context window size (tokens)"
+    )
+    preferred_provider: Optional[str] = Field(
+        None, description="Preferred provider name (10% score boost applied)"
+    )
+    task_type: Optional[str] = Field(
+        None, description="Task type hint: 'code' | 'chat' | 'analysis' | 'summarization'"
+    )
+
+
+class RouterResponse(BaseModel):
+    """Response body for POST /router/recommend."""
+
+    recommended: PricingMetrics = Field(..., description="Best matching model")
+    score: float = Field(..., description="Composite routing score")
+    reason: str = Field(..., description="Human-readable explanation of the recommendation")
+    alternatives: List[PricingMetrics] = Field(
+        default_factory=list, description="Up to 3 alternative models"
+    )
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class SavingsRecord(BaseModel):
+    """A single routing savings record."""
+
+    model_config = ConfigDict(protected_namespaces=())
+
+    id: int = Field(..., description="Unique record ID")
+    org_id: Optional[str] = Field(None, description="Organisation identifier")
+    api_key_tier: Optional[str] = Field(None, description="API key tier")
+    requested_at: float = Field(..., description="Unix timestamp of the routing request")
+    recommended_model: str = Field(..., description="Recommended model name")
+    recommended_provider: str = Field(..., description="Recommended model provider")
+    recommended_cost_per_1m: float = Field(..., description="Recommended model cost per 1M tokens")
+    baseline_model: Optional[str] = Field(None, description="Most expensive alternative considered")
+    baseline_cost_per_1m: Optional[float] = Field(None, description="Baseline model cost per 1M tokens")
+    savings_per_1m: Optional[float] = Field(None, description="Cost savings per 1M tokens vs baseline")
+    task_type: Optional[str] = Field(None, description="Task type hint provided by caller")
+
+
+class SavingsResponse(BaseModel):
+    """Response for GET /telemetry/savings."""
+
+    records: List[SavingsRecord] = Field(..., description="Routing savings records")
+    total: int = Field(..., description="Total matching records")
+    total_savings_per_1m: float = Field(..., description="Sum of savings_per_1m across records")
+    org_id: Optional[str] = Field(None, description="Organisation filter applied")
+    days: int = Field(..., description="Look-back window in days")
 
 
 class ConversationSummary(BaseModel):
