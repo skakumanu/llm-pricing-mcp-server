@@ -100,10 +100,11 @@ class SavingsTrackerService:
             await db.execute(_CREATE_FEEDBACK_TABLE)
             await db.execute(_CREATE_FEEDBACK_INDEX)
             # Migrate: add routing_id column to routing_savings if missing
+            import aiosqlite as _aiosqlite
             try:
                 await db.execute("ALTER TABLE routing_savings ADD COLUMN routing_id TEXT")
-            except Exception:
-                pass  # Column already exists — OperationalError in SQLite
+            except _aiosqlite.OperationalError:
+                pass  # nosec B110 — column already exists, this is intentional
             await db.commit()
 
     async def record_routing(
