@@ -162,20 +162,20 @@ jobs:
       run: |
         echo "Validating production health..."
         PROD_URL="https://${{ steps.kvsecrets.outputs.azure-webapp-name }}.azurewebsites.net/health"
-        EXPECTED_VERSION=$(grep -oP '__version__ = "\K[^"]*' src/__init__.py)
+        EXPECTED_VERSION=$(grep '__version__' src/__init__.py | cut -d'"' -f2)
+        echo "Expecting version: $EXPECTED_VERSION"
 
-        for attempt in {1..18}; do
+        for attempt in $(seq 1 18); do
           echo "Health check attempt $attempt/18..."
-          RESPONSE=$(curl -s "$PROD_URL")
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$PROD_URL")
+          RESPONSE=$(curl -s --max-time 10 "$PROD_URL" || echo "")
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$PROD_URL" || echo "000")
 
           if [ "$HTTP_CODE" = "200" ]; then
-            ACTUAL_VERSION=$(echo "$RESPONSE" | grep -oP '"version":"?\K[^,"]*')
-            if [ "$ACTUAL_VERSION" = "$EXPECTED_VERSION" ]; then
-              echo "OK: Production is healthy and running v$ACTUAL_VERSION"
+            if echo "$RESPONSE" | grep -q "\"version\":\"$EXPECTED_VERSION\""; then
+              echo "OK: Production is healthy and running v$EXPECTED_VERSION"
               exit 0
             fi
-            echo "Version not yet updated (got $ACTUAL_VERSION, want $EXPECTED_VERSION), waiting..."
+            echo "Version not yet updated (want $EXPECTED_VERSION, response: $RESPONSE), waiting..."
           else
             echo "HTTP $HTTP_CODE, waiting..."
           fi
