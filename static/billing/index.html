@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LLM Pricing API — Billing</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --accent: #7c6af7;
+      --accent-hover: #9585ff;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --success: #34d399;
+      --danger: #f87171;
+      --warn: #fbbf24;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      height: 56px;
+    }
+    header h1 { font-size: 1rem; font-weight: 600; color: var(--accent); }
+    nav { display: flex; gap: 0.5rem; margin-left: auto; }
+    nav button {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 0.4rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.15s;
+    }
+    nav button:hover, nav button.active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    main { max-width: 720px; margin: 3rem auto; padding: 0 1.5rem; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    h2 { font-size: 1.4rem; margin-bottom: 0.5rem; }
+    p.sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.4rem; }
+    input[type=email], input[type=text], input[type=password] {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.6rem 0.8rem;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus { border-color: var(--accent); }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.6rem 1.4rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 500;
+      margin-top: 1rem;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn.secondary {
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+    }
+    .btn.secondary:hover { background: rgba(124,106,247,0.1); }
+    .result-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-top: 1rem;
+      font-family: monospace;
+      font-size: 0.85rem;
+      word-break: break-all;
+      display: none;
+    }
+    .copy-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-top: 0.5rem;
+    }
+    .copy-row input { flex: 1; }
+    .copy-btn {
+      background: var(--border);
+      border: none;
+      color: var(--text);
+      padding: 0.5rem 0.8rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      white-space: nowrap;
+    }
+    .copy-btn:hover { background: var(--accent); }
+    .tier-badge {
+      display: inline-block;
+      padding: 0.2rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .badge-free { background: rgba(139,147,163,0.15); color: var(--muted); }
+    .badge-pro { background: rgba(124,106,247,0.2); color: var(--accent); }
+    .badge-enterprise { background: rgba(251,191,36,0.2); color: var(--warn); }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .stat {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      text-align: center;
+    }
+    .stat .value { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+    .stat .label { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
+    .tier-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .tier-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      text-align: center;
+      transition: border-color 0.15s;
+    }
+    .tier-card:hover { border-color: var(--accent); }
+    .tier-card h3 { font-size: 1.1rem; margin-bottom: 0.3rem; }
+    .tier-card .price { font-size: 1.8rem; font-weight: 700; color: var(--accent); margin: 0.5rem 0; }
+    .tier-card .price span { font-size: 0.8rem; color: var(--muted); font-weight: normal; }
+    .tier-card ul { list-style: none; text-align: left; font-size: 0.85rem; color: var(--muted); margin: 1rem 0; }
+    .tier-card ul li::before { content: "✓ "; color: var(--success); }
+    .tier-card ul li { margin-bottom: 0.3rem; }
+    .error-msg { color: var(--danger); font-size: 0.85rem; margin-top: 0.5rem; }
+    .success-msg { color: var(--success); font-size: 0.85rem; margin-top: 0.5rem; }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>LLM Pricing API</h1>
+  <nav>
+    <button class="active" onclick="showPanel('signup')">Sign Up</button>
+    <button onclick="showPanel('dashboard')">Dashboard</button>
+    <button onclick="showPanel('upgrade')">Upgrade</button>
+    <button onclick="openPortal()">Manage Billing</button>
+  </nav>
+</header>
+<main>
+
+  <!-- ── SIGNUP PANEL ── -->
+  <div id="panel-signup" class="panel active">
+    <h2>Get your free API key</h2>
+    <p class="sub">Sign up with your email to receive instant access. No credit card required.</p>
+    <div class="card">
+      <label for="signup-email">Email address</label>
+      <input type="email" id="signup-email" placeholder="you@company.com">
+      <button class="btn" onclick="doSignup()"><span id="signup-spin"></span> Get API Key</button>
+      <div class="error-msg" id="signup-error"></div>
+    </div>
+    <div class="result-box" id="signup-result">
+      <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.8rem;">
+        <strong>Your API key</strong>
+        <span class="tier-badge badge-free" id="signup-tier-badge">free</span>
+      </div>
+      <div class="copy-row">
+        <input type="text" id="signup-key-display" readonly>
+        <button class="copy-btn" onclick="copyKey('signup-key-display')">Copy</button>
+      </div>
+      <div class="success-msg" style="margin-top:0.6rem;" id="signup-msg"></div>
+    </div>
+  </div>
+
+  <!-- ── DASHBOARD PANEL ── -->
+  <div id="panel-dashboard" class="panel">
+    <h2>Dashboard</h2>
+    <p class="sub">Enter your API key to view usage and savings.</p>
+    <div class="card">
+      <label for="dash-key">API key</label>
+      <div class="copy-row">
+        <input type="text" id="dash-key" placeholder="Paste your API key">
+        <button class="btn" style="margin-top:0;" onclick="loadDashboard()"><span id="dash-spin"></span> Load</button>
+      </div>
+      <div class="error-msg" id="dash-error"></div>
+    </div>
+    <div id="dash-result" style="display:none;">
+      <div class="card" style="margin-bottom:0.5rem;">
+        <div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.8rem;">
+          <strong id="dash-email"></strong>
+          <span class="tier-badge" id="dash-tier-badge"></span>
+        </div>
+        <div style="font-size:0.85rem;color:var(--muted);">Org ID: <code id="dash-org"></code></div>
+        <div style="font-size:0.85rem;color:var(--muted);margin-top:0.3rem;">Key: <code id="dash-key-preview"></code></div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat"><div class="value" id="dash-calls">–</div><div class="label">Router calls (30d)</div></div>
+        <div class="stat"><div class="value" id="dash-savings">–</div><div class="label">Savings /1M tokens</div></div>
+        <div class="stat"><div class="value" id="dash-acceptance">–</div><div class="label">Acceptance rate</div></div>
+      </div>
+      <button class="btn secondary" style="margin-top:1rem;" onclick="showPanel('upgrade')">Upgrade Plan</button>
+    </div>
+  </div>
+
+  <!-- ── UPGRADE PANEL ── -->
+  <div id="panel-upgrade" class="panel">
+    <h2>Choose a plan</h2>
+    <p class="sub">Unlock higher rate limits and priority support. Powered by Stripe.</p>
+    <div style="margin-bottom:1rem;">
+      <label for="upgrade-key">Your API key (for checkout)</label>
+      <input type="text" id="upgrade-key" placeholder="Paste your API key">
+    </div>
+    <div class="tier-cards">
+      <div class="tier-card">
+        <h3>Free</h3>
+        <div class="price">$0 <span>/mo</span></div>
+        <ul>
+          <li>30 req/min</li>
+          <li>Router access</li>
+          <li>Savings tracker</li>
+        </ul>
+        <button class="btn secondary" disabled>Current</button>
+      </div>
+      <div class="tier-card">
+        <h3>Pro</h3>
+        <div class="price">$29 <span>/mo</span></div>
+        <ul>
+          <li>120 req/min</li>
+          <li>Priority routing</li>
+          <li>Usage analytics</li>
+        </ul>
+        <button class="btn" onclick="doCheckout('pro')"><span id="pro-spin"></span> Upgrade to Pro</button>
+        <div class="error-msg" id="pro-error"></div>
+      </div>
+      <div class="tier-card">
+        <h3>Enterprise</h3>
+        <div class="price">$299 <span>/mo</span></div>
+        <ul>
+          <li>600 req/min</li>
+          <li>SLA guarantee</li>
+          <li>Dedicated support</li>
+        </ul>
+        <button class="btn" onclick="doCheckout('enterprise')"><span id="ent-spin"></span> Upgrade</button>
+        <div class="error-msg" id="ent-error"></div>
+      </div>
+    </div>
+  </div>
+
+</main>
+<script>
+  let _apiKey = '';
+
+  function showPanel(name) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+    const btns = document.querySelectorAll('nav button');
+    const idx = { signup: 0, dashboard: 1, upgrade: 2 };
+    if (idx[name] !== undefined) btns[idx[name]].classList.add('active');
+  }
+
+  function copyKey(inputId) {
+    const el = document.getElementById(inputId);
+    el.select();
+    navigator.clipboard.writeText(el.value).catch(() => document.execCommand('copy'));
+  }
+
+  function badgeClass(tier) {
+    return { free: 'badge-free', pro: 'badge-pro', enterprise: 'badge-enterprise' }[tier] || 'badge-free';
+  }
+
+  async function doSignup() {
+    const email = document.getElementById('signup-email').value.trim();
+    const errEl = document.getElementById('signup-error');
+    const resultEl = document.getElementById('signup-result');
+    errEl.textContent = '';
+    resultEl.style.display = 'none';
+    if (!email) { errEl.textContent = 'Please enter an email address.'; return; }
+    const spin = document.getElementById('signup-spin');
+    spin.innerHTML = '<span class="spinner"></span>';
+    try {
+      const res = await fetch('/billing/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.detail || 'Signup failed.'; return; }
+      _apiKey = data.api_key;
+      document.getElementById('signup-key-display').value = data.api_key;
+      const badge = document.getElementById('signup-tier-badge');
+      badge.textContent = data.tier;
+      badge.className = 'tier-badge ' + badgeClass(data.tier);
+      document.getElementById('signup-msg').textContent = data.message;
+      resultEl.style.display = 'block';
+      document.getElementById('dash-key').value = data.api_key;
+      document.getElementById('upgrade-key').value = data.api_key;
+    } catch (e) {
+      errEl.textContent = 'Network error. Please try again.';
+    } finally {
+      spin.innerHTML = '';
+    }
+  }
+
+  async function loadDashboard() {
+    const key = document.getElementById('dash-key').value.trim();
+    const errEl = document.getElementById('dash-error');
+    const resultEl = document.getElementById('dash-result');
+    errEl.textContent = '';
+    resultEl.style.display = 'none';
+    if (!key) { errEl.textContent = 'Please enter your API key.'; return; }
+    const spin = document.getElementById('dash-spin');
+    spin.innerHTML = '<span class="spinner"></span>';
+    try {
+      const res = await fetch('/billing/me', { headers: { 'x-api-key': key } });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.detail || 'Failed to load dashboard.'; return; }
+      _apiKey = key;
+      document.getElementById('upgrade-key').value = key;
+      document.getElementById('dash-email').textContent = data.email;
+      const badge = document.getElementById('dash-tier-badge');
+      badge.textContent = data.tier;
+      badge.className = 'tier-badge ' + badgeClass(data.tier);
+      document.getElementById('dash-org').textContent = data.org_id;
+      document.getElementById('dash-key-preview').textContent = data.api_key_preview;
+      document.getElementById('dash-calls').textContent = data.router_calls_30d;
+      document.getElementById('dash-savings').textContent = data.savings_per_1m_30d != null ? '$' + data.savings_per_1m_30d.toFixed(2) : '–';
+      document.getElementById('dash-acceptance').textContent = data.acceptance_rate != null ? (data.acceptance_rate * 100).toFixed(0) + '%' : '–';
+      resultEl.style.display = 'block';
+    } catch (e) {
+      errEl.textContent = 'Network error. Please try again.';
+    } finally {
+      spin.innerHTML = '';
+    }
+  }
+
+  async function doCheckout(tier) {
+    const key = document.getElementById('upgrade-key').value.trim() || _apiKey;
+    const spinId = tier === 'pro' ? 'pro-spin' : 'ent-spin';
+    const errId = tier === 'pro' ? 'pro-error' : 'ent-error';
+    document.getElementById(errId).textContent = '';
+    if (!key) { document.getElementById(errId).textContent = 'Paste your API key above.'; return; }
+    document.getElementById(spinId).innerHTML = '<span class="spinner"></span>';
+    try {
+      const res = await fetch('/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': key },
+        body: JSON.stringify({ tier }),
+      });
+      const data = await res.json();
+      if (!res.ok) { document.getElementById(errId).textContent = data.detail || 'Checkout failed.'; return; }
+      window.location.href = data.checkout_url;
+    } catch (e) {
+      document.getElementById(errId).textContent = 'Network error. Please try again.';
+    } finally {
+      document.getElementById(spinId).innerHTML = '';
+    }
+  }
+
+  async function openPortal() {
+    const key = document.getElementById('upgrade-key').value.trim()
+      || document.getElementById('dash-key').value.trim()
+      || _apiKey;
+    if (!key) { showPanel('dashboard'); alert('Enter your API key in the Dashboard tab first.'); return; }
+    try {
+      const res = await fetch('/billing/portal', { headers: { 'x-api-key': key } });
+      const data = await res.json();
+      if (!res.ok) { alert(data.detail || 'Portal unavailable.'); return; }
+      window.location.href = data.portal_url;
+    } catch (e) {
+      alert('Network error. Please try again.');
+    }
+  }
+
+  // Auto-detect ?success or ?cancel from Stripe redirect
+  const params = new URLSearchParams(location.search);
+  if (params.get('success')) {
+    showPanel('dashboard');
+    document.getElementById('dash-error').style.color = 'var(--success)';
+    document.getElementById('dash-error').textContent = 'Subscription activated! Enter your API key to refresh.';
+  }
+</script>
+</body>
+</html>
