@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # Request limits
     max_body_bytes: int = 1_000_000
     rate_limit_per_minute: int = 60
+    rate_limit_free: int = 30
+    rate_limit_pro: int = 120
+    rate_limit_enterprise: int = 600
 
     # Server Configuration
     server_host: str = "0.0.0.0"  # nosec B104
