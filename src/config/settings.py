@@ -50,6 +50,14 @@ class Settings(BaseSettings):
     # Webhook signing secret (None = unsigned; set to a long random string in production)
     webhook_secret: Optional[str] = None
 
+    # Stripe / Billing
+    stripe_secret_key: Optional[str] = None
+    stripe_webhook_secret: Optional[str] = None
+    stripe_price_id_pro: Optional[str] = None
+    stripe_price_id_enterprise: Optional[str] = None
+    billing_db_path: str = "billing.db"
+    billing_base_url: str = "http://localhost:8000"
+
     # Pricing history
     pricing_history_db_path: str = "pricing_history.db"
     pricing_snapshot_interval_hours: int = 6     # how often to snapshot live prices

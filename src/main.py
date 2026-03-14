@@ -40,6 +40,11 @@ from src.services.pricing_history import init_pricing_history_service, get_prici
 from src.services.pricing_alerts import init_pricing_alert_service, get_pricing_alert_service  # noqa: E402
 from src.services.router import init_router, get_router  # noqa: E402
 from src.services.savings_tracker import init_savings_tracker, get_savings_tracker  # noqa: E402
+from src.services.billing_service import init_billing_service, get_billing_service  # noqa: E402
+from src.models.billing import (  # noqa: E402
+    SignupRequest, SignupResponse, CheckoutRequest, CheckoutResponse,
+    BillingPortalResponse, CustomerDashboard,
+)
 from src.services.benchmark_service import enrich_models, set_cache_ttl  # noqa: E402
 from agent.conversation import init_conversation_store, get_conversation_store  # noqa: E402
 from src.models.deployment import (  # noqa: E402
@@ -159,6 +164,9 @@ _unauthenticated_paths = {
     "/chat",
     "/v1/chat/completions",
     "/rate-limits/tiers",
+    "/billing",
+    "/billing/signup",
+    "/billing/webhook",
 }
 
 _sensitive_paths = {
@@ -229,8 +237,19 @@ async def security_middleware(request: Request, call_next):
             )
             return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
     elif path not in _unauthenticated_paths:
-        if settings.mcp_api_key:
-            provided_key = request.headers.get(settings.mcp_api_key_header)
+        provided_key = request.headers.get(settings.mcp_api_key_header)
+
+        # Per-customer billing key lookup (falls back to global key if not found)
+        customer = None
+        try:
+            billing = get_billing_service()
+            if provided_key:
+                customer = await billing.get_customer_by_api_key(provided_key)
+        except RuntimeError:
+            pass  # nosec B110 — billing not initialized yet
+        request.state.customer = customer
+
+        if settings.mcp_api_key and not customer:
             if not provided_key or not secrets.compare_digest(provided_key, settings.mcp_api_key):
                 client_ip = (
                     request.headers.get("x-forwarded-for", "").split(",")[0].strip()
@@ -244,7 +263,7 @@ async def security_middleware(request: Request, call_next):
                     client_ip,
                 )
                 return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
-        elif not _auth_warning_logged:
+        elif not settings.mcp_api_key and not customer and not _auth_warning_logged:
             logger.warning("MCP API key not configured; endpoints are unauthenticated.")
             _auth_warning_logged = True
 
@@ -260,14 +279,19 @@ async def security_middleware(request: Request, call_next):
             or (request.client.host if request.client else None)
             or "unknown"
         )
-        tier = request.headers.get("X-Api-Key-Tier", "").lower()
+        _customer = getattr(request.state, "customer", None)
+        if _customer:
+            tier = _customer.tier
+            bucket_key = _customer.id
+        else:
+            tier = request.headers.get("X-Api-Key-Tier", "").lower()
+            bucket_key = f"{client_ip}:{tier}"
         _tier_limits = {
             "free": settings.rate_limit_free,
             "pro": settings.rate_limit_pro,
             "enterprise": settings.rate_limit_enterprise,
         }
         tier_limit = _tier_limits.get(tier, settings.rate_limit_per_minute)
-        bucket_key = f"{client_ip}:{tier}"
         now = time.time()
         window_start = now - 60
         async with _rate_limit_lock:
@@ -488,6 +512,8 @@ async def _pricing_snapshot_loop() -> None:
 @app.on_event("startup")
 async def startup_pricing_history() -> None:
     """Initialize the pricing history/alerts/conversation DBs and launch the background snapshot loop."""
+    await init_billing_service(settings.billing_db_path)
+    logger.info("Billing service initialized at %s", settings.billing_db_path)
     await init_pricing_history_service(settings.pricing_history_db_path)
     logger.info("Pricing history service initialized at %s", settings.pricing_history_db_path)
     await init_pricing_alert_service(settings.pricing_history_db_path)
@@ -1257,7 +1283,9 @@ async def router_recommend(req: RouterRequest, request: Request):
 
     # Record routing decision for telemetry/savings
     try:
-        org_id = request.headers.get("X-Organization-Id")
+        org_id = (
+            getattr(request.state, "customer", None) and request.state.customer.org_id
+        ) or request.headers.get("X-Organization-Id")
         api_key_tier = request.headers.get("X-Api-Key-Tier")
         recommended_cost_1m = (
             result.recommended.cost_per_input_token + result.recommended.cost_per_output_token
@@ -1484,6 +1512,207 @@ async def rate_limit_tiers():
         "enterprise": settings.rate_limit_enterprise,
         "default": settings.rate_limit_per_minute,
     }
+
+
+# ---------------------------------------------------------------------------
+# Billing / Stripe endpoints
+# ---------------------------------------------------------------------------
+
+_PRICE_ID_TO_TIER = {}  # populated lazily from settings
+
+
+def _price_tier_map():
+    m = {}
+    if settings.stripe_price_id_pro:
+        m[settings.stripe_price_id_pro] = "pro"
+    if settings.stripe_price_id_enterprise:
+        m[settings.stripe_price_id_enterprise] = "enterprise"
+    return m
+
+
+@app.get("/billing")
+async def billing_index():
+    """Serve the self-serve billing dashboard SPA."""
+    html_path = Path(__file__).parent.parent / "static" / "billing" / "index.html"
+    return FileResponse(str(html_path))
+
+
+@app.post("/billing/signup", response_model=SignupResponse)
+async def billing_signup(req: SignupRequest):
+    """
+    Free-tier signup — create (or retrieve) a customer record and return an API key.
+
+    Idempotent: the same email always returns the same API key.
+    """
+    billing = get_billing_service()
+    customer = await billing.get_or_create_customer(req.email)
+    return SignupResponse(
+        api_key=customer.api_key,
+        org_id=customer.org_id,
+        tier=customer.tier,
+        message=(
+            "Welcome! Your free-tier API key is ready. "
+            "Upgrade anytime via POST /billing/checkout."
+        ),
+    )
+
+
+@app.post("/billing/checkout", response_model=CheckoutResponse)
+async def billing_checkout(req: CheckoutRequest, request: Request):
+    """
+    Create a Stripe Checkout session for the requested tier (pro|enterprise).
+
+    Requires authentication (x-api-key header with a billing API key).
+    Returns 503 if Stripe is not configured.
+    """
+    if not settings.stripe_secret_key:
+        raise HTTPException(status_code=503, detail="Stripe not configured")
+
+    customer = getattr(request.state, "customer", None)
+    if customer is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    tier = req.tier.lower()
+    price_map = _price_tier_map()
+    price_id = {v: k for k, v in price_map.items()}.get(tier)
+    if not price_id:
+        raise HTTPException(status_code=400, detail=f"Unknown tier: {tier}")
+
+    import stripe  # local import — optional dependency
+    stripe.api_key = settings.stripe_secret_key
+    session = stripe.checkout.Session.create(
+        customer_email=customer.email,
+        payment_method_types=["card"],
+        line_items=[{"price": price_id, "quantity": 1}],
+        mode="subscription",
+        success_url=f"{settings.billing_base_url}/billing?success=1",
+        cancel_url=f"{settings.billing_base_url}/billing?cancel=1",
+        metadata={"customer_id": customer.id, "tier": tier},
+    )
+    return CheckoutResponse(checkout_url=session.url)
+
+
+@app.post("/billing/webhook")
+async def billing_webhook(request: Request):
+    """
+    Stripe webhook receiver.
+
+    Verifies the Stripe-Signature header and processes subscription events.
+    Returns 400 on signature failure, 200 on success.
+    """
+    if not settings.stripe_webhook_secret:
+        raise HTTPException(status_code=503, detail="Stripe webhook not configured")
+
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+
+    import stripe  # local import — optional dependency
+    stripe.api_key = settings.stripe_secret_key
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, settings.stripe_webhook_secret
+        )
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid Stripe signature")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    billing = get_billing_service()
+    price_map = _price_tier_map()
+    event_type = event["type"]
+
+    if event_type == "checkout.session.completed":
+        session = event["data"]["object"]
+        customer_id = session.get("metadata", {}).get("customer_id")
+        tier = session.get("metadata", {}).get("tier", "pro")
+        stripe_customer_id = session.get("customer")
+        stripe_subscription_id = session.get("subscription")
+        if customer_id:
+            await billing.update_tier(
+                customer_id,
+                tier,
+                stripe_customer_id=stripe_customer_id,
+                stripe_subscription_id=stripe_subscription_id,
+            )
+
+    elif event_type == "customer.subscription.updated":
+        sub = event["data"]["object"]
+        stripe_customer_id = sub.get("customer")
+        price_id = sub["items"]["data"][0]["price"]["id"] if sub.get("items", {}).get("data") else None
+        tier = price_map.get(price_id, "free")
+        if stripe_customer_id:
+            customer = await billing.get_customer_by_stripe_id(stripe_customer_id)
+            if customer:
+                await billing.update_tier(customer.id, tier)
+
+    elif event_type == "customer.subscription.deleted":
+        sub = event["data"]["object"]
+        stripe_customer_id = sub.get("customer")
+        if stripe_customer_id:
+            customer = await billing.get_customer_by_stripe_id(stripe_customer_id)
+            if customer:
+                await billing.update_tier(customer.id, "free")
+
+    return {"ok": True}
+
+
+@app.get("/billing/portal", response_model=BillingPortalResponse)
+async def billing_portal(request: Request):
+    """
+    Create a Stripe Customer Portal session for the authenticated customer.
+
+    Returns 503 if Stripe is not configured.
+    """
+    if not settings.stripe_secret_key:
+        raise HTTPException(status_code=503, detail="Stripe not configured")
+
+    customer = getattr(request.state, "customer", None)
+    if customer is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not customer.stripe_customer_id:
+        raise HTTPException(status_code=400, detail="No Stripe customer associated with this account")
+
+    import stripe  # local import — optional dependency
+    stripe.api_key = settings.stripe_secret_key
+    portal = stripe.billing_portal.Session.create(
+        customer=customer.stripe_customer_id,
+        return_url=f"{settings.billing_base_url}/billing",
+    )
+    return BillingPortalResponse(portal_url=portal.url)
+
+
+@app.get("/billing/me", response_model=CustomerDashboard)
+async def billing_me(request: Request):
+    """
+    Return the authenticated customer's dashboard data.
+
+    Requires a valid billing API key in the x-api-key header.
+    """
+    customer = getattr(request.state, "customer", None)
+    if customer is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # Pull 30-day savings/router stats
+    try:
+        tracker = get_savings_tracker()
+        savings = await tracker.get_savings(org_id=customer.org_id, days=30)
+        router_calls = savings.get("total", 0)
+        savings_per_1m = savings.get("total_savings_per_1m", 0.0)
+        acceptance_rate = savings.get("acceptance_rate")
+    except Exception:
+        router_calls = 0
+        savings_per_1m = 0.0
+        acceptance_rate = None
+
+    return CustomerDashboard(
+        email=customer.email,
+        tier=customer.tier,
+        org_id=customer.org_id,
+        api_key_preview=customer.api_key[:8] + "...",
+        router_calls_30d=router_calls,
+        savings_per_1m_30d=savings_per_1m,
+        acceptance_rate=acceptance_rate,
+    )
 
 
 @app.get("/telemetry", response_model=TelemetryResponse)
@@ -2055,6 +2284,42 @@ async def admin_rate_limits():
         "tracked_ips": len(consumers),
         "limit_per_minute": settings.rate_limit_per_minute,
         "top_consumers": consumers[:20],
+        "snapshot_at": datetime.now(UTC).isoformat(),
+    }
+
+
+@app.get("/admin/customers")
+async def admin_customers():
+    """
+    List all billing customers for the admin dashboard.
+
+    Returns customer count by tier, plus a full customer list (api_key
+    masked to first 8 chars).  Requires a valid ``x-api-key`` header.
+    """
+    try:
+        billing = get_billing_service()
+        customers = await billing.get_all_customers()
+    except RuntimeError:
+        customers = []
+
+    tier_counts: Dict[str, int] = {}
+    rows = []
+    for c in customers:
+        tier_counts[c.tier] = tier_counts.get(c.tier, 0) + 1
+        rows.append({
+            "id": c.id,
+            "email": c.email,
+            "tier": c.tier,
+            "org_id": c.org_id,
+            "api_key_preview": c.api_key[:8] + "...",
+            "stripe_customer_id": c.stripe_customer_id,
+            "created_at": datetime.fromtimestamp(c.created_at, tz=UTC).isoformat(),
+        })
+
+    return {
+        "total": len(rows),
+        "by_tier": tier_counts,
+        "customers": rows,
         "snapshot_at": datetime.now(UTC).isoformat(),
     }
 
