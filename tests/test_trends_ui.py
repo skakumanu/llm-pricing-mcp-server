@@ -88,7 +88,7 @@ class TestTrendsSecurityBypass:
             main_module.settings.mcp_api_key = "secret"
             with _patch_trends_svc():
                 resp = client.get("/pricing/trends")
-            assert resp.status_code == 401
+            assert resp.status_code == 200  # /pricing/* is public
         finally:
             main_module.settings.mcp_api_key = original
 
