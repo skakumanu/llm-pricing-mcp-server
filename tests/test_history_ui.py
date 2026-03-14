@@ -56,15 +56,15 @@ class TestHistoryPageSecurityBypass:
         finally:
             main_module.settings.mcp_api_key = original
 
-    def test_pricing_history_endpoint_requires_auth_when_key_set(self):
-        """GET /pricing/history is NOT in the bypass list — requires auth when key is set."""
+    def test_pricing_history_endpoint_is_public(self):
+        """GET /pricing/history is in the public bypass list — no auth required."""
         import src.main as main_module
         original = main_module.settings.mcp_api_key
         try:
             main_module.settings.mcp_api_key = "secret"
             with _patch_history_svc():
                 resp = client.get("/pricing/history")
-            assert resp.status_code == 401
+            assert resp.status_code == 200
         finally:
             main_module.settings.mcp_api_key = original
 
