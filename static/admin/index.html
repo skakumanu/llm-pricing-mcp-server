@@ -264,6 +264,7 @@
     <a href="/calculator">Calculator</a>
     <a href="/compare">Compare</a>
     <a href="/widget">Widget</a>
+    <a href="/billing">Billing</a>
     <a href="/admin" class="active">Admin</a>
   </nav>
 </header>
@@ -403,6 +404,23 @@
 
   </div>
 
+  <!-- ── Billing customers ── -->
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-header">
+      Billing Customers
+      <span class="panel-badge" id="cust-count">—</span>
+      <span id="cust-tier-summary" style="margin-left:auto;font-size:12px;color:var(--muted);font-weight:normal"></span>
+    </div>
+    <table class="data-table" id="cust-table">
+      <thead>
+        <tr><th>Email</th><th>Tier</th><th>API Key</th><th>Org ID</th><th>Stripe</th><th>Joined</th></tr>
+      </thead>
+      <tbody id="cust-body">
+        <tr class="empty-row"><td colspan="6">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
 </div><!-- /page -->
 
 <script>
@@ -451,11 +469,12 @@ async function loadAll() {
   document.getElementById("error-panel").style.display = "none";
 
   try {
-    const [statsRes, rlRes, alertRes, convRes] = await Promise.all([
+    const [statsRes, rlRes, alertRes, convRes, custRes] = await Promise.all([
       fetch("/admin/stats", { headers: headers() }),
       fetch("/admin/rate-limits", { headers: headers() }),
       fetch("/pricing/alerts", { headers: headers() }),
       fetch("/agent/conversations", { headers: headers() }),
+      fetch("/admin/customers", { headers: headers() }),
     ]);
 
     if (statsRes.status === 401 || statsRes.status === 403) {
@@ -467,11 +486,13 @@ async function loadAll() {
     const rl    = rlRes.ok   ? await rlRes.json()    : null;
     const alerts = alertRes.ok ? await alertRes.json() : null;
     const convs  = convRes.ok  ? await convRes.json()  : null;
+    const custs  = custRes.ok  ? await custRes.json()  : null;
 
     if (stats)  renderStats(stats);
     if (rl)     renderRateLimits(rl);
     if (alerts) renderAlerts(alerts);
     if (convs)  renderConversations(convs);
+    if (custs)  renderCustomers(custs);
 
     document.getElementById("last-updated").textContent =
       "Updated " + new Date().toLocaleTimeString();
@@ -648,6 +669,42 @@ function renderConversations(data) {
       <td style="font-size:12px;color:var(--muted)">${esc(truncate(c.preview || "", 50))}</td>
     </tr>`
   ).join("");
+}
+
+// ── Customers ──────────────────────────────────────────────────────────────
+function renderCustomers(data) {
+  const customers = data.customers || [];
+  const byTier = data.by_tier || {};
+  document.getElementById("cust-count").textContent = data.total || 0;
+
+  const tierOrder = ["enterprise", "pro", "free"];
+  const tierColors = { free: "#8892a4", pro: "#7c6af7", enterprise: "#ed8936" };
+  const summary = tierOrder.filter(t => byTier[t]).map(t =>
+    `<span style="color:${tierColors[t]}">${byTier[t]} ${t}</span>`
+  ).join(" · ");
+  document.getElementById("cust-tier-summary").innerHTML = summary;
+
+  const cbody = document.getElementById("cust-body");
+  if (customers.length === 0) {
+    cbody.innerHTML = '<tr class="empty-row"><td colspan="6">No customers yet — <a href="/billing" style="color:var(--accent)">sign up</a></td></tr>';
+    return;
+  }
+  cbody.innerHTML = customers.map(c => {
+    const tierColor = tierColors[c.tier] || "#8892a4";
+    const joined = c.created_at ? new Date(c.created_at).toLocaleDateString() : "—";
+    const stripeIcon = c.stripe_customer_id
+      ? `<span style="color:var(--success)" title="${esc(c.stripe_customer_id)}">✓</span>`
+      : `<span style="color:var(--muted)">—</span>`;
+    return `
+      <tr>
+        <td>${esc(c.email || "")}</td>
+        <td><span style="color:${tierColor};font-weight:600;text-transform:uppercase;font-size:11px">${esc(c.tier)}</span></td>
+        <td class="mono" style="font-size:11px">${esc(c.api_key_preview || "")}</td>
+        <td class="mono" style="font-size:11px;color:var(--muted)">${esc((c.org_id || "").slice(0, 8))}…</td>
+        <td style="text-align:center">${stripeIcon}</td>
+        <td style="color:var(--muted);font-size:12px">${joined}</td>
+      </tr>`;
+  }).join("");
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
