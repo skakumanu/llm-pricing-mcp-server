@@ -116,6 +116,18 @@ class BillingService:
                 row = await cur.fetchone()
         return _row_to_customer(row) if row else None
 
+    async def get_all_customers(self, limit: int = 500) -> list:
+        """Return all customers ordered by created_at desc (for admin view)."""
+        async with aiosqlite.connect(self._db_path) as db:
+            async with db.execute(
+                "SELECT id, email, stripe_customer_id, stripe_subscription_id, "
+                "api_key, tier, org_id, created_at, updated_at "
+                "FROM customers ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ) as cur:
+                rows = await cur.fetchall()
+        return [_row_to_customer(r) for r in rows]
+
     async def update_tier(
         self,
         customer_id: str,

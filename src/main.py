@@ -2288,6 +2288,42 @@ async def admin_rate_limits():
     }
 
 
+@app.get("/admin/customers")
+async def admin_customers():
+    """
+    List all billing customers for the admin dashboard.
+
+    Returns customer count by tier, plus a full customer list (api_key
+    masked to first 8 chars).  Requires a valid ``x-api-key`` header.
+    """
+    try:
+        billing = get_billing_service()
+        customers = await billing.get_all_customers()
+    except RuntimeError:
+        customers = []
+
+    tier_counts: Dict[str, int] = {}
+    rows = []
+    for c in customers:
+        tier_counts[c.tier] = tier_counts.get(c.tier, 0) + 1
+        rows.append({
+            "id": c.id,
+            "email": c.email,
+            "tier": c.tier,
+            "org_id": c.org_id,
+            "api_key_preview": c.api_key[:8] + "...",
+            "stripe_customer_id": c.stripe_customer_id,
+            "created_at": datetime.fromtimestamp(c.created_at, tz=UTC).isoformat(),
+        })
+
+    return {
+        "total": len(rows),
+        "by_tier": tier_counts,
+        "customers": rows,
+        "snapshot_at": datetime.now(UTC).isoformat(),
+    }
+
+
 # ---------------------------------------------------------------------------
 # OpenAI-compatible proxy endpoint
 # ---------------------------------------------------------------------------
