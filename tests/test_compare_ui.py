@@ -67,11 +67,11 @@ class TestCompareUIMount:
 
     def test_compare_references_performance_api(self):
         resp = client.get("/compare/", follow_redirects=True)
-        assert "/pricing/performance" in resp.text
+        assert '"/performance"' in resp.text
 
     def test_compare_references_use_cases_api(self):
         resp = client.get("/compare/", follow_redirects=True)
-        assert "/pricing/use-cases" in resp.text
+        assert '"/use-cases"' in resp.text
 
     def test_compare_index_html_exists(self):
         html_path = project_root / "static" / "compare" / "index.html"
