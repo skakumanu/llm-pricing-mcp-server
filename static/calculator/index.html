@@ -9,11 +9,11 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #f0f2f5;
+      background: #0f1117;
+      color: #e2e8f0;
       min-height: 100vh;
     }
 
-    /* Header */
     /* ── Shared nav ── */
     .main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;border-bottom:1px solid #23263a;position:sticky;top:0;z-index:200;gap:.5rem}
     .nav-brand{font-weight:700;color:#7c6af7;text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
@@ -50,15 +50,15 @@
 
     /* Card */
     .card {
-      background: #fff;
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
       border-radius: 12px;
       padding: 22px 24px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
     }
     .card-title {
       font-size: 13px;
       font-weight: 600;
-      color: #555;
+      color: #8b93a5;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       margin-bottom: 16px;
@@ -70,20 +70,21 @@
       display: block;
       font-size: 12px;
       font-weight: 500;
-      color: #666;
+      color: #8b93a5;
       margin-bottom: 5px;
     }
     .form-control {
       width: 100%;
       padding: 9px 12px;
-      border: 1px solid #d0d4da;
+      border: 1px solid #2a2d3a;
       border-radius: 8px;
       font-size: 14px;
       outline: none;
       transition: border-color 0.15s;
-      background: #fff;
+      background: #0f1117;
+      color: #e2e8f0;
     }
-    .form-control:focus { border-color: #4f6ef7; }
+    .form-control:focus { border-color: #7c6af7; }
     select.form-control { cursor: pointer; }
 
     .token-row {
@@ -101,13 +102,14 @@
     .preset-btn {
       padding: 4px 10px;
       font-size: 11px;
-      border: 1px solid #d0d4da;
+      border: 1px solid #2a2d3a;
       border-radius: 5px;
-      background: #f5f6fa;
+      background: #22263a;
+      color: #8b93a5;
       cursor: pointer;
       transition: background 0.12s;
     }
-    .preset-btn:hover { background: #e8eaf0; }
+    .preset-btn:hover { background: #2a2d3a; color: #e2e8f0; }
 
     /* Cost breakdown */
     .breakdown {
@@ -122,13 +124,13 @@
       align-items: center;
       font-size: 14px;
     }
-    .breakdown-label { color: #666; }
-    .breakdown-value { font-weight: 600; color: #222; font-size: 15px; }
-    .breakdown-value.total { font-size: 22px; color: #4f6ef7; }
+    .breakdown-label { color: #8b93a5; }
+    .breakdown-value { font-weight: 600; color: #e2e8f0; font-size: 15px; }
+    .breakdown-value.total { font-size: 22px; color: #7c6af7; }
 
     .divider {
       height: 1px;
-      background: #eee;
+      background: #2a2d3a;
       margin: 10px 0;
     }
 
@@ -139,30 +141,30 @@
       gap: 10px;
     }
     .scale-card {
-      background: #f5f6fa;
+      background: #22263a;
       border-radius: 8px;
       padding: 12px 14px;
       text-align: center;
     }
-    .scale-label { font-size: 11px; color: #888; margin-bottom: 4px; }
-    .scale-value { font-size: 16px; font-weight: 700; color: #1a1a2e; }
+    .scale-label { font-size: 11px; color: #8b93a5; margin-bottom: 4px; }
+    .scale-value { font-size: 16px; font-weight: 700; color: #e2e8f0; }
 
     /* Tokens per dollar */
     .tpd-box {
-      background: #eef2ff;
+      background: rgba(124,106,247,0.1);
       border-radius: 8px;
       padding: 14px 16px;
       margin-top: 16px;
       text-align: center;
     }
-    .tpd-label { font-size: 11px; color: #4f6ef7; margin-bottom: 4px; }
-    .tpd-value { font-size: 20px; font-weight: 700; color: #3051d3; }
+    .tpd-label { font-size: 11px; color: #7c6af7; margin-bottom: 4px; }
+    .tpd-value { font-size: 20px; font-weight: 700; color: #9585ff; }
 
     /* Empty / loading */
     .placeholder {
       text-align: center;
       padding: 32px 16px;
-      color: #aaa;
+      color: #8b93a5;
       font-size: 14px;
     }
     .placeholder .icon { font-size: 36px; margin-bottom: 8px; }
@@ -178,23 +180,23 @@
       font-size: 13px;
     }
     th {
-      background: #f5f6fa;
+      background: #22263a;
       padding: 10px 12px;
       text-align: left;
       font-weight: 600;
-      color: #555;
-      border-bottom: 2px solid #e8eaf0;
+      color: #8b93a5;
+      border-bottom: 2px solid #2a2d3a;
       cursor: pointer;
       user-select: none;
       white-space: nowrap;
     }
-    th:hover { background: #eceef5; }
+    th:hover { background: #2a2d3a; }
     td {
       padding: 9px 12px;
-      border-bottom: 1px solid #f0f0f0;
-      color: #333;
+      border-bottom: 1px solid #2a2d3a;
+      color: #e2e8f0;
     }
-    tr.selected td { background: #eef2ff; font-weight: 600; }
+    tr.selected td { background: rgba(124,106,247,0.12); font-weight: 600; }
     tr:last-child td { border-bottom: none; }
     .badge {
       display: inline-block;
@@ -203,12 +205,12 @@
       font-size: 11px;
       font-weight: 600;
     }
-    .badge-cheapest { background: #c6f6d5; color: #276749; }
-    .badge-selected { background: #bee3f8; color: #2c5282; }
+    .badge-cheapest { background: rgba(52,211,153,0.15); color: #34d399; }
+    .badge-selected { background: rgba(124,106,247,0.15); color: #9585ff; }
 
-    .sort-arrow { margin-left: 4px; color: #aaa; font-size: 10px; }
+    .sort-arrow { margin-left: 4px; color: #2a2d3a; font-size: 10px; }
 
-    .loading-row td { text-align: center; color: #aaa; padding: 24px; }
+    .loading-row td { text-align: center; color: #8b93a5; padding: 24px; }
   </style>
 </head>
 <body>
@@ -284,7 +286,7 @@
     <!-- Right: Comparison table -->
     <div class="card">
       <div class="card-title">All Models — Cost Comparison
-        <span style="font-size:11px;font-weight:400;color:#aaa;margin-left:8px" id="table-subtitle"></span>
+        <span style="font-size:11px;font-weight:400;color:#8b93a5;margin-left:8px" id="table-subtitle"></span>
       </div>
       <div class="table-wrap">
         <table id="compare-table">
@@ -419,7 +421,7 @@
         <div class="tpd-value">${fmt(tpd)}</div>
       </div>` : ""}
 
-      <div style="margin-top:14px;font-size:11px;color:#aaa">
+      <div style="margin-top:14px;font-size:11px;color:#8b93a5">
         Rates: \$${fmtRate(model.cost_per_input_token)}/token input &nbsp;·&nbsp;
         \$${fmtRate(model.cost_per_output_token)}/token output
         &nbsp;·&nbsp; (\$${fmtUSD(model.cost_per_input_token * 1e6)}/1M input,

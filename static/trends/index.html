@@ -9,7 +9,8 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #f0f2f5;
+      background: #0f1117;
+      color: #e2e8f0;
       min-height: 100vh;
     }
 
@@ -38,30 +39,32 @@
 
     /* Controls */
     .controls {
-      background: #fff;
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
       border-radius: 12px;
       padding: 16px 20px;
-      box-shadow: 0 1px 6px rgba(0,0,0,0.08);
       display: flex;
       flex-wrap: wrap;
       gap: 16px;
       align-items: flex-end;
     }
     .field { display: flex; flex-direction: column; gap: 6px; }
-    .field label { font-size: 12px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+    .field label { font-size: 12px; font-weight: 600; color: #8b93a5; text-transform: uppercase; letter-spacing: 0.04em; }
     select {
       height: 36px;
       padding: 0 12px;
-      border: 1px solid #ddd;
+      border: 1px solid #2a2d3a;
       border-radius: 8px;
       font-size: 14px;
       outline: none;
       min-width: 140px;
+      background: #0f1117;
+      color: #e2e8f0;
     }
     .btn {
       height: 36px;
       padding: 0 18px;
-      background: #1a1a2e;
+      background: #7c6af7;
       color: #fff;
       border: none;
       border-radius: 8px;
@@ -70,14 +73,14 @@
       cursor: pointer;
       transition: background 0.15s;
     }
-    .btn:hover { background: #2d2d50; }
-    .btn:disabled { background: #999; cursor: not-allowed; }
+    .btn:hover { background: #9585ff; }
+    .btn:disabled { background: #2a2d3a; color: #8b93a5; cursor: not-allowed; }
     .btn-outline {
       background: transparent;
-      color: #1a1a2e;
-      border: 1px solid #ccc;
+      color: #e2e8f0;
+      border: 1px solid #2a2d3a;
     }
-    .btn-outline:hover { background: #f5f5f5; border-color: #999; }
+    .btn-outline:hover { background: #22263a; border-color: #7c6af7; }
 
     /* Status */
     .status {
@@ -87,8 +90,8 @@
       font-size: 13px;
       display: none;
     }
-    .status.error { background: #fdecea; color: #c62828; display: block; }
-    .status.info  { background: #e8f0fe; color: #1a56db; display: block; }
+    .status.error { background: rgba(248,113,113,0.1); color: #f87171; display: block; }
+    .status.info  { background: rgba(124,106,247,0.1); color: #9585ff; display: block; }
 
     /* Summary cards */
     .summary {
@@ -101,21 +104,21 @@
     .stat-card {
       flex: 1;
       min-width: 150px;
-      background: #fff;
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
       border-radius: 10px;
       padding: 14px 18px;
-      box-shadow: 0 1px 6px rgba(0,0,0,0.07);
     }
-    .stat-card .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
-    .stat-card .value { font-size: 18px; font-weight: 700; color: #1a1a2e; word-break: break-word; }
-    .stat-card .sub   { font-size: 12px; color: #888; margin-top: 3px; }
+    .stat-card .label { font-size: 11px; color: #8b93a5; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+    .stat-card .value { font-size: 18px; font-weight: 700; color: #e2e8f0; word-break: break-word; }
+    .stat-card .sub   { font-size: 12px; color: #8b93a5; margin-top: 3px; }
 
     /* Table */
     .table-wrap {
       margin-top: 20px;
-      background: #fff;
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
       border-radius: 12px;
-      box-shadow: 0 1px 6px rgba(0,0,0,0.08);
       overflow: hidden;
       display: none;
     }
@@ -125,10 +128,10 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 1px solid #eee;
+      border-bottom: 1px solid #2a2d3a;
     }
-    .table-title { font-size: 14px; font-weight: 600; color: #333; }
-    .table-meta  { font-size: 12px; color: #888; }
+    .table-title { font-size: 14px; font-weight: 600; color: #e2e8f0; }
+    .table-meta  { font-size: 12px; color: #8b93a5; }
 
     .table-scroll { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -138,26 +141,26 @@
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      color: #888;
-      background: #fafafa;
-      border-bottom: 1px solid #eee;
+      color: #8b93a5;
+      background: #22263a;
+      border-bottom: 1px solid #2a2d3a;
       white-space: nowrap;
       cursor: pointer;
       user-select: none;
     }
-    th:hover { color: #333; }
-    th.sorted-asc::after  { content: " ▲"; color: #1a73e8; }
-    th.sorted-desc::after { content: " ▼"; color: #1a73e8; }
+    th:hover { color: #e2e8f0; }
+    th.sorted-asc::after  { content: " ▲"; color: #7c6af7; }
+    th.sorted-desc::after { content: " ▼"; color: #7c6af7; }
     td {
       padding: 10px 14px;
-      border-bottom: 1px solid #f4f4f4;
-      color: #333;
+      border-bottom: 1px solid #2a2d3a;
+      color: #e2e8f0;
       white-space: nowrap;
     }
     tr:last-child td { border-bottom: none; }
-    tr:hover td { background: #fafafa; }
+    tr:hover td { background: #22263a; }
 
-    .rank { color: #aaa; font-weight: 600; font-size: 12px; }
+    .rank { color: #8b93a5; font-weight: 600; font-size: 12px; }
 
     /* Direction badges */
     .badge {
@@ -167,20 +170,20 @@
       font-size: 11px;
       font-weight: 700;
     }
-    .badge-up       { background: #fdecea; color: #c62828; }
-    .badge-down     { background: #e6f4ea; color: #2e7d32; }
-    .badge-flat     { background: #f5f5f5; color: #888; }
-    .badge-provider { background: #e8f0fe; color: #1a73e8; }
+    .badge-up       { background: rgba(248,113,113,0.15); color: #f87171; }
+    .badge-down     { background: rgba(52,211,153,0.15); color: #34d399; }
+    .badge-flat     { background: rgba(43,46,58,0.6); color: #8b93a5; }
+    .badge-provider { background: rgba(124,106,247,0.15); color: #9585ff; }
 
     /* Pct change colouring */
-    .pct-up   { color: #c62828; font-weight: 600; }
-    .pct-down { color: #2e7d32; font-weight: 600; }
-    .pct-flat { color: #aaa; }
+    .pct-up   { color: #f87171; font-weight: 600; }
+    .pct-down { color: #34d399; font-weight: 600; }
+    .pct-flat { color: #8b93a5; }
 
     .empty-state {
       padding: 48px 20px;
       text-align: center;
-      color: #888;
+      color: #8b93a5;
       font-size: 14px;
     }
 
