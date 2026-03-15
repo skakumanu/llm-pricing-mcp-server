@@ -14,30 +14,22 @@
       min-height: 100vh;
     }
 
-    .header {
-      background: #1a1a2e;
-      color: #fff;
-      padding: 14px 24px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
+    /* ── Shared nav ── */
+    .main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;border-bottom:1px solid #23263a;position:sticky;top:0;z-index:200;gap:.5rem}
+    .nav-brand{font-weight:700;color:#7c6af7;text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
+    .nav-spacer{flex:1}
+    .nav-links{display:flex;align-items:center;gap:.125rem;overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .nav-links::-webkit-scrollbar{display:none}
+    .nav-links a{color:#8b93a5;text-decoration:none;padding:.35rem .6rem;border-radius:6px;font-size:.8rem;white-space:nowrap;transition:all .15s}
+    .nav-links a:hover{background:#1a1d2e;color:#e5e7eb}
+    .nav-links a.active{background:#1a1d2e;color:#7c6af7;font-weight:600}
+    .nav-toggle{display:none;background:none;border:1px solid #2a2d3a;color:#9ca3af;font-size:1.1rem;cursor:pointer;padding:.25rem .5rem;border-radius:6px;line-height:1}
+    @media(max-width:640px){
+      .nav-toggle{display:block}
+      .nav-links{display:none;position:absolute;top:52px;left:0;right:0;flex-direction:column;background:#0f1117;border-bottom:1px solid #23263a;padding:.5rem 1rem;gap:.25rem;z-index:199}
+      .nav-links.open{display:flex}
+      .nav-links a{padding:.6rem .75rem;font-size:.875rem}
     }
-
-    .header-icon { font-size: 22px; }
-    .header-text h1 { font-size: 16px; font-weight: 600; }
-    .header-text p  { font-size: 12px; color: #aab; margin-top: 2px; }
-
-    .nav-link {
-      margin-left: auto;
-      color: #aab;
-      text-decoration: none;
-      font-size: 13px;
-      border: 1px solid #444;
-      padding: 5px 12px;
-      border-radius: 6px;
-      transition: color 0.15s, border-color 0.15s;
-    }
-    .nav-link:hover { color: #fff; border-color: #888; }
 
     .main {
       max-width: 960px;
@@ -207,14 +199,21 @@
 </head>
 <body>
 
-<div class="header">
-  <span class="header-icon">📈</span>
-  <div class="header-text">
-    <h1>LLM Pricing History</h1>
-    <p>Track how model prices change over time</p>
+<nav class="main-nav">
+  <a href="/" class="nav-brand">⚡ LLM Pricing</a>
+  <span class="nav-spacer"></span>
+  <div class="nav-links" id="navLinks">
+    <a href="/chat">💬 Chat</a>
+    <a href="/calculator">🧮 Calc</a>
+    <a href="/compare">⚖️ Compare</a>
+    <a href="/history">📈 History</a>
+    <a href="/trends">🔥 Trends</a>
+    <a href="/widget">🔌 Widget</a>
+    <a href="/billing">💳 Billing</a>
+    <a href="/admin">⚙️ Admin</a>
   </div>
-  <a href="/chat" class="nav-link">💬 Chat</a>
-</div>
+  <button class="nav-toggle" id="navToggle" aria-label="Menu">☰</button>
+</nav>
 
 <div class="main">
   <div class="controls">
@@ -288,7 +287,6 @@
 </div>
 
 <script>
-  const API_KEY = "Y2Q0MTIwM2EtNTQ0OC00MjViLTljYjEtOTZlOWI2MThlYzdi";
   let chart = null;
 
   function fmt1M(perToken) {
@@ -469,9 +467,7 @@
       if (model)    params.set("model_name", model);
       if (provider) params.set("provider", provider);
 
-      const resp = await fetch("/pricing/history?" + params, {
-        headers: { "x-api-key": API_KEY },
-      });
+      const resp = await fetch("/pricing/history?" + params);
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
@@ -506,6 +502,17 @@
       if (e.key === "Enter") loadHistory();
     });
   });
+</script>
+<script>
+  (function(){
+    var t=document.getElementById('navToggle'),l=document.getElementById('navLinks');
+    if(t)t.onclick=function(){l.classList.toggle('open');};
+    var p=location.pathname.replace(/\/$/,'');
+    l.querySelectorAll('a').forEach(function(a){
+      if(a.getAttribute('href')===p||a.getAttribute('href')===p+'/')a.classList.add('active');
+      a.addEventListener('click',function(){l.classList.remove('open');});
+    });
+  })();
 </script>
 </body>
 </html>

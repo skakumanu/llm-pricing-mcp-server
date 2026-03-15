@@ -24,31 +24,29 @@
       font-family: 'Segoe UI', system-ui, sans-serif;
       min-height: 100vh;
     }
-    header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 0 2rem;
-      display: flex;
-      align-items: center;
-      gap: 2rem;
-      height: 56px;
+    /* ── Shared nav ── */
+    .main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;border-bottom:1px solid #23263a;position:sticky;top:0;z-index:200;gap:.5rem}
+    .nav-brand{font-weight:700;color:#7c6af7;text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
+    .nav-spacer{flex:1}
+    .main-nav .nav-links{display:flex;align-items:center;gap:.125rem;overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .main-nav .nav-links::-webkit-scrollbar{display:none}
+    .main-nav .nav-links a{color:#8b93a5;text-decoration:none;padding:.35rem .6rem;border-radius:6px;font-size:.8rem;white-space:nowrap;transition:all .15s;border:none}
+    .main-nav .nav-links a:hover{background:#1a1d2e;color:#e5e7eb}
+    .main-nav .nav-links a.active{background:#1a1d2e;color:#7c6af7;font-weight:600}
+    .nav-toggle{display:none;background:none;border:1px solid #2a2d3a;color:#9ca3af;font-size:1.1rem;cursor:pointer;padding:.25rem .5rem;border-radius:6px;line-height:1}
+    @media(max-width:640px){
+      .nav-toggle{display:block}
+      .main-nav .nav-links{display:none;position:absolute;top:52px;left:0;right:0;flex-direction:column;background:#0f1117;border-bottom:1px solid #23263a;padding:.5rem 1rem;gap:.25rem;z-index:199}
+      .main-nav .nav-links.open{display:flex}
+      .main-nav .nav-links a{padding:.6rem .75rem;font-size:.875rem}
     }
-    header h1 { font-size: 1rem; font-weight: 600; color: var(--accent); }
-    nav { display: flex; gap: 0.5rem; margin-left: auto; }
-    nav button {
-      background: none;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      padding: 0.4rem 1rem;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 0.85rem;
-      transition: all 0.15s;
+    /* ── Billing sub-nav ── */
+    .billing-subnav { display: flex; gap: 0.5rem; padding: 0.75rem 1.5rem; background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    .billing-subnav button {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      padding: 0.4rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; transition: all 0.15s;
     }
-    nav button:hover, nav button.active {
-      border-color: var(--accent);
-      color: var(--accent);
-    }
+    .billing-subnav button:hover, .billing-subnav button.active { border-color: var(--accent); color: var(--accent); }
     main { max-width: 720px; margin: 3rem auto; padding: 0 1.5rem; }
     .panel { display: none; }
     .panel.active { display: block; }
@@ -180,16 +178,27 @@
   </style>
 </head>
 <body>
-<header>
-  <h1>LLM Pricing API</h1>
-  <nav>
-    <button class="active" onclick="showPanel('signup')">Sign Up</button>
-    <button onclick="showPanel('dashboard')">Dashboard</button>
-    <button onclick="showPanel('upgrade')">Upgrade</button>
-    <button onclick="openPortal()">Manage Billing</button>
-    <a href="/admin" style="color:var(--muted);text-decoration:none;font-size:0.85rem;padding:0.4rem 1rem;border:1px solid var(--border);border-radius:6px;transition:all 0.15s" onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">Admin</a>
-  </nav>
-</header>
+<nav class="main-nav">
+  <a href="/" class="nav-brand">⚡ LLM Pricing</a>
+  <span class="nav-spacer"></span>
+  <div class="nav-links" id="navLinks">
+    <a href="/chat">💬 Chat</a>
+    <a href="/calculator">🧮 Calc</a>
+    <a href="/compare">⚖️ Compare</a>
+    <a href="/history">📈 History</a>
+    <a href="/trends">🔥 Trends</a>
+    <a href="/widget">🔌 Widget</a>
+    <a href="/billing">💳 Billing</a>
+    <a href="/admin">⚙️ Admin</a>
+  </div>
+  <button class="nav-toggle" id="navToggle" aria-label="Menu">☰</button>
+</nav>
+<div class="billing-subnav">
+  <button class="active" onclick="showPanel('signup')">Sign Up</button>
+  <button onclick="showPanel('dashboard')">Dashboard</button>
+  <button onclick="showPanel('upgrade')">Upgrade</button>
+  <button onclick="openPortal()">Manage Billing</button>
+</div>
 <main>
 
   <!-- ── SIGNUP PANEL ── -->
@@ -422,6 +431,25 @@
     document.getElementById('dash-error').style.color = 'var(--success)';
     document.getElementById('dash-error').textContent = 'Subscription activated! Enter your API key to refresh.';
   }
+</script>
+<script>
+  (function(){
+    var t=document.getElementById('navToggle'),l=document.getElementById('navLinks');
+    if(t)t.onclick=function(){l.classList.toggle('open');};
+    var p=location.pathname.replace(/\/$/,'');
+    l.querySelectorAll('a').forEach(function(a){
+      if(a.getAttribute('href')===p||a.getAttribute('href')===p+'/')a.classList.add('active');
+      a.addEventListener('click',function(){l.classList.remove('open');});
+    });
+    // sync billing subnav button active state with showPanel
+    var _origShow=window.showPanel;
+    window.showPanel=function(name){
+      _origShow(name);
+      document.querySelectorAll('.billing-subnav button').forEach(function(b){
+        b.classList.toggle('active', b.textContent.toLowerCase().replace(' ','')===name);
+      });
+    };
+  })();
 </script>
 </body>
 </html>
