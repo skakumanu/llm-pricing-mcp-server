@@ -548,104 +548,14 @@ async def startup_pricing_history() -> None:
     asyncio.create_task(_prewarm_agent())
 
 
-@app.get("/", response_model=ServerInfo)
+@app.get("/", include_in_schema=False)
 async def root():
-    """
-    Root endpoint providing server information.
-
-    Returns:
-        ServerInfo: Information about the server and available endpoints with usage guidance
-    """
-    return ServerInfo(
-        name=settings.app_name,
-        version=settings.app_version,
-        description=settings.app_description,
-        endpoints=[
-            EndpointInfo(
-                path="/",
-                method="GET",
-                description="Server information and API overview"
-            ),
-            EndpointInfo(
-                path="/pricing",
-                method="GET",
-                description=(
-                    "Get pricing data for all models "
-                    "(optional ?provider=openai|anthropic|google|cohere|mistral filter)"
-                )
-            ),
-            EndpointInfo(
-                path="/models",
-                method="GET",
-                description=(
-                    "List all available model names "
-                    "(optional ?provider=openai|anthropic|google|cohere|mistral filter)"
-                )
-            ),
-            EndpointInfo(
-                path="/cost-estimate",
-                method="POST",
-                description="Estimate cost for a single model (requires JSON body)"
-            ),
-            EndpointInfo(
-                path="/cost-estimate/batch",
-                method="POST",
-                description="Compare costs across multiple models (requires JSON body)"
-            ),
-            EndpointInfo(
-                path="/performance",
-                method="GET",
-                description="Get performance metrics for models (optional filters)"
-            ),
-            EndpointInfo(
-                path="/health",
-                method="GET",
-                description="Health check endpoint"
-            ),
-            EndpointInfo(
-                path="/docs",
-                method="GET",
-                description="Interactive API documentation (Swagger UI)"
-            ),
-            EndpointInfo(
-                path="/redoc",
-                method="GET",
-                description="Alternative API documentation (ReDoc)"
-            ),
-            EndpointInfo(
-                path="/use-cases",
-                method="GET",
-                description="Get recommended use cases for each LLM model"
-            ),
-            EndpointInfo(
-                path="/telemetry",
-                method="GET",
-                description="Get telemetry data including endpoint usage, provider adoption, and feature usage"
-            ),
-            EndpointInfo(
-                path="/agent/chat",
-                method="POST",
-                description=(
-                    "Natural language interface: ask questions about LLM pricing "
-                    "and get AI-sourced answers"
-                )
-            ),
-        ],
-        sample_models=[
-            "gpt-4", "gpt-4-turbo", "gpt-3.5-turbo",
-            "claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307",
-            "gemini-1.5-pro", "gemini-1.5-flash",
-            "command-r-plus", "command-r",
-            "mistral-large-latest", "mistral-small-latest"
-        ],
-        quick_start_guide=(
-            "1. GET /models to see all available models | "
-            "2. GET /pricing to see pricing data | "
-            "3. POST /cost-estimate with JSON body to calculate costs | "
-            "4. POST /agent/chat with JSON body to ask natural language questions | "
-            "5. Visit /docs for interactive testing"
-        )
-    )
+    """Serve the marketing landing page."""
+    html_path = _static_dir / "landing" / "index.html"
+    if html_path.exists():
+        return FileResponse(str(html_path), media_type="text/html")
+    # Fallback: plain JSON info if landing page not present
+    return JSONResponse({"name": settings.app_name, "version": settings.app_version})
 
 
 @app.get("/models")
