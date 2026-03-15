@@ -177,10 +177,15 @@ _unauthenticated_paths = {
     "/models",
     "/providers",
     "/agent/conversations",
+    # Public read-only dashboard endpoints (non-sensitive aggregate stats)
+    "/telemetry",
+    "/admin/stats",
+    "/admin/rate-limits",
+    "/performance",
+    "/use-cases",
 }
 
 _sensitive_paths = {
-    "/telemetry",
     "/deployment/shutdown",
     "/deployment/shutdown/status",
 }
@@ -224,7 +229,16 @@ async def security_middleware(request: Request, call_next):
     global _auth_warning_logged
 
     path = request.url.path
-    if path.startswith("/chat") or path.startswith("/agent/chat") or path.startswith("/history") or path.startswith("/trends") or path.startswith("/conversations") or path.startswith("/calculator") or path.startswith("/compare") or path.startswith("/widget") or path.startswith("/pricing") or path.startswith("/models") or path.startswith("/providers") or path == "/admin" or request.method == "OPTIONS":
+    if (
+        path.startswith("/chat") or path.startswith("/agent/chat")
+        or path.startswith("/history") or path.startswith("/trends")
+        or path.startswith("/conversations") or path.startswith("/calculator")
+        or path.startswith("/compare") or path.startswith("/widget")
+        or path.startswith("/pricing") or path.startswith("/models")
+        or path.startswith("/providers") or path.startswith("/landing")
+        or path == "/admin" or path in _unauthenticated_paths
+        or request.method == "OPTIONS"
+    ):
         return await call_next(request)
     if path in _sensitive_paths:
         if not settings.mcp_api_key:
