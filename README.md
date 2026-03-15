@@ -3,967 +3,374 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A production-ready Python-based **Model Context Protocol (MCP)** server for LLM pricing data with zero-downtime deployment support. This server provides a RESTful API (via FastAPI), an MCP protocol interface with 14 tools, a **conversational Agent + RAG pipeline**, and a **browser-based Chat UI** for querying pricing data from **12 major LLM providers** including OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Anyscale, and Amazon Bedrock. Features a **configurable LLM backend** (OpenAI GPT-4o-mini default, Anthropic Claude, easily switchable via env vars), Claude Desktop integration, telemetry tracking, geolocation analytics, admin dashboard, and blue-green deployment support.
+A production-ready **Model Context Protocol (MCP)** server for LLM pricing data. Provides a RESTful API (FastAPI), **14 MCP tools** over STDIO and HTTP, a conversational Agent + RAG pipeline, browser-based UIs, and a self-serve billing dashboard — for pricing data from **12 major LLM providers**.
+
+**Live at**: https://llm-pricing-api.fly.dev
+
+---
 
 ## Features
 
-### Model Context Protocol (MCP) Interface
-- **7 MCP Tools**: `estimate_cost`, `get_all_pricing`, `compare_costs`, `get_performance_metrics`, `get_use_cases`, `get_telemetry`, `ask_agent`
-- **STDIO JSON-RPC 2.0**: Standard MCP protocol for Claude Desktop and other MCP clients
-- **Tool Discovery**: Automatic tool registration with JSON schemas
-- **Session Management**: Isolated sessions with state tracking
-- **Telemetry Tracking**: Built-in request tracking with timing, tool usage, and client analytics
-- **Comprehensive Testing**: 3 test suites (quick, integration, comprehensive validation)
+### MCP Interface (STDIO + HTTP)
+- **14 MCP Tools**: `get_all_pricing`, `estimate_cost`, `compare_costs`, `get_performance_metrics`, `get_use_cases`, `get_telemetry`, `get_pricing_history`, `get_pricing_trends`, `register_price_alert`, `list_price_alerts`, `delete_price_alert`, `get_pricing_export_url`, `list_conversations`, `delete_conversation`
+- **STDIO transport** — JSON-RPC 2.0 over STDIO for local Claude Desktop integration
+- **HTTP transport** — `POST /mcp` (JSON-RPC 2.0 over HTTP) for remote MCP clients — no local install needed
+- MCP Protocol version: `2024-11-05`
 
-### RESTful API Interface
-- **Real-Time Pricing Aggregation**: Asynchronously fetch pricing data from multiple LLM providers concurrently
-- **Volume-Based Cost Estimates**: Automatic cost calculations at small (10K), medium (100K), and large (1M) token volumes
-- **Performance Projections**: Estimated processing time for 1M tokens based on throughput metrics
-- **Graceful Error Handling**: Return partial data when providers are unavailable with detailed status information
-- **Provider Status Tracking**: Monitor availability and health of each pricing provider
-- **Unified Pricing Format**: All pricing data in USD per token with source attribution
-- **Comprehensive Metrics**: Track cost per token, context window sizes, and provider metadata
-- **Interactive Documentation**: Swagger UI and ReDoc endpoints
-
-### Analytics & Monitoring
-- **Geolocation Tracking**: Automatic client IP geolocation with country/city details and browser detection
-- **Browser Analytics**: User-Agent parsing for browser, OS, and device type classification
-- **Client Analytics**: Track unique clients, geographic distribution, and browser usage patterns
-- **Health Checks**: Kubernetes/Docker-compatible liveness, readiness, and detailed health probes
-- **Production Monitoring**: Automated health checks and tool validation
-
-### Deployment & Operations
-- **Blue-Green Deployment**: Zero-downtime deployments with instant rollback capability
-- **Automated Validation**: Pre-deployment testing with 6 critical tests
-- **Graceful Shutdown**: Proper request draining during deployment (SIGTERM/SIGINT handling)
-- **Deployment Manager**: Single-command deployment with automatic validation
-
-### Security & Quality
-- **Security Baseline**: API key authentication (x-api-key header), rate limiting (60 req/min per IP), request size validation (1MB), safe logging, container hardening
-- **Secrets Management**: Secure integration with Azure Key Vault via managed identity
-- **Data Validation**: Robust validation using Pydantic models
-- **Comprehensive Testing**: 515 passing tests with full coverage of REST API, MCP tools, Agent/RAG pipeline, and streaming endpoints
-- **CI/CD**: Automated testing and deployment via GitHub Actions with branch protection
-- **Git Flow**: Master branch protection with linear history enforcement
+### RESTful API
+- Real-time pricing from 12 providers (87+ models), async fetching with smart caching
+- Cost estimation: single model (`POST /cost-estimate`) and batch comparison (`POST /cost-estimate/batch`)
+- Performance metrics, use-case recommendations, pricing history, trends
+- Router recommendation (`POST /router/recommend`) with feedback loop
+- OpenAI-compatible proxy (`POST /v1/chat/completions`) for drop-in SDK integration
+- Webhook alerts for price changes (HMAC-SHA256 signed)
+- Interactive docs: `/docs` (Swagger) and `/redoc`
 
 ### Agent + RAG Pipeline
-- **Configurable LLM Backend**: Switch between OpenAI (default: `gpt-4o-mini`) and Anthropic Claude via `AGENT_LLM_PROVIDER` + `AGENT_MODEL` env vars — no code changes needed
-- **Conversational Agent**: ReAct-loop agent backed by OpenAI GPT-4o-mini (default) or Anthropic Claude
-- **RAG Pipeline**: TF-IDF vector store over pricing docs with top-k retrieval for grounded answers
-- **Conversation Memory**: Per-session history with SQLite persistence and configurable turn limit (default 10 turns)
-- **MCP Tool Integration**: Agent has access to all 14 MCP tools
-- **Chat UI**: Browser-based interface served at `/chat` — streams ReAct progress in real time (thinking → tool calls → answer)
-- **REST Endpoint**: `POST /agent/chat` — blocking JSON response with `message` + optional `conversation_id`
-- **Streaming Endpoint**: `POST /agent/chat/stream` — SSE stream of `thinking` / `tool_call` / `tool_result` / `answer` / `done` events
-- **Admin Dashboard**: `/admin` — real-time server stats, rate-limit monitoring, and deployment metadata
+- **Configurable LLM backend**: OpenAI GPT-4o-mini (default) or Anthropic Claude via env vars
+- **ReAct loop agent** with access to all 14 MCP tools
+- **TF-IDF RAG** over pricing docs with top-k retrieval
+- **Conversation memory**: per-session SQLite persistence, configurable turn limit
+- **Chat UI** at `/chat` — streams ReAct progress in real time
+- `POST /agent/chat` — blocking JSON response
+- `POST /agent/chat/stream` — SSE stream (`thinking` / `tool_call` / `tool_result` / `answer` / `done`)
 
-### Architecture & Extensibility
-- **Extensible Architecture**: Easy-to-use base provider interface for adding new providers
-- **Modular Design**: Clean separation between MCP protocol, tools, and business logic
-- **Environment Configuration**: Secure configuration management with `.env` files
-- **Production Ready**: Azure App Service, Docker, Kubernetes compatible
+### Browser UIs
+| Path | Description |
+|------|-------------|
+| `/` | Marketing landing page |
+| `/chat` | Conversational AI agent |
+| `/calculator` | Interactive cost calculator |
+| `/compare` | Side-by-side model comparison |
+| `/history` | Pricing history charts (Chart.js) |
+| `/trends` | Price-change leaderboard |
+| `/widget` | Embeddable pricing table |
+| `/billing` | Self-serve signup + upgrade dashboard |
+| `/admin` | Server stats, rate limits, customers |
+
+All UIs are mobile-responsive with a consistent navigation bar.
+
+### SaaS Billing (Stripe)
+- **Free tier signup**: `POST /billing/signup` (email → API key, no Stripe required)
+- Paid tiers (Pro/Enterprise) via Stripe Checkout → auto-updates rate limits
+- Self-serve portal: `GET /billing/portal`
+- Usage dashboard: `GET /billing/me` (router calls, savings, acceptance rate)
+- Stripe webhook handler: `POST /billing/webhook`
+
+### API Key Tiers & Rate Limiting
+- **Free**: 30 req/min · **Pro**: 120 req/min · **Enterprise**: 600 req/min
+- Tier auto-detected from billing DB (customer API key) or `X-Api-Key-Tier` header
+- `GET /rate-limits/tiers` — public endpoint listing tier details
+
+### Security & Quality
+- Most endpoints are public (read-only pricing data, UIs, MCP tools)
+- Protected endpoints (`/billing/me`, `/router/recommend`, `/router/feedback`, `/billing/portal`) require a billing API key or the global `MCP_API_KEY`
+- Rate limiting per client IP + tier bucket
+- Request size limit (1MB default)
+- 625 passing tests, CI/CD on every PR
+
+### Deployment
+- **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
+- **CI/CD**: GitHub Actions — test → deploy on `master` push
+- Blue-green deployment support, graceful shutdown (SIGTERM/SIGINT)
+- Health probes: `/health`, `/health/live`, `/health/ready`, `/health/detailed`
+
+---
 
 ## Table of Contents
 
-- [Features](#features)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Architecture](#architecture)
-- [Live Data Fetching](#live-data-fetching)
-- [API Documentation](#api-documentation)
+- [Quick Start (Claude Desktop)](#quick-start-claude-desktop)
+- [Quick Start (API)](#quick-start-api)
+- [HTTP MCP Transport](#http-mcp-transport)
+- [API Reference](#api-reference)
 - [Configuration](#configuration)
 - [Development](#development)
 - [Testing](#testing)
 - [Deployment](#deployment)
 - [Contributing](#contributing)
-- [License](#license)
-- [Acknowledgments](#acknowledgments)
-- [Support](#support)
 - [Roadmap](#roadmap)
 
-## Installation
+---
 
-### Prerequisites
+## Quick Start (Claude Desktop)
 
-- Python 3.11 or higher
-- pip (Python package manager)
+### Option A — Remote (no install needed)
 
-### Setup
+Add to your `claude_desktop_config.json`:
 
-1. Clone the repository:
+```json
+{
+  "mcpServers": {
+    "llm-pricing": {
+      "url": "https://llm-pricing-api.fly.dev/mcp"
+    }
+  }
+}
+```
+
+Restart Claude Desktop. All 14 pricing tools are immediately available.
+
+### Option B — Local STDIO
+
+1. Clone and install:
 ```bash
 git clone https://github.com/skakumanu/llm-pricing-mcp-server.git
 cd llm-pricing-mcp-server
-```
-
-2. Create a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
+python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Configure environment variables:
-```bash
-cp .env.example .env
-# Edit .env with your configuration
+2. Add to `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "llm-pricing": {
+      "command": "python",
+      "args": ["/absolute/path/to/mcp/server.py"],
+      "cwd": "/absolute/path/to/llm-pricing-mcp-server",
+      "env": { "PYTHONUNBUFFERED": "1" }
+    }
+  }
+}
 ```
 
-### Security Configuration (Recommended for Production)
+See [docs/CLAUDE_INTEGRATION.md](docs/CLAUDE_INTEGRATION.md) for detailed setup, Windows paths, and troubleshooting.
 
-Configure API key authentication and rate limiting in `.env`:
-```bash
-# API Key Authentication (required for protected endpoints)
-export MCP_API_KEY="your-strong-random-key-here"
-export MCP_API_KEY_HEADER="x-api-key"
+---
 
-# Request Size Limits
-export MAX_BODY_BYTES=1000000  # 1MB
-
-# Rate Limiting
-export RATE_LIMIT_PER_MINUTE=60  # Per client IP
-```
-
-For production deployments on Azure, store `MCP_API_KEY` in Azure Key Vault:
-```bash
-# Create secret in Key Vault
-az keyvault secret set --vault-name your-vault --name mcp-api-key --value "your-key"
-
-# Reference from App Service settings
-az webapp config appsettings set --resource-group your-rg --name your-app \
-  --settings MCP_API_KEY="@Microsoft.KeyVault(SecretUri=https://your-vault.vault.azure.net/secrets/mcp-api-key/)"
-```
-
-### Protected Endpoints
-
-All endpoints except `/health`, `/docs`, and `/openapi.json` require the `x-api-key` header:
-```bash
-curl -H "x-api-key: your-api-key" https://your-server/pricing
-```
-
-## Quick Start
+## Quick Start (API)
 
 ### Running the Server
 
-Start the development server:
 ```bash
 python src/main.py
-```
-
-Or using uvicorn directly:
-```bash
+# or
 uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The server will be available at `http://localhost:8000`
+### Public Endpoints (no auth)
 
-For protected endpoints, send the API key:
 ```bash
-curl -H "x-api-key: $MCP_API_KEY" http://localhost:8000/pricing
-```
+# Get all pricing
+curl http://localhost:8000/pricing
 
-### Chat UI
+# Estimate cost
+curl -X POST http://localhost:8000/cost-estimate \
+  -H "Content-Type: application/json" \
+  -d '{"model_name": "gpt-4o", "input_tokens": 1000, "output_tokens": 500}'
 
-Open the browser-based chat interface at:
-- **Local**: `http://localhost:8000/chat`
-- **Production**: `https://llm-pricing-api.azurewebsites.net/chat`
-
-No headers or API keys needed — the UI handles authentication automatically.
-
-### Agent API (REST)
-
-Chat with the pricing agent via REST (blocking — waits for the full answer):
-```bash
+# Chat with the agent
 curl -X POST http://localhost:8000/agent/chat \
   -H "Content-Type: application/json" \
-  -H "x-api-key: $MCP_API_KEY" \
   -d '{"message": "What is the cheapest model for RAG pipelines?"}'
-```
 
-Continue a conversation by passing the returned `conversation_id`:
-```bash
-curl -X POST http://localhost:8000/agent/chat \
+# OpenAI-compatible routing proxy
+curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "x-api-key: $MCP_API_KEY" \
-  -d '{"message": "What about latency?", "conversation_id": "abc123"}'
+  -d '{"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}'
 ```
 
-### Agent API (Streaming)
+### Protected Endpoints (billing API key or MCP_API_KEY)
 
-Stream ReAct loop progress as Server-Sent Events:
+```bash
+# Get your API key via free signup
+curl -X POST http://localhost:8000/billing/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@example.com"}'
+
+# Use the returned api_key for protected endpoints
+curl -H "x-api-key: <your-api-key>" \
+  http://localhost:8000/billing/me
+
+curl -X POST http://localhost:8000/router/recommend \
+  -H "x-api-key: <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"max_cost_per_1m_tokens": 5}'
+```
+
+### Agent Streaming
+
 ```bash
 curl -X POST http://localhost:8000/agent/chat/stream \
   -H "Content-Type: application/json" \
-  -H "x-api-key: $MCP_API_KEY" \
   -d '{"message": "Compare GPT-4o vs Claude Sonnet pricing"}' \
   --no-buffer
 ```
 
-Each line is a JSON event:
-```
-data: {"type": "thinking", "iteration": 1}
-data: {"type": "tool_call", "tool": "get_all_pricing", "args": {}}
-data: {"type": "tool_result", "tool": "get_all_pricing", "ok": true}
-data: {"type": "answer", "text": "...", "conversation_id": "abc123", "sources": [...]}
-data: {"type": "done"}
-```
+Events: `thinking` → `tool_call` → `tool_result` → `answer` → `done`
 
-### Interactive API Documentation
+---
 
-Once the server is running, visit:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+## HTTP MCP Transport
 
-## Architecture
+The server exposes a JSON-RPC 2.0 endpoint at `POST /mcp` supporting the MCP protocol over HTTP (protocol version `2024-11-05`).
 
-This project follows a modular, layered architecture designed for scalability and extensibility. For a comprehensive understanding of the system design, including detailed architecture diagrams, patterns, and component interactions, please refer to the [ARCHITECTURE.md](docs/ARCHITECTURE.md) document.
+### Supported methods
 
-### Key Highlights
+| Method | Description |
+|--------|-------------|
+| `initialize` | Handshake — returns server info and capabilities |
+| `initialized` | Notification — returns 204 |
+| `tools/list` | List all 14 tools with input schemas |
+| `tools/call` | Execute a tool |
 
-- **Service Provider Pattern**: Each LLM provider is implemented as an independent service
-- **Aggregator Pattern**: Central service orchestrates and caches data from all providers
-- **Lazy Initialization**: Aggregator initializes on first request for optimal startup performance
-- **Async/Await**: Non-blocking I/O for handling concurrent requests efficiently
-- **Pydantic Models**: Strong data validation and serialization
-
-For detailed diagrams, design patterns, and architectural decisions, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
-## Live Data Fetching
-
-As of v1.5.1, the server implements intelligent live data fetching with smart caching and graceful fallbacks:
-
-### What's Live? (No API Keys Required)
-
-- **Pricing Data**: Fetched from official public pricing pages using web scraping
-- **Available Models**: Retrieved from public provider information pages  
-- **Performance Metrics**: Real-time measurements from public status pages
-- **Caching**: Automatic caching with TTL to minimize requests (500x+ faster for cached data)
-
-### How It Works (Without API Keys)
-
-The server uses publicly available data sources:
-
-1. **Web Scraping**: Extracts current pricing from official pricing pages
-2. **Public Status Pages**: Measures API latency from provider status dashboards
-3. **Smart Caching**: Stores results for 2 hours (pricing) / 5 minutes (performance)
-4. **Fallback**: Returns hardcoded data if live sources unavailable
-
-✅ Works completely without API keys
-✅ 99.9%+ uptime with automatic fallbacks
-✅ Zero configuration required
-
-### Optional: API Keys for Enhanced Model Lists
-
-Set environment variables to get the latest model list directly from provider APIs:
+### Example
 
 ```bash
-# These are optional - system works fine without them
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-GOOGLE_API_KEY=...
-COHERE_API_KEY=...
-MISTRAL_API_KEY=...
+# List tools
+curl -X POST https://llm-pricing-api.fly.dev/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+
+# Call a tool
+curl -X POST https://llm-pricing-api.fly.dev/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+    "params": {
+      "name": "estimate_cost",
+      "arguments": {"model_name": "gpt-4o", "input_tokens": 1000, "output_tokens": 500}
+    }
+  }'
 ```
 
-Benefits with API keys:
-- Get absolute latest available models from each provider
-- Slightly improved performance metrics from direct API checks
-- Better detection of new model releases
+`GET /mcp` returns server info and a config snippet.
 
-### Data Source Information
+---
 
-The `source` field in API responses indicates data origin:
+## API Reference
 
-- `"OpenAI Official API"` - Fresh data from provider API (with API key)
-- `"OpenAI Official Pricing (Cached)"` - Cached live data from web scraping
-- `"OpenAI Official Pricing (Fallback - Static)"` - Static fallback data
+### Public Endpoints
 
-### Performance Metrics
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Landing page (HTML) |
+| GET | `/pricing` | All model pricing (`?provider=` filter) |
+| GET | `/models` | All available models |
+| GET | `/performance` | Throughput, latency, context window, quality scores |
+| GET | `/use-cases` | Model use-case recommendations |
+| GET | `/telemetry` | Server usage metrics and analytics |
+| GET | `/admin/stats` | Aggregated server statistics |
+| GET | `/admin/rate-limits` | Current rate-limit state |
+| GET | `/rate-limits/tiers` | API tier definitions |
+| GET | `/pricing/history` | Historical pricing snapshots |
+| GET | `/pricing/trends` | Price-change leaderboard |
+| GET | `/pricing/public` | Public pricing (unauthenticated, embed-safe) |
+| GET | `/pricing/history/export` | CSV/JSON export |
+| POST | `/cost-estimate` | Single model cost estimate |
+| POST | `/cost-estimate/batch` | Multi-model cost comparison |
+| POST | `/agent/chat` | Blocking agent chat |
+| POST | `/agent/chat/stream` | Streaming agent chat (SSE) |
+| GET | `/agent/conversations` | List conversations |
+| POST | `/v1/chat/completions` | OpenAI-compatible routing proxy |
+| GET | `/mcp` | HTTP MCP server info |
+| POST | `/mcp` | HTTP MCP JSON-RPC 2.0 |
+| POST | `/billing/signup` | Free tier signup → API key |
+| GET | `/billing` | Billing dashboard (HTML) |
+| POST | `/billing/webhook` | Stripe webhook |
+| GET | `/health` | Health check |
+| GET | `/health/live` | Kubernetes liveness probe |
+| GET | `/health/ready` | Kubernetes readiness probe |
+| GET | `/health/detailed` | Detailed health with service statuses |
 
-- **First request**: ~500-700ms (real web scraping / status check)
-- **Subsequent requests**: ~1ms (from cache)
-- **Cache refresh**: Every 2 hours for pricing, 5 minutes for performance
-- **Uptime**: 99.9%+ with smart fallbacks
+### Protected Endpoints (billing API key or MCP_API_KEY)
 
-For detailed information about live data fetching architecture, caching strategy, and data sources, see [LIVE_DATA_FETCHING.md](docs/LIVE_DATA_FETCHING.md).
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/router/recommend` | Smart model routing recommendation |
+| POST | `/router/recommend/stream` | Streaming router (SSE) |
+| POST | `/router/feedback` | Submit routing feedback |
+| GET | `/telemetry/savings` | Router savings report |
+| POST | `/billing/checkout` | Stripe Checkout session |
+| GET | `/billing/portal` | Stripe billing portal |
+| GET | `/billing/me` | Usage dashboard |
+| POST | `/pricing/alerts` | Register price-change webhook |
+| GET | `/pricing/alerts` | List alerts |
+| DELETE | `/pricing/alerts/{id}` | Delete alert |
 
-### Live Data Validation
-
-✅ **All systems validated and working** (February 17, 2026):
-
-| Provider | Status | Models | Data Source |
-|----------|--------|--------|-------------|
-| **OpenAI** | ✅ Working | 7 models | Public Pricing + Status Page (Cached) |
-| **Anthropic** | ✅ Working | 7 models | Public Pricing + Status Page (Cached) |
-| **Google** | ✅ Working | 5 models | Public Pricing + Status Page (Cached) |
-| **Cohere** | ✅ Working | 6 models | Public Pricing + Status Page (Cached) |
-| **Mistral AI** | ✅ Working | 7 models | Public Pricing + Status Page (Cached) |
-| **Groq** | ✅ Working | 11 models | Public Pricing + Status Page (Cached) |
-| **Together AI** | ✅ Working | 9 models | Public Pricing + Status Page (Cached) |
-| **Fireworks AI** | ✅ Working | 7 models | Public Pricing + Status Page (Cached) |
-| **Perplexity AI** | ✅ Working | 3 models | Public Pricing + Status Page (Cached) |
-| **AI21 Labs** | ✅ Working | 5 models | Public Pricing + Status Page (Cached) |
-| **Anyscale** | ✅ Working | 6 models | Public Pricing + Status Page (Cached) |
-| **Amazon Bedrock** | ✅ Working | 14 models | Public Pricing + AWS Status (Cached) |
-
-- **Total Models Available**: 87+ across all 12 providers
-- **Cache Performance**: 58x faster on cached requests
-- **Deployment Status**: Ready for production (no API keys required)
-- **Test Coverage**: Comprehensive test suite included
-
-## API Documentation
-
-### Endpoints
-
-#### `GET /`
-Returns server information and available endpoints.
-
-**Response:**
-```json
-{
-  "name": "LLM Pricing MCP Server",
-  "version": "1.5.1",
-  "description": "Dynamic pricing comparison server for LLM models across 11 major providers",
-  "endpoints": ["/", "/models", "/pricing", "/performance", "/use-cases", "/cost-estimate", "/cost-estimate/batch", "/health", "/docs", "/redoc"]
-}
-```
-
-#### `GET /models`
-Lists all available LLM models across all providers.
-
-**Query Parameters:**
-- `provider` (optional): Filter by provider name (e.g., "openai", "anthropic", "google", "cohere", "mistral")
-
-**Response:**
-```json
-{
-  "total_models": 24,
-  "providers": ["OpenAI", "Anthropic", "Google", "Cohere", "Mistral AI"],
-  "models_by_provider": {
-    "OpenAI": ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo", "gpt-3.5-turbo-0125"],
-    "Anthropic": ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307", "claude-2.1", "claude-2.0"],
-    "Google": ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro", "gemini-1.0-ultra"],
-    "Cohere": ["command-r-plus", "command-r", "command", "command-light"],
-    "Mistral AI": ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest", "mistral-tiny"]
-  },
-  "all_models": ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo", ...]
-}
-```
-
-#### `GET /pricing`
-Retrieves aggregated pricing data from all LLM providers with real-time fetching.
-
-**Features:**
-- Asynchronous data fetching from multiple providers concurrently
-- Graceful handling of provider failures (returns partial data)
-- Provider availability status included in response
-- Unified pricing format (USD per token)
-- Source attribution for each pricing data point
-
-**Query Parameters:**
-- `provider` (optional): Filter by provider name (e.g., "openai", "anthropic")
-
-**Response:**
-```json
-{
-  "models": [
-    {
-      "model_name": "gpt-4",
-      "provider": "OpenAI",
-      "cost_per_input_token": 0.00003,
-      "cost_per_output_token": 0.00006,
-      "context_window": 8192,
-      "currency": "USD",
-      "unit": "per_token",
-      "source": "OpenAI Official Pricing (Static)",
-      "last_updated": "2024-02-10T00:00:00Z",
-      "cost_at_10k_tokens": {
-        "input_cost": 0.3,
-        "output_cost": 0.6,
-        "total_cost": 0.45
-      },
-      "cost_at_100k_tokens": {
-        "input_cost": 3.0,
-        "output_cost": 6.0,
-        "total_cost": 4.5
-      },
-      "cost_at_1m_tokens": {
-        "input_cost": 30.0,
-        "output_cost": 60.0,
-        "total_cost": 45.0
-      },
-      "estimated_time_1m_tokens": 22222.22
-    }
-  ],
-  "total_models": 10,
-  "provider_status": [
-    {
-      "provider_name": "OpenAI",
-      "is_available": true,
-      "error_message": null,
-      "models_count": 5
-    },
-    {
-      "provider_name": "Anthropic",
-      "is_available": true,
-      "error_message": null,
-      "models_count": 5
-    }
-  ],
-  "timestamp": "2024-02-10T00:00:00Z"
-}
-```
-
-**Note on Provider Failures:**
-If a provider is unavailable, the response will still include data from available providers:
-```json
-{
-  "models": [...],  // Only models from available providers
-  "total_models": 5,
-  "provider_status": [
-    {
-      "provider_name": "OpenAI",
-      "is_available": false,
-      "error_message": "Connection timeout",
-      "models_count": 0
-    },
-    {
-      "provider_name": "Anthropic",
-      "is_available": true,
-      "error_message": null,
-      "models_count": 5
-    }
-  ],
-  "timestamp": "2024-02-10T00:00:00Z"
-}
-```
-
-#### `POST /cost-estimate/batch`
-Compare costs for multiple LLM models with the same token usage.
-
-**Features:**
-- Compare costs across multiple models simultaneously
-- Identify cheapest and most expensive models
-- Shows cost range and currency
-- Case-insensitive model name matching
-- Validates token counts (must be non-negative)
-
-**Request Body:**
-```json
-{
-  "model_names": ["gpt-4", "claude-3-opus-20240229", "gemini-1.5-pro"],
-  "input_tokens": 1000,
-  "output_tokens": 500
-}
-```
-
-**Response:**
-```json
-{
-  "input_tokens": 1000,
-  "output_tokens": 500,
-  "models": [
-    {
-      "model_name": "gpt-4",
-      "provider": "OpenAI",
-      "input_cost": 0.03,
-      "output_cost": 0.03,
-      "total_cost": 0.06,
-      "cost_per_1m_tokens": 40.0,
-      "is_available": true,
-      "error_message": null
-    },
-    {
-      "model_name": "claude-3-opus-20240229",
-      "provider": "Anthropic",
-      "input_cost": 0.015,
-      "output_cost": 0.0375,
-      "total_cost": 0.0525,
-      "cost_per_1m_tokens": 35.0,
-      "is_available": true,
-      "error_message": null
-    },
-    {
-      "model_name": "gemini-1.5-pro",
-      "provider": "Google",
-      "input_cost": 0.00125,
-      "output_cost": 0.00375,
-      "total_cost": 0.005,
-      "cost_per_1m_tokens": 3.33,
-      "is_available": true,
-      "error_message": null
-    }
-  ],
-  "cheapest_model": "gemini-1.5-pro",
-  "most_expensive_model": "gpt-4",
-  "cost_range": {
-    "min": 0.005,
-    "max": 0.06
-  },
-  "currency": "USD",
-  "timestamp": "2024-02-10T00:00:00Z"
-}
-```
-
-#### `GET /performance`
-Get performance metrics and comparisons for LLM models.
-
-**Features:**
-- Throughput (tokens per second) for each model
-- Latency metrics in milliseconds
-- Context window sizes
-- Performance scores based on throughput/cost ratio
-- Value scores based on context window/cost ratio
-- Models with best performance highlighted
-
-**Query Parameters:**
-- `provider` (optional): Filter by provider name
-- `sort_by` (optional): Sort by metric - "throughput", "latency", "context_window", "cost", or "value"
-
-**Response:**
-```json
-{
-  "models": [
-    {
-      "model_name": "gpt-4",
-      "provider": "OpenAI",
-      "throughput": 80.0,
-      "latency_ms": 320.0,
-      "context_window": 8192,
-      "cost_per_input_token": 0.00003,
-      "cost_per_output_token": 0.00006,
-      "performance_score": 131.25,
-      "value_score": 182044.44
-    },
-    {
-      "model_name": "gemini-1.5-pro",
-      "provider": "Google",
-      "throughput": 120.0,
-      "latency_ms": 250.0,
-      "context_window": 1000000,
-      "cost_per_input_token": 0.00000125,
-      "cost_per_output_token": 0.00000375,
-      "performance_score": 25600000.0,
-      "value_score": 1600000000.0
-    }
-  ],
-  "total_models": 24,
-  "best_throughput": "gemini-1.5-pro",
-  "lowest_latency": "gemini-1.5-pro",
-  "largest_context": "gemini-1.5-pro",
-  "best_value": "gemini-1.5-pro",
-  "provider_status": [...],
-  "timestamp": "2024-02-10T00:00:00Z"
-}
-```
-
-#### `GET /use-cases`
-Get model recommendations organized by use cases.
-
-**Features:**
-- Organized recommendations by use case category
-- Includes model strengths and capabilities
-- Cost tier information (low, medium, high)
-- Context window sizes for each model
-- Complete feature set for informed decision-making
-
-**Response:**
-```json
-{
-  "models": [
-    {
-      "model_name": "gpt-4",
-      "provider": "OpenAI",
-      "best_for": "High-stakes tasks requiring maximum accuracy and reasoning",
-      "use_cases": ["Complex reasoning", "Code generation", "Creative writing", "Data analysis"],
-      "strengths": ["High accuracy", "Strong reasoning", "Reliable outputs"],
-      "context_window": 8192,
-      "cost_tier": "high"
-    },
-    {
-      "model_name": "gpt-3.5-turbo",
-      "provider": "OpenAI",
-      "best_for": "High-volume applications where cost efficiency is critical",
-      "use_cases": ["Chatbots", "Simple Q&A", "Content generation", "Data extraction"],
-      "strengths": ["Very low cost", "Fast responses", "Good for simple tasks"],
-      "context_window": 16385,
-      "cost_tier": "low"
-    },
-    {
-      "model_name": "gemini-1.5-pro",
-      "provider": "Google",
-      "best_for": "Processing massive documents and complex multimodal tasks",
-      "use_cases": ["Long document analysis", "Video understanding", "Code analysis with large context"],
-      "strengths": ["Largest context window", "Excellent for long documents", "Multimodal capabilities"],
-      "context_window": 1000000,
-      "cost_tier": "medium"
-    }
-  ],
-  "total_models": 24,
-  "providers": ["OpenAI", "Anthropic", "Google", "Cohere", "Mistral AI"],
-  "timestamp": "2024-02-10T00:00:00Z"
-}
-```
-
-#### `GET /health`
-Health check endpoint for monitoring.
-
-**Response:**
-```json
-{
-  "status": "healthy",
-  "service": "LLM Pricing MCP Server",
-  "version": "1.5.1"
-}
-```
-
-#### `GET /telemetry`
-Get real-time telemetry data including endpoint usage metrics, provider adoption, feature usage, client locations, and browser analytics.
-
-**Features:**
-- Real-time endpoint usage metrics (call count, error rates, response times)
-- Provider adoption tracking (which models are most requested)
-- Feature usage statistics (pricing lookups, cost comparisons, etc.)
-- Client location analytics with geographic distribution (powered by IP geolocation)
-- Browser and OS analytics (User-Agent parsing for client environment detection)
-- Overall system health metrics and uptime
-- Unique client tracking and multi-country usage insights
-- Comprehensive statistics for monitoring and optimization
-
-**Response (Includes Client Analytics):**
-```json
-{
-  "overall_stats": {
-    "total_requests": 150,
-    "total_errors": 3,
-    "error_rate": 0.02,
-    "total_endpoints": 8,
-    "total_providers_adopted": 5,
-    "total_features_used": 4,
-    "avg_response_time_ms": 45.5,
-    "unique_clients": 23,
-    "unique_countries": 8,
-    "uptime_since": "2024-02-10T12:00:00Z",
-    "timestamp": "2024-02-10T14:30:00Z"
-  },
-  "endpoints": [
-    {
-      "endpoint": "/pricing",
-      "path": "/pricing",
-      "method": "GET",
-      "call_count": 45,
-      "error_count": 0,
-      "success_rate": 1.0,
-      "avg_response_time_ms": 32.5,
-      "min_response_time_ms": 28.2,
-      "max_response_time_ms": 42.1,
-      "last_called": "2024-02-10T14:29:55Z"
-    }
-  ],
-  "provider_adoption": [
-    {
-      "provider_name": "OpenAI",
-      "model_requests": 65,
-      "unique_models_requested": 4,
-      "total_cost_estimated": 2.45,
-      "last_requested": "2024-02-10T14:29:50Z"
-    }
-  ],
-  "features": [
-    {
-      "feature_name": "cost_estimation",
-      "usage_count": 35,
-      "last_used": "2024-02-10T14:29:52Z"
-    }
-  ],
-  "client_locations": [
-    {
-      "country": "United States",
-      "country_code": "US",
-      "request_count": 85,
-      "unique_clients": 15
-    },
-    {
-      "country": "United Kingdom",
-      "country_code": "GB",
-      "request_count": 32,
-      "unique_clients": 5
-    },
-    {
-      "country": "Canada",
-      "country_code": "CA",
-      "request_count": 18,
-      "unique_clients": 3
-    }
-  ],
-  "top_browsers": [
-    {
-      "browser_name": "Chrome",
-      "request_count": 78,
-      "unique_clients": 12
-    },
-    {
-      "browser_name": "Firefox",
-      "request_count": 42,
-      "unique_clients": 8
-    },
-    {
-      "browser_name": "Safari",
-      "request_count": 30,
-      "unique_clients": 3
-    }
-  ],
-  "timestamp": "2024-02-10T14:30:00Z"
-}
-```
-
-**Use Cases for Telemetry:**
-- **Monitoring:** Track API health and response times
-- **Capacity Planning:** Identify peak usage patterns and bottlenecks
-- **Feature Adoption:** See which pricing features are used most
-- **Provider Insights:** Understand which LLM providers are most popular
-- **Cost Tracking:** Monitor estimated costs from usage patterns
-- **Geographic Analysis:** See which countries are using the API most
-- **Client Analytics:** Understand browser and device distribution of users
-- **Performance Optimization:** Identify slow endpoints for optimization
+### Key Request/Response Examples
 
 #### `POST /cost-estimate`
-Estimate the cost for using a specific LLM model based on token usage.
-
-**Features:**
-- Calculate total costs for any supported model
-- Provides detailed breakdown of input and output costs
-- Case-insensitive model name matching
-- Validates token counts (must be non-negative)
-
-**Request Body:**
 ```json
+// Request
+{"model_name": "gpt-4o", "input_tokens": 1000, "output_tokens": 500}
+
+// Response
 {
-  "model_name": "gpt-4",
-  "input_tokens": 1000,
-  "output_tokens": 500
+  "model_name": "gpt-4o", "provider": "OpenAI",
+  "input_tokens": 1000, "output_tokens": 500,
+  "input_cost": 0.0000025, "output_cost": 0.000005,
+  "total_cost": 0.0000075, "currency": "USD"
 }
 ```
 
-**Response:**
+#### `POST /billing/signup`
 ```json
+// Request
+{"email": "you@example.com"}
+
+// Response
 {
-  "model_name": "gpt-4",
-  "provider": "OpenAI",
-  "input_tokens": 1000,
-  "output_tokens": 500,
-  "input_cost": 0.03,
-  "output_cost": 0.03,
-  "total_cost": 0.06,
-  "currency": "USD",
-  "timestamp": "2024-02-10T00:00:00Z"
+  "api_key": "abc123...", "org_id": "org-xyz...",
+  "tier": "free", "message": "Welcome! Your free API key is ready."
 }
 ```
 
-**Error Response (404 - Model Not Found):**
+#### `POST /router/recommend`
 ```json
+// Request (x-api-key header required)
+{"max_cost_per_1m_tokens": 5, "task_type": "code"}
+
+// Response
 {
-  "detail": "Model 'unknown-model' not found. Please check the /pricing endpoint for available models."
+  "recommended": {"model_name": "gpt-4o-mini", "provider": "OpenAI", ...},
+  "alternatives": [...],
+  "reason": "Best quality/cost ratio for code tasks under $5/1M tokens",
+  "routing_id": "uuid4..."
 }
 ```
 
-**Error Response (422 - Validation Error):**
-```json
-{
-  "detail": [
-    {
-      "type": "greater_than_equal",
-      "loc": ["body", "input_tokens"],
-      "msg": "Input should be greater than or equal to 0"
-    }
-  ]
-}
-```
-
-### Example Requests
-
-```bash
-# Get server info
-curl http://localhost:8000/
-
-# List all available models
-curl http://localhost:8000/models
-
-# Get models from a specific provider
-curl http://localhost:8000/models?provider=anthropic
-
-# Get all pricing data with provider status
-curl http://localhost:8000/pricing
-
-# Get OpenAI pricing only
-curl http://localhost:8000/pricing?provider=openai
-
-# Get Anthropic pricing only
-curl http://localhost:8000/pricing?provider=anthropic
-
-# Get performance metrics sorted by throughput
-curl http://localhost:8000/performance?sort_by=throughput
-
-# Get performance metrics for a specific provider
-curl http://localhost:8000/performance?provider=google
-
-# Get use case recommendations
-curl http://localhost:8000/use-cases
-
-# Estimate cost for GPT-4 with 1000 input tokens and 500 output tokens
-curl -X POST http://localhost:8000/cost-estimate \
-  -H "Content-Type: application/json" \
-  -d '{"model_name": "gpt-4", "input_tokens": 1000, "output_tokens": 500}'
-
-# Estimate cost for Claude 3 Opus
-curl -X POST http://localhost:8000/cost-estimate \
-  -H "Content-Type: application/json" \
-  -d '{"model_name": "claude-3-opus-20240229", "input_tokens": 5000, "output_tokens": 2000}'
-
-# Compare costs across multiple models
-curl -X POST http://localhost:8000/cost-estimate/batch \
-  -H "Content-Type: application/json" \
-  -d '{"model_names": ["gpt-4", "claude-3-opus-20240229", "gemini-1.5-pro"], "input_tokens": 1000, "output_tokens": 500}'
-
-# Health check
-curl http://localhost:8000/health
-
-# Get telemetry data (usage metrics, provider adoption, feature usage)
-curl http://localhost:8000/telemetry
-
-# View telemetry with pretty formatting
-curl http://localhost:8000/telemetry | python -m json.tool
-
-# Extract provider adoption metrics
-curl -s http://localhost:8000/telemetry | python -c "import sys, json; data = json.load(sys.stdin); [print(f\"{p['provider_name']}: {p['model_requests']} requests\") for p in data['provider_adoption']]"
-
-# Monitor endpoint performance
-curl -s http://localhost:8000/telemetry | python -c "import sys, json; data = json.load(sys.stdin); [print(f\"{e['path']}: {e['avg_response_time_ms']:.1f}ms avg\") for e in data['endpoints']]"
-
-# Pretty-print JSON output
-curl http://localhost:8000/pricing | python -m json.tool
-
-# Get only provider status information
-curl http://localhost:8000/pricing | python -c "import sys, json; data = json.load(sys.stdin); print(json.dumps(data['provider_status'], indent=2))"
-
-# Count total models by provider
-curl -s http://localhost:8000/pricing | python -c "import sys, json; data = json.load(sys.stdin); [print(f\"{s['provider_name']}: {s['models_count']} models\") for s in data['provider_status']]"
-
-# Calculate cost for a batch of prompts
-MODEL="gpt-3.5-turbo"
-INPUT_TOKENS=2000
-OUTPUT_TOKENS=500
-curl -s -X POST http://localhost:8000/cost-estimate \
-  -H "Content-Type: application/json" \
-  -d "{\"model_name\": \"$MODEL\", \"input_tokens\": $INPUT_TOKENS, \"output_tokens\": $OUTPUT_TOKENS}" | \
-  python -c "import sys, json; data = json.load(sys.stdin); print(f\"Total cost for {data['model_name']}: \${data['total_cost']:.4f}\")"
-
-# Find the cheapest model for your use case
-curl -s -X POST http://localhost:8000/cost-estimate/batch \
-  -H "Content-Type: application/json" \
-  -d '{"model_names": ["gpt-4", "gpt-3.5-turbo", "claude-3-sonnet-20240229", "gemini-1.5-pro", "mistral-large-latest"], "input_tokens": 5000, "output_tokens": 2000}' | \
-  python -c "import sys, json; data = json.load(sys.stdin); print(f\"Cheapest: {data['cheapest_model']} at \${data['cost_range']['min']:.4f}\")"
-```
-
-## Understanding Volume-Based Pricing
-
-Every model response now includes automatic cost projections at three usage scales:
-
-### Cost Breakdown by Volume
-
-**Small Scale (10K tokens)**
-- Ideal for: Testing, prototyping, low-volume applications
-- Example: 50-100 user interactions per day
-- Shows: `cost_at_10k_tokens`
-
-**Medium Scale (100K tokens)**
-- Ideal for: Small production apps, moderate traffic
-- Example: 500-1,000 user interactions per day  
-- Shows: `cost_at_100k_tokens`
-
-**Large Scale (1M tokens)**
-- Ideal for: High-volume production, enterprise workloads
-- Example: 5,000-10,000+ user interactions per day
-- Shows: `cost_at_1m_tokens`
-
-### Cost Calculation Notes
-
-- All volume costs assume a **50/50 split** between input and output tokens (common in conversational AI)
-- Adjust your calculations based on your actual input/output ratio
-- For write-heavy workloads (summaries, generation): Use closer to 30/70 input/output
-- For read-heavy workloads (analysis, extraction): Use closer to 70/30 input/output
-
-### Performance Metrics
-
-**Processing Time Estimates**
-- `estimated_time_1m_tokens`: Time to process 1M tokens based on throughput
-- Calculated from provider's tokens/second performance
-- Helps plan for batch processing and real-time requirements
-- Example: 22,222 seconds (~6.2 hours) for a 45 tok/s model
-
-### Example Comparison
-
-```json
-{
-  "model_name": "gpt-4o-mini",
-  "provider": "OpenAI",
-  "cost_per_input_token": 0.00000015,
-  "cost_per_output_token": 0.0000006,
-  "cost_at_10k_tokens": {
-    "input_cost": 0.0015,
-    "output_cost": 0.006,
-    "total_cost": 0.00375
-  },
-  "cost_at_1m_tokens": {
-    "input_cost": 0.15,
-    "output_cost": 0.60,
-    "total_cost": 0.375
-  },
-  "estimated_time_1m_tokens": 12500.0
-}
-```
-
-**Reading these metrics:**
-- At 10K tokens: $0.00375 (less than half a cent)
-- At 1M tokens: $0.375 (about 38 cents)
-- Processing time: 3.5 hours at this throughput
-- Perfect for high-volume, cost-sensitive workloads
+---
 
 ## Configuration
 
 ### Environment Variables
 
-Create a `.env` file in the root directory (use `.env.example` as template):
-
 ```env
 # LLM Backend (Agent)
 AGENT_LLM_PROVIDER=openai           # "openai" (default) or "anthropic"
-AGENT_MODEL=gpt-4o-mini             # Model name for the chosen provider
-OPENAI_API_KEY=your_openai_api_key  # Required when AGENT_LLM_PROVIDER=openai
-ANTHROPIC_API_KEY=your_anthropic_key # Required when AGENT_LLM_PROVIDER=anthropic
+AGENT_MODEL=gpt-4o-mini             # Model name
+OPENAI_API_KEY=sk-...               # Required when AGENT_LLM_PROVIDER=openai
+ANTHROPIC_API_KEY=sk-ant-...        # Required when AGENT_LLM_PROVIDER=anthropic
 
-# Server Configuration
+# Server
 SERVER_HOST=0.0.0.0
 SERVER_PORT=8000
 DEBUG=false
 
 # Security
-MCP_API_KEY=your-strong-random-key  # Protects non-public endpoints
-RATE_LIMIT_PER_MINUTE=60
+MCP_API_KEY=your-strong-random-key  # Global admin key (optional — billing keys work too)
+RATE_LIMIT_PER_MINUTE=60            # Default rate limit (overridden by tier)
+
+# Billing (Stripe)
+STRIPE_SECRET_KEY=sk_live_...       # Optional — free signup works without this
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_ID_PRO=price_...
+STRIPE_PRICE_ID_ENTERPRISE=price_...
+BILLING_DB_PATH=/app/data/billing.db
+BILLING_BASE_URL=https://llm-pricing-api.fly.dev
 ```
 
 **Switching LLM providers** requires only env var changes — no code modifications:
 
-| Provider | `AGENT_LLM_PROVIDER` | `AGENT_MODEL` | Cost (est.) |
+| Provider | `AGENT_LLM_PROVIDER` | `AGENT_MODEL` | Estimated cost |
 |---|---|---|---|
 | OpenAI (default) | `openai` | `gpt-4o-mini` | ~$0.73/mo |
 | OpenAI (powerful) | `openai` | `gpt-4o` | ~$8/mo |
 | Anthropic | `anthropic` | `claude-sonnet-4-6` | ~$15/mo |
 | Anthropic (fast) | `anthropic` | `claude-haiku-4-5-20251001` | ~$2/mo |
+
+---
 
 ## Development
 
@@ -972,440 +379,197 @@ RATE_LIMIT_PER_MINUTE=60
 ```
 llm-pricing-mcp-server/
 ├── src/
-│   ├── __init__.py
-│   ├── main.py                    # FastAPI application
-│   ├── config/
-│   │   ├── __init__.py
-│   │   └── settings.py            # Configuration settings
-│   ├── models/
-│   │   ├── __init__.py
-│   │   └── pricing.py             # Pydantic models
-│   └── services/
-│       ├── __init__.py
-│       ├── openai_pricing.py      # OpenAI pricing service
-│       ├── anthropic_pricing.py   # Anthropic pricing service
-│       └── pricing_aggregator.py  # Aggregator service
-├── tests/
-│   ├── conftest.py
-│   ├── test_api.py                # API endpoint tests
-│   ├── test_models.py             # Model validation tests
-│   └── test_services.py           # Service tests
-├── .github/
-│   └── workflows/
-│       └── ci-cd.yml              # CI/CD pipeline
-├── .env.example
-├── .gitignore
-├── requirements.txt
-├── README.md
-├── DEPLOYMENT.md
-├── LICENSE
-├── Procfile                       # For deployment
-└── runtime.txt                    # Python version
+│   ├── __init__.py                  # Version (1.38.0)
+│   ├── main.py                      # FastAPI app + all endpoints
+│   ├── config/settings.py           # Pydantic settings
+│   ├── models/                      # Pydantic models (pricing, billing, router, …)
+│   └── services/                    # Business logic
+│       ├── pricing_aggregator.py    # Multi-provider pricing aggregator
+│       ├── billing_service.py       # SQLite billing / customer DB
+│       ├── router.py                # Model routing engine
+│       ├── savings_tracker.py       # Router savings analytics
+│       ├── benchmark_service.py     # Quality scores + HF API
+│       ├── pricing_history.py       # Historical snapshot DB
+│       └── …
+├── mcp/
+│   ├── server.py                    # STDIO JSON-RPC 2.0 server
+│   ├── server_azure.py              # STDIO server proxying remote API
+│   └── tools/                       # 14 MCP tool implementations
+│       ├── tool_manager.py
+│       ├── get_all_pricing.py
+│       ├── estimate_cost.py
+│       └── …
+├── agent/
+│   ├── pricing_agent.py             # ReAct loop agent
+│   ├── llm_backend.py               # OpenAI + Anthropic backends
+│   └── tools.py                     # Agent tool wrappers
+├── static/                          # Browser UIs (one dir per page)
+│   ├── landing/                     # / (marketing page)
+│   ├── chat/                        # /chat (agent UI)
+│   ├── calculator/                  # /calculator
+│   ├── compare/                     # /compare
+│   ├── history/                     # /history
+│   ├── trends/                      # /trends
+│   ├── widget/                      # /widget
+│   ├── billing/                     # /billing
+│   └── admin/                       # /admin
+├── tests/                           # 625 tests
+├── docs/                            # Extended documentation
+├── .github/workflows/ci-cd.yml      # CI/CD pipeline
+├── Dockerfile
+├── fly.toml                         # Fly.io deployment config
+└── requirements.txt
 ```
 
 ### Adding a New Provider
 
-The server uses a base provider interface that makes it easy to add new pricing providers. Follow these steps:
-
-1. Create a new service file in `src/services/`:
-```python
-# src/services/new_provider_pricing.py
-from typing import List
-from src.models.pricing import PricingMetrics
-from src.services.base_provider import BasePricingProvider
-
-class NewProviderPricingService(BasePricingProvider):
-    """Service to fetch and manage NewProvider model pricing."""
-    
-    def __init__(self, api_key=None):
-        super().__init__("NewProvider")
-        self.api_key = api_key
-    
-    async def fetch_pricing_data(self) -> List[PricingMetrics]:
-        """
-        Fetch pricing data from the provider.
-        
-        Returns:
-            List of PricingMetrics for NewProvider models
-        """
-        # Implement your pricing fetch logic here
-        return [
-            PricingMetrics(
-                model_name="model-name",
-                provider="NewProvider",
-                cost_per_input_token=0.001,
-                cost_per_output_token=0.002,
-                context_window=100000,
-                currency="USD",
-                unit="per_token",
-                source="NewProvider Official Pricing"
-            )
-        ]
-    
-    @staticmethod
-    def get_pricing_data() -> List[PricingMetrics]:
-        """Synchronous method for backward compatibility."""
-        # Implement synchronous version if needed
-        pass
-```
-
-2. Update the aggregator in `src/services/pricing_aggregator.py`:
-```python
-from src.services.new_provider_pricing import NewProviderPricingService
-
-class PricingAggregatorService:
-    def __init__(self):
-        self.openai_service = OpenAIPricingService()
-        self.anthropic_service = AnthropicPricingService()
-        self.newprovider_service = NewProviderPricingService()
-    
-    async def get_all_pricing_async(self):
-        tasks = [
-            self.openai_service.get_pricing_with_status(),
-            self.anthropic_service.get_pricing_with_status(),
-            self.newprovider_service.get_pricing_with_status(),  # Add here
-        ]
-        # ... rest of implementation
-```
-
-3. Add API key configuration to `.env`:
-```env
-NEWPROVIDER_API_KEY=your_api_key_here
-```
-
-4. Add tests in `tests/test_async_pricing.py` or create a new test file.
-
-## Testing
-
-### Running Tests
-
-Run all tests:
-```bash
-pytest
-```
-
-Run with coverage:
-```bash
-pytest --cov=src --cov-report=term-missing
-```
-
-Run specific test file:
-```bash
-pytest tests/test_api.py -v
-```
-
-### Test Structure
-
-- `tests/test_api.py`: Tests for API endpoints
-- `tests/test_models.py`: Tests for Pydantic models
-- `tests/test_services.py`: Tests for pricing services
-- `tests/test_agent.py`: Unit tests for the ReAct agent and conversation memory
-- `tests/test_agent_endpoint.py`: Integration tests for `POST /agent/chat` and `POST /agent/chat/stream`
-- `tests/test_rag.py`: Tests for TF-IDF RAG pipeline (chunker, vector store, retrieval)
-
-## Deployment
-
-### Production-Ready Features
-
-This service is fully production-ready with support for:
-
-- **Blue-Green Deployment**: Zero-downtime deployments with instant rollback capability
-- **Backwards Compatibility**: All endpoints maintain compatibility through major version boundaries
-- **Graceful Shutdown**: Proper handling of in-flight requests during deployment
-- **Health Checks**: Comprehensive liveness and readiness probes for orchestrators
-- **Telemetry**: Real-time usage and adoption metrics for monitoring
-
-### Blue-Green Deployment Guide
-
-For comprehensive instructions on deploying with zero downtime, see [BLUE_GREEN_DEPLOYMENT.md](docs/BLUE_GREEN_DEPLOYMENT.md).
-
-**Key Features:**
-- Switch traffic between Blue and Green instances
-- Instant rollback if issues detected
-- Environment awareness (detect blue/green deployment group)
-- Graceful shutdown with request draining
-- Health check endpoints for orchestrators (K8s, Docker Swarm, ECS)
-
-**Quick Blue-Green Deployment:**
-
-```bash
-# 1. Deploy green instance
-docker run -d \
-  --name llm-pricing-green \
-  -e ENV=production \
-  -e DEPLOYMENT_GROUP=green \
-  -p 8001:8000 \
-  myregistry/llm-pricing:v1.5.1
-
-# 2. Verify health
-curl http://localhost:8001/health/ready
-
-# 3. Switch load balancer to green
-# (Configure in your load balancer)
-
-# 4. Graceful shutdown of blue
-curl -X POST http://localhost:8000/deployment/shutdown \
-  -d '{"drain_timeout_seconds": 30}'
-```
-
-### Backwards Compatibility
-
-All API endpoints maintain backwards compatibility. See [BACKWARDS_COMPATIBILITY.md](docs/BACKWARDS_COMPATIBILITY.md) for:
-
-- API versioning strategy
-- Guaranteed stable endpoints
-- Client resilience recommendations
-- Migration planning
-- Common migration scenarios
-
-### Health Check Endpoints
-
-For orchestrators and load balancers:
-
-```bash
-# Simple health check (backwards compatible)
-GET /health
-→ {"status": "healthy", "service": "LLM Pricing MCP Server", "version": "1.5.1"}
-
-# Kubernetes readinessProbe (ready for traffic)
-GET /health/ready
-→ {"ready": true, "checks": {...}}
-
-# Kubernetes livenessProbe (process should continue)
-GET /health/live
-→ {"alive": true}
-
-# Comprehensive health details
-GET /health/detailed
-→ Detailed status including environment, metrics, services
-
-# Deployment information (blue-green aware)
-GET /deployment/info
-→ {"environment": "production", "deployment_group": "blue", "region": "us-east-1", ...}
-```
-
-### Azure App Service
-
-Detailed deployment instructions are available in [DEPLOYMENT.md](docs/DEPLOYMENT.md).
-
-**Quick Deploy:**
-```bash
-az webapp up --name llm-pricing-server --resource-group llm-pricing-rg --runtime "PYTHON:3.11"
-```
-
-### GitHub Actions CI/CD
-
-The repository includes a GitHub Actions workflow that:
-1. Runs tests on every push and pull request
-2. Performs code linting
-3. Deploys to Azure App Service on successful merge to main
-
-Configure the following secrets in your GitHub repository:
-- `AZURE_CREDENTIALS`: Azure service principal credentials
-- `AZURE_WEBAPP_NAME`: Your Azure web app name
-
-## Contributing
-
-Contributions are welcome! We **strictly follow Git Flow** for all development. Please read our detailed [CONTRIBUTING.md](docs/CONTRIBUTING.md) guide before starting.
-
-### Quick Start for Contributors
-
-1. Fork the repository
-2. Clone your fork and checkout the `develop` branch:
-   ```bash
-   git checkout develop
-   git pull origin develop
-   ```
-3. Create a feature branch from `develop`:
-   ```bash
-   git checkout -b feature/amazing-feature
-   ```
-4. Make your changes and commit:
-   ```bash
-   git add .
-   git commit -m 'Add amazing feature'
-   ```
-5. Run tests to ensure everything works:
-   ```bash
-   pytest
-   ```
-6. Push to your fork:
-   ```bash
-   git push origin feature/amazing-feature
-   ```
-7. Open a Pull Request **against the `develop` branch** (NOT master)
-
-### Important Git Flow Rules
-
-- ⚠️ **Always branch from `develop`** for new features
-- ⚠️ **Never merge directly to `master`** - features go to `develop` first
-- ⚠️ **NEVER commit secrets or API keys** - use environment variables
-- ⚠️ **Use `--no-ff` for merges** to preserve branch history
-- ✅ See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for detailed Git Flow workflows
-
-### Security Requirements
-
-Before committing, **always verify**:
-
-```bash
-# Check for secrets in your changes
-git diff --cached
-grep -r "api_key" .
-grep -r "password" .
-```
-
-**Never commit:**
-- API keys (OpenAI, Anthropic, Azure, etc.)
-- Passwords or tokens
-- `.env` files (use `.env.example` instead)
-- Private keys (`.pem`, `.key`, `.pfx`)
-- Hard-coded credentials
-
-Use environment variables for all sensitive data. See the [Security Compliance](docs/CONTRIBUTING.md#security-compliance) section for details.
-
-### Code Style
-
-- Follow PEP 8 guidelines
-- Use type hints where possible
-- Write docstrings for all functions and classes
-- Keep functions focused and small
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- FastAPI for the excellent web framework
-- Pydantic for robust data validation
-- The open-source community for inspiration and support
-
-## Support
-
-For issues, questions, or contributions, please open an issue on GitHub.
-
-## Roadmap
-
-### Completed (v1.33.0) - Latest
-- [x] **LLM Backend**: Switch default agent backend to GPT-4o-mini (20× cheaper, 2× faster than Claude Sonnet)
-- [x] Provider configurable via `AGENT_LLM_PROVIDER` + `AGENT_MODEL` env vars — no code changes needed
-- [x] Full OpenAI and Anthropic backends implemented with token-level streaming support
-
-### Completed (v1.32.0)
-- [x] Friendly error message when AI provider credits are exhausted
-- [x] Improved error classification for billing vs. authentication vs. rate-limit failures
-
-### Completed (v1.31.0)
-- [x] Fixed `BadRequestError` from Anthropic API caused by empty `required: []` in tool schemas
-- [x] `AgentTool.to_llm_schema()` now strips empty `required` arrays before sending to LLM
-
-### Completed (v1.30.0)
-- [x] Fixed 401 Unauthorized on `/chat` — chat endpoints bypassed from API key middleware
-- [x] Removed hardcoded API key from frontend HTML
-- [x] Fixed `AttributeError` from dead code in `PricingAgent` initialization
-
-### Completed (v1.29.0)
-- [x] Reduced agent chat latency — removed mandatory `rag_retrieve` for pure pricing questions
-- [x] Agent pre-warmed at server startup to eliminate cold-start penalty on first request
-
-### Completed (v1.28.0)
-- [x] Admin dashboard at `/admin` — real-time server stats, rate-limit monitoring, deployment metadata
-- [x] Fixed `StaticFiles` mount conflict with API routes (moved to `FileResponse`)
-
-### Completed (v1.27.0)
-- [x] Pricing embed widget — embeddable pricing tables for third-party sites
-- [x] Public API at `/pricing/public` — no authentication required
-
-### Completed (v1.26.0)
-- [x] Model comparison UI at `/compare` — side-by-side model comparison interface
-
-### Completed (v1.25.0)
-- [x] HMAC-SHA256 webhook payload signing for price-change alerts
-
-### Completed (v1.24.0)
-- [x] Cost calculator UI — interactive token cost estimator at `/calculator`
-
-### Completed (v1.23.0)
-- [x] `list_conversations` and `delete_conversation` agent tools
-- [x] Agent can manage its own conversation history via tool calls
-
-### Completed (v1.22.0)
-- [x] Conversation history UI — browse and manage past chat sessions at `/history-ui`
-
-### Completed (v1.21.0)
-- [x] Conversation management REST API — `GET/DELETE /conversations`
-
-### Completed (v1.20.0)
-- [x] Price-change alert webhooks and pricing export exposed as agent tools
-
-### Completed (v1.19.0)
-- [x] `/trends` price-change leaderboard UI with Chart.js visualizations
-
-### Completed (v1.18.0)
-- [x] CSV and JSON pricing history export via `GET /pricing/history/export`
-
-### Completed (v1.17.0)
-- [x] `/history` Chart.js price-history UI — interactive pricing trend charts
-
-### Completed (v1.16.0)
-- [x] Pricing history and trends exposed as agent tools (`get_pricing_history`, `get_pricing_trends`)
-
-### Completed (v1.15.0)
-- [x] Price-change alert webhooks — register URLs to be notified when model prices change
-
-### Completed (v1.14.0)
-- [x] Historical pricing snapshots — automatic 6-hour snapshots stored in SQLite
-
-### Completed (v1.13.0 – v1.13.1)
-- [x] Token-level streaming for agent final answer (real-time text rendering in Chat UI)
-- [x] SQLite-backed conversation persistence across server restarts
-
-### Completed (v1.12.0 – v1.12.2)
-- [x] SSE streaming endpoint `POST /agent/chat/stream` — live ReAct progress events
-- [x] RAG source citations rendered as chips below agent answer bubbles
-
-### Completed (v1.10.0 – v1.11.7)
-- [x] **MAJOR:** Agent + RAG pipeline with OWASP hardening
-- [x] ReAct loop with configurable max iterations and tool routing
-- [x] TF-IDF RAG pipeline over pricing documentation
-- [x] Conversation memory with configurable turn limit
-- [x] OpenAI and Anthropic LLM backends abstracted behind `LLMBackend` interface
-
-### Completed (v1.8.0 – v1.9.0)
-- [x] Azure-hosted MCP server for remote Claude Desktop connections
-- [x] Telemetry tracking, client analytics, geolocation and browser detection
-
-### Completed (v1.6.0)
-- [x] Full MCP protocol (STDIO JSON-RPC 2.0) with Claude Desktop integration
-- [x] Comprehensive MCP testing suite
-
-### Completed (v1.5.1)
-- [x] Expanded to 12 major LLM providers (87+ models)
-- [x] Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Anyscale, Amazon Bedrock
-- [x] Live data fetching for all providers (no API keys required)
-
-### Completed (v1.4.2)
-- [x] Real-time pricing API with async fetching and smart caching (500x+ faster cached)
-- [x] 5 initial providers (OpenAI, Anthropic, Google, Cohere, Mistral AI)
-- [x] Cost estimation endpoints (single and batch)
-- [x] Performance metrics, use-case recommendations, health checks
-- [x] Azure App Service deployment with blue-green support
+1. Create `src/services/<provider>_pricing.py` implementing `BasePricingProvider`
+2. Register in `src/services/pricing_aggregator.py`
+3. Add env var for optional API key in `src/config/settings.py`
+4. Add tests in `tests/`
 
 ---
 
-### Roadmap: Cost Optimization (Next Up)
+## Testing
 
-> Current hosting cost: ~$76/month. Target: ~$9/month or $0 with OSS credits.
+```bash
+# Run all 625 tests
+pytest
 
-- [ ] **Migrate to Fly.io** — equivalent performance at $5–8/mo vs $69/mo Azure S1; existing `Dockerfile` works unchanged
-- [ ] **Apply for Fly.io OSS credits** — public repos qualify for $150/mo free compute at [fly.io/open-source](https://fly.io/open-source)
-- [ ] **Downgrade Azure S1 → B1** — if staying on Azure, save $56/mo by dropping deployment slots (Basic B1 = $13/mo)
+# With coverage
+pytest --cov=src --cov-report=term-missing
 
-### Roadmap: Future Features
+# Specific suites
+pytest tests/test_api.py -v
+pytest tests/test_billing_endpoints.py -v
+pytest tests/test_mcp_http.py -v     # HTTP MCP transport
+pytest tests/test_router.py -v
+```
 
-- [ ] Support additional LLM backends (Google Gemini native, Groq direct, Ollama local)
-- [ ] WebSocket support for live price update subscriptions
-- [ ] GraphQL API support
-- [ ] Multi-region deployment support
-- [ ] Advanced filtering and custom comparison criteria
-- [ ] Additional specialized providers (Replicate, Hugging Face Inference)
+### Test Files
+
+| File | What it covers |
+|------|---------------|
+| `test_api.py` | Core API endpoints |
+| `test_agent_endpoint.py` | Agent chat + streaming |
+| `test_billing_endpoints.py` | Signup, checkout, webhook, me |
+| `test_billing_service.py` | BillingService unit tests |
+| `test_mcp_http.py` | HTTP MCP transport |
+| `test_router.py` | Router recommendation + feedback |
+| `test_security.py` | Auth middleware |
+| `test_admin_dashboard.py` | Admin endpoints |
+| `test_history_tools.py` | Pricing history + trends |
+| `test_rag.py` | TF-IDF RAG pipeline |
+| `test_agent.py` | ReAct agent unit tests |
+
+---
+
+## Deployment
+
+### Fly.io (Primary)
+
+The app is deployed on [Fly.io](https://fly.io) and auto-deploys on every push to `master`.
+
+```bash
+# Install flyctl
+# https://fly.io/docs/getting-started/installing-flyctl/
+
+# Deploy manually
+flyctl deploy
+
+# Set secrets
+flyctl secrets set \
+  MCP_API_KEY=... \
+  OPENAI_API_KEY=... \
+  AGENT_LLM_PROVIDER=openai \
+  AGENT_MODEL=gpt-4o-mini
+
+# Set Stripe secrets (optional — free tier works without)
+flyctl secrets set \
+  STRIPE_SECRET_KEY=sk_live_... \
+  STRIPE_WEBHOOK_SECRET=whsec_... \
+  STRIPE_PRICE_ID_PRO=price_... \
+  STRIPE_PRICE_ID_ENTERPRISE=price_... \
+  BILLING_BASE_URL=https://llm-pricing-api.fly.dev
+```
+
+Configuration in `fly.toml`. Persistent volume at `/app/data/` stores all SQLite databases.
+
+### GitHub Actions CI/CD
+
+The `.github/workflows/ci-cd.yml` pipeline:
+1. Runs all 625 tests on every PR
+2. Deploys to Fly.io on `master` push (via `FLY_API_TOKEN` secret)
+3. Performs a health check after deploy
+
+### Health Check Endpoints
+
+```bash
+GET /health        → {"status":"healthy","version":"1.38.0"}
+GET /health/live   → {"alive":true}
+GET /health/ready  → {"ready":true,"checks":{...}}
+GET /health/detailed → detailed environment + service statuses
+```
+
+### Blue-Green Deployment
+
+Graceful shutdown with request draining is supported. See [docs/BLUE_GREEN_DEPLOYMENT.md](docs/BLUE_GREEN_DEPLOYMENT.md).
+
+---
+
+## Live Data
+
+The server fetches pricing data from official public pricing pages using web scraping with smart caching. No provider API keys are required for pricing data.
+
+- **Cache TTL**: 2 hours for pricing, 5 minutes for performance metrics
+- **Fallback**: Static hardcoded data if live sources are unavailable
+- **Providers**: OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Anyscale, Amazon Bedrock
+
+Optional provider API keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) improve model-list freshness but are not required.
+
+---
+
+## Contributing
+
+See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md). This repo uses **Git Flow**:
+
+```
+feature/<name>  →  develop (PR)  →  master (PR)  →  Fly.io auto-deploy
+```
+
+- Never commit directly to `develop` or `master`
+- Branch names: `feature/<topic>-v<version>` (e.g. `feature/stripe-billing-v1.37.0`)
+- Open PRs against `develop`; maintainers promote develop → master for releases
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+---
+
+## Roadmap
+
+### Completed
+
+- [x] v1.38.0 — HTTP MCP transport (`POST /mcp`, `GET /mcp`) for remote clients
+- [x] v1.37.3 — Mobile-responsive UI, consistent nav across all pages
+- [x] v1.37.2 — SQLite directory auto-creation on Fly.io volume mount
+- [x] v1.37.1 — Marketing landing page at `/`
+- [x] v1.37.0 — Stripe SaaS billing: free signup, Pro/Enterprise tiers, self-serve portal
+- [x] v1.36.0 — API key tiers (free/pro/enterprise), router feedback loop, streaming router, Fly.io migration
+- [x] v1.35.0 — Quality value index, benchmark service, model router, savings tracker
+- [x] v1.33.0 — Switched default LLM backend to GPT-4o-mini (~20× cheaper)
+- [x] v1.27.0–v1.32.0 — Admin dashboard, widget, compare UI, calculator, price alerts, history export
+- [x] v1.10.0–v1.26.0 — Agent + RAG pipeline, streaming, conversation memory, pricing history
+- [x] v1.5.1 — 12 providers, 87+ models, live data fetching
+- [x] v1.6.0 — Full MCP protocol (STDIO JSON-RPC 2.0), Claude Desktop integration
+
+### Upcoming
+
+- [ ] Stripe products live setup (configure products + set Fly.io secrets)
+- [ ] Shut down Azure App Service (currently running in parallel at ~$27/mo)
+- [ ] Custom domain
+- [ ] Additional LLM backends (Groq direct, Ollama local)
+- [ ] WebSocket support for live price subscriptions
