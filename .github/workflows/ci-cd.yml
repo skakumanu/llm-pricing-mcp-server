@@ -100,8 +100,23 @@ jobs:
       run: |
         bandit -r src -q
 
+  secret_scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Gitleaks — scan for committed secrets
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   deploy:
-    needs: [test, lint, osv_scan, security]
+    needs: [test, lint, osv_scan, security, secret_scan]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -186,7 +201,7 @@ jobs:
         exit 0
 
   deploy_fly:
-    needs: [test, lint, osv_scan, security]
+    needs: [test, lint, osv_scan, security, secret_scan]
     runs-on: ubuntu-latest
     permissions:
       contents: read

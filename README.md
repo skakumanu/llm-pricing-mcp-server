@@ -48,7 +48,7 @@ A production-ready **Model Context Protocol (MCP)** server for LLM pricing data.
 | `/billing` | Self-serve signup + upgrade dashboard |
 | `/admin` | Server stats, rate limits, customers |
 
-All UIs are mobile-responsive with a consistent navigation bar.
+All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font, `#0f1117` background, `#7c6af7` accent) and are fully mobile-responsive with a sticky hamburger navigation bar.
 
 ### SaaS Billing (Stripe)
 - **Free tier signup**: `POST /billing/signup` (email → API key, no Stripe required)
@@ -67,7 +67,7 @@ All UIs are mobile-responsive with a consistent navigation bar.
 - Protected endpoints (`/billing/me`, `/router/recommend`, `/router/feedback`, `/billing/portal`) require a billing API key or the global `MCP_API_KEY`
 - Rate limiting per client IP + tier bucket
 - Request size limit (1MB default)
-- 625 passing tests, CI/CD on every PR
+- 625 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo

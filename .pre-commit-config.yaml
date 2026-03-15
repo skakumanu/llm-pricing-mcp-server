@@ -1,0 +1,21 @@
+repos:
+  # ── General hygiene ──────────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: no-commit-to-branch
+        args: [--branch, develop, --branch, master]
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: trailing-whitespace
+        exclude: "\\.(md|txt)$"
+      - id: end-of-file-fixer
+        exclude: "\\.(md|txt)$"
+
+  # ── Secret scanning ───────────────────────────────────────────────────────
+  # Blocks commits that contain API keys, tokens, passwords, etc.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
