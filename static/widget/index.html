@@ -22,16 +22,6 @@
 
     body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
 
-    header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 14px 24px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-    header h1 { font-size: 18px; font-weight: 700; }
-    header .subtitle { color: var(--muted); font-size: 13px; }
     /* ── Shared nav ── */
     .main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;border-bottom:1px solid #23263a;position:sticky;top:0;z-index:200;gap:.5rem}
     .nav-brand{font-weight:700;color:#7c6af7;text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
@@ -84,9 +74,9 @@
     /* ── Code block ── */
     .code-wrap {
       position: relative;
-      background: #0b0e16;
+      background: var(--surface2);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: var(--radius);
       padding: 14px 16px;
       margin-bottom: 20px;
     }
@@ -120,7 +110,7 @@
     .preview-wrap {
       background: var(--surface2);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: var(--radius);
       padding: 20px;
       margin-bottom: 24px;
     }

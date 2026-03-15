@@ -30,17 +30,6 @@
       min-height: 100vh;
     }
 
-    /* ── Header ── */
-    header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 14px 24px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-    header h1 { font-size: 18px; font-weight: 700; color: var(--text); }
-    header .subtitle { color: var(--muted); font-size: 13px; }
     /* ── Shared nav ── */
     .main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;border-bottom:1px solid #23263a;position:sticky;top:0;z-index:200;gap:.5rem}
     .nav-brand{font-weight:700;color:#7c6af7;text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
@@ -59,7 +48,7 @@
     }
 
     /* ── Layout ── */
-    .page { max-width: 1400px; margin: 0 auto; padding: 24px; }
+    .page { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
 
     /* ── Model Selector Bar ── */
     .selector-bar {
@@ -321,9 +310,14 @@
 
     /* ── Responsive ── */
     @media (max-width: 700px) {
-      header { flex-wrap: wrap; }
       .selector-row { flex-direction: column; }
       .model-slot { min-width: 100%; }
+      .bar-model-label { width: 100px; }
+      .volume-tabs { gap: 4px; }
+      .volume-tab { padding: 5px 10px; font-size: 11px; }
+    }
+    @media (max-width: 500px) {
+      .metric-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -346,7 +340,6 @@
 </nav>
 
 <div class="page">
-
   <!-- ── Model Selector ── -->
   <div class="selector-bar">
     <h2>Select Models to Compare (2–4)</h2>
