@@ -44,7 +44,23 @@ Run every item below before staging files on any feature branch. Do not skip any
 __version__ = "x.y.z"   # ← bump this
 ```
 
-### 2. Update README test count
+### 2. Update `docs/ARCHITECTURE.md` when structure changes
+
+Update `docs/ARCHITECTURE.md` whenever any of these change:
+- New or removed service in `src/services/` or `agent/`
+- New endpoint group or auth change in `src/main.py`
+- New database table or schema
+- New browser UI page in `static/`
+- New external dependency (provider, payment, etc.)
+- CI/CD job added or removed
+- Deployment target added or removed
+- Design system token change (CSS variables)
+
+**Minor changes do NOT need an architecture update**: bug fixes, style tweaks, test additions, wording changes.
+
+The canonical file is `docs/ARCHITECTURE.md`. Keep the layer diagram, file structure, and endpoint map current.
+
+### 3. Update README test count
 
 After running tests, update the count in `README.md` if it changed:
 
@@ -57,7 +73,7 @@ Run tests first:
 py -m pytest tests/ -q
 ```
 
-### 3. Secret scan — MUST PASS before `git add`
+### 4. Secret scan — MUST PASS before `git add`
 
 Check staged files for accidentally included secrets:
 
@@ -74,14 +90,14 @@ git diff --staged --name-only | grep -E "\.(db|env|pem|key|p12|pfx|secret)$"
 ```
 This must return empty. If not, unstage those files.
 
-### 4. Verify `.db` / `.env` are gitignored
+### 5. Verify `.db` / `.env` are gitignored
 
 ```bash
 git status --short | grep -E "\.(db|env)$"
 ```
 Should return empty. If `billing.db` or `pricing_history.db` appear untracked, they are already in `.gitignore` — do not `git add` them.
 
-### 5. Commit message format
+### 6. Commit message format
 
 Use conventional commits:
 ```
