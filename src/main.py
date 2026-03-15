@@ -522,8 +522,11 @@ async def _pricing_snapshot_loop() -> None:
 @app.on_event("startup")
 async def startup_pricing_history() -> None:
     """Initialize the pricing history/alerts/conversation DBs and launch the background snapshot loop."""
-    await init_billing_service(settings.billing_db_path)
-    logger.info("Billing service initialized at %s", settings.billing_db_path)
+    try:
+        await init_billing_service(settings.billing_db_path)
+        logger.info("Billing service initialized at %s", settings.billing_db_path)
+    except Exception as exc:  # nosec B110
+        logger.error("Billing service init failed (billing endpoints disabled): %s", exc)
     await init_pricing_history_service(settings.pricing_history_db_path)
     logger.info("Pricing history service initialized at %s", settings.pricing_history_db_path)
     await init_pricing_alert_service(settings.pricing_history_db_path)

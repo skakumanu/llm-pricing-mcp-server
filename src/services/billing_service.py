@@ -1,11 +1,15 @@
 """Billing service — SQLite-backed customer/subscription management."""
+import logging
 import secrets
 import time
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import aiosqlite
+
+logger = logging.getLogger(__name__)
 
 _billing_service: Optional["BillingService"] = None
 
@@ -56,6 +60,10 @@ class BillingService:
         self._db_path = db_path
 
     async def initialize(self) -> None:
+        # Ensure the parent directory exists (important for Fly.io volume mounts)
+        db_path = Path(self._db_path)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.info("Initializing billing DB at %s", self._db_path)
         async with aiosqlite.connect(self._db_path) as db:
             await db.execute(_CREATE_TABLE)
             await db.commit()

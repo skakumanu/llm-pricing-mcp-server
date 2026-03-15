@@ -1,6 +1,7 @@
 """Savings tracker: persist routing decisions and report per-org savings."""
 import logging
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -94,6 +95,7 @@ class SavingsTrackerService:
     async def initialize(self) -> None:
         """Create tables and apply any pending schema migrations."""
         import aiosqlite
+        Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
         async with aiosqlite.connect(self._db_path) as db:
             await db.execute(_CREATE_TABLE)
             await db.execute(_CREATE_INDEX)
