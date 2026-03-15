@@ -10,7 +10,8 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #f0f2f5;
+      background: #0f1117;
+      color: #e2e8f0;
       min-height: 100vh;
     }
 
@@ -39,10 +40,10 @@
 
     /* Controls */
     .controls {
-      background: #fff;
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
       border-radius: 12px;
       padding: 20px 24px;
-      box-shadow: 0 1px 6px rgba(0,0,0,0.08);
       display: flex;
       flex-wrap: wrap;
       gap: 16px;
@@ -50,24 +51,26 @@
     }
 
     .field { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 140px; }
-    .field label { font-size: 12px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+    .field label { font-size: 12px; font-weight: 600; color: #8b93a5; text-transform: uppercase; letter-spacing: 0.04em; }
 
     input, select {
       height: 38px;
       padding: 0 12px;
-      border: 1px solid #ddd;
+      border: 1px solid #2a2d3a;
       border-radius: 8px;
       font-size: 14px;
       outline: none;
       transition: border-color 0.15s;
       width: 100%;
+      background: #0f1117;
+      color: #e2e8f0;
     }
-    input:focus, select:focus { border-color: #1a73e8; }
+    input:focus, select:focus { border-color: #7c6af7; }
 
     .btn {
       height: 38px;
       padding: 0 20px;
-      background: #1a1a2e;
+      background: #7c6af7;
       color: #fff;
       border: none;
       border-radius: 8px;
@@ -78,8 +81,8 @@
       transition: background 0.15s;
       align-self: flex-end;
     }
-    .btn:hover { background: #2d2d50; }
-    .btn:disabled { background: #999; cursor: not-allowed; }
+    .btn:hover { background: #9585ff; }
+    .btn:disabled { background: #2a2d3a; color: #8b93a5; cursor: not-allowed; }
 
     /* Status / error */
     .status {
@@ -89,8 +92,8 @@
       font-size: 13px;
       display: none;
     }
-    .status.error   { background: #fdecea; color: #c62828; display: block; }
-    .status.info    { background: #e8f0fe; color: #1a56db; display: block; }
+    .status.error   { background: rgba(248,113,113,0.1); color: #f87171; display: block; }
+    .status.info    { background: rgba(124,106,247,0.1); color: #9585ff; display: block; }
 
     /* Stats bar */
     .stats {
@@ -104,25 +107,25 @@
     .stat-card {
       flex: 1;
       min-width: 140px;
-      background: #fff;
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
       border-radius: 10px;
       padding: 14px 18px;
-      box-shadow: 0 1px 6px rgba(0,0,0,0.07);
     }
-    .stat-card .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
-    .stat-card .value { font-size: 20px; font-weight: 700; color: #1a1a2e; }
+    .stat-card .label { font-size: 11px; color: #8b93a5; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+    .stat-card .value { font-size: 20px; font-weight: 700; color: #e2e8f0; }
     .stat-card .sub   { font-size: 12px; margin-top: 3px; }
-    .sub.up   { color: #c62828; }
-    .sub.down { color: #2e7d32; }
-    .sub.flat { color: #888; }
+    .sub.up   { color: #f87171; }
+    .sub.down { color: #34d399; }
+    .sub.flat { color: #8b93a5; }
 
     /* Chart */
     .chart-wrap {
       margin-top: 20px;
-      background: #fff;
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
       border-radius: 12px;
       padding: 20px;
-      box-shadow: 0 1px 6px rgba(0,0,0,0.08);
       display: none;
       position: relative;
     }
@@ -130,19 +133,19 @@
     .chart-title {
       font-size: 14px;
       font-weight: 600;
-      color: #333;
+      color: #e2e8f0;
       margin-bottom: 16px;
     }
-    .chart-subtitle { font-size: 12px; color: #888; font-weight: 400; margin-left: 6px; }
+    .chart-subtitle { font-size: 12px; color: #8b93a5; font-weight: 400; margin-left: 6px; }
 
     canvas { width: 100% !important; }
 
     /* Table */
     .table-wrap {
       margin-top: 20px;
-      background: #fff;
+      background: #1a1d27;
+      border: 1px solid #2a2d3a;
       border-radius: 12px;
-      box-shadow: 0 1px 6px rgba(0,0,0,0.08);
       overflow: hidden;
       display: none;
     }
@@ -151,13 +154,13 @@
       padding: 14px 20px;
       font-size: 13px;
       font-weight: 600;
-      color: #333;
-      border-bottom: 1px solid #eee;
+      color: #e2e8f0;
+      border-bottom: 1px solid #2a2d3a;
       display: flex;
       align-items: center;
       justify-content: space-between;
     }
-    .table-count { font-size: 12px; color: #888; font-weight: 400; }
+    .table-count { font-size: 12px; color: #8b93a5; font-weight: 400; }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -169,17 +172,17 @@
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      color: #888;
-      background: #fafafa;
-      border-bottom: 1px solid #eee;
+      color: #8b93a5;
+      background: #22263a;
+      border-bottom: 1px solid #2a2d3a;
     }
     td {
       padding: 10px 16px;
-      border-bottom: 1px solid #f4f4f4;
-      color: #333;
+      border-bottom: 1px solid #2a2d3a;
+      color: #e2e8f0;
     }
     tr:last-child td { border-bottom: none; }
-    tr:hover td { background: #fafafa; }
+    tr:hover td { background: #22263a; }
 
     .badge {
       display: inline-block;
@@ -188,8 +191,8 @@
       font-size: 11px;
       font-weight: 600;
     }
-    .badge-blue  { background: #e8f0fe; color: #1a73e8; }
-    .badge-green { background: #e6f4ea; color: #2e7d32; }
+    .badge-blue  { background: rgba(124,106,247,0.15); color: #9585ff; }
+    .badge-green { background: rgba(52,211,153,0.15); color: #34d399; }
 
     @media (max-width: 600px) {
       .controls { flex-direction: column; }
@@ -375,8 +378,8 @@
           {
             label: "Input price ($/1M tokens)",
             data: inputData,
-            borderColor: "#1a73e8",
-            backgroundColor: "rgba(26,115,232,0.08)",
+            borderColor: "#7c6af7",
+            backgroundColor: "rgba(124,106,247,0.08)",
             tension: 0.3,
             pointRadius: snapshots.length < 30 ? 4 : 2,
             fill: true,
@@ -384,8 +387,8 @@
           {
             label: "Output price ($/1M tokens)",
             data: outputData,
-            borderColor: "#2e7d32",
-            backgroundColor: "rgba(46,125,50,0.08)",
+            borderColor: "#34d399",
+            backgroundColor: "rgba(52,211,153,0.08)",
             tension: 0.3,
             pointRadius: snapshots.length < 30 ? 4 : 2,
             fill: true,
@@ -396,7 +399,10 @@
         responsive: true,
         interaction: { mode: "index", intersect: false },
         plugins: {
-          legend: { position: "top", labels: { font: { size: 12 } } },
+          legend: {
+            position: "top",
+            labels: { font: { size: 12 }, color: "#e2e8f0" },
+          },
           tooltip: {
             callbacks: {
               label: ctx => ctx.dataset.label + ": $" + ctx.parsed.y.toFixed(4),
@@ -405,15 +411,16 @@
         },
         scales: {
           x: {
-            ticks: { maxTicksLimit: 8, font: { size: 11 } },
-            grid: { color: "#f0f0f0" },
+            ticks: { maxTicksLimit: 8, font: { size: 11 }, color: "#8b93a5" },
+            grid: { color: "#2a2d3a" },
           },
           y: {
             ticks: {
               font: { size: 11 },
+              color: "#8b93a5",
               callback: v => "$" + v.toFixed(2),
             },
-            grid: { color: "#f0f0f0" },
+            grid: { color: "#2a2d3a" },
           },
         },
       },
