@@ -37,16 +37,10 @@ jobs:
             echo "needed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create sync PR
+      - name: Sync develop from master
         if: steps.check.outputs.needed == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BRANCH="ci/sync-develop-$(date +%Y%m%d-%H%M%S)"
-          git checkout -b "$BRANCH" origin/master
-          git push origin "$BRANCH"
-          gh pr create \
-            --base develop \
-            --head "$BRANCH" \
-            --title "chore: sync develop from master" \
-            --body "Automated sync of \`develop\` from \`master\`. This PR was opened because \`master\` contains commits (e.g. a hotfix) not yet in \`develop\`."
+          git checkout develop
+          git merge --ff-only origin/master || git merge -X theirs origin/master
+          git push origin develop
+          echo "✅ develop synced from master"
