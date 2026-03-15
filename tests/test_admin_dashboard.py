@@ -135,13 +135,14 @@ class TestAdminStatsEndpoint:
         resp = client.get("/admin/stats", headers=HEADERS)
         assert resp.json()["version"] == src.__version__
 
-    def test_requires_api_key_when_configured(self):
+    def test_accessible_without_api_key(self):
+        """/admin/stats is public read-only — no auth required."""
         import src.main as main_module
         original = main_module.settings.mcp_api_key
         try:
             main_module.settings.mcp_api_key = "secret"
-            resp = client.get("/admin/stats", headers={"x-api-key": "wrong"})
-            assert resp.status_code == 401
+            resp = client.get("/admin/stats")
+            assert resp.status_code == 200
         finally:
             main_module.settings.mcp_api_key = original
 
@@ -188,12 +189,13 @@ class TestAdminRateLimitsEndpoint:
         resp = client.get("/admin/rate-limits", headers=HEADERS)
         assert resp.json()["limit_per_minute"] > 0
 
-    def test_requires_api_key_when_configured(self):
+    def test_accessible_without_api_key(self):
+        """/admin/rate-limits is public read-only — no auth required."""
         import src.main as main_module
         original = main_module.settings.mcp_api_key
         try:
             main_module.settings.mcp_api_key = "secret"
-            resp = client.get("/admin/rate-limits", headers={"x-api-key": "bad"})
-            assert resp.status_code == 401
+            resp = client.get("/admin/rate-limits")
+            assert resp.status_code == 200
         finally:
             main_module.settings.mcp_api_key = original

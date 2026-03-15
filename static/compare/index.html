@@ -41,18 +41,22 @@
     }
     header h1 { font-size: 18px; font-weight: 700; color: var(--text); }
     header .subtitle { color: var(--muted); font-size: 13px; }
-    header .nav-links { margin-left: auto; display: flex; gap: 12px; }
-    header .nav-links a {
-      color: var(--muted);
-      text-decoration: none;
-      font-size: 13px;
-      padding: 4px 10px;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      transition: all .15s;
+    /* ── Shared nav ── */
+    .main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;border-bottom:1px solid #23263a;position:sticky;top:0;z-index:200;gap:.5rem}
+    .nav-brand{font-weight:700;color:#7c6af7;text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
+    .nav-spacer{flex:1}
+    .main-nav .nav-links{display:flex;align-items:center;gap:.125rem;overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .main-nav .nav-links::-webkit-scrollbar{display:none}
+    .main-nav .nav-links a{color:#8b93a5;text-decoration:none;padding:.35rem .6rem;border-radius:6px;font-size:.8rem;white-space:nowrap;transition:all .15s;border:none}
+    .main-nav .nav-links a:hover{background:#1a1d2e;color:#e5e7eb}
+    .main-nav .nav-links a.active{background:#1a1d2e;color:#7c6af7;font-weight:600}
+    .nav-toggle{display:none;background:none;border:1px solid #2a2d3a;color:#9ca3af;font-size:1.1rem;cursor:pointer;padding:.25rem .5rem;border-radius:6px;line-height:1}
+    @media(max-width:640px){
+      .nav-toggle{display:block}
+      .main-nav .nav-links{display:none;position:absolute;top:52px;left:0;right:0;flex-direction:column;background:#0f1117;border-bottom:1px solid #23263a;padding:.5rem 1rem;gap:.25rem;z-index:199}
+      .main-nav .nav-links.open{display:flex}
+      .main-nav .nav-links a{padding:.6rem .75rem;font-size:.875rem}
     }
-    header .nav-links a:hover { color: var(--text); border-color: var(--accent); }
-    header .nav-links a.active { color: var(--accent); border-color: var(--accent); }
 
     /* ── Layout ── */
     .page { max-width: 1400px; margin: 0 auto; padding: 24px; }
@@ -325,19 +329,21 @@
 </head>
 <body>
 
-<header>
-  <div>
-    <h1>Model Comparison</h1>
-    <div class="subtitle">Side-by-side cost, performance &amp; use-case analysis</div>
+<nav class="main-nav">
+  <a href="/" class="nav-brand">⚡ LLM Pricing</a>
+  <span class="nav-spacer"></span>
+  <div class="nav-links" id="navLinks">
+    <a href="/chat">💬 Chat</a>
+    <a href="/calculator">🧮 Calc</a>
+    <a href="/compare">⚖️ Compare</a>
+    <a href="/history">📈 History</a>
+    <a href="/trends">🔥 Trends</a>
+    <a href="/widget">🔌 Widget</a>
+    <a href="/billing">💳 Billing</a>
+    <a href="/admin">⚙️ Admin</a>
   </div>
-  <nav class="nav-links">
-    <a href="/chat">Chat</a>
-    <a href="/history">History</a>
-    <a href="/calculator">Calculator</a>
-    <a href="/compare" class="active">Compare</a>
-    <a href="/conversations">Sessions</a>
-  </nav>
-</header>
+  <button class="nav-toggle" id="navToggle" aria-label="Menu">☰</button>
+</nav>
 
 <div class="page">
 
@@ -403,10 +409,6 @@
 const API_PRICING     = "/pricing";
 const API_PERFORMANCE = "/pricing/performance";
 const API_USE_CASES   = "/pricing/use-cases";
-const API_KEY_HEADER  = "x-api-key";
-
-// Try to grab key from local storage (same as calculator page)
-let _apiKey = localStorage.getItem("llm_api_key") || "test-key";
 
 // ── State ──────────────────────────────────────────────────────────────────
 let _allModels   = [];       // [{model_name, provider, input_usd, output_usd}]
@@ -439,12 +441,11 @@ async function init() {
 
 // ── Data loading ───────────────────────────────────────────────────────────
 async function loadData() {
-  const headers = { [API_KEY_HEADER]: _apiKey };
   try {
     const [priceRes, perfRes, ucRes] = await Promise.all([
-      fetch(API_PRICING,     { headers }).then(r => r.json()),
-      fetch(API_PERFORMANCE, { headers }).then(r => r.json()),
-      fetch(API_USE_CASES,   { headers }).then(r => r.json()),
+      fetch(API_PRICING).then(r => r.json()),
+      fetch(API_PERFORMANCE).then(r => r.json()),
+      fetch(API_USE_CASES).then(r => r.json()),
     ]);
 
     // Flatten pricing data — API returns {models: [{model_name, provider, cost_per_input_token, ...}]}
@@ -857,6 +858,17 @@ function renderCostTable(models) {
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 init();
+</script>
+<script>
+  (function(){
+    var t=document.getElementById('navToggle'),l=document.getElementById('navLinks');
+    if(t)t.onclick=function(){l.classList.toggle('open');};
+    var p=location.pathname.replace(/\/$/,'');
+    l.querySelectorAll('a').forEach(function(a){
+      if(a.getAttribute('href')===p||a.getAttribute('href')===p+'/')a.classList.add('active');
+      a.addEventListener('click',function(){l.classList.remove('open');});
+    });
+  })();
 </script>
 </body>
 </html>
