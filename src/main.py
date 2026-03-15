@@ -19,7 +19,7 @@ from io import StringIO  # noqa: E402
 from fastapi.responses import JSONResponse, Response, StreamingResponse, FileResponse  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
-from typing import Optional, Deque, Dict, List  # noqa: E402
+from typing import Any, Optional, Deque, Dict, List  # noqa: E402
 import asyncio  # noqa: E402
 import time  # noqa: E402
 import uuid  # noqa: E402
@@ -167,6 +167,8 @@ _unauthenticated_paths = {
     "/billing",
     "/billing/signup",
     "/billing/webhook",
+    # HTTP MCP transport — public so remote MCP clients (Claude Desktop, Cursor) can connect
+    "/mcp",
     # Core pricing data — public read-only endpoints used by the frontend pages
     "/pricing",
     "/pricing/history",
@@ -236,6 +238,7 @@ async def security_middleware(request: Request, call_next):
         or path.startswith("/compare") or path.startswith("/widget")
         or path.startswith("/pricing") or path.startswith("/models")
         or path.startswith("/providers") or path.startswith("/landing")
+        or path.startswith("/mcp")
         or path == "/admin" or path in _unauthenticated_paths
         or request.method == "OPTIONS"
     ):
@@ -2350,6 +2353,129 @@ async def openai_proxy(req: _ProxyRequest):
             "task_type_inferred": task_type,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# HTTP MCP transport — JSON-RPC 2.0 over HTTP POST
+# Compatible with Claude Desktop (remote URL config), Cursor, and other
+# MCP clients that support the HTTP transport.
+# ---------------------------------------------------------------------------
+
+_MCP_SERVER_NAME = "LLM Pricing MCP Server"
+_MCP_SERVER_VERSION = "1.1.0"
+_MCP_PROTOCOL_VERSION = "2024-11-05"
+
+# Lazily initialized ToolManager — shared across requests
+_http_mcp_tool_manager: Optional[ToolManager] = None
+
+
+def _get_http_mcp_tool_manager() -> ToolManager:
+    global _http_mcp_tool_manager
+    if _http_mcp_tool_manager is None:
+        _http_mcp_tool_manager = ToolManager()
+    return _http_mcp_tool_manager
+
+
+def _mcp_ok(request_id, result: Any) -> dict:
+    resp: dict = {"jsonrpc": "2.0", "result": result}
+    if request_id is not None:
+        resp["id"] = request_id
+    return resp
+
+
+def _mcp_err(request_id, code: int, message: str) -> dict:
+    resp: dict = {"jsonrpc": "2.0", "error": {"code": code, "message": message}}
+    if request_id is not None:
+        resp["id"] = request_id
+    return resp
+
+
+async def _handle_mcp_request(body: dict) -> Optional[dict]:
+    """Dispatch a JSON-RPC 2.0 MCP request; returns None for notifications."""
+    import json as _json
+
+    if body.get("jsonrpc") != "2.0":
+        return _mcp_err(body.get("id"), -32600, "Invalid Request: jsonrpc must be '2.0'")
+
+    method = body.get("method")
+    if not method:
+        return _mcp_err(body.get("id"), -32600, "Invalid Request: method is required")
+
+    request_id = body.get("id")
+    params = body.get("params", {})
+
+    if method == "initialize":
+        return _mcp_ok(request_id, {
+            "protocolVersion": _MCP_PROTOCOL_VERSION,
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": _MCP_SERVER_NAME, "version": _MCP_SERVER_VERSION},
+        })
+
+    if method in ("initialized", "notifications/initialized"):
+        return None  # notification — no response required
+
+    if method == "tools/list":
+        tm = _get_http_mcp_tool_manager()
+        return _mcp_ok(request_id, {"tools": tm.list_tools()})
+
+    if method == "tools/call":
+        if not isinstance(params, dict) or "name" not in params:
+            return _mcp_err(request_id, -32602, "Invalid params: name is required")
+        tm = _get_http_mcp_tool_manager()
+        result = await tm.execute_tool(params["name"], params.get("arguments", {}))
+        return _mcp_ok(request_id, {
+            "content": [{"type": "text", "text": _json.dumps(result, indent=2)}],
+        })
+
+    return _mcp_err(request_id, -32601, f"Method not found: {method}")
+
+
+@app.get("/mcp", include_in_schema=False)
+async def mcp_info():
+    """MCP server info — health check and configuration reference."""
+    return {
+        "name": _MCP_SERVER_NAME,
+        "version": _MCP_SERVER_VERSION,
+        "protocol": "JSON-RPC 2.0",
+        "transport": "HTTP POST",
+        "endpoint": "/mcp",
+        "protocolVersion": _MCP_PROTOCOL_VERSION,
+        "config_example": {
+            "mcpServers": {
+                "llm-pricing": {"url": "https://llm-pricing-api.fly.dev/mcp"}
+            }
+        },
+    }
+
+
+@app.post("/mcp", include_in_schema=False)
+async def mcp_http(request: Request):
+    """
+    HTTP MCP transport endpoint (JSON-RPC 2.0 over POST).
+
+    Supports: initialize, tools/list, tools/call.
+
+    Claude Desktop / Cursor remote config:
+        {
+          "mcpServers": {
+            "llm-pricing": { "url": "https://llm-pricing-api.fly.dev/mcp" }
+          }
+        }
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(
+            status_code=400,
+            content=_mcp_err(None, -32700, "Parse error: invalid JSON"),
+        )
+
+    response = await _handle_mcp_request(body)
+
+    if response is None:
+        return Response(status_code=204)
+
+    return JSONResponse(content=response)
 
 
 if __name__ == "__main__":
