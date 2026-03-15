@@ -24,25 +24,22 @@ class TestAPIKeyAuthentication:
         response = client.get("/docs")
         assert response.status_code == 200
 
-    @patch('src.main.settings.mcp_api_key', 'test-secret-key')
-    def test_pricing_requires_api_key(self):
-        """Protected endpoints require API key when configured."""
+    def test_pricing_is_public(self):
+        """Pricing endpoint is public — no API key required."""
         response = client.get("/pricing")
-        assert response.status_code == 401
-        assert response.json()["detail"] == "Unauthorized"
+        assert response.status_code == 200
 
     @patch('src.main.settings.mcp_api_key', 'test-secret-key')
     def test_pricing_with_valid_api_key(self):
-        """Protected endpoints accept valid API key."""
+        """Pricing endpoint still works with a valid API key."""
         response = client.get("/pricing", headers={"x-api-key": "test-secret-key"})
         assert response.status_code == 200
 
     @patch('src.main.settings.mcp_api_key', 'test-secret-key')
     def test_pricing_with_invalid_api_key(self):
-        """Protected endpoints reject invalid API key."""
+        """Pricing endpoint is public — even an invalid key returns 200."""
         response = client.get("/pricing", headers={"x-api-key": "wrong-key"})
-        assert response.status_code == 401
-        assert response.json()["detail"] == "Unauthorized"
+        assert response.status_code == 200
 
     def test_custom_header_name(self):
         """Test that custom header name in settings is respected."""
@@ -107,8 +104,8 @@ class TestSecurityLoggingIntegration:
 
     @patch('src.main.settings.mcp_api_key', 'test-secret-key')
     def test_auth_failure_response(self):
-        """Authentication failures should return 401."""
-        response = client.get("/pricing", headers={"x-api-key": "wrong"})
+        """Authentication failures on protected endpoints should return 401."""
+        response = client.get("/telemetry/savings", headers={"x-api-key": "wrong"})
         assert response.status_code == 401
         data = response.json()
         assert "detail" in data

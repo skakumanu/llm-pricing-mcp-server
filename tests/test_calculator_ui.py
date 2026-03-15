@@ -78,13 +78,13 @@ class TestCalculatorPageSecurityBypass:
         finally:
             main_module.settings.mcp_api_key = original
 
-    def test_pricing_endpoint_still_requires_auth_when_key_set(self):
-        """GET /pricing is NOT in the bypass list — needs auth when key is configured."""
+    def test_pricing_endpoint_is_public(self):
+        """GET /pricing is in the public bypass list — no auth required."""
         import src.main as main_module
         original = main_module.settings.mcp_api_key
         try:
             main_module.settings.mcp_api_key = "secret"
-            resp = client.get("/pricing")  # no key
-            assert resp.status_code == 401
+            resp = client.get("/pricing")  # no key needed
+            assert resp.status_code == 200
         finally:
             main_module.settings.mcp_api_key = original

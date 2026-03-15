@@ -73,15 +73,15 @@ class TestListConversations:
         assert "turn_count" in conv
         assert "preview" in conv
 
-    def test_returns_401_without_api_key(self):
-        """Endpoint requires auth when MCP_API_KEY is set."""
+    def test_returns_200_without_api_key(self):
+        """/agent/conversations is in the public bypass list — no auth required."""
         with patch("src.main.settings") as mock_settings:
             mock_settings.mcp_api_key = "secret"
             mock_settings.mcp_api_key_header = "x-api-key"
             mock_settings.rate_limit_per_minute = 0
             mock_settings.max_body_bytes = 1_000_000
-            resp = client.get("/agent/conversations")  # no key
-        assert resp.status_code == 401
+            resp = client.get("/agent/conversations")  # no key needed
+        assert resp.status_code == 200
 
     def test_null_preview_allowed(self):
         """Conversations with no user messages have preview=None."""

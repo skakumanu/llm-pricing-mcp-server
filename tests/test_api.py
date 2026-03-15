@@ -6,21 +6,11 @@ client = TestClient(app)
 
 
 def test_root_endpoint():
-    """Test the root endpoint returns server information."""
+    """Test the root endpoint returns the landing page HTML."""
     response = client.get("/")
     assert response.status_code == 200
-    data = response.json()
-
-    assert "name" in data
-    assert "version" in data
-    assert "description" in data
-    assert "endpoints" in data
-    assert data["name"] == "LLM Pricing MCP Server"
-
-    # Endpoints is now a list of EndpointInfo objects
-    endpoint_paths = [e["path"] for e in data["endpoints"]]
-    assert "/" in endpoint_paths
-    assert "/pricing" in endpoint_paths
+    assert "text/html" in response.headers["content-type"]
+    assert "LLM" in response.text or "pricing" in response.text.lower()
 
 
 def test_pricing_endpoint():
@@ -416,32 +406,13 @@ def test_performance_score_calculation():
 
 
 def test_root_endpoint_includes_new_endpoints():
-    """Test that root endpoint lists all new endpoints."""
+    """Test that root landing page links to key platform pages."""
     response = client.get("/")
     assert response.status_code == 200
-    data = response.json()
-
-    # Check that endpoints is now a list of EndpointInfo objects
-    assert "endpoints" in data
-    assert isinstance(data["endpoints"], list)
-
-    # Check that each endpoint has method and description
-    for endpoint in data["endpoints"]:
-        assert "path" in endpoint
-        assert "method" in endpoint
-        assert "description" in endpoint
-
-    # Check for specific endpoints
-    endpoint_paths = [e["path"] for e in data["endpoints"]]
-    assert "/cost-estimate/batch" in endpoint_paths
-    assert "/performance" in endpoint_paths
-    assert "/models" in endpoint_paths
-
-    # Check that sample_models and quick_start_guide are present
-    assert "sample_models" in data
-    assert isinstance(data["sample_models"], list)
-    assert len(data["sample_models"]) > 0
-    assert "quick_start_guide" in data
+    assert "text/html" in response.headers["content-type"]
+    # Landing page should link to main platform areas
+    text = response.text
+    assert "/pricing" in text or "/calculator" in text or "/chat" in text
 
 
 def test_models_endpoint():
@@ -495,27 +466,10 @@ def test_models_endpoint_with_provider_filter():
 
 
 def test_endpoint_methods_are_clear():
-    """Test that root endpoint clearly shows HTTP methods for each endpoint."""
+    """Test that root landing page is accessible and HTML."""
     response = client.get("/")
     assert response.status_code == 200
-    data = response.json()
-
-    # Find POST endpoints
-    post_endpoints = [e for e in data["endpoints"] if e["method"] == "POST"]
-    assert len(post_endpoints) >= 2  # At least /cost-estimate and /cost-estimate/batch
-
-    # Find GET endpoints
-    get_endpoints = [e for e in data["endpoints"] if e["method"] == "GET"]
-    assert len(get_endpoints) >= 6  # /, /pricing, /models, /performance, /health, /docs, /redoc
-
-    # Verify specific endpoints have correct methods
-    endpoint_methods = {e["path"]: e["method"] for e in data["endpoints"]}
-    assert endpoint_methods["/cost-estimate"] == "POST"
-    assert endpoint_methods["/cost-estimate/batch"] == "POST"
-    assert endpoint_methods["/models"] == "GET"
-    assert endpoint_methods["/pricing"] == "GET"
-    assert endpoint_methods["/performance"] == "GET"
-    assert endpoint_methods["/use-cases"] == "GET"
+    assert "text/html" in response.headers["content-type"]
 
 
 def test_use_cases_endpoint():

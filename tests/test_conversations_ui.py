@@ -65,16 +65,16 @@ class TestConversationsPageSecurityBypass:
         finally:
             main_module.settings.mcp_api_key = original
 
-    def test_agent_conversations_api_requires_auth_when_key_set(self):
-        """GET /agent/conversations is NOT bypassed — it requires auth when key is set."""
+    def test_agent_conversations_api_is_public(self):
+        """GET /agent/conversations is in the public bypass list — no auth required."""
         import src.main as main_module
         original = main_module.settings.mcp_api_key
         try:
             main_module.settings.mcp_api_key = "secret"
             store = _mock_store()
             with patch("src.main.get_conversation_store", return_value=store):
-                resp = client.get("/agent/conversations")  # no key
-            assert resp.status_code == 401
+                resp = client.get("/agent/conversations")  # no key needed
+            assert resp.status_code == 200
         finally:
             main_module.settings.mcp_api_key = original
 
