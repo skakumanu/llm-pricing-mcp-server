@@ -301,8 +301,9 @@
 <div class="toast" id="toast"></div>
 
 <script>
-  const API_KEY = "Y2Q0MTIwM2EtNTQ0OC00MjViLTljYjEtOTZlOWI2MThlYzdi";
-  const HEADERS = { "x-api-key": API_KEY };
+  const KEY_STORAGE = "llm_admin_api_key";
+  let _apiKey = localStorage.getItem(KEY_STORAGE) || "";
+  function headers() { return { "x-api-key": _apiKey }; }
 
   let allConversations = [];
   let pendingDeleteId = null;
@@ -314,7 +315,7 @@
     document.getElementById("list-container").innerHTML =
       '<div class="loading">Loading conversations…</div>';
     try {
-      const res = await fetch("/agent/conversations", { headers: HEADERS });
+      const res = await fetch("/agent/conversations", { headers: headers() });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       allConversations = data.conversations || [];
@@ -416,7 +417,7 @@
     if (card) card.classList.add("deleting");
     try {
       const res = await fetch(`/agent/conversations/${encodeURIComponent(id)}`, {
-        method: "DELETE", headers: HEADERS,
+        method: "DELETE", headers: headers(),
       });
       if (res.status === 204) {
         allConversations = allConversations.filter(c => c.id !== id);
@@ -448,7 +449,7 @@
     for (const id of ids) {
       try {
         const res = await fetch(`/agent/conversations/${encodeURIComponent(id)}`, {
-          method: "DELETE", headers: HEADERS,
+          method: "DELETE", headers: headers(),
         });
         if (res.status === 204) deleted++;
       } catch { /* continue */ }

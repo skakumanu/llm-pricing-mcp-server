@@ -8,20 +8,22 @@
     :root {
       --bg: #0f1117;
       --surface: #1a1d27;
-      --border: #2a2d3a;
+      --surface2: #22263a;
+      --border: #2e3347;
       --accent: #7c6af7;
-      --accent-hover: #9585ff;
       --text: #e2e8f0;
       --muted: #8892a4;
-      --success: #34d399;
-      --danger: #f87171;
-      --warn: #fbbf24;
+      --success: #48bb78;
+      --warn: #ed8936;
+      --danger: #f56565;
+      --radius: 10px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       background: var(--bg);
       color: var(--text);
       font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
       min-height: 100vh;
     }
     /* ── Shared nav ── */
@@ -47,27 +49,28 @@
       padding: 0.4rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; transition: all 0.15s;
     }
     .billing-subnav button:hover, .billing-subnav button.active { border-color: var(--accent); color: var(--accent); }
-    main { max-width: 720px; margin: 3rem auto; padding: 0 1.5rem; }
+    main { max-width: 720px; margin: 2rem auto; padding: 0 1.25rem; }
     .panel { display: none; }
     .panel.active { display: block; }
-    h2 { font-size: 1.4rem; margin-bottom: 0.5rem; }
-    p.sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+    h2 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+    p.sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.5rem;
-      margin-bottom: 1rem;
+      border-radius: var(--radius);
+      padding: 18px;
+      margin-bottom: 14px;
     }
-    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.4rem; }
+    label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
     input[type=email], input[type=text], input[type=password] {
       width: 100%;
-      background: var(--bg);
+      background: var(--surface2);
       border: 1px solid var(--border);
       color: var(--text);
-      padding: 0.6rem 0.8rem;
-      border-radius: 8px;
-      font-size: 0.95rem;
+      padding: 7px 10px;
+      border-radius: 7px;
+      font-size: 13px;
+      font-family: inherit;
       outline: none;
       transition: border-color 0.15s;
     }
@@ -75,106 +78,113 @@
     .btn {
       display: inline-flex;
       align-items: center;
-      gap: 0.4rem;
+      gap: 6px;
       background: var(--accent);
       color: #fff;
       border: none;
-      padding: 0.6rem 1.4rem;
-      border-radius: 8px;
+      padding: 7px 14px;
+      border-radius: 7px;
       cursor: pointer;
-      font-size: 0.95rem;
-      font-weight: 500;
-      margin-top: 1rem;
-      transition: background 0.15s;
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: 12px;
+      transition: opacity .15s;
+      white-space: nowrap;
     }
-    .btn:hover { background: var(--accent-hover); }
+    .btn:hover { opacity: .85; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
     .btn.secondary {
       background: transparent;
-      border: 1px solid var(--accent);
-      color: var(--accent);
-    }
-    .btn.secondary:hover { background: rgba(124,106,247,0.1); }
-    .result-box {
-      background: var(--bg);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 1rem;
-      margin-top: 1rem;
+      color: var(--muted);
+    }
+    .btn.secondary:hover { border-color: var(--accent); color: var(--accent); opacity: 1; }
+    .result-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 12px 14px;
+      margin-top: 12px;
       font-family: monospace;
-      font-size: 0.85rem;
+      font-size: 12px;
       word-break: break-all;
       display: none;
     }
     .copy-row {
       display: flex;
       align-items: center;
-      gap: 0.6rem;
-      margin-top: 0.5rem;
+      gap: 8px;
+      margin-top: 6px;
     }
-    .copy-row input { flex: 1; }
+    .copy-row input { flex: 1; margin: 0; }
     .copy-btn {
-      background: var(--border);
-      border: none;
-      color: var(--text);
-      padding: 0.5rem 0.8rem;
-      border-radius: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 7px 12px;
+      border-radius: 7px;
       cursor: pointer;
-      font-size: 0.8rem;
+      font-size: 12px;
       white-space: nowrap;
+      transition: all .15s;
     }
-    .copy-btn:hover { background: var(--accent); }
+    .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
     .tier-badge {
       display: inline-block;
-      padding: 0.2rem 0.7rem;
-      border-radius: 999px;
-      font-size: 0.75rem;
-      font-weight: 600;
+      padding: 1px 7px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: .04em;
     }
-    .badge-free { background: rgba(139,147,163,0.15); color: var(--muted); }
-    .badge-pro { background: rgba(124,106,247,0.2); color: var(--accent); }
-    .badge-enterprise { background: rgba(251,191,36,0.2); color: var(--warn); }
+    .badge-free { background: rgba(136,146,164,.15); color: var(--muted); }
+    .badge-pro { background: rgba(124,106,247,.15); color: var(--accent); }
+    .badge-enterprise { background: rgba(237,137,54,.15); color: var(--warn); }
     .stats-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 1rem;
-      margin-top: 1rem;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 14px;
     }
     .stat {
-      background: var(--bg);
+      background: var(--surface2);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 1rem;
+      border-radius: 7px;
+      padding: 12px;
       text-align: center;
     }
-    .stat .value { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
-    .stat .label { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
+    .stat .value { font-size: 22px; font-weight: 700; color: var(--accent); }
+    .stat .label { font-size: 11px; color: var(--muted); margin-top: 4px; }
     .tier-cards {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 1rem;
-      margin-top: 1rem;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 14px;
     }
     .tier-card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.5rem;
+      border-radius: var(--radius);
+      padding: 18px;
       text-align: center;
       transition: border-color 0.15s;
     }
     .tier-card:hover { border-color: var(--accent); }
-    .tier-card h3 { font-size: 1.1rem; margin-bottom: 0.3rem; }
-    .tier-card .price { font-size: 1.8rem; font-weight: 700; color: var(--accent); margin: 0.5rem 0; }
-    .tier-card .price span { font-size: 0.8rem; color: var(--muted); font-weight: normal; }
-    .tier-card ul { list-style: none; text-align: left; font-size: 0.85rem; color: var(--muted); margin: 1rem 0; }
+    .tier-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+    .tier-card .price { font-size: 26px; font-weight: 700; color: var(--accent); margin: 8px 0; }
+    .tier-card .price span { font-size: 13px; color: var(--muted); font-weight: normal; }
+    .tier-card ul { list-style: none; text-align: left; font-size: 12px; color: var(--muted); margin: 12px 0; }
     .tier-card ul li::before { content: "✓ "; color: var(--success); }
-    .tier-card ul li { margin-bottom: 0.3rem; }
-    .error-msg { color: var(--danger); font-size: 0.85rem; margin-top: 0.5rem; }
-    .success-msg { color: var(--success); font-size: 0.85rem; margin-top: 0.5rem; }
-    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
+    .tier-card ul li { margin-bottom: 4px; }
+    .error-msg { color: var(--danger); font-size: 12px; margin-top: 6px; }
+    .success-msg { color: var(--success); font-size: 12px; margin-top: 6px; }
+    .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    @media (max-width: 600px) {
+      .tier-cards { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+    }
   </style>
 </head>
 <body>

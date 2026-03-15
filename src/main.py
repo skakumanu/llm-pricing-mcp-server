@@ -173,8 +173,6 @@ _unauthenticated_paths = {
     "/pricing",
     "/pricing/history",
     "/pricing/trends",
-    "/pricing/performance",
-    "/pricing/compare",
     "/pricing/public",
     "/models",
     "/providers",
