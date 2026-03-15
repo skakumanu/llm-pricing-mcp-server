@@ -4,6 +4,7 @@ import hmac
 import json
 import logging
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -46,6 +47,7 @@ class PricingAlertService:
     async def initialize(self) -> None:
         """Create the alerts table if it does not exist."""
         import aiosqlite
+        Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
         async with aiosqlite.connect(self._db_path) as db:
             await db.execute(_CREATE_TABLE)
             await db.commit()
