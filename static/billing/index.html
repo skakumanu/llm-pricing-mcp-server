@@ -179,6 +179,31 @@
     .tier-card ul li { margin-bottom: 4px; }
     .error-msg { color: var(--danger); font-size: 12px; margin-top: 6px; }
     .success-msg { color: var(--success); font-size: 12px; margin-top: 6px; }
+    .coming-soon-msg { color: var(--warn); font-size: 12px; margin-top: 6px; }
+    .beta-banner {
+      background: rgba(237,137,54,.08);
+      border-bottom: 1px solid rgba(237,137,54,.25);
+      padding: 9px 1.5rem;
+      font-size: 12px;
+      color: var(--warn);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .beta-banner strong { font-weight: 600; }
+    .coming-soon-overlay {
+      background: rgba(237,137,54,.07);
+      border: 1px solid rgba(237,137,54,.2);
+      border-radius: 7px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: var(--warn);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn[disabled] { opacity: .4; cursor: not-allowed; }
     .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; }
     @keyframes spin { to { transform: rotate(360deg); } }
     @media (max-width: 600px) {
@@ -207,14 +232,18 @@
   <button class="active" onclick="showPanel('signup')">Sign Up</button>
   <button onclick="showPanel('dashboard')">Dashboard</button>
   <button onclick="showPanel('upgrade')">Upgrade</button>
-  <button onclick="openPortal()">Manage Billing</button>
+  <button onclick="openPortal()" title="Coming soon — not available during beta" style="opacity:.45;cursor:not-allowed;">Manage Billing</button>
+</div>
+<div class="beta-banner">
+  <span>🚧</span>
+  <span><strong>Beta:</strong> Free tier is live. Paid plans are coming soon — sign up now to secure your spot.</span>
 </div>
 <main>
 
   <!-- ── SIGNUP PANEL ── -->
   <div id="panel-signup" class="panel active">
     <h2>Get your free API key</h2>
-    <p class="sub">Sign up with your email to receive instant access. No credit card required.</p>
+    <p class="sub">Sign up with your email to receive instant access. Free during beta — paid tiers coming soon. No credit card required, ever for the free tier.</p>
     <div class="card">
       <label for="signup-email">Email address</label>
       <input type="email" id="signup-email" placeholder="you@company.com">
@@ -267,7 +296,11 @@
   <!-- ── UPGRADE PANEL ── -->
   <div id="panel-upgrade" class="panel">
     <h2>Choose a plan</h2>
-    <p class="sub">Unlock higher rate limits and priority support. Powered by Stripe.</p>
+    <p class="sub">Paid tiers are coming soon. Sign up for free now to secure early-adopter access when they launch.</p>
+    <div class="coming-soon-overlay">
+      <span>🔜</span>
+      <span>Paid plans are not yet active. Your free signup puts you on the waitlist — you'll be notified when Pro and Enterprise launch.</span>
+    </div>
     <div style="margin-bottom:1rem;">
       <label for="upgrade-key">Your API key (for checkout)</label>
       <input type="text" id="upgrade-key" placeholder="Paste your API key">
@@ -291,8 +324,8 @@
           <li>Priority routing</li>
           <li>Usage analytics</li>
         </ul>
-        <button class="btn" onclick="doCheckout('pro')"><span id="pro-spin"></span> Upgrade to Pro</button>
-        <div class="error-msg" id="pro-error"></div>
+        <button class="btn" disabled title="Coming soon">Coming Soon</button>
+        <div class="coming-soon-msg" id="pro-error"></div>
       </div>
       <div class="tier-card">
         <h3>Enterprise</h3>
@@ -302,8 +335,8 @@
           <li>SLA guarantee</li>
           <li>Dedicated support</li>
         </ul>
-        <button class="btn" onclick="doCheckout('enterprise')"><span id="ent-spin"></span> Upgrade</button>
-        <div class="error-msg" id="ent-error"></div>
+        <button class="btn" disabled title="Coming soon">Coming Soon</button>
+        <div class="coming-soon-msg" id="ent-error"></div>
       </div>
     </div>
   </div>
@@ -410,6 +443,12 @@
         body: JSON.stringify({ tier }),
       });
       const data = await res.json();
+      if (res.status === 503) {
+        const el = document.getElementById(errId);
+        el.textContent = 'Paid tiers are coming soon — you\'re on the waitlist!';
+        el.className = 'coming-soon-msg';
+        return;
+      }
       if (!res.ok) { document.getElementById(errId).textContent = data.detail || 'Checkout failed.'; return; }
       window.location.href = data.checkout_url;
     } catch (e) {
@@ -427,6 +466,7 @@
     try {
       const res = await fetch('/billing/portal', { headers: { 'x-api-key': key } });
       const data = await res.json();
+      if (res.status === 503) { alert('Billing portal is coming soon — not yet active during beta.'); return; }
       if (!res.ok) { alert(data.detail || 'Portal unavailable.'); return; }
       window.location.href = data.portal_url;
     } catch (e) {
