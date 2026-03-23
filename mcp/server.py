@@ -232,7 +232,31 @@ class MCPServer:
 
 async def main():
     """Main entry point for the MCP server."""
+    import os
+    from src.services.pricing_history import init_pricing_history_service
+    from agent.conversation import init_conversation_store
+
+    # Initialize services that require async setup
+    db_path = os.environ.get("PRICING_HISTORY_DB_PATH", "pricing_history.db")
+    await init_pricing_history_service(db_path)
+
+    await init_conversation_store(
+        db_path=os.environ.get("CONVERSATION_DB_PATH", None),
+        max_turns=50,
+    )
+
     server = MCPServer()
+
+    # Wire PricingAgent into ask_agent tool (requires API key)
+    try:
+        from agent.pricing_agent import PricingAgent
+        agent = PricingAgent()
+        ask_tool = server.tool_manager.tools.get("ask_agent", {}).get("instance")
+        if ask_tool is not None:
+            ask_tool.set_agent(agent)
+    except Exception:
+        pass  # nosec B110 — agent unavailable without API key config
+
     await server.run()
 
 
