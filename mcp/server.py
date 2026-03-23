@@ -234,11 +234,13 @@ async def main():
     """Main entry point for the MCP server."""
     import os
     from src.services.pricing_history import init_pricing_history_service
+    from src.services.pricing_alerts import init_pricing_alert_service
     from agent.conversation import init_conversation_store
 
     # Initialize services that require async setup
     db_path = os.environ.get("PRICING_HISTORY_DB_PATH", "pricing_history.db")
     await init_pricing_history_service(db_path)
+    await init_pricing_alert_service(db_path)
 
     await init_conversation_store(
         db_path=os.environ.get("CONVERSATION_DB_PATH", None),
