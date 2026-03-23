@@ -14,6 +14,7 @@ from mcp.tools.delete_price_alert import DeletePriceAlertTool
 from mcp.tools.get_pricing_export_url import GetPricingExportUrlTool
 from mcp.tools.list_conversations import ListConversationsTool
 from mcp.tools.delete_conversation import DeleteConversationTool
+from mcp.tools.ask_agent import AskAgentTool
 
 
 class ToolManager:
@@ -357,6 +358,34 @@ class ToolManager:
                         },
                     },
                     "required": ["conversation_id"],
+                },
+            },
+            "ask_agent": {
+                "instance": AskAgentTool(),
+                "name": "ask_agent",
+                "description": (
+                    "Ask the LLM Pricing AI agent a question in natural language. "
+                    "Use for complex queries about pricing, model recommendations, "
+                    "cost optimisation advice, or anything that benefits from multi-step reasoning."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "description": "The question or task for the pricing agent",
+                        },
+                        "conversation_id": {
+                            "type": "string",
+                            "description": "Optional conversation ID to continue a previous session",
+                        },
+                        "autonomous": {
+                            "type": "boolean",
+                            "description": "Run in autonomous task mode (default: false)",
+                            "default": False,
+                        },
+                    },
+                    "required": ["message"],
                 },
             },
         }
