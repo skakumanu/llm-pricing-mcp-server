@@ -129,6 +129,48 @@
     .tool-info .name { font-size: 0.875rem; font-weight: 600; }
     .tool-info .desc { font-size: 0.75rem; color: var(--muted); }
 
+    /* ── MCP section ── */
+    .mcp-step { margin-bottom: 2rem; }
+    .mcp-step-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.6rem; }
+    .mcp-tabs { display: flex; gap: 0.4rem; margin-bottom: 0; flex-wrap: wrap; }
+    .mcp-tab {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      padding: 0.4rem 1rem; border-radius: 6px 6px 0 0; cursor: pointer;
+      font-size: 0.8rem; font-weight: 600; transition: all 0.15s;
+      border-bottom: none; position: relative; top: 1px;
+    }
+    .mcp-tab:hover { color: var(--text); border-color: var(--accent); }
+    .mcp-tab.active { background: var(--surface2); color: var(--accent); border-color: var(--border); border-bottom-color: var(--surface2); }
+    .mcp-panel { display: none; }
+    .mcp-panel.active { display: block; }
+    .mcp-config-path {
+      font-size: 0.75rem; color: var(--muted); background: var(--surface);
+      border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px;
+      margin-bottom: 0; border-bottom: none; border-radius: 0 6px 0 0;
+    }
+    .mcp-config-path span { display: block; line-height: 1.6; }
+    .copy-config-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--muted); padding: 5px 12px; border-radius: 0 0 6px 6px;
+      cursor: pointer; font-size: 0.75rem; font-weight: 600;
+      border-top: none; transition: all 0.15s; width: 100%; justify-content: center;
+    }
+    .copy-config-btn:hover { color: var(--accent); border-color: var(--accent); }
+    .mcp-prompts { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.8rem; }
+    .mcp-prompt {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.6rem 1rem; font-size: 0.875rem;
+      color: var(--text); font-style: italic;
+    }
+    .mcp-prompt::before { content: "💬 "; font-style: normal; }
+    .mcp-tool-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.5rem; }
+    .mcp-tool-chip {
+      background: rgba(124,106,247,0.1); border: 1px solid rgba(124,106,247,0.25);
+      color: var(--accent); font-size: 0.75rem; font-weight: 600;
+      padding: 0.25rem 0.7rem; border-radius: 999px; font-family: 'Cascadia Code', 'Fira Code', monospace;
+    }
+
     /* ── CTA banner ── */
     .cta-banner {
       text-align: center;
@@ -266,6 +308,126 @@
   </div>
 </div>
 
+<!-- MCP Integration -->
+<div class="section" id="mcp" style="padding-top:0">
+  <div class="section-label">MCP Integration</div>
+  <h2>Use from Claude, VS Code &amp; Cursor</h2>
+  <p>Connect any MCP-compatible AI assistant to your LLM Pricing server in under 2 minutes.</p>
+
+  <!-- Step 1 -->
+  <div class="mcp-step">
+    <div class="mcp-step-label">Step 1 — Clone &amp; install</div>
+    <div class="demo-block">
+      git clone <span class="str">https://github.com/skakumanu/llm-pricing-mcp-server.git</span><br>
+      cd llm-pricing-mcp-server<br>
+      pip install -r requirements.txt
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="mcp-step">
+    <div class="mcp-step-label">Step 2 — Add to your client config</div>
+    <div class="mcp-tabs">
+      <button class="mcp-tab active" onclick="showMcpTab('claude')">Claude Desktop</button>
+      <button class="mcp-tab" onclick="showMcpTab('vscode')">VS Code (Cline)</button>
+      <button class="mcp-tab" onclick="showMcpTab('cursor')">Cursor</button>
+    </div>
+
+    <!-- Claude Desktop -->
+    <div class="mcp-panel active" id="mcp-claude">
+      <div class="mcp-config-path">
+        <span>📁 <strong>Windows:</strong> %APPDATA%\Claude\claude_desktop_config.json</span>
+        <span>📁 <strong>Mac:</strong> ~/Library/Application Support/Claude/claude_desktop_config.json</span>
+      </div>
+      <div class="demo-block" style="border-radius:0;border-top:none;border-bottom:none;margin:0">
+{<br>
+&nbsp;&nbsp;<span class="key">"mcpServers"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"llm-pricing"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"command"</span>: <span class="str">"python"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"args"</span>: [<span class="str">"-u"</span>, <span class="str">"mcp/server.py"</span>],<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"cwd"</span>: <span class="str">"/path/to/llm-pricing-mcp-server"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"env"</span>: { <span class="key">"PYTHONPATH"</span>: <span class="str">"/path/to/llm-pricing-mcp-server"</span>, <span class="key">"PYTHONUNBUFFERED"</span>: <span class="str">"1"</span> }<br>
+&nbsp;&nbsp;&nbsp;&nbsp;}<br>
+&nbsp;&nbsp;}<br>
+}
+      </div>
+      <button class="copy-config-btn" onclick="copyMcpConfig('claude')">📋 Copy JSON</button>
+    </div>
+
+    <!-- VS Code Cline -->
+    <div class="mcp-panel" id="mcp-vscode">
+      <div class="mcp-config-path">
+        <span>📁 Open Cline in VS Code → Settings (⚙️) → MCP Servers → Edit JSON</span>
+      </div>
+      <div class="demo-block" style="border-radius:0;border-top:none;border-bottom:none;margin:0">
+{<br>
+&nbsp;&nbsp;<span class="key">"mcpServers"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"llm-pricing"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"command"</span>: <span class="str">"python"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"args"</span>: [<span class="str">"-u"</span>, <span class="str">"mcp/server.py"</span>],<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"cwd"</span>: <span class="str">"/path/to/llm-pricing-mcp-server"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"env"</span>: { <span class="key">"PYTHONPATH"</span>: <span class="str">"/path/to/llm-pricing-mcp-server"</span>, <span class="key">"PYTHONUNBUFFERED"</span>: <span class="str">"1"</span> }<br>
+&nbsp;&nbsp;&nbsp;&nbsp;}<br>
+&nbsp;&nbsp;}<br>
+}
+      </div>
+      <button class="copy-config-btn" onclick="copyMcpConfig('vscode')">📋 Copy JSON</button>
+    </div>
+
+    <!-- Cursor -->
+    <div class="mcp-panel" id="mcp-cursor">
+      <div class="mcp-config-path">
+        <span>📁 <strong>Windows:</strong> %USERPROFILE%\.cursor\mcp.json</span>
+        <span>📁 <strong>Mac/Linux:</strong> ~/.cursor/mcp.json</span>
+      </div>
+      <div class="demo-block" style="border-radius:0;border-top:none;border-bottom:none;margin:0">
+{<br>
+&nbsp;&nbsp;<span class="key">"mcpServers"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"llm-pricing"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"command"</span>: <span class="str">"python"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"args"</span>: [<span class="str">"-u"</span>, <span class="str">"mcp/server.py"</span>],<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"cwd"</span>: <span class="str">"/path/to/llm-pricing-mcp-server"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"env"</span>: { <span class="key">"PYTHONPATH"</span>: <span class="str">"/path/to/llm-pricing-mcp-server"</span>, <span class="key">"PYTHONUNBUFFERED"</span>: <span class="str">"1"</span> }<br>
+&nbsp;&nbsp;&nbsp;&nbsp;}<br>
+&nbsp;&nbsp;}<br>
+}
+      </div>
+      <button class="copy-config-btn" onclick="copyMcpConfig('cursor')">📋 Copy JSON</button>
+    </div>
+  </div>
+
+  <!-- Step 3 -->
+  <div class="mcp-step">
+    <div class="mcp-step-label">Step 3 — Restart your client and ask</div>
+    <div class="mcp-prompts">
+      <div class="mcp-prompt">What's the cheapest model for RAG right now?</div>
+      <div class="mcp-prompt">Compare GPT-4o vs Claude 3.5 Sonnet on cost and speed</div>
+      <div class="mcp-prompt">What would 10M tokens cost on Gemini Flash?</div>
+      <div class="mcp-prompt">Which model gives the best quality per dollar under $5/1M tokens?</div>
+    </div>
+  </div>
+
+  <!-- Available tools -->
+  <div class="mcp-step" style="margin-bottom:0">
+    <div class="mcp-step-label">15 tools available</div>
+    <div class="mcp-tool-chips">
+      <span class="mcp-tool-chip">get_all_pricing</span>
+      <span class="mcp-tool-chip">estimate_cost</span>
+      <span class="mcp-tool-chip">compare_costs</span>
+      <span class="mcp-tool-chip">get_performance_metrics</span>
+      <span class="mcp-tool-chip">get_pricing_trends</span>
+      <span class="mcp-tool-chip">get_pricing_history</span>
+      <span class="mcp-tool-chip">get_use_cases</span>
+      <span class="mcp-tool-chip">ask_agent</span>
+      <span class="mcp-tool-chip">register_price_alert</span>
+      <span class="mcp-tool-chip">list_price_alerts</span>
+      <span class="mcp-tool-chip">get_telemetry</span>
+      <span class="mcp-tool-chip">list_conversations</span>
+      <span class="mcp-tool-chip">+ more</span>
+    </div>
+  </div>
+</div>
+
 <!-- Pricing tiers -->
 <div class="section" id="pricing">
   <div class="section-label">Pricing</div>
@@ -357,6 +519,22 @@
       a.addEventListener('click',function(){l.classList.remove('open');});
     });
   })();
+
+  function showMcpTab(name) {
+    document.querySelectorAll('.mcp-tab').forEach(function(b){ b.classList.remove('active'); });
+    document.querySelectorAll('.mcp-panel').forEach(function(p){ p.classList.remove('active'); });
+    event.target.classList.add('active');
+    document.getElementById('mcp-' + name).classList.add('active');
+  }
+
+  var _mcpJson = '{\n  "mcpServers": {\n    "llm-pricing": {\n      "command": "python",\n      "args": ["-u", "mcp/server.py"],\n      "cwd": "/path/to/llm-pricing-mcp-server",\n      "env": { "PYTHONPATH": "/path/to/llm-pricing-mcp-server", "PYTHONUNBUFFERED": "1" }\n    }\n  }\n}';
+
+  function copyMcpConfig(tab) {
+    navigator.clipboard.writeText(_mcpJson).then(function() {
+      var btn = document.querySelector('#mcp-' + tab + ' .copy-config-btn');
+      if (btn) { btn.textContent = '✓ Copied!'; setTimeout(function(){ btn.textContent = '📋 Copy JSON'; }, 2000); }
+    });
+  }
 </script>
 </body>
 </html>
