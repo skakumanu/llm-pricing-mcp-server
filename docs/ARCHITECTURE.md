@@ -25,12 +25,12 @@ A production FastAPI service that aggregates real-time LLM pricing data from 12 
 ┌─────────────────────────────────▼───────────────────────────────────────────┐
 │  Presentation Layer (src/main.py + mcp/)                                    │
 │                                                                             │
-│  REST API              MCP (15 tools)          Browser UIs (10 pages)       │
+│  REST API              MCP (15 tools)          Browser UIs (12 pages)       │
 │  /pricing              STDIO transport          /  /chat  /calculator        │
 │  /router/recommend     HTTP POST /mcp           /compare  /history           │
 │  /billing/*            JSON-RPC 2.0             /trends   /widget            │
 │  /agent/chat           MCP 2024-11-05           /billing  /admin             │
-│  /v1/chat/completions                                                        │
+│  /v1/chat/completions                           /mcp-setup  /api-docs        │
 │                                                                             │
 │  Security middleware: billing DB key → global MCP_API_KEY fallback          │
 │  Rate limiting: per {ip}:{tier} token-bucket (30/120/600 req/min)           │
@@ -132,13 +132,15 @@ llm-pricing-mcp-server/
 │   ├── history/index.html           # /history — Chart.js pricing history
 │   ├── trends/index.html            # /trends — price-change leaderboard
 │   ├── widget/index.html            # /widget — embeddable pricing table
-│   └── conversations/index.html     # /conversations — conversation history viewer
+│   ├── conversations/index.html     # /conversations — conversation history viewer
+│   ├── mcp-setup/index.html         # /mcp-setup — MCP integration hub (5 client tabs, live test, all 15 tools)
+│   └── api-docs/index.html          # /api-docs — API reference (Swagger/ReDoc iframe + endpoint table)
 │
 ├── .github/workflows/
 │   ├── ci-cd.yml                    # Full CI/CD: test→lint→osv→bandit→gitleaks→deploy
 │   └── sync-develop.yml             # Auto-sync develop ← master after deploy
 │
-├── tests/                           # 625 pytest tests (as of v1.39.0)
+├── tests/                           # 625 pytest tests (as of v1.40.0)
 ├── docs/
 │   └── ARCHITECTURE.md              # THIS FILE — update on every structural change
 ├── fly.toml                         # Fly.io app config (volume, health checks)
