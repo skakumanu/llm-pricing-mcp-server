@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP Setup — LLM Pricing API</title>
+  <meta name="description" content="Connect Claude, VS Code, Cursor, Perplexity and more to the LLM Pricing MCP server in under 2 minutes.">
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3347;
+      --accent: #7c6af7;
+      --accent2: #4ecdc4;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --success: #48bb78;
+      --warn: #ed8936;
+      --danger: #f56565;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.6; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { font-family: 'Consolas', 'Cascadia Code', monospace; font-size: 0.85em; background: var(--surface2); padding: 0.1em 0.4em; border-radius: 4px; color: var(--accent2); }
+
+    /* Nav */
+    .main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;border-bottom:1px solid #23263a;position:sticky;top:0;z-index:200;gap:.5rem}
+    .nav-brand{font-weight:700;color:#7c6af7;text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
+    .nav-spacer{flex:1}
+    .nav-links{display:flex;align-items:center;gap:.125rem;overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .nav-links::-webkit-scrollbar{display:none}
+    .nav-links a{color:#8b93a5;text-decoration:none;padding:.35rem .6rem;border-radius:6px;font-size:.8rem;white-space:nowrap;transition:all .15s;border:none}
+    .nav-links a:hover{background:#1a1d2e;color:#e5e7eb}
+    .nav-links a.active{background:#1a1d2e;color:#7c6af7;font-weight:600}
+    .nav-toggle{display:none;background:none;border:1px solid #2a2d3a;color:#9ca3af;font-size:1.1rem;cursor:pointer;padding:.25rem .5rem;border-radius:6px;line-height:1}
+    @media(max-width:640px){
+      .nav-toggle{display:block}
+      .nav-links{display:none;position:absolute;top:52px;left:0;right:0;flex-direction:column;background:#0f1117;border-bottom:1px solid #23263a;padding:.5rem 1rem;gap:.25rem;z-index:199}
+      .nav-links.open{display:flex}
+      .nav-links a{padding:.6rem .75rem;font-size:.875rem}
+    }
+
+    /* Layout */
+    .page { max-width: 860px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+    .page-header { margin-bottom: 2rem; }
+    .page-header .badge { display: inline-flex; align-items: center; gap: .4rem; background: rgba(124,106,247,.12); border: 1px solid rgba(124,106,247,.3); color: var(--accent); font-size: .75rem; font-weight: 700; padding: .25rem .75rem; border-radius: 999px; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: .05em; }
+    .page-header h1 { font-size: clamp(1.6rem, 4vw, 2.4rem); font-weight: 800; margin-bottom: .6rem; }
+    .page-header p { color: var(--muted); font-size: 1rem; max-width: 600px; }
+
+    /* Status pill */
+    .status-row { display: flex; align-items: center; gap: 1rem; margin-top: 1.2rem; flex-wrap: wrap; }
+    .status-pill { display: inline-flex; align-items: center; gap: .4rem; font-size: .8rem; font-weight: 600; padding: .3rem .8rem; border-radius: 999px; border: 1px solid; }
+    .status-pill.checking { border-color: var(--warn); color: var(--warn); }
+    .status-pill.ok { border-color: var(--success); color: var(--success); }
+    .status-pill.err { border-color: var(--danger); color: var(--danger); }
+    .test-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: .3rem .9rem; border-radius: 6px; font-size: .8rem; cursor: pointer; transition: border-color .15s; }
+    .test-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Section headings */
+    .section-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: .5rem; }
+    .section { margin-bottom: 2.5rem; }
+
+    /* Client tabs */
+    .tab-bar { display: flex; gap: .35rem; flex-wrap: wrap; margin-bottom: 0; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+    .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-size: .85rem; font-weight: 600; padding: .55rem .9rem; cursor: pointer; margin-bottom: -1px; transition: all .15s; border-radius: 6px 6px 0 0; }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-panel { display: none; padding-top: 1.25rem; }
+    .tab-panel.active { display: block; }
+
+    /* Config blocks */
+    .config-path { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0; padding: .6rem 1rem; font-size: .78rem; color: var(--muted); }
+    .config-path strong { color: var(--text); }
+    .config-path span { display: block; line-height: 1.8; }
+    .code-block { background: #0d0f18; border: 1px solid var(--border); border-top: none; border-radius: 0 0 var(--radius) var(--radius); padding: 1rem 1.25rem; font-family: 'Consolas', 'Cascadia Code', monospace; font-size: .82rem; line-height: 1.7; overflow-x: auto; white-space: pre; }
+    .code-block .key { color: #79b8ff; }
+    .code-block .str { color: #9ecbff; }
+    .code-block .cmt { color: #6a737d; }
+    .code-block.solo { border-top: 1px solid var(--border); border-radius: var(--radius); }
+    .copy-row { display: flex; justify-content: flex-end; margin-top: .5rem; }
+    .copy-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--muted); font-size: .75rem; padding: .25rem .7rem; border-radius: 6px; cursor: pointer; transition: all .15s; }
+    .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .copy-btn.copied { border-color: var(--success); color: var(--success); }
+
+    /* Callout */
+    .callout { background: rgba(78,205,196,.07); border: 1px solid rgba(78,205,196,.25); border-radius: var(--radius); padding: .75rem 1rem; font-size: .85rem; color: var(--accent2); margin-bottom: 1rem; }
+    .callout strong { color: var(--accent2); }
+    .callout.warn { background: rgba(237,137,54,.07); border-color: rgba(237,137,54,.25); color: var(--warn); }
+    .callout.warn strong { color: var(--warn); }
+
+    /* Step markers */
+    .steps { display: flex; flex-direction: column; gap: 1.5rem; }
+    .step { display: flex; gap: 1rem; }
+    .step-num { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: rgba(124,106,247,.15); border: 1px solid rgba(124,106,247,.3); color: var(--accent); font-size: .8rem; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: .1rem; }
+    .step-body { flex: 1; }
+    .step-body h4 { font-size: .9rem; font-weight: 700; margin-bottom: .4rem; }
+    .step-body p { font-size: .85rem; color: var(--muted); margin-bottom: .6rem; }
+
+    /* Tool grid */
+    .tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: .75rem; }
+    .tool-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .9rem 1rem; }
+    .tool-card .tool-name { font-family: 'Consolas', monospace; font-size: .8rem; color: var(--accent2); font-weight: 600; margin-bottom: .3rem; }
+    .tool-card .tool-desc { font-size: .78rem; color: var(--muted); line-height: 1.4; }
+    .tool-card .tool-args { font-size: .72rem; color: var(--muted); margin-top: .4rem; }
+    .tool-card .tool-args span { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: .1em .4em; margin-right: .25rem; }
+    .tool-card .tool-args span.req { border-color: rgba(124,106,247,.4); color: var(--accent); }
+
+    /* Troubleshooting table */
+    .trouble-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    .trouble-table th { text-align: left; padding: .5rem .75rem; background: var(--surface2); color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--border); }
+    .trouble-table td { padding: .6rem .75rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .trouble-table tr:last-child td { border-bottom: none; }
+    .trouble-table td:first-child { color: var(--warn); font-weight: 600; width: 42%; }
+  </style>
+</head>
+<body>
+
+<nav class="main-nav">
+  <a href="/" class="nav-brand">⚡ LLM Pricing</a>
+  <span class="nav-spacer"></span>
+  <div class="nav-links" id="navLinks">
+    <a href="/chat">💬 Chat</a>
+    <a href="/calculator">🧮 Calc</a>
+    <a href="/compare">⚖️ Compare</a>
+    <a href="/history">📈 History</a>
+    <a href="/trends">🔥 Trends</a>
+    <a href="/widget">🔌 Widget</a>
+    <a href="/billing">💳 Billing</a>
+    <a href="/mcp-setup">⚡ MCP</a>
+    <a href="/api-docs">📖 Docs</a>
+    <a href="/admin">⚙️ Admin</a>
+  </div>
+  <button class="nav-toggle" id="navToggle" aria-label="Menu">☰</button>
+</nav>
+
+<div class="page">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div class="badge">Model Context Protocol</div>
+    <h1>MCP Setup Guide</h1>
+    <p>Connect Claude Desktop, VS Code, Cursor, Perplexity — or any MCP-compatible client — to the LLM Pricing server in under 2 minutes.</p>
+    <div class="status-row">
+      <span class="status-pill checking" id="statusPill">⬤ Checking server…</span>
+      <button class="test-btn" onclick="testConnection()">Test connection</button>
+    </div>
+  </div>
+
+  <!-- Protocol info -->
+  <div class="section">
+    <div class="section-label">Protocol</div>
+    <div style="display:flex;gap:1rem;flex-wrap:wrap">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.75rem 1.1rem;font-size:.82rem;">
+        <div style="color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">Endpoint</div>
+        <code style="font-size:.88rem">POST https://llm-pricing-api.fly.dev/mcp</code>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.75rem 1.1rem;font-size:.82rem;">
+        <div style="color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">Protocol</div>
+        <span style="color:var(--accent2);font-weight:600">MCP 2024-11-05 · JSON-RPC 2.0</span>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.75rem 1.1rem;font-size:.82rem;">
+        <div style="color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">Tools</div>
+        <span style="color:var(--success);font-weight:600">15 tools · No auth required</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Client setup tabs -->
+  <div class="section">
+    <div class="section-label">Client Setup</div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="showTab('remote')">Remote HTTP</button>
+      <button class="tab-btn" onclick="showTab('claude')">Claude Desktop</button>
+      <button class="tab-btn" onclick="showTab('vscode')">VS Code</button>
+      <button class="tab-btn" onclick="showTab('cursor')">Cursor</button>
+      <button class="tab-btn" onclick="showTab('perplexity')">Perplexity</button>
+    </div>
+
+    <!-- Remote HTTP -->
+    <div class="tab-panel active" id="tab-remote">
+      <div class="callout"><strong>Recommended.</strong> No installation required — your client connects directly to the hosted server at <code>https://llm-pricing-api.fly.dev/mcp</code>.</div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <h4>Add to your client's MCP config</h4>
+            <p>Use the <code>url</code> field — no command or local path needed.</p>
+            <div class="code-block solo" id="code-remote">{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"llm-pricing"</span>: {
+      <span class="key">"url"</span>: <span class="str">"https://llm-pricing-api.fly.dev/mcp"</span>
+    }
+  }
+}</div>
+            <div class="copy-row"><button class="copy-btn" onclick="copyCode('remote')">Copy JSON</button></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <h4>Restart your client</h4>
+            <p>After saving the config, restart Claude Desktop / VS Code / Cursor. The 15 tools will appear automatically.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <h4>Ask a question</h4>
+            <p>Try: <em>"What is the cheapest model for RAG under $2/1M tokens?"</em></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Claude Desktop -->
+    <div class="tab-panel" id="tab-claude">
+      <div class="callout"><strong>Option A (remote, easiest):</strong> use the Remote HTTP tab above. Option B below runs a local Python server — works offline.</div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <h4>Clone and install</h4>
+            <div class="code-block solo">git clone https://github.com/skakumanu/llm-pricing-mcp-server.git
+cd llm-pricing-mcp-server
+python -m venv .venv
+<span class="cmt"># macOS/Linux:</span>  source .venv/bin/activate
+<span class="cmt"># Windows:</span>        .venv\Scripts\Activate.ps1
+pip install -r requirements.txt</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <h4>Edit <code>claude_desktop_config.json</code></h4>
+            <div class="config-path">
+              <span><strong>Windows:</strong> %APPDATA%\Claude\claude_desktop_config.json</span>
+              <span><strong>macOS:</strong> ~/Library/Application Support/Claude/claude_desktop_config.json</span>
+            </div>
+            <div class="code-block" id="code-claude">{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"llm-pricing"</span>: {
+      <span class="key">"command"</span>: <span class="str">"python"</span>,
+      <span class="key">"args"</span>: [<span class="str">"-u"</span>, <span class="str">"/absolute/path/to/llm-pricing-mcp-server/mcp/server.py"</span>],
+      <span class="key">"cwd"</span>: <span class="str">"/absolute/path/to/llm-pricing-mcp-server"</span>,
+      <span class="key">"env"</span>: { <span class="key">"PYTHONUNBUFFERED"</span>: <span class="str">"1"</span> }
+    }
+  }
+}</div>
+            <div class="copy-row"><button class="copy-btn" onclick="copyCode('claude')">Copy JSON</button></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <h4>Restart Claude Desktop</h4>
+            <p>Tools appear in Claude's tool list. You'll see a hammer icon when the MCP server is active.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VS Code -->
+    <div class="tab-panel" id="tab-vscode">
+      <div class="callout"><strong>Works with:</strong> Cline, Continue, GitHub Copilot (agent mode), and any VS Code extension that supports MCP servers.</div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <h4>Open your MCP config</h4>
+            <p>In Cline: Settings (⚙) → MCP Servers → Edit JSON. For <code>.vscode/mcp.json</code> in your workspace, create the file if it doesn't exist.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <h4>Add the server</h4>
+            <div class="code-block solo" id="code-vscode">{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"llm-pricing"</span>: {
+      <span class="key">"url"</span>: <span class="str">"https://llm-pricing-api.fly.dev/mcp"</span>
+    }
+  }
+}</div>
+            <div class="copy-row"><button class="copy-btn" onclick="copyCode('vscode')">Copy JSON</button></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <h4>Reload the extension</h4>
+            <p>Open the command palette (<kbd>Ctrl+Shift+P</kbd>) → <em>Cline: Reload MCP Servers</em>. Tools will appear in the agent panel.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cursor -->
+    <div class="tab-panel" id="tab-cursor">
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <h4>Open Cursor MCP config</h4>
+            <div class="config-path">
+              <span><strong>Windows:</strong> %USERPROFILE%\.cursor\mcp.json</span>
+              <span><strong>macOS/Linux:</strong> ~/.cursor/mcp.json</span>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <h4>Add the server</h4>
+            <div class="code-block solo" id="code-cursor">{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"llm-pricing"</span>: {
+      <span class="key">"url"</span>: <span class="str">"https://llm-pricing-api.fly.dev/mcp"</span>
+    }
+  }
+}</div>
+            <div class="copy-row"><button class="copy-btn" onclick="copyCode('cursor')">Copy JSON</button></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <h4>Restart Cursor</h4>
+            <p>Go to <em>Settings → Features → MCP</em> to confirm the server shows as connected.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Perplexity -->
+    <div class="tab-panel" id="tab-perplexity">
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <h4>Open Perplexity MCP config</h4>
+            <div class="config-path">
+              <span><strong>Windows:</strong> %APPDATA%\Perplexity\mcp_config.json</span>
+              <span><strong>macOS:</strong> ~/Library/Application Support/Perplexity/mcp_config.json</span>
+              <span style="color:var(--muted);font-size:.75rem;margin-top:.25rem">Tip: verify the exact path in Perplexity → Settings → MCP Servers.</span>
+            </div>
+            <div class="code-block" id="code-perplexity">{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"llm-pricing"</span>: {
+      <span class="key">"url"</span>: <span class="str">"https://llm-pricing-api.fly.dev/mcp"</span>
+    }
+  }
+}</div>
+            <div class="copy-row"><button class="copy-btn" onclick="copyCode('perplexity')">Copy JSON</button></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <h4>Restart Perplexity</h4>
+            <p>After saving, restart the desktop app. All 15 pricing tools will be available in your conversations.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <h4>Verify</h4>
+            <p>Ask: <em>"What LLM pricing tools do you have available?"</em> — Perplexity should list all 15 tools.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /section -->
+
+  <!-- All 15 tools -->
+  <div class="section">
+    <div class="section-label">Available Tools</div>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">All 15 tools are accessible via MCP. <span style="color:var(--accent)">Purple</span> = required arg · <span style="color:var(--muted)">Grey</span> = optional.</p>
+    <div class="tool-grid">
+      <div class="tool-card">
+        <div class="tool-name">get_all_pricing</div>
+        <div class="tool-desc">Live pricing for all 87+ models across 12 providers.</div>
+        <div class="tool-args">No arguments required</div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">estimate_cost</div>
+        <div class="tool-desc">Cost breakdown for a single model and token count.</div>
+        <div class="tool-args"><span class="req">model_name</span><span class="req">input_tokens</span><span class="req">output_tokens</span></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">compare_costs</div>
+        <div class="tool-desc">Side-by-side cost comparison across multiple models.</div>
+        <div class="tool-args"><span class="req">model_names[]</span><span class="req">input_tokens</span><span class="req">output_tokens</span></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">get_performance_metrics</div>
+        <div class="tool-desc">Throughput, latency, context window, and quality scores.</div>
+        <div class="tool-args"><span>provider</span><span>include_cost</span></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">get_use_cases</div>
+        <div class="tool-desc">Model recommendations by use case and task type.</div>
+        <div class="tool-args"><span>provider</span></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">get_telemetry</div>
+        <div class="tool-desc">Server usage analytics and tool call statistics.</div>
+        <div class="tool-args"><span>include_details</span><span>limit</span></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">get_pricing_history</div>
+        <div class="tool-desc">Historical pricing snapshots for any model or provider.</div>
+        <div class="tool-args"><span>model_name</span><span>provider</span><span>days</span><span>limit</span></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">get_pricing_trends</div>
+        <div class="tool-desc">Price-change leaderboard — biggest movers over N days.</div>
+        <div class="tool-args"><span>days</span><span>limit</span></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">register_price_alert</div>
+        <div class="tool-desc">Webhook alert when a model price changes by threshold%.</div>
+        <div class="tool-args"><span class="req">url</span><span>threshold_pct</span><span>provider</span><span>model_name</span></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">list_price_alerts</div>
+        <div class="tool-desc">List all registered price-change webhooks.</div>
+        <div class="tool-args">No arguments required</div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">delete_price_alert</div>
+        <div class="tool-desc">Remove a registered webhook by ID.</div>
+        <div class="tool-args"><span class="req">alert_id</span></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">get_pricing_export_url</div>
+        <div class="tool-desc">Generate a CSV or JSON export URL for pricing data.</div>
+        <div class="tool-args"><span>format</span><span>model_name</span><span>provider</span><span>days</span></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">list_conversations</div>
+        <div class="tool-desc">List recent agent conversation sessions.</div>
+        <div class="tool-args"><span>limit</span></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">delete_conversation</div>
+        <div class="tool-desc">Delete a conversation by session ID.</div>
+        <div class="tool-args"><span class="req">conversation_id</span></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">ask_agent</div>
+        <div class="tool-desc">Ask the ReAct AI pricing agent a natural-language question.</div>
+        <div class="tool-args"><span class="req">message</span><span>session_id</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sample prompts -->
+  <div class="section">
+    <div class="section-label">Sample Prompts</div>
+    <div style="display:flex;flex-direction:column;gap:.5rem">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.7rem 1rem;font-size:.85rem;cursor:pointer" onclick="copyText(this.querySelector('span').textContent, this)"><span>What is the cheapest model for RAG pipelines under $2/1M tokens?</span></div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.7rem 1rem;font-size:.85rem;cursor:pointer" onclick="copyText(this.querySelector('span').textContent, this)"><span>Compare GPT-4o vs Claude Sonnet vs Gemini 1.5 Pro on cost and quality</span></div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.7rem 1rem;font-size:.85rem;cursor:pointer" onclick="copyText(this.querySelector('span').textContent, this)"><span>What would 10M tokens per month cost on each major provider?</span></div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.7rem 1rem;font-size:.85rem;cursor:pointer" onclick="copyText(this.querySelector('span').textContent, this)"><span>Which models have dropped in price in the last 30 days?</span></div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.7rem 1rem;font-size:.85rem;cursor:pointer" onclick="copyText(this.querySelector('span').textContent, this)"><span>Which model gives the best quality per dollar for coding tasks?</span></div>
+    </div>
+    <p style="color:var(--muted);font-size:.75rem;margin-top:.5rem">Click any prompt to copy it.</p>
+  </div>
+
+  <!-- Troubleshooting -->
+  <div class="section">
+    <div class="section-label">Troubleshooting</div>
+    <table class="trouble-table">
+      <thead><tr><th>Problem</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td>Tools not showing after restart</td><td>Check the config file path and JSON syntax. Use a JSON validator if unsure. Ensure no trailing commas.</td></tr>
+        <tr><td>STDIO server hangs with no output</td><td>Expected — the STDIO server waits for JSON-RPC input on stdin. It is not a web server; use it only with a MCP client.</td></tr>
+        <tr><td><code>ModuleNotFoundError</code> (local STDIO)</td><td>Activate the virtualenv (<code>source .venv/bin/activate</code>) and run from the repo root directory.</td></tr>
+        <tr><td><code>Model not found</code> error</td><td>Call <code>get_all_pricing</code> first to get valid model names — they are case-sensitive.</td></tr>
+        <tr><td>Connection refused / timeout</td><td>Run <code>curl https://llm-pricing-api.fly.dev/health</code> to verify the server is up. If using local STDIO, ensure the server process is running.</td></tr>
+        <tr><td><code>401 Unauthorized</code> on MCP endpoint</td><td>The <code>/mcp</code> endpoint is public — no API key needed. If you see 401, check for a misconfigured auth header in your client.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Links -->
+  <div class="section" style="margin-bottom:0">
+    <div class="section-label">Further Reading</div>
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+      <a href="/api-docs" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.65rem 1rem;font-size:.85rem;color:var(--text);display:inline-flex;align-items:center;gap:.4rem">📖 API Reference</a>
+      <a href="/docs" target="_blank" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.65rem 1rem;font-size:.85rem;color:var(--text);display:inline-flex;align-items:center;gap:.4rem">🔍 Swagger UI</a>
+      <a href="https://github.com/skakumanu/llm-pricing-mcp-server" target="_blank" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.65rem 1rem;font-size:.85rem;color:var(--text);display:inline-flex;align-items:center;gap:.4rem">GitHub Repo</a>
+      <a href="/chat" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.65rem 1rem;font-size:.85rem;color:var(--text);display:inline-flex;align-items:center;gap:.4rem">💬 Try the AI Agent</a>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+(function(){
+  var t=document.getElementById('navToggle'),l=document.getElementById('navLinks');
+  if(t)t.onclick=function(){l.classList.toggle('open');};
+  var p=location.pathname.replace(/\/$/,'');
+  l.querySelectorAll('a').forEach(function(a){
+    if(a.getAttribute('href')===p)a.classList.add('active');
+    a.addEventListener('click',function(){l.classList.remove('open');});
+  });
+})();
+
+function showTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});
+  document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});
+  event.currentTarget.classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+var _configs = {
+  remote: '{\n  "mcpServers": {\n    "llm-pricing": {\n      "url": "https://llm-pricing-api.fly.dev/mcp"\n    }\n  }\n}',
+  claude: '{\n  "mcpServers": {\n    "llm-pricing": {\n      "command": "python",\n      "args": ["-u", "/absolute/path/to/llm-pricing-mcp-server/mcp/server.py"],\n      "cwd": "/absolute/path/to/llm-pricing-mcp-server",\n      "env": { "PYTHONUNBUFFERED": "1" }\n    }\n  }\n}',
+  vscode: '{\n  "mcpServers": {\n    "llm-pricing": {\n      "url": "https://llm-pricing-api.fly.dev/mcp"\n    }\n  }\n}',
+  cursor: '{\n  "mcpServers": {\n    "llm-pricing": {\n      "url": "https://llm-pricing-api.fly.dev/mcp"\n    }\n  }\n}',
+  perplexity: '{\n  "mcpServers": {\n    "llm-pricing": {\n      "url": "https://llm-pricing-api.fly.dev/mcp"\n    }\n  }\n}'
+};
+
+function copyCode(name) {
+  var btn = document.querySelector('#tab-'+name+' .copy-btn') || document.querySelector('#code-'+name+' ~ .copy-row .copy-btn');
+  // find the copy-btn in the active tab
+  var tabs = document.querySelectorAll('.tab-panel');
+  var targetBtn = null;
+  tabs.forEach(function(tp){ if(tp.id==='tab-'+name) targetBtn = tp.querySelector('.copy-btn'); });
+  navigator.clipboard.writeText(_configs[name] || '').then(function(){
+    if(targetBtn){ targetBtn.textContent='Copied!'; targetBtn.classList.add('copied'); setTimeout(function(){ targetBtn.textContent='Copy JSON'; targetBtn.classList.remove('copied'); }, 2000); }
+  });
+}
+
+function copyText(text, el) {
+  navigator.clipboard.writeText(text).then(function(){
+    var orig = el.style.borderColor;
+    el.style.borderColor = 'var(--success)';
+    setTimeout(function(){ el.style.borderColor = orig; }, 1200);
+  });
+}
+
+function testConnection() {
+  var pill = document.getElementById('statusPill');
+  pill.className = 'status-pill checking';
+  pill.textContent = '⬤ Checking…';
+  fetch('/health').then(function(r){ return r.json(); }).then(function(d){
+    if(d.status === 'healthy') {
+      pill.className = 'status-pill ok';
+      pill.textContent = '⬤ Server online — v' + (d.version || '?');
+    } else {
+      pill.className = 'status-pill err';
+      pill.textContent = '⬤ Unexpected response';
+    }
+  }).catch(function(){
+    pill.className = 'status-pill err';
+    pill.textContent = '⬤ Cannot reach server';
+  });
+}
+
+// Auto-test on load
+testConnection();
+</script>
+</body>
+</html>
