@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Docs — LLM Pricing API</title>
+  <meta name="description" content="Interactive API documentation for the LLM Pricing API. Browse all endpoints, try requests, and explore the OpenAPI spec.">
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3347;
+      --accent: #7c6af7;
+      --accent2: #4ecdc4;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --success: #48bb78;
+      --warn: #ed8936;
+      --danger: #f56565;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; display: flex; flex-direction: column; }
+    a { color: var(--accent); text-decoration: none; }
+    code { font-family: 'Consolas', 'Cascadia Code', monospace; font-size: .85em; background: var(--surface2); padding: .1em .4em; border-radius: 4px; color: var(--accent2); }
+
+    /* Nav */
+    .main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;border-bottom:1px solid #23263a;position:sticky;top:0;z-index:200;gap:.5rem;flex-shrink:0}
+    .nav-brand{font-weight:700;color:#7c6af7;text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
+    .nav-spacer{flex:1}
+    .nav-links{display:flex;align-items:center;gap:.125rem;overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .nav-links::-webkit-scrollbar{display:none}
+    .nav-links a{color:#8b93a5;text-decoration:none;padding:.35rem .6rem;border-radius:6px;font-size:.8rem;white-space:nowrap;transition:all .15s;border:none}
+    .nav-links a:hover{background:#1a1d2e;color:#e5e7eb}
+    .nav-links a.active{background:#1a1d2e;color:#7c6af7;font-weight:600}
+    .nav-toggle{display:none;background:none;border:1px solid #2a2d3a;color:#9ca3af;font-size:1.1rem;cursor:pointer;padding:.25rem .5rem;border-radius:6px;line-height:1}
+    @media(max-width:640px){
+      .nav-toggle{display:block}
+      .nav-links{display:none;position:absolute;top:52px;left:0;right:0;flex-direction:column;background:#0f1117;border-bottom:1px solid #23263a;padding:.5rem 1rem;gap:.25rem;z-index:199}
+      .nav-links.open{display:flex}
+      .nav-links a{padding:.6rem .75rem;font-size:.875rem}
+    }
+
+    /* Toolbar bar under nav */
+    .docs-toolbar {
+      display: flex; align-items: center; gap: .75rem; padding: .6rem 1.25rem;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      flex-shrink: 0; flex-wrap: wrap;
+    }
+    .docs-toolbar .toolbar-label { font-size: .75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+    .view-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: .3rem .85rem; border-radius: 6px; font-size: .8rem; font-weight: 600; cursor: pointer; transition: all .15s; }
+    .view-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .view-btn.active { background: rgba(124,106,247,.12); border-color: var(--accent); color: var(--accent); }
+    .toolbar-sep { width: 1px; height: 20px; background: var(--border); }
+    .toolbar-link { font-size: .8rem; color: var(--muted); display: inline-flex; align-items: center; gap: .3rem; }
+    .toolbar-link:hover { color: var(--accent2); }
+    .spec-badge { font-size: .72rem; background: rgba(78,205,196,.1); border: 1px solid rgba(78,205,196,.25); color: var(--accent2); padding: .15rem .55rem; border-radius: 999px; font-weight: 600; }
+
+    /* Frame wrapper */
+    .frame-wrapper { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .docs-frame {
+      flex: 1;
+      border: none;
+      width: 100%;
+      min-height: 0;
+      display: block;
+      background: #fff;
+    }
+
+    /* Fallback / endpoint reference (hidden by default, shown in reference view) */
+    .ref-view { display: none; flex: 1; overflow-y: auto; padding: 1.5rem 1.25rem 3rem; max-width: 1000px; margin: 0 auto; width: 100%; }
+    .ref-view.active { display: block; }
+
+    .endpoint-group { margin-bottom: 2rem; }
+    .endpoint-group h3 { font-size: .85rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); border-bottom: 1px solid var(--border); padding-bottom: .4rem; margin-bottom: .75rem; }
+    .endpoint-row { display: flex; align-items: flex-start; gap: .75rem; padding: .55rem 0; border-bottom: 1px solid rgba(46,51,71,.5); }
+    .endpoint-row:last-child { border-bottom: none; }
+    .method { font-size: .7rem; font-weight: 700; padding: .2rem .45rem; border-radius: 4px; width: 44px; text-align: center; flex-shrink: 0; margin-top: .1rem; }
+    .method.GET { background: rgba(72,187,120,.12); color: var(--success); border: 1px solid rgba(72,187,120,.25); }
+    .method.POST { background: rgba(237,137,54,.12); color: var(--warn); border: 1px solid rgba(237,137,54,.25); }
+    .method.DELETE { background: rgba(245,101,101,.12); color: var(--danger); border: 1px solid rgba(245,101,101,.25); }
+    .ep-path { font-family: 'Consolas', monospace; font-size: .82rem; color: var(--text); flex: 0 0 auto; min-width: 200px; }
+    .ep-desc { font-size: .82rem; color: var(--muted); flex: 1; }
+    .ep-auth { font-size: .7rem; background: rgba(124,106,247,.1); border: 1px solid rgba(124,106,247,.25); color: var(--accent); padding: .1rem .4rem; border-radius: 4px; flex-shrink: 0; }
+    @media(max-width:600px){ .ep-path { min-width: 0; } .ep-auth { display: none; } }
+  </style>
+</head>
+<body>
+
+<nav class="main-nav">
+  <a href="/" class="nav-brand">⚡ LLM Pricing</a>
+  <span class="nav-spacer"></span>
+  <div class="nav-links" id="navLinks">
+    <a href="/chat">💬 Chat</a>
+    <a href="/calculator">🧮 Calc</a>
+    <a href="/compare">⚖️ Compare</a>
+    <a href="/history">📈 History</a>
+    <a href="/trends">🔥 Trends</a>
+    <a href="/widget">🔌 Widget</a>
+    <a href="/billing">💳 Billing</a>
+    <a href="/mcp-setup">⚡ MCP</a>
+    <a href="/api-docs">📖 Docs</a>
+    <a href="/admin">⚙️ Admin</a>
+  </div>
+  <button class="nav-toggle" id="navToggle" aria-label="Menu">☰</button>
+</nav>
+
+<div class="docs-toolbar">
+  <span class="toolbar-label">View</span>
+  <button class="view-btn active" id="btnSwagger" onclick="switchView('swagger')">Swagger UI</button>
+  <button class="view-btn" id="btnRedoc" onclick="switchView('redoc')">ReDoc</button>
+  <button class="view-btn" id="btnRef" onclick="switchView('ref')">Endpoint Reference</button>
+  <div class="toolbar-sep"></div>
+  <span class="spec-badge">OpenAPI 3.1</span>
+  <a class="toolbar-link" href="/openapi.json" target="_blank">⬇ openapi.json</a>
+  <a class="toolbar-link" href="/mcp-setup">⚡ MCP Setup</a>
+</div>
+
+<div class="frame-wrapper" id="frameWrapper">
+  <iframe class="docs-frame" id="docsFrame" src="/docs" title="Swagger UI" allow="clipboard-write"></iframe>
+</div>
+
+<!-- Endpoint Reference (static, shown when iframe unavailable or user selects it) -->
+<div class="ref-view" id="refView">
+
+  <div class="endpoint-group">
+    <h3>Pricing</h3>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing</span><span class="ep-desc">All model pricing, optional <code>?provider=</code> filter</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/models</span><span class="ep-desc">List all available model names</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/public</span><span class="ep-desc">Public pricing — embed-safe, unauthenticated</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/history</span><span class="ep-desc">Historical pricing snapshots</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/trends</span><span class="ep-desc">Price-change leaderboard</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/history/export</span><span class="ep-desc">CSV or JSON export of pricing history</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/alerts/signing-info</span><span class="ep-desc">Webhook HMAC signing key info</span></div>
+    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/pricing/alerts</span><span class="ep-desc">Register a price-change webhook</span><span class="ep-auth">API key</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/alerts</span><span class="ep-desc">List registered webhooks</span><span class="ep-auth">API key</span></div>
+    <div class="endpoint-row"><span class="method DELETE">DELETE</span><span class="ep-path">/pricing/alerts/{id}</span><span class="ep-desc">Delete a webhook</span><span class="ep-auth">API key</span></div>
+  </div>
+
+  <div class="endpoint-group">
+    <h3>Cost Estimation</h3>
+    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/cost-estimate</span><span class="ep-desc">Single model cost estimate</span></div>
+    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/cost-estimate/batch</span><span class="ep-desc">Multi-model cost comparison</span></div>
+  </div>
+
+  <div class="endpoint-group">
+    <h3>Performance &amp; Use Cases</h3>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/performance</span><span class="ep-desc">Throughput, latency, context window, quality scores</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/use-cases</span><span class="ep-desc">Model recommendations by use case</span></div>
+  </div>
+
+  <div class="endpoint-group">
+    <h3>Router</h3>
+    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/recommend</span><span class="ep-desc">Smart model routing recommendation</span><span class="ep-auth">API key</span></div>
+    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/recommend/stream</span><span class="ep-desc">Streaming router recommendation (SSE)</span><span class="ep-auth">API key</span></div>
+    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/feedback</span><span class="ep-desc">Submit routing feedback</span><span class="ep-auth">API key</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/telemetry/savings</span><span class="ep-desc">Router savings report per org</span><span class="ep-auth">API key</span></div>
+  </div>
+
+  <div class="endpoint-group">
+    <h3>Agent</h3>
+    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/agent/chat</span><span class="ep-desc">Blocking chat with the ReAct pricing agent</span></div>
+    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/agent/chat/stream</span><span class="ep-desc">Streaming agent chat (SSE)</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/agent/conversations</span><span class="ep-desc">List conversation sessions</span></div>
+    <div class="endpoint-row"><span class="method DELETE">DELETE</span><span class="ep-path">/agent/conversations/{id}</span><span class="ep-desc">Delete a conversation</span></div>
+  </div>
+
+  <div class="endpoint-group">
+    <h3>MCP (Model Context Protocol)</h3>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/mcp</span><span class="ep-desc">MCP server info and config snippet</span></div>
+    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/mcp</span><span class="ep-desc">MCP JSON-RPC 2.0 endpoint — all 15 tools</span></div>
+  </div>
+
+  <div class="endpoint-group">
+    <h3>Billing</h3>
+    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/signup</span><span class="ep-desc">Free tier signup — returns API key</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/billing/me</span><span class="ep-desc">Usage dashboard (calls, savings, tier)</span><span class="ep-auth">API key</span></div>
+    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/checkout</span><span class="ep-desc">Create Stripe Checkout session</span><span class="ep-auth">API key</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/billing/portal</span><span class="ep-desc">Stripe billing self-serve portal</span><span class="ep-auth">API key</span></div>
+    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/webhook</span><span class="ep-desc">Stripe webhook receiver</span></div>
+  </div>
+
+  <div class="endpoint-group">
+    <h3>Admin &amp; Telemetry</h3>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/telemetry</span><span class="ep-desc">Server usage metrics and analytics</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/admin/stats</span><span class="ep-desc">Aggregated server statistics</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/admin/rate-limits</span><span class="ep-desc">Current rate-limit state</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/rate-limits/tiers</span><span class="ep-desc">API tier definitions (free/pro/enterprise)</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/api/versions</span><span class="ep-desc">API version info</span></div>
+  </div>
+
+  <div class="endpoint-group">
+    <h3>OpenAI Compatibility</h3>
+    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/v1/chat/completions</span><span class="ep-desc">OpenAI-compatible routing proxy — drop-in replacement</span></div>
+  </div>
+
+  <div class="endpoint-group">
+    <h3>Health</h3>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/health</span><span class="ep-desc">Health check — returns status and version</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/health/live</span><span class="ep-desc">Kubernetes liveness probe</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/health/ready</span><span class="ep-desc">Kubernetes readiness probe</span></div>
+    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/health/detailed</span><span class="ep-desc">Detailed health with service statuses</span></div>
+  </div>
+
+  <div style="margin-top:1.5rem;padding:1rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);font-size:.82rem;color:var(--muted)">
+    <strong style="color:var(--text)">Authentication:</strong> Protected endpoints require <code>x-api-key: &lt;key&gt;</code> header.
+    Get a free API key at <a href="/billing">/billing</a> or via <code>POST /billing/signup</code>.
+    <br><br>
+    <strong style="color:var(--text)">Interactive docs:</strong>
+    <a href="/docs" target="_blank">Swagger UI (/docs)</a> &nbsp;·&nbsp;
+    <a href="/redoc" target="_blank">ReDoc (/redoc)</a> &nbsp;·&nbsp;
+    <a href="/openapi.json" target="_blank">OpenAPI JSON</a>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  var t=document.getElementById('navToggle'),l=document.getElementById('navLinks');
+  if(t)t.onclick=function(){l.classList.toggle('open');};
+  var p=location.pathname.replace(/\/$/,'');
+  l.querySelectorAll('a').forEach(function(a){
+    if(a.getAttribute('href')===p)a.classList.add('active');
+    a.addEventListener('click',function(){l.classList.remove('open');});
+  });
+})();
+
+function switchView(view) {
+  var frame = document.getElementById('docsFrame');
+  var wrapper = document.getElementById('frameWrapper');
+  var refView = document.getElementById('refView');
+  document.querySelectorAll('.view-btn').forEach(function(b){b.classList.remove('active');});
+
+  if (view === 'swagger') {
+    document.getElementById('btnSwagger').classList.add('active');
+    frame.src = '/docs';
+    wrapper.style.display = 'flex';
+    refView.classList.remove('active');
+  } else if (view === 'redoc') {
+    document.getElementById('btnRedoc').classList.add('active');
+    frame.src = '/redoc';
+    wrapper.style.display = 'flex';
+    refView.classList.remove('active');
+  } else {
+    document.getElementById('btnRef').classList.add('active');
+    wrapper.style.display = 'none';
+    refView.classList.add('active');
+  }
+}
+</script>
+</body>
+</html>
