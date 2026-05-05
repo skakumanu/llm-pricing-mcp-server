@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.38.2 | **Last updated**: 2026-03-15
+**Version**: v1.39.0 | **Last updated**: 2026-05-04
 
 ---
 
@@ -25,7 +25,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 12 
 ┌─────────────────────────────────▼───────────────────────────────────────────┐
 │  Presentation Layer (src/main.py + mcp/)                                    │
 │                                                                             │
-│  REST API              MCP (14 tools)          Browser UIs (9 pages)        │
+│  REST API              MCP (15 tools)          Browser UIs (10 pages)       │
 │  /pricing              STDIO transport          /  /chat  /calculator        │
 │  /router/recommend     HTTP POST /mcp           /compare  /history           │
 │  /billing/*            JSON-RPC 2.0             /trends   /widget            │
@@ -113,7 +113,7 @@ llm-pricing-mcp-server/
 │   ├── react_loop.py                # ReAct (Reason + Act) loop implementation
 │   ├── llm_backend.py               # AnthropicBackend + OpenAIBackend (switch via env)
 │   ├── conversation.py              # SQLite conversation memory, turn limit
-│   └── tools.py                     # 14 MCP tool bindings for agent use
+│   └── tools.py                     # 15 MCP tool bindings for agent use
 │
 ├── mcp/
 │   ├── server.py                    # MCP STDIO transport (Claude Desktop)
@@ -138,7 +138,7 @@ llm-pricing-mcp-server/
 │   ├── ci-cd.yml                    # Full CI/CD: test→lint→osv→bandit→gitleaks→deploy
 │   └── sync-develop.yml             # Auto-sync develop ← master after deploy
 │
-├── tests/                           # 625 pytest tests (as of v1.38.2)
+├── tests/                           # 625 pytest tests (as of v1.39.0)
 ├── docs/
 │   └── ARCHITECTURE.md              # THIS FILE — update on every structural change
 ├── fly.toml                         # Fly.io app config (volume, health checks)
@@ -191,7 +191,7 @@ Each of 12 LLM providers implements `BasePricingProvider`:
 ### 4. MCP Dual Transport
 - **STDIO** (`mcp/server.py`): JSON-RPC 2.0 over stdin/stdout for Claude Desktop local integration
 - **HTTP** (`POST /mcp`): Same JSON-RPC 2.0 payload over HTTP for remote MCP clients — no local install needed
-- Protocol version: `2024-11-05`; 14 tools exposed
+- Protocol version: `2024-11-05`; 15 tools exposed
 
 ### 5. Agent Architecture (ReAct Loop)
 ```
@@ -252,24 +252,40 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | GET | `/health`, `/health/live`, `/health/ready`, `/health/detailed` | None | Health probes |
 | GET | `/pricing` | None | All model pricing |
 | GET | `/models` | None | Model list |
+| GET | `/pricing/public` | None | Embed-safe public pricing |
+| GET | `/pricing/history` | None | Historical price snapshots |
+| GET | `/pricing/trends` | None | Price-change leaderboard |
+| GET | `/pricing/history/export` | None | CSV / JSON export |
+| GET | `/pricing/alerts/signing-info` | Required | Webhook HMAC signing key info |
 | GET | `/performance` | None | Performance metrics |
 | GET | `/use-cases` | None | Use-case recommendations |
 | POST | `/cost-estimate` | None | Single-model cost |
 | POST | `/cost-estimate/batch` | None | Multi-model cost comparison |
 | GET | `/rate-limits/tiers` | None | Tier rate limits |
+| GET | `/api/versions` | None | API version negotiation |
+| GET | `/telemetry` | None | Request telemetry |
 | POST | `/router/recommend` | Required | LLM routing recommendation |
 | POST | `/router/recommend/stream` | Required | SSE streaming router |
 | POST | `/router/feedback` | Required | Accept/reject feedback |
 | GET | `/telemetry/savings` | Required | Per-org savings stats |
 | POST | `/agent/chat` | None | Blocking agent response |
 | POST | `/agent/chat/stream` | None | SSE agent stream |
+| GET | `/agent/conversations` | None | List agent conversations |
+| DELETE | `/agent/conversations/{id}` | Required | Delete a conversation |
 | POST | `/v1/chat/completions` | None | OpenAI-compatible proxy |
-| POST | `/mcp` | None | MCP HTTP transport |
+| GET | `/mcp` | None | MCP server info |
+| POST | `/mcp` | None | MCP HTTP transport (JSON-RPC 2.0) |
 | POST | `/billing/signup` | None | Free-tier signup |
 | GET | `/billing/me` | Required | Customer dashboard |
 | POST | `/billing/checkout` | Required | Stripe checkout |
 | GET | `/billing/portal` | Required | Stripe billing portal |
 | POST | `/billing/webhook` | Stripe sig | Subscription sync |
+| POST | `/pricing/alerts` | Required | Register price-change webhook |
+| GET | `/pricing/alerts` | Required | List alerts |
+| DELETE | `/pricing/alerts/{id}` | Required | Delete alert |
+| GET | `/docs` | None | Swagger UI (OpenAPI) |
+| GET | `/redoc` | None | ReDoc (OpenAPI) |
+| GET | `/openapi.json` | None | OpenAPI spec (JSON) |
 | GET | `/billing` | None | Billing SPA |
 | GET | `/admin` | None | Admin SPA |
 | GET | `/{page}` | None | Browser UIs |

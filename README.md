@@ -3,7 +3,7 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A production-ready **Model Context Protocol (MCP)** server for LLM pricing data. Provides a RESTful API (FastAPI), **14 MCP tools** over STDIO and HTTP, a conversational Agent + RAG pipeline, browser-based UIs, and a self-serve billing dashboard — for pricing data from **12 major LLM providers**.
+A production-ready **Model Context Protocol (MCP)** server for LLM pricing data. Provides a RESTful API (FastAPI), **15 MCP tools** over STDIO and HTTP, a conversational Agent + RAG pipeline, browser-based UIs, and a self-serve billing dashboard — for pricing data from **12 major LLM providers**.
 
 **Live at**: https://llm-pricing-api.fly.dev
 
@@ -12,7 +12,7 @@ A production-ready **Model Context Protocol (MCP)** server for LLM pricing data.
 ## Features
 
 ### MCP Interface (STDIO + HTTP)
-- **14 MCP Tools**: `get_all_pricing`, `estimate_cost`, `compare_costs`, `get_performance_metrics`, `get_use_cases`, `get_telemetry`, `get_pricing_history`, `get_pricing_trends`, `register_price_alert`, `list_price_alerts`, `delete_price_alert`, `get_pricing_export_url`, `list_conversations`, `delete_conversation`
+- **15 MCP Tools**: `get_all_pricing`, `estimate_cost`, `compare_costs`, `get_performance_metrics`, `get_use_cases`, `get_telemetry`, `get_pricing_history`, `get_pricing_trends`, `register_price_alert`, `list_price_alerts`, `delete_price_alert`, `get_pricing_export_url`, `list_conversations`, `delete_conversation`, `ask_agent`
 - **STDIO transport** — JSON-RPC 2.0 over STDIO for local Claude Desktop integration
 - **HTTP transport** — `POST /mcp` (JSON-RPC 2.0 over HTTP) for remote MCP clients — no local install needed
 - MCP Protocol version: `2024-11-05`
@@ -46,6 +46,7 @@ A production-ready **Model Context Protocol (MCP)** server for LLM pricing data.
 | `/trends` | Price-change leaderboard |
 | `/widget` | Embeddable pricing table |
 | `/billing` | Self-serve signup + upgrade dashboard |
+| `/conversations` | Conversation history viewer |
 | `/admin` | Server stats, rate limits, customers |
 
 All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font, `#0f1117` background, `#7c6af7` accent) and are fully mobile-responsive with a sticky hamburger navigation bar.
@@ -108,7 +109,7 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
-Restart Claude Desktop. All 14 pricing tools are immediately available.
+Restart Claude Desktop. All 15 pricing tools are immediately available.
 
 ### Option B — Local STDIO
 
@@ -211,7 +212,7 @@ The server exposes a JSON-RPC 2.0 endpoint at `POST /mcp` supporting the MCP pro
 |--------|-------------|
 | `initialize` | Handshake — returns server info and capabilities |
 | `initialized` | Notification — returns 204 |
-| `tools/list` | List all 14 tools with input schemas |
+| `tools/list` | List all 15 tools with input schemas |
 | `tools/call` | Execute a tool |
 
 ### Example
@@ -234,7 +235,7 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
   }'
 ```
 
-`GET /mcp` returns server info and a config snippet.
+`GET /mcp` returns server info and a config snippet. Full interactive docs at `/docs` (Swagger UI) and `/redoc`.
 
 ---
 
@@ -262,6 +263,9 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 | POST | `/agent/chat` | Blocking agent chat |
 | POST | `/agent/chat/stream` | Streaming agent chat (SSE) |
 | GET | `/agent/conversations` | List conversations |
+| DELETE | `/agent/conversations/{id}` | Delete a conversation |
+| GET | `/api/versions` | API version info |
+| GET | `/pricing/alerts/signing-info` | Webhook signing key info |
 | POST | `/v1/chat/completions` | OpenAI-compatible routing proxy |
 | GET | `/mcp` | HTTP MCP server info |
 | POST | `/mcp` | HTTP MCP JSON-RPC 2.0 |
@@ -379,7 +383,7 @@ BILLING_BASE_URL=https://llm-pricing-api.fly.dev
 ```
 llm-pricing-mcp-server/
 ├── src/
-│   ├── __init__.py                  # Version (1.38.0)
+│   ├── __init__.py                  # Version (1.39.0)
 │   ├── main.py                      # FastAPI app + all endpoints
 │   ├── config/settings.py           # Pydantic settings
 │   ├── models/                      # Pydantic models (pricing, billing, router, …)
@@ -505,7 +509,7 @@ The `.github/workflows/ci-cd.yml` pipeline:
 ### Health Check Endpoints
 
 ```bash
-GET /health        → {"status":"healthy","version":"1.38.0"}
+GET /health        → {"status":"healthy","version":"1.39.0"}
 GET /health/live   → {"alive":true}
 GET /health/ready  → {"ready":true,"checks":{...}}
 GET /health/detailed → detailed environment + service statuses
@@ -553,6 +557,13 @@ MIT — see [LICENSE](LICENSE).
 
 ### Completed
 
+- [x] v1.39.0 — OpenAPI tags + grouped Swagger UI; 15th MCP tool (`ask_agent`)
+- [x] v1.38.6 — MCP server fixes: initialize all services, register `ask_agent` tool, init PricingAlertService
+- [x] v1.38.5 — Landing page MCP integration guide (Claude Desktop, VS Code, Cursor)
+- [x] v1.38.4 — Billing beta UX: coming-soon copy, disabled paid buttons, graceful 503
+- [x] v1.38.3 — Dark theme + shared nav for chat and conversations pages
+- [x] v1.38.2 — Design system standardized across all 9 UIs (admin as canonical reference)
+- [x] v1.38.1 — UI theme consistency pass
 - [x] v1.38.0 — HTTP MCP transport (`POST /mcp`, `GET /mcp`) for remote clients
 - [x] v1.37.3 — Mobile-responsive UI, consistent nav across all pages
 - [x] v1.37.2 — SQLite directory auto-creation on Fly.io volume mount
