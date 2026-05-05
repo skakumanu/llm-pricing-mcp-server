@@ -26,6 +26,7 @@ Welcome to the LLM Pricing MCP Server documentation! This directory contains com
 - **[MCP_TESTING.md](MCP_TESTING.md)** - Comprehensive testing guide with all test scripts
 - **[MCP_INTEGRATION.md](MCP_INTEGRATION.md)** - Architecture and integration patterns
 - **[CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md)** - Claude Desktop integration guide (local development)
+- **[PERPLEXITY_INTEGRATION.md](PERPLEXITY_INTEGRATION.md)** - Perplexity desktop MCP setup + full API endpoint reference
 - **[MCP_AZURE_CLIENT_SETUP.md](MCP_AZURE_CLIENT_SETUP.md)** - End-user guide for connecting to Azure-hosted server
 - **[VS_CODE_INTEGRATION.md](VS_CODE_INTEGRATION.md)** - VS Code workspace setup and development guide
 - **[MCP_PRODUCTION_CHECKLIST.md](MCP_PRODUCTION_CHECKLIST.md)** - Pre-deployment checklist and procedures
@@ -60,11 +61,13 @@ Welcome to the LLM Pricing MCP Server documentation! This directory contains com
 6. Use [HOUSEKEEPING.md](HOUSEKEEPING.md) for operational procedures
 
 **For MCP Client Integrators:**
-1. **Azure Users (Recommended)**: Follow [MCP_AZURE_CLIENT_SETUP.md](MCP_AZURE_CLIENT_SETUP.md) to connect to the cloud server
-2. **Local Development**: Follow [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md) for Claude Desktop with local server
-3. Review [MCP_INTEGRATION.md](MCP_INTEGRATION.md) for architecture and custom clients
-4. Use [MCP_TESTING.md](MCP_TESTING.md) to validate your integration
-5. Check [MCP_VALIDATION_REPORT.md](MCP_VALIDATION_REPORT.md) for expected behavior
+1. **Perplexity**: Follow [PERPLEXITY_INTEGRATION.md](PERPLEXITY_INTEGRATION.md) for Perplexity desktop MCP setup
+2. **Azure Users**: Follow [MCP_AZURE_CLIENT_SETUP.md](MCP_AZURE_CLIENT_SETUP.md) to connect to the cloud server
+3. **Claude Desktop**: Follow [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md) for Claude Desktop with local server
+4. **VS Code**: Follow [VS_CODE_INTEGRATION.md](VS_CODE_INTEGRATION.md) for Copilot + MCP
+5. Review [MCP_INTEGRATION.md](MCP_INTEGRATION.md) for architecture and custom clients
+6. Use [MCP_TESTING.md](MCP_TESTING.md) to validate your integration
+7. Check [MCP_VALIDATION_REPORT.md](MCP_VALIDATION_REPORT.md) for expected behavior
 
 **For API Users:**
 1. Start with [README.md](../README.md) API Documentation section
@@ -85,8 +88,9 @@ Welcome to the LLM Pricing MCP Server documentation! This directory contains com
 **MCP Protocol & Tools:**
 - [MCP_QUICK_START.md](MCP_QUICK_START.md)
 - [MCP_INTEGRATION.md](MCP_INTEGRATION.md)
-- [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md) - Local development setup
-- [MCP_AZURE_CLIENT_SETUP.md](MCP_AZURE_CLIENT_SETUP.md) - Cloud server connection (recommended for end users)
+- [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md) - Claude Desktop setup
+- [PERPLEXITY_INTEGRATION.md](PERPLEXITY_INTEGRATION.md) - Perplexity desktop setup
+- [MCP_AZURE_CLIENT_SETUP.md](MCP_AZURE_CLIENT_SETUP.md) - Cloud server connection (Azure)
 - [VS_CODE_INTEGRATION.md](VS_CODE_INTEGRATION.md)
 - [MCP_TESTING.md](MCP_TESTING.md)
 - [MCP_MONITORING_GUIDE.md](MCP_MONITORING_GUIDE.md)
