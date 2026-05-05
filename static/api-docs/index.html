@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>API Docs — LLM Pricing API</title>
   <meta name="description" content="Interactive API documentation for the LLM Pricing API. Browse all endpoints, try requests, and explore the OpenAPI spec.">
+  <!-- Swagger UI CSS (loaded upfront; dark overrides applied below) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
   <style>
     :root {
       --bg: #0f1117;
@@ -26,7 +28,7 @@
     a { color: var(--accent); text-decoration: none; }
     code { font-family: 'Consolas', 'Cascadia Code', monospace; font-size: .85em; background: var(--surface2); padding: .1em .4em; border-radius: 4px; color: var(--accent2); }
 
-    /* Nav */
+    /* ── Nav ── */
     .main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;border-bottom:1px solid #23263a;position:sticky;top:0;z-index:200;gap:.5rem;flex-shrink:0}
     .nav-brand{font-weight:700;color:#7c6af7;text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
     .nav-spacer{flex:1}
@@ -43,36 +45,31 @@
       .nav-links a{padding:.6rem .75rem;font-size:.875rem}
     }
 
-    /* Toolbar bar under nav */
+    /* ── Toolbar ── */
     .docs-toolbar {
       display: flex; align-items: center; gap: .75rem; padding: .6rem 1.25rem;
       background: var(--surface); border-bottom: 1px solid var(--border);
       flex-shrink: 0; flex-wrap: wrap;
     }
-    .docs-toolbar .toolbar-label { font-size: .75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+    .toolbar-label { font-size: .75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
     .view-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: .3rem .85rem; border-radius: 6px; font-size: .8rem; font-weight: 600; cursor: pointer; transition: all .15s; }
     .view-btn:hover { border-color: var(--accent); color: var(--accent); }
     .view-btn.active { background: rgba(124,106,247,.12); border-color: var(--accent); color: var(--accent); }
     .toolbar-sep { width: 1px; height: 20px; background: var(--border); }
     .toolbar-link { font-size: .8rem; color: var(--muted); display: inline-flex; align-items: center; gap: .3rem; }
-    .toolbar-link:hover { color: var(--accent2); }
+    .toolbar-link:hover { color: var(--accent2); text-decoration: none; }
     .spec-badge { font-size: .72rem; background: rgba(78,205,196,.1); border: 1px solid rgba(78,205,196,.25); color: var(--accent2); padding: .15rem .55rem; border-radius: 999px; font-weight: 600; }
 
-    /* Frame wrapper */
-    .frame-wrapper { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-    .docs-frame {
-      flex: 1;
-      border: none;
-      width: 100%;
-      min-height: 0;
-      display: block;
-      background: #fff;
-    }
+    /* ── View panels ── */
+    .view-panel { display: none; flex: 1; min-height: 0; flex-direction: column; }
+    .view-panel.active { display: flex; }
 
-    /* Fallback / endpoint reference (hidden by default, shown in reference view) */
-    .ref-view { display: none; flex: 1; overflow-y: auto; padding: 1.5rem 1.25rem 3rem; max-width: 1000px; margin: 0 auto; width: 100%; }
-    .ref-view.active { display: block; }
+    /* Swagger / ReDoc containers fill remaining height */
+    #swagger-container, #redoc-container { flex: 1; overflow-y: auto; }
 
+    /* ── Reference view ── */
+    #ref-panel { overflow-y: auto; padding: 1.5rem 1.25rem 3rem; }
+    .ref-inner { max-width: 1000px; margin: 0 auto; }
     .endpoint-group { margin-bottom: 2rem; }
     .endpoint-group h3 { font-size: .85rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); border-bottom: 1px solid var(--border); padding-bottom: .4rem; margin-bottom: .75rem; }
     .endpoint-row { display: flex; align-items: flex-start; gap: .75rem; padding: .55rem 0; border-bottom: 1px solid rgba(46,51,71,.5); }
@@ -85,6 +82,87 @@
     .ep-desc { font-size: .82rem; color: var(--muted); flex: 1; }
     .ep-auth { font-size: .7rem; background: rgba(124,106,247,.1); border: 1px solid rgba(124,106,247,.25); color: var(--accent); padding: .1rem .4rem; border-radius: 4px; flex-shrink: 0; }
     @media(max-width:600px){ .ep-path { min-width: 0; } .ep-auth { display: none; } }
+
+    /* ── Dark Swagger UI overrides ── */
+    #swagger-container { background: #0f1117; }
+    #swagger-container .swagger-ui .topbar { display: none !important; }
+    #swagger-container .swagger-ui,
+    #swagger-container .swagger-ui .wrapper { background: #0f1117; color: #e2e8f0; }
+    #swagger-container .swagger-ui .info .title,
+    #swagger-container .swagger-ui .info h1,
+    #swagger-container .swagger-ui .info h2 { color: #e2e8f0; }
+    #swagger-container .swagger-ui .info a { color: #7c6af7; }
+    #swagger-container .swagger-ui .info .description p,
+    #swagger-container .swagger-ui .renderedMarkdown p { color: #8892a4; }
+    #swagger-container .swagger-ui .info .description code,
+    #swagger-container .swagger-ui .renderedMarkdown code { background: #22263a; color: #4ecdc4; border-radius: 4px; padding: .1em .4em; }
+    #swagger-container .swagger-ui .scheme-container { background: #1a1d27; border: 1px solid #2e3347; border-radius: 8px; box-shadow: none; padding: 1rem; margin-bottom: 1rem; }
+    #swagger-container .swagger-ui select { background: #1a1d27; border: 1px solid #2e3347; color: #e2e8f0; border-radius: 4px; }
+    #swagger-container .swagger-ui .opblock { border: 1px solid #2e3347; border-radius: 8px; margin-bottom: 6px; background: #1a1d27; }
+    #swagger-container .swagger-ui .opblock.opblock-get { border-color: rgba(72,187,120,.3); }
+    #swagger-container .swagger-ui .opblock.opblock-post { border-color: rgba(237,137,54,.3); }
+    #swagger-container .swagger-ui .opblock.opblock-put { border-color: rgba(99,179,237,.3); }
+    #swagger-container .swagger-ui .opblock.opblock-delete { border-color: rgba(245,101,101,.3); }
+    #swagger-container .swagger-ui .opblock.opblock-patch { border-color: rgba(78,205,196,.3); }
+    #swagger-container .swagger-ui .opblock.opblock-get .opblock-summary-method { background: rgba(72,187,120,.15); color: #48bb78; }
+    #swagger-container .swagger-ui .opblock.opblock-post .opblock-summary-method { background: rgba(237,137,54,.15); color: #ed8936; }
+    #swagger-container .swagger-ui .opblock.opblock-put .opblock-summary-method { background: rgba(99,179,237,.15); color: #63b3ed; }
+    #swagger-container .swagger-ui .opblock.opblock-delete .opblock-summary-method { background: rgba(245,101,101,.15); color: #f56565; }
+    #swagger-container .swagger-ui .opblock.opblock-patch .opblock-summary-method { background: rgba(78,205,196,.15); color: #4ecdc4; }
+    #swagger-container .swagger-ui .opblock .opblock-summary { border-bottom: 1px solid #2e3347; }
+    #swagger-container .swagger-ui .opblock .opblock-summary-path { color: #e2e8f0; }
+    #swagger-container .swagger-ui .opblock .opblock-summary-description { color: #8892a4; }
+    #swagger-container .swagger-ui .opblock-section-header { border-bottom: 1px solid #2e3347; background: #22263a; }
+    #swagger-container .swagger-ui .opblock-section-header label,
+    #swagger-container .swagger-ui .opblock-description-wrapper p,
+    #swagger-container .swagger-ui .opblock-section-header h4 { color: #8892a4; }
+    #swagger-container .swagger-ui .opblock-body { background: #0f1117; }
+    #swagger-container .swagger-ui .opblock-body pre { background: #0d0f18; color: #e2e8f0; border: 1px solid #2e3347; border-radius: 4px; }
+    #swagger-container .swagger-ui table thead tr th { color: #8892a4; border-bottom: 1px solid #2e3347; background: #22263a; }
+    #swagger-container .swagger-ui table tbody tr td { border-bottom: 1px solid #2e3347; color: #e2e8f0; }
+    #swagger-container .swagger-ui .parameter__name { color: #e2e8f0; }
+    #swagger-container .swagger-ui .parameter__type { color: #4ecdc4; }
+    #swagger-container .swagger-ui .parameter__in { color: #8892a4; }
+    #swagger-container .swagger-ui .parameters-col_description { color: #8892a4; }
+    #swagger-container .swagger-ui .parameters-col_description input,
+    #swagger-container .swagger-ui textarea,
+    #swagger-container .swagger-ui input[type=text],
+    #swagger-container .swagger-ui input[type=password],
+    #swagger-container .swagger-ui input[type=search] { background: #1a1d27; border: 1px solid #2e3347; color: #e2e8f0; border-radius: 4px; }
+    #swagger-container .swagger-ui .response-col_status { color: #48bb78; }
+    #swagger-container .swagger-ui .response-col_description,
+    #swagger-container .swagger-ui .responses-inner h4,
+    #swagger-container .swagger-ui .responses-inner h5 { color: #8892a4; }
+    #swagger-container .swagger-ui .highlight-code,
+    #swagger-container .swagger-ui .microlight { background: #0d0f18 !important; }
+    #swagger-container .swagger-ui code { background: #22263a; color: #4ecdc4; border-radius: 4px; }
+    #swagger-container .swagger-ui .opblock-tag { color: #e2e8f0; border-bottom: 1px solid #2e3347; }
+    #swagger-container .swagger-ui .opblock-tag:hover { background: rgba(124,106,247,.05); }
+    #swagger-container .swagger-ui section.models { border: 1px solid #2e3347; border-radius: 8px; }
+    #swagger-container .swagger-ui section.models h4 { color: #e2e8f0; border-bottom: 1px solid #2e3347; }
+    #swagger-container .swagger-ui .model-title,
+    #swagger-container .swagger-ui .model,
+    #swagger-container .swagger-ui span.model-title__text { color: #e2e8f0; }
+    #swagger-container .swagger-ui .model-box { background: #22263a; border-radius: 4px; }
+    #swagger-container .swagger-ui .prop-type { color: #4ecdc4; }
+    #swagger-container .swagger-ui .prop-format { color: #8892a4; }
+    #swagger-container .swagger-ui .btn { background: #22263a; border: 1px solid #2e3347; color: #e2e8f0; border-radius: 6px; }
+    #swagger-container .swagger-ui .btn:hover { border-color: #7c6af7; color: #7c6af7; }
+    #swagger-container .swagger-ui .btn.authorize { border-color: rgba(72,187,120,.4); color: #48bb78; }
+    #swagger-container .swagger-ui .btn.authorize svg { fill: #48bb78; }
+    #swagger-container .swagger-ui .btn.execute { background: #7c6af7; border-color: #7c6af7; color: #fff; }
+    #swagger-container .swagger-ui .btn.cancel,
+    #swagger-container .swagger-ui .btn.btn-clear { background: transparent; border-color: #f56565; color: #f56565; }
+    #swagger-container .swagger-ui .tab li button.tablinks { color: #8892a4; }
+    #swagger-container .swagger-ui .tab li.active button.tablinks { color: #7c6af7; border-bottom: 2px solid #7c6af7; }
+    #swagger-container .swagger-ui .arrow { fill: #8892a4; }
+    #swagger-container .swagger-ui dialog.dialog-ux,
+    #swagger-container .swagger-ui .dialog-ux .modal-ux { background: #1a1d27; border: 1px solid #2e3347; }
+    #swagger-container .swagger-ui .dialog-ux .modal-ux-header { border-bottom: 1px solid #2e3347; }
+    #swagger-container .swagger-ui .dialog-ux .modal-ux-header h3,
+    #swagger-container .swagger-ui .auth-container { color: #e2e8f0; }
+    #swagger-container .swagger-ui .auth-container label { color: #8892a4; }
+    #swagger-container .swagger-ui .auth-container code { background: #22263a; color: #4ecdc4; }
   </style>
 </head>
 <body>
@@ -118,104 +196,115 @@
   <a class="toolbar-link" href="/mcp-setup">⚡ MCP Setup</a>
 </div>
 
-<div class="frame-wrapper" id="frameWrapper">
-  <iframe class="docs-frame" id="docsFrame" src="/docs" title="Swagger UI" allow="clipboard-write"></iframe>
+<!-- Swagger UI view -->
+<div class="view-panel active" id="panel-swagger">
+  <div id="swagger-container">
+    <div id="swagger-ui"></div>
+  </div>
 </div>
 
-<!-- Endpoint Reference (static, shown when iframe unavailable or user selects it) -->
-<div class="ref-view" id="refView">
-
-  <div class="endpoint-group">
-    <h3>Pricing</h3>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing</span><span class="ep-desc">All model pricing, optional <code>?provider=</code> filter</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/models</span><span class="ep-desc">List all available model names</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/public</span><span class="ep-desc">Public pricing — embed-safe, unauthenticated</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/history</span><span class="ep-desc">Historical pricing snapshots</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/trends</span><span class="ep-desc">Price-change leaderboard</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/history/export</span><span class="ep-desc">CSV or JSON export of pricing history</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/alerts/signing-info</span><span class="ep-desc">Webhook HMAC signing key info</span></div>
-    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/pricing/alerts</span><span class="ep-desc">Register a price-change webhook</span><span class="ep-auth">API key</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/alerts</span><span class="ep-desc">List registered webhooks</span><span class="ep-auth">API key</span></div>
-    <div class="endpoint-row"><span class="method DELETE">DELETE</span><span class="ep-path">/pricing/alerts/{id}</span><span class="ep-desc">Delete a webhook</span><span class="ep-auth">API key</span></div>
-  </div>
-
-  <div class="endpoint-group">
-    <h3>Cost Estimation</h3>
-    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/cost-estimate</span><span class="ep-desc">Single model cost estimate</span></div>
-    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/cost-estimate/batch</span><span class="ep-desc">Multi-model cost comparison</span></div>
-  </div>
-
-  <div class="endpoint-group">
-    <h3>Performance &amp; Use Cases</h3>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/performance</span><span class="ep-desc">Throughput, latency, context window, quality scores</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/use-cases</span><span class="ep-desc">Model recommendations by use case</span></div>
-  </div>
-
-  <div class="endpoint-group">
-    <h3>Router</h3>
-    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/recommend</span><span class="ep-desc">Smart model routing recommendation</span><span class="ep-auth">API key</span></div>
-    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/recommend/stream</span><span class="ep-desc">Streaming router recommendation (SSE)</span><span class="ep-auth">API key</span></div>
-    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/feedback</span><span class="ep-desc">Submit routing feedback</span><span class="ep-auth">API key</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/telemetry/savings</span><span class="ep-desc">Router savings report per org</span><span class="ep-auth">API key</span></div>
-  </div>
-
-  <div class="endpoint-group">
-    <h3>Agent</h3>
-    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/agent/chat</span><span class="ep-desc">Blocking chat with the ReAct pricing agent</span></div>
-    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/agent/chat/stream</span><span class="ep-desc">Streaming agent chat (SSE)</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/agent/conversations</span><span class="ep-desc">List conversation sessions</span></div>
-    <div class="endpoint-row"><span class="method DELETE">DELETE</span><span class="ep-path">/agent/conversations/{id}</span><span class="ep-desc">Delete a conversation</span></div>
-  </div>
-
-  <div class="endpoint-group">
-    <h3>MCP (Model Context Protocol)</h3>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/mcp</span><span class="ep-desc">MCP server info and config snippet</span></div>
-    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/mcp</span><span class="ep-desc">MCP JSON-RPC 2.0 endpoint — all 15 tools</span></div>
-  </div>
-
-  <div class="endpoint-group">
-    <h3>Billing</h3>
-    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/signup</span><span class="ep-desc">Free tier signup — returns API key</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/billing/me</span><span class="ep-desc">Usage dashboard (calls, savings, tier)</span><span class="ep-auth">API key</span></div>
-    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/checkout</span><span class="ep-desc">Create Stripe Checkout session</span><span class="ep-auth">API key</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/billing/portal</span><span class="ep-desc">Stripe billing self-serve portal</span><span class="ep-auth">API key</span></div>
-    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/webhook</span><span class="ep-desc">Stripe webhook receiver</span></div>
-  </div>
-
-  <div class="endpoint-group">
-    <h3>Admin &amp; Telemetry</h3>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/telemetry</span><span class="ep-desc">Server usage metrics and analytics</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/admin/stats</span><span class="ep-desc">Aggregated server statistics</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/admin/rate-limits</span><span class="ep-desc">Current rate-limit state</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/rate-limits/tiers</span><span class="ep-desc">API tier definitions (free/pro/enterprise)</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/api/versions</span><span class="ep-desc">API version info</span></div>
-  </div>
-
-  <div class="endpoint-group">
-    <h3>OpenAI Compatibility</h3>
-    <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/v1/chat/completions</span><span class="ep-desc">OpenAI-compatible routing proxy — drop-in replacement</span></div>
-  </div>
-
-  <div class="endpoint-group">
-    <h3>Health</h3>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/health</span><span class="ep-desc">Health check — returns status and version</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/health/live</span><span class="ep-desc">Kubernetes liveness probe</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/health/ready</span><span class="ep-desc">Kubernetes readiness probe</span></div>
-    <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/health/detailed</span><span class="ep-desc">Detailed health with service statuses</span></div>
-  </div>
-
-  <div style="margin-top:1.5rem;padding:1rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);font-size:.82rem;color:var(--muted)">
-    <strong style="color:var(--text)">Authentication:</strong> Protected endpoints require <code>x-api-key: &lt;key&gt;</code> header.
-    Get a free API key at <a href="/billing">/billing</a> or via <code>POST /billing/signup</code>.
-    <br><br>
-    <strong style="color:var(--text)">Interactive docs:</strong>
-    <a href="/docs" target="_blank">Swagger UI (/docs)</a> &nbsp;·&nbsp;
-    <a href="/redoc" target="_blank">ReDoc (/redoc)</a> &nbsp;·&nbsp;
-    <a href="/openapi.json" target="_blank">OpenAPI JSON</a>
-  </div>
-
+<!-- ReDoc view -->
+<div class="view-panel" id="panel-redoc">
+  <div id="redoc-container"></div>
 </div>
 
+<!-- Endpoint Reference view -->
+<div class="view-panel" id="panel-ref">
+  <div id="ref-panel">
+    <div class="ref-inner">
+
+      <div class="endpoint-group">
+        <h3>Pricing</h3>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing</span><span class="ep-desc">All model pricing, optional <code>?provider=</code> filter</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/models</span><span class="ep-desc">List all available model names</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/public</span><span class="ep-desc">Public pricing — embed-safe, unauthenticated</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/history</span><span class="ep-desc">Historical pricing snapshots</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/trends</span><span class="ep-desc">Price-change leaderboard</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/history/export</span><span class="ep-desc">CSV or JSON export of pricing history</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/alerts/signing-info</span><span class="ep-desc">Webhook HMAC signing key info</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/pricing/alerts</span><span class="ep-desc">Register a price-change webhook</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/alerts</span><span class="ep-desc">List registered webhooks</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method DELETE">DELETE</span><span class="ep-path">/pricing/alerts/{id}</span><span class="ep-desc">Delete a webhook</span><span class="ep-auth">API key</span></div>
+      </div>
+
+      <div class="endpoint-group">
+        <h3>Cost Estimation</h3>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/cost-estimate</span><span class="ep-desc">Single model cost estimate</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/cost-estimate/batch</span><span class="ep-desc">Multi-model cost comparison</span></div>
+      </div>
+
+      <div class="endpoint-group">
+        <h3>Performance &amp; Use Cases</h3>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/performance</span><span class="ep-desc">Throughput, latency, context window, quality scores</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/use-cases</span><span class="ep-desc">Model recommendations by use case</span></div>
+      </div>
+
+      <div class="endpoint-group">
+        <h3>Router</h3>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/recommend</span><span class="ep-desc">Smart model routing recommendation</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/recommend/stream</span><span class="ep-desc">Streaming router recommendation (SSE)</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/feedback</span><span class="ep-desc">Submit routing feedback</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/telemetry/savings</span><span class="ep-desc">Router savings report per org</span><span class="ep-auth">API key</span></div>
+      </div>
+
+      <div class="endpoint-group">
+        <h3>Agent</h3>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/agent/chat</span><span class="ep-desc">Blocking chat with the ReAct pricing agent</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/agent/chat/stream</span><span class="ep-desc">Streaming agent chat (SSE)</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/agent/conversations</span><span class="ep-desc">List conversation sessions</span></div>
+        <div class="endpoint-row"><span class="method DELETE">DELETE</span><span class="ep-path">/agent/conversations/{id}</span><span class="ep-desc">Delete a conversation</span></div>
+      </div>
+
+      <div class="endpoint-group">
+        <h3>MCP (Model Context Protocol)</h3>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/mcp</span><span class="ep-desc">MCP server info and config snippet</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/mcp</span><span class="ep-desc">MCP JSON-RPC 2.0 endpoint — all 15 tools</span></div>
+      </div>
+
+      <div class="endpoint-group">
+        <h3>Billing</h3>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/signup</span><span class="ep-desc">Free tier signup — returns API key</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/billing/me</span><span class="ep-desc">Usage dashboard (calls, savings, tier)</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/checkout</span><span class="ep-desc">Create Stripe Checkout session</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/billing/portal</span><span class="ep-desc">Stripe billing self-serve portal</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/webhook</span><span class="ep-desc">Stripe webhook receiver</span></div>
+      </div>
+
+      <div class="endpoint-group">
+        <h3>Admin &amp; Telemetry</h3>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/telemetry</span><span class="ep-desc">Server usage metrics and analytics</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/admin/stats</span><span class="ep-desc">Aggregated server statistics</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/admin/rate-limits</span><span class="ep-desc">Current rate-limit state</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/rate-limits/tiers</span><span class="ep-desc">API tier definitions (free/pro/enterprise)</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/api/versions</span><span class="ep-desc">API version info</span></div>
+      </div>
+
+      <div class="endpoint-group">
+        <h3>OpenAI Compatibility</h3>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/v1/chat/completions</span><span class="ep-desc">OpenAI-compatible routing proxy — drop-in replacement</span></div>
+      </div>
+
+      <div class="endpoint-group">
+        <h3>Health</h3>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/health</span><span class="ep-desc">Health check — returns status and version</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/health/live</span><span class="ep-desc">Kubernetes liveness probe</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/health/ready</span><span class="ep-desc">Kubernetes readiness probe</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/health/detailed</span><span class="ep-desc">Detailed health with service statuses</span></div>
+      </div>
+
+      <div style="margin-top:1.5rem;padding:1rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);font-size:.82rem;color:var(--muted)">
+        <strong style="color:var(--text)">Authentication:</strong> Protected endpoints require <code>x-api-key: &lt;key&gt;</code> header.
+        Get a free key at <a href="/billing">/billing</a> or via <code>POST /billing/signup</code>.
+        &nbsp;·&nbsp;
+        <a href="/openapi.json" target="_blank">Download OpenAPI JSON</a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Lazy-load JS -->
+<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
 <script>
 (function(){
   var t=document.getElementById('navToggle'),l=document.getElementById('navLinks');
@@ -227,28 +316,79 @@
   });
 })();
 
-function switchView(view) {
-  var frame = document.getElementById('docsFrame');
-  var wrapper = document.getElementById('frameWrapper');
-  var refView = document.getElementById('refView');
-  document.querySelectorAll('.view-btn').forEach(function(b){b.classList.remove('active');});
+var _swaggerInit = false;
+var _redocInit = false;
 
-  if (view === 'swagger') {
-    document.getElementById('btnSwagger').classList.add('active');
-    frame.src = '/docs';
-    wrapper.style.display = 'flex';
-    refView.classList.remove('active');
-  } else if (view === 'redoc') {
-    document.getElementById('btnRedoc').classList.add('active');
-    frame.src = '/redoc';
-    wrapper.style.display = 'flex';
-    refView.classList.remove('active');
-  } else {
-    document.getElementById('btnRef').classList.add('active');
-    wrapper.style.display = 'none';
-    refView.classList.add('active');
-  }
+function initSwagger() {
+  if (_swaggerInit) return;
+  _swaggerInit = true;
+  SwaggerUIBundle({
+    url: '/openapi.json',
+    dom_id: '#swagger-ui',
+    presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+    layout: 'BaseLayout',
+    deepLinking: true,
+    displayRequestDuration: true,
+    filter: true,
+  });
 }
+
+function initRedoc() {
+  if (_redocInit) return;
+  _redocInit = true;
+  var script = document.createElement('script');
+  script.src = 'https://cdn.jsdelivr.net/npm/redoc@latest/bundles/redoc.standalone.js';
+  script.onload = function() {
+    Redoc.init('/openapi.json', {
+      theme: {
+        colors: {
+          primary: { main: '#7c6af7' },
+          text: { primary: '#e2e8f0', secondary: '#8892a4' },
+          border: { dark: '#2e3347', light: '#2e3347' },
+          http: {
+            get: '#48bb78', post: '#ed8936', put: '#63b3ed',
+            options: '#8892a4', patch: '#4ecdc4', delete: '#f56565'
+          }
+        },
+        typography: {
+          fontSize: '14px',
+          fontFamily: "'Segoe UI', system-ui, sans-serif",
+          code: {
+            fontSize: '13px',
+            fontFamily: "'Consolas', 'Cascadia Code', monospace",
+            color: '#4ecdc4',
+            backgroundColor: '#22263a'
+          }
+        },
+        sidebar: {
+          backgroundColor: '#0f1117',
+          textColor: '#e2e8f0',
+          activeTextColor: '#7c6af7'
+        },
+        rightPanel: { backgroundColor: '#0d0f18' },
+        schema: {
+          linesColor: '#2e3347',
+          typeNameColor: '#4ecdc4',
+          typeTitleColor: '#7c6af7',
+          requireLabelColor: '#f56565'
+        }
+      }
+    }, document.getElementById('redoc-container'));
+  };
+  document.head.appendChild(script);
+}
+
+function switchView(view) {
+  document.querySelectorAll('.view-btn').forEach(function(b){ b.classList.remove('active'); });
+  document.querySelectorAll('.view-panel').forEach(function(p){ p.classList.remove('active'); });
+  document.getElementById('btn' + view.charAt(0).toUpperCase() + view.slice(1)).classList.add('active');
+  document.getElementById('panel-' + view).classList.add('active');
+  if (view === 'swagger') initSwagger();
+  if (view === 'redoc') initRedoc();
+}
+
+// Auto-initialize Swagger on load (default view)
+initSwagger();
 </script>
 </body>
 </html>
