@@ -182,6 +182,8 @@ app = FastAPI(
         "name": "MIT",
         "url": "https://opensource.org/licenses/MIT",
     },
+    docs_url=None,
+    redoc_url=None,
 )
 
 logger.info(f"FastAPI app created: {app.title} v{app.version}")
@@ -700,6 +702,226 @@ async def root():
         return FileResponse(str(html_path), media_type="text/html")
     # Fallback: plain JSON info if landing page not present
     return JSONResponse({"name": settings.app_name, "version": settings.app_version})
+
+
+_DARK_SWAGGER_CSS = """
+body{background:#0f1117!important}
+.swagger-ui .topbar{display:none!important}
+.swagger-ui,.swagger-ui .wrapper,.swagger-ui .info{background:#0f1117;color:#e2e8f0}
+.swagger-ui .info .title,.swagger-ui .info h1,.swagger-ui .info h2,.swagger-ui .info h3{color:#e2e8f0}
+.swagger-ui .info a{color:#7c6af7}
+.swagger-ui .info .description p,.swagger-ui .renderedMarkdown p{color:#8892a4}
+.swagger-ui .info .description code,.swagger-ui .renderedMarkdown code{background:#22263a;color:#4ecdc4;border-radius:4px;padding:.1em .4em}
+.swagger-ui .scheme-container{background:#1a1d27;border:1px solid #2e3347;border-radius:8px;box-shadow:none;padding:1rem;margin-bottom:1rem}
+.swagger-ui select{background:#1a1d27;border:1px solid #2e3347;color:#e2e8f0;border-radius:4px}
+.swagger-ui .opblock{border:1px solid #2e3347;border-radius:8px;margin-bottom:6px;background:#1a1d27}
+.swagger-ui .opblock.opblock-get{border-color:rgba(72,187,120,.3)}
+.swagger-ui .opblock.opblock-post{border-color:rgba(237,137,54,.3)}
+.swagger-ui .opblock.opblock-put{border-color:rgba(99,179,237,.3)}
+.swagger-ui .opblock.opblock-delete{border-color:rgba(245,101,101,.3)}
+.swagger-ui .opblock.opblock-patch{border-color:rgba(78,205,196,.3)}
+.swagger-ui .opblock.opblock-get .opblock-summary-method{background:rgba(72,187,120,.15);color:#48bb78}
+.swagger-ui .opblock.opblock-post .opblock-summary-method{background:rgba(237,137,54,.15);color:#ed8936}
+.swagger-ui .opblock.opblock-put .opblock-summary-method{background:rgba(99,179,237,.15);color:#63b3ed}
+.swagger-ui .opblock.opblock-delete .opblock-summary-method{background:rgba(245,101,101,.15);color:#f56565}
+.swagger-ui .opblock.opblock-patch .opblock-summary-method{background:rgba(78,205,196,.15);color:#4ecdc4}
+.swagger-ui .opblock .opblock-summary{border-bottom:1px solid #2e3347}
+.swagger-ui .opblock .opblock-summary-path{color:#e2e8f0}
+.swagger-ui .opblock .opblock-summary-description{color:#8892a4}
+.swagger-ui .opblock-description-wrapper p,.swagger-ui .opblock-section-header h4{color:#8892a4}
+.swagger-ui .opblock-section-header{border-bottom:1px solid #2e3347;background:#22263a}
+.swagger-ui .opblock-section-header label{color:#8892a4}
+.swagger-ui .opblock-body{background:#0f1117}
+.swagger-ui .opblock-body pre{background:#0d0f18;color:#e2e8f0;border:1px solid #2e3347;border-radius:4px}
+.swagger-ui table thead tr th{color:#8892a4;border-bottom:1px solid #2e3347;background:#22263a}
+.swagger-ui table tbody tr td{border-bottom:1px solid #2e3347;color:#e2e8f0}
+.swagger-ui table tbody tr:last-child td{border-bottom:none}
+.swagger-ui .parameter__name{color:#e2e8f0}
+.swagger-ui .parameter__type{color:#4ecdc4}
+.swagger-ui .parameter__in{color:#8892a4}
+.swagger-ui .parameters-col_description{color:#8892a4}
+.swagger-ui .parameters-col_description input,.swagger-ui textarea,
+.swagger-ui input[type=text],.swagger-ui input[type=password],.swagger-ui input[type=search]{
+  background:#1a1d27;border:1px solid #2e3347;color:#e2e8f0;border-radius:4px}
+.swagger-ui .response-col_status{color:#48bb78}
+.swagger-ui .response-col_description{color:#8892a4}
+.swagger-ui .responses-inner h4,.swagger-ui .responses-inner h5{color:#8892a4}
+.swagger-ui .highlight-code,.swagger-ui .microlight{background:#0d0f18!important}
+.swagger-ui code{background:#22263a;color:#4ecdc4;border-radius:4px}
+.swagger-ui .opblock-tag{color:#e2e8f0;border-bottom:1px solid #2e3347}
+.swagger-ui .opblock-tag:hover{background:rgba(124,106,247,.05)}
+.swagger-ui section.models{border:1px solid #2e3347;border-radius:8px}
+.swagger-ui section.models h4{color:#e2e8f0;border-bottom:1px solid #2e3347}
+.swagger-ui .model-title,.swagger-ui .model,.swagger-ui span.model-title__text{color:#e2e8f0}
+.swagger-ui .model-box{background:#22263a;border-radius:4px}
+.swagger-ui .prop-type{color:#4ecdc4}
+.swagger-ui .prop-format{color:#8892a4}
+.swagger-ui .btn{background:#22263a;border:1px solid #2e3347;color:#e2e8f0;border-radius:6px}
+.swagger-ui .btn:hover{border-color:#7c6af7;color:#7c6af7}
+.swagger-ui .btn.authorize{border-color:rgba(72,187,120,.4);color:#48bb78}
+.swagger-ui .btn.authorize svg{fill:#48bb78}
+.swagger-ui .btn.execute{background:#7c6af7;border-color:#7c6af7;color:#fff}
+.swagger-ui .btn.cancel,.swagger-ui .btn.btn-clear{background:transparent;border-color:#f56565;color:#f56565}
+.swagger-ui .tab li button.tablinks{color:#8892a4}
+.swagger-ui .tab li.active button.tablinks{color:#7c6af7;border-bottom:2px solid #7c6af7}
+.swagger-ui .arrow{fill:#8892a4}
+.swagger-ui dialog.dialog-ux,.swagger-ui .dialog-ux .modal-ux{background:#1a1d27;border:1px solid #2e3347}
+.swagger-ui .dialog-ux .modal-ux-header{border-bottom:1px solid #2e3347}
+.swagger-ui .dialog-ux .modal-ux-header h3,.swagger-ui .auth-container{color:#e2e8f0}
+.swagger-ui .auth-container label{color:#8892a4}
+.swagger-ui .auth-container code{background:#22263a;color:#4ecdc4}
+"""
+
+_NAV_HTML = """
+<nav class="main-nav">
+  <a href="/" class="nav-brand">&#9889; LLM Pricing</a>
+  <span class="nav-spacer"></span>
+  <div class="nav-links" id="navLinks">
+    <a href="/chat">&#128172; Chat</a>
+    <a href="/calculator">&#129518; Calc</a>
+    <a href="/compare">&#9878; Compare</a>
+    <a href="/history">&#128200; History</a>
+    <a href="/trends">&#128293; Trends</a>
+    <a href="/widget">&#128268; Widget</a>
+    <a href="/billing">&#128179; Billing</a>
+    <a href="/mcp-setup">&#9889; MCP</a>
+    <a href="/api-docs">&#128214; Docs</a>
+    <a href="/admin">&#9881; Admin</a>
+  </div>
+  <button class="nav-toggle" id="navToggle" aria-label="Menu">&#9776;</button>
+</nav>
+<script>
+(function(){
+  var t=document.getElementById('navToggle'),l=document.getElementById('navLinks');
+  if(t)t.onclick=function(){l.classList.toggle('open');};
+  var p=location.pathname.replace(/\\/$/,'');
+  l.querySelectorAll('a').forEach(function(a){
+    if(a.getAttribute('href')===p)a.classList.add('active');
+    a.addEventListener('click',function(){l.classList.remove('open');});
+  });
+})();
+</script>
+"""
+
+_NAV_CSS = """
+.main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;
+  border-bottom:1px solid #23263a;position:sticky;top:0;z-index:9999;gap:.5rem}
+.nav-brand{font-weight:700;color:#7c6af7;text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
+.nav-spacer{flex:1}
+.nav-links{display:flex;align-items:center;gap:.125rem;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.nav-links::-webkit-scrollbar{display:none}
+.nav-links a{color:#8b93a5;text-decoration:none;padding:.35rem .6rem;border-radius:6px;
+  font-size:.8rem;white-space:nowrap;transition:all .15s;border:none}
+.nav-links a:hover{background:#1a1d2e;color:#e5e7eb}
+.nav-links a.active{background:#1a1d2e;color:#7c6af7;font-weight:600}
+.nav-toggle{display:none;background:none;border:1px solid #2a2d3a;color:#9ca3af;
+  font-size:1.1rem;cursor:pointer;padding:.25rem .5rem;border-radius:6px;line-height:1}
+@media(max-width:640px){
+  .nav-toggle{display:block}
+  .nav-links{display:none;position:absolute;top:52px;left:0;right:0;flex-direction:column;
+    background:#0f1117;border-bottom:1px solid #23263a;padding:.5rem 1rem;gap:.25rem;z-index:199}
+  .nav-links.open{display:flex}
+  .nav-links a{padding:.6rem .75rem;font-size:.875rem}
+}
+"""
+
+
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui():
+    """Dark-themed Swagger UI with site navigation."""
+    from fastapi.responses import HTMLResponse
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{settings.app_name} — Swagger UI</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
+  <style>
+    {_NAV_CSS}
+    {_DARK_SWAGGER_CSS}
+    #swagger-ui {{ padding-top: .5rem; }}
+  </style>
+</head>
+<body>
+{_NAV_HTML}
+<div id="swagger-ui"></div>
+<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+<script>
+  SwaggerUIBundle({{
+    url: "/openapi.json",
+    dom_id: "#swagger-ui",
+    presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+    layout: "BaseLayout",
+    deepLinking: true,
+    displayRequestDuration: true,
+    filter: true,
+  }});
+</script>
+</body>
+</html>"""
+    return HTMLResponse(html)
+
+
+@app.get("/redoc", include_in_schema=False)
+async def custom_redoc():
+    """Dark-themed ReDoc with site navigation."""
+    from fastapi.responses import HTMLResponse
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{settings.app_name} — ReDoc</title>
+  <style>
+    {_NAV_CSS}
+    body {{ margin: 0; background: #0f1117; }}
+  </style>
+</head>
+<body>
+{_NAV_HTML}
+<div id="redoc-container"></div>
+<script src="https://cdn.jsdelivr.net/npm/redoc@latest/bundles/redoc.standalone.js"></script>
+<script>
+  Redoc.init("/openapi.json", {{
+    theme: {{
+      colors: {{
+        primary: {{ main: "#7c6af7" }},
+        text: {{ primary: "#e2e8f0", secondary: "#8892a4" }},
+        border: {{ dark: "#2e3347", light: "#2e3347" }},
+        http: {{
+          get: "#48bb78", post: "#ed8936", put: "#63b3ed",
+          options: "#8892a4", patch: "#4ecdc4", delete: "#f56565"
+        }}
+      }},
+      typography: {{
+        fontSize: "14px",
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
+        code: {{
+          fontSize: "13px",
+          fontFamily: "'Consolas', 'Cascadia Code', monospace",
+          color: "#4ecdc4",
+          backgroundColor: "#22263a"
+        }}
+      }},
+      sidebar: {{
+        backgroundColor: "#0f1117",
+        textColor: "#e2e8f0",
+        activeTextColor: "#7c6af7"
+      }},
+      rightPanel: {{ backgroundColor: "#0d0f18" }},
+      schema: {{
+        linesColor: "#2e3347",
+        typeNameColor: "#4ecdc4",
+        typeTitleColor: "#7c6af7",
+        requireLabelColor: "#f56565"
+      }}
+    }}
+  }}, document.getElementById("redoc-container"));
+</script>
+</body>
+</html>"""
+    return HTMLResponse(html)
 
 
 @app.get("/models", tags=["Pricing"])
