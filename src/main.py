@@ -69,10 +69,119 @@ logger.info("Starting application initialization...")
 logger.info("Imports completed successfully")
 
 # Initialize FastAPI app
+_openapi_tags = [
+    {
+        "name": "Pricing",
+        "description": "Live LLM model pricing data across 12+ providers. Supports filtering by provider.",
+    },
+    {
+        "name": "Pricing History",
+        "description": "Historical pricing snapshots, trend analysis, and CSV/JSON export.",
+    },
+    {
+        "name": "Pricing Alerts",
+        "description": "Register and manage webhook-based price-change alerts for specific models.",
+    },
+    {
+        "name": "Cost Estimation",
+        "description": "Estimate and compare token-based costs across models for single or batched workloads.",
+    },
+    {
+        "name": "Performance",
+        "description": "Quality scores, benchmark data, and use-case routing recommendations.",
+    },
+    {
+        "name": "Router",
+        "description": (
+            "Intelligent model routing — recommend the best model for a given prompt, "
+            "stream routing events, and submit feedback to improve future recommendations."
+        ),
+    },
+    {
+        "name": "Telemetry",
+        "description": "API usage metrics, endpoint adoption stats, and per-org cost savings tracking.",
+    },
+    {
+        "name": "Agent",
+        "description": (
+            "RAG-powered pricing assistant. Supports streaming and persistent conversation history."
+        ),
+    },
+    {
+        "name": "Billing",
+        "description": "Customer sign-up, Stripe checkout, subscription portal, and account dashboard.",
+    },
+    {
+        "name": "Health",
+        "description": "Liveness, readiness, and detailed health check endpoints for orchestrators.",
+    },
+    {
+        "name": "Deployment",
+        "description": "Deployment metadata, API version info, and graceful shutdown control.",
+    },
+    {
+        "name": "API Info",
+        "description": "Rate-limit tier definitions and API version negotiation.",
+    },
+    {
+        "name": "Admin",
+        "description": "Internal admin endpoints — aggregate stats, rate-limit state, and customer list.",
+    },
+    {
+        "name": "OpenAI Proxy",
+        "description": (
+            "OpenAI-compatible `/v1/chat/completions` proxy that transparently routes requests "
+            "through the LLM router and returns pricing metadata in the response."
+        ),
+    },
+]
+
+_api_description = """\
+## LLM Pricing MCP Server
+
+Real-time pricing comparison for **12+ LLM providers** (OpenAI, Anthropic, Google, Cohere, \
+Mistral, Meta, xAI, DeepSeek, and more).
+
+### Key capabilities
+- **Live pricing** — sub-second model cost lookup across all providers
+- **Cost estimation** — token-level cost calculator with batch support
+- **Performance benchmarks** — quality scores and value-index rankings
+- **Intelligent router** — automatically picks the best model for your workload
+- **Price alerts** — webhook notifications when a model's price changes
+- **RAG agent** — conversational assistant with full pricing context
+- **Billing / SaaS** — Stripe-powered free / pro / enterprise tiers
+
+### Authentication
+Most read endpoints are **public** (no key required).
+Mutating and admin endpoints require `X-API-Key: <your-key>` in the request header.
+
+### Rate limits
+| Tier | Limit |
+|------|-------|
+| Free | 30 req / min |
+| Pro | 120 req / min |
+| Enterprise | 600 req / min |
+
+Pass `X-Api-Key-Tier: free|pro|enterprise` to select your bucket.
+
+### MCP transport
+The server exposes an HTTP MCP endpoint at `/mcp` for direct integration with \
+Claude Desktop, Cursor, and other MCP-compatible clients.
+"""
+
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    description=settings.app_description,
+    description=_api_description,
+    openapi_tags=_openapi_tags,
+    contact={
+        "name": "LLM Pricing MCP Server",
+        "url": "https://llm-pricing-api.fly.dev",
+    },
+    license_info={
+        "name": "MIT",
+        "url": "https://opensource.org/licenses/MIT",
+    },
 )
 
 logger.info(f"FastAPI app created: {app.title} v{app.version}")
@@ -576,7 +685,7 @@ async def root():
     return JSONResponse({"name": settings.app_name, "version": settings.app_version})
 
 
-@app.get("/models")
+@app.get("/models", tags=["Pricing"])
 async def get_models(
     provider: Optional[str] = Query(
         None,
@@ -618,7 +727,7 @@ async def get_models(
     }
 
 
-@app.get("/pricing", response_model=PricingResponse)
+@app.get("/pricing", response_model=PricingResponse, tags=["Pricing"])
 async def get_pricing(
     provider: Optional[str] = Query(
         None,
@@ -663,7 +772,7 @@ async def get_pricing(
     )
 
 
-@app.get("/health")
+@app.get("/health", tags=["Health"])
 async def health_check():
     """
     Simple health check endpoint (backwards compatible).
@@ -681,7 +790,7 @@ async def health_check():
     }
 
 
-@app.get("/health/detailed", response_model=HealthCheckResponse)
+@app.get("/health/detailed", response_model=HealthCheckResponse, tags=["Health"])
 async def health_check_detailed():
     """
     Detailed health check for monitoring and load balancers.
@@ -704,7 +813,7 @@ async def health_check_detailed():
     )
 
 
-@app.get("/health/ready", response_model=DeploymentReadiness)
+@app.get("/health/ready", response_model=DeploymentReadiness, tags=["Health"])
 async def health_ready():
     """
     Kubernetes readinessProbe endpoint.
@@ -720,7 +829,7 @@ async def health_ready():
     return await deployment_manager.get_readiness_check()
 
 
-@app.get("/health/live")
+@app.get("/health/live", tags=["Health"])
 async def health_live():
     """
     Kubernetes livenessProbe endpoint.
@@ -734,7 +843,7 @@ async def health_live():
     return await deployment_manager.get_liveness_check()
 
 
-@app.get("/deployment/metadata", response_model=DeploymentMetadata)
+@app.get("/deployment/metadata", response_model=DeploymentMetadata, tags=["Deployment"])
 async def get_deployment_metadata():
     """
     Get deployment metadata including version and API versioning information.
@@ -756,7 +865,7 @@ async def get_deployment_metadata():
     return deployment_manager.get_deployment_metadata()
 
 
-@app.get("/deployment/info")
+@app.get("/deployment/info", tags=["Deployment"])
 async def get_deployment_info():
     """
     Get deployment and blue-green environment information.
@@ -789,7 +898,7 @@ async def get_deployment_info():
     }
 
 
-@app.post("/deployment/shutdown", response_model=GracefulShutdownStatus)
+@app.post("/deployment/shutdown", response_model=GracefulShutdownStatus, tags=["Deployment"])
 async def initiate_graceful_shutdown(request: GracefulShutdownRequest):
     """
     Initiate graceful shutdown of the service.
@@ -822,7 +931,7 @@ async def initiate_graceful_shutdown(request: GracefulShutdownRequest):
     return await deployment_manager.get_shutdown_status()
 
 
-@app.get("/deployment/shutdown/status", response_model=GracefulShutdownStatus)
+@app.get("/deployment/shutdown/status", response_model=GracefulShutdownStatus, tags=["Deployment"])
 async def get_shutdown_status():
     """
     Get current graceful shutdown status.
@@ -833,7 +942,7 @@ async def get_shutdown_status():
     return await deployment_manager.get_shutdown_status()
 
 
-@app.get("/api/versions", response_model=ApiVersionInfo)
+@app.get("/api/versions", response_model=ApiVersionInfo, tags=["API Info"])
 async def get_api_versions():
     """
     Get API version information and migration guides.
@@ -858,7 +967,7 @@ async def get_api_versions():
     )
 
 
-@app.post("/cost-estimate", response_model=CostEstimateResponse)
+@app.post("/cost-estimate", response_model=CostEstimateResponse, tags=["Cost Estimation"])
 async def estimate_cost(request: CostEstimateRequest):
     """
     Estimate the cost for a specific model based on token usage.
@@ -908,7 +1017,7 @@ async def estimate_cost(request: CostEstimateRequest):
     )
 
 
-@app.post("/cost-estimate/batch", response_model=BatchCostEstimateResponse)
+@app.post("/cost-estimate/batch", response_model=BatchCostEstimateResponse, tags=["Cost Estimation"])
 async def estimate_cost_batch(request: BatchCostEstimateRequest):
     """
     Compare cost estimates across multiple models.
@@ -996,7 +1105,7 @@ async def estimate_cost_batch(request: BatchCostEstimateRequest):
     )
 
 
-@app.get("/performance", response_model=PerformanceResponse)
+@app.get("/performance", response_model=PerformanceResponse, tags=["Performance"])
 async def get_performance(
     provider: Optional[str] = Query(
         None,
@@ -1124,7 +1233,7 @@ async def get_performance(
     )
 
 
-@app.get("/use-cases", response_model=UseCaseResponse)
+@app.get("/use-cases", response_model=UseCaseResponse, tags=["Performance"])
 async def get_use_cases(
     provider: Optional[str] = Query(
         None,
@@ -1189,7 +1298,7 @@ async def get_use_cases(
     )
 
 
-@app.post("/router/recommend", response_model=RouterResponse)
+@app.post("/router/recommend", response_model=RouterResponse, tags=["Router"])
 async def router_recommend(req: RouterRequest, request: Request):
     """
     Recommend the optimal LLM model for the caller's constraints.
@@ -1263,7 +1372,7 @@ async def router_recommend(req: RouterRequest, request: Request):
     )
 
 
-@app.get("/telemetry/savings", response_model=SavingsResponse)
+@app.get("/telemetry/savings", response_model=SavingsResponse, tags=["Telemetry"])
 async def telemetry_savings(
     org_id: Optional[str] = Query(None, description="Filter by organisation ID"),
     days: int = Query(30, ge=1, le=365, description="Look-back window in days"),
@@ -1290,7 +1399,7 @@ async def telemetry_savings(
     )
 
 
-@app.post("/router/feedback", response_model=RouterFeedbackResponse)
+@app.post("/router/feedback", response_model=RouterFeedbackResponse, tags=["Router"])
 async def router_feedback(req: RouterFeedbackRequest):
     """
     Record feedback for a prior routing recommendation.
@@ -1310,7 +1419,7 @@ async def router_feedback(req: RouterFeedbackRequest):
     return RouterFeedbackResponse(routing_id=req.routing_id, recorded=True)
 
 
-@app.post("/router/recommend/stream")
+@app.post("/router/recommend/stream", tags=["Router"])
 async def router_recommend_stream(req: RouterRequest, request: Request):
     """
     Streaming version of /router/recommend — emits SSE progress events.
@@ -1441,7 +1550,7 @@ async def router_recommend_stream(req: RouterRequest, request: Request):
     )
 
 
-@app.get("/rate-limits/tiers")
+@app.get("/rate-limits/tiers", tags=["API Info"])
 async def rate_limit_tiers():
     """Return the rate limit (requests/minute) for each API key tier."""
     return {
@@ -1475,7 +1584,7 @@ async def billing_index():
     return FileResponse(str(html_path))
 
 
-@app.post("/billing/signup", response_model=SignupResponse)
+@app.post("/billing/signup", response_model=SignupResponse, tags=["Billing"])
 async def billing_signup(req: SignupRequest):
     """
     Free-tier signup — create (or retrieve) a customer record and return an API key.
@@ -1495,7 +1604,7 @@ async def billing_signup(req: SignupRequest):
     )
 
 
-@app.post("/billing/checkout", response_model=CheckoutResponse)
+@app.post("/billing/checkout", response_model=CheckoutResponse, tags=["Billing"])
 async def billing_checkout(req: CheckoutRequest, request: Request):
     """
     Create a Stripe Checkout session for the requested tier (pro|enterprise).
@@ -1530,7 +1639,7 @@ async def billing_checkout(req: CheckoutRequest, request: Request):
     return CheckoutResponse(checkout_url=session.url)
 
 
-@app.post("/billing/webhook")
+@app.post("/billing/webhook", tags=["Billing"])
 async def billing_webhook(request: Request):
     """
     Stripe webhook receiver.
@@ -1594,7 +1703,7 @@ async def billing_webhook(request: Request):
     return {"ok": True}
 
 
-@app.get("/billing/portal", response_model=BillingPortalResponse)
+@app.get("/billing/portal", response_model=BillingPortalResponse, tags=["Billing"])
 async def billing_portal(request: Request):
     """
     Create a Stripe Customer Portal session for the authenticated customer.
@@ -1619,7 +1728,7 @@ async def billing_portal(request: Request):
     return BillingPortalResponse(portal_url=portal.url)
 
 
-@app.get("/billing/me", response_model=CustomerDashboard)
+@app.get("/billing/me", response_model=CustomerDashboard, tags=["Billing"])
 async def billing_me(request: Request):
     """
     Return the authenticated customer's dashboard data.
@@ -1653,7 +1762,7 @@ async def billing_me(request: Request):
     )
 
 
-@app.get("/telemetry", response_model=TelemetryResponse)
+@app.get("/telemetry", response_model=TelemetryResponse, tags=["Telemetry"])
 async def get_telemetry():
     """
     Get real-time telemetry data including endpoint usage, provider adoption, feature usage,
@@ -1763,7 +1872,7 @@ async def get_telemetry():
 # ------------------------------------------------------------------
 
 
-@app.post("/agent/chat", response_model=AgentChatResponse)
+@app.post("/agent/chat", response_model=AgentChatResponse, tags=["Agent"])
 async def agent_chat(request: AgentChatRequest):
     """
     Natural language interface to the LLM Pricing Agent.
@@ -1809,7 +1918,7 @@ async def agent_chat(request: AgentChatRequest):
     )
 
 
-@app.post("/agent/chat/stream")
+@app.post("/agent/chat/stream", tags=["Agent"])
 async def agent_chat_stream(request: AgentChatRequest):
     """SSE streaming version of /agent/chat. Emits progress events as the ReAct loop runs."""
     async def generate():
@@ -1857,7 +1966,7 @@ async def agent_chat_stream(request: AgentChatRequest):
 # Historical pricing endpoints
 # ---------------------------------------------------------------------------
 
-@app.get("/pricing/history", response_model=PricingHistoryResponse)
+@app.get("/pricing/history", response_model=PricingHistoryResponse, tags=["Pricing History"])
 async def pricing_history(
     model_name: Optional[str] = Query(None, description="Filter by model name"),
     provider: Optional[str] = Query(None, description="Filter by provider"),
@@ -1878,7 +1987,7 @@ async def pricing_history(
     return PricingHistoryResponse(**result)
 
 
-@app.get("/pricing/trends", response_model=PricingTrendsResponse)
+@app.get("/pricing/trends", response_model=PricingTrendsResponse, tags=["Pricing History"])
 async def pricing_trends(
     days: int = Query(30, ge=1, le=365, description="Look-back window in days"),
     limit: int = Query(20, ge=1, le=100, description="Max models to return"),
@@ -1899,7 +2008,7 @@ async def pricing_trends(
 # Pricing history export endpoint
 # ---------------------------------------------------------------------------
 
-@app.get("/pricing/history/export")
+@app.get("/pricing/history/export", tags=["Pricing History"])
 async def pricing_history_export(
     format: str = Query("csv", pattern="^(csv|json)$", description="Output format: 'csv' or 'json'"),
     model_name: Optional[str] = Query(None, description="Filter by model name"),
@@ -1977,7 +2086,7 @@ async def pricing_history_export(
 # Pricing alert endpoints
 # ---------------------------------------------------------------------------
 
-@app.post("/pricing/alerts", response_model=PricingAlertRecord, status_code=201)
+@app.post("/pricing/alerts", response_model=PricingAlertRecord, status_code=201, tags=["Pricing Alerts"])
 async def create_pricing_alert(request: PricingAlertRequest):
     """
     Register a webhook alert for price changes.
@@ -1998,7 +2107,7 @@ async def create_pricing_alert(request: PricingAlertRequest):
     return PricingAlertRecord(**record)
 
 
-@app.get("/pricing/alerts", response_model=PricingAlertListResponse)
+@app.get("/pricing/alerts", response_model=PricingAlertListResponse, tags=["Pricing Alerts"])
 async def list_pricing_alerts():
     """Return all registered price-change alert webhooks."""
     svc = get_pricing_alert_service()
@@ -2006,7 +2115,7 @@ async def list_pricing_alerts():
     return PricingAlertListResponse(alerts=alerts, total=len(alerts))
 
 
-@app.delete("/pricing/alerts/{alert_id}", status_code=204)
+@app.delete("/pricing/alerts/{alert_id}", status_code=204, tags=["Pricing Alerts"])
 async def delete_pricing_alert(alert_id: int):
     """Delete a registered alert by ID."""
     svc = get_pricing_alert_service()
@@ -2020,7 +2129,7 @@ async def delete_pricing_alert(alert_id: int):
 # ---------------------------------------------------------------------------
 
 
-@app.get("/agent/conversations", response_model=ConversationListResponse)
+@app.get("/agent/conversations", response_model=ConversationListResponse, tags=["Agent"])
 async def list_conversations():
     """
     List all stored chat conversations with metadata.
@@ -2037,7 +2146,7 @@ async def list_conversations():
     return ConversationListResponse(conversations=items, total=len(items))
 
 
-@app.delete("/agent/conversations/{conversation_id}", status_code=204)
+@app.delete("/agent/conversations/{conversation_id}", status_code=204, tags=["Agent"])
 async def delete_conversation(conversation_id: str):
     """
     Delete a stored conversation by its ID.
@@ -2060,7 +2169,7 @@ async def delete_conversation(conversation_id: str):
 # ---------------------------------------------------------------------------
 
 
-@app.get("/pricing/alerts/signing-info")
+@app.get("/pricing/alerts/signing-info", tags=["Pricing Alerts"])
 async def webhook_signing_info():
     """
     Return information about webhook payload signing.
@@ -2087,7 +2196,7 @@ async def webhook_signing_info():
     }
 
 
-@app.get("/pricing/public")
+@app.get("/pricing/public", tags=["Pricing"])
 async def get_public_pricing(
     models: Optional[str] = Query(
         None,
@@ -2148,7 +2257,7 @@ async def admin_index():
     return FileResponse(str(html_path), media_type="text/html")
 
 
-@app.get("/admin/stats")
+@app.get("/admin/stats", tags=["Admin"])
 async def admin_stats():
     """
     Aggregated server statistics for the admin dashboard.
@@ -2200,7 +2309,7 @@ async def admin_stats():
     }
 
 
-@app.get("/admin/rate-limits")
+@app.get("/admin/rate-limits", tags=["Admin"])
 async def admin_rate_limits():
     """
     Current rate-limit consumer snapshot.
@@ -2226,7 +2335,7 @@ async def admin_rate_limits():
     }
 
 
-@app.get("/admin/customers")
+@app.get("/admin/customers", tags=["Admin"])
 async def admin_customers():
     """
     List all billing customers for the admin dashboard.
@@ -2306,7 +2415,7 @@ def _format_routing_recommendation(requested_model: str, result) -> str:
     return "\n".join(lines)
 
 
-@app.post("/v1/chat/completions")
+@app.post("/v1/chat/completions", tags=["OpenAI Proxy"])
 async def openai_proxy(req: _ProxyRequest):
     """
     OpenAI-compatible routing proxy.
