@@ -1,12 +1,12 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.39.0 | **Last updated**: 2026-05-04
+**Version**: v1.41.0 | **Last updated**: 2026-05-05
 
 ---
 
 ## System Overview
 
-A production FastAPI service that aggregates real-time LLM pricing data from 12 providers (87+ models), exposes it via REST API and MCP protocol, and layers on a ReAct agent, self-serve SaaS billing, and a suite of browser UIs.
+A production FastAPI service that aggregates real-time LLM pricing data from 17 providers (110+ models), exposes it via REST API and MCP protocol, and layers on a ReAct agent, self-serve SaaS billing, and a suite of browser UIs.
 
 - **Primary deployment**: Fly.io (`llm-pricing-api.fly.dev`) — shared-cpu-1x, 512 MB, ~$3.40/mo
 - **Secondary deployment**: Azure App Service (`llm-pricing-api.azurewebsites.net`) — parallel cutover pending
@@ -40,7 +40,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 12 
 │  Pricing Services   │  │  Agent / RAG   │  │  Billing Service           │
 │                     │  │                │  │                            │
 │  PricingAggregator  │  │  ReAct loop    │  │  BillingService            │
-│  12 provider impls  │  │  TF-IDF RAG    │  │  billing.db (SQLite)       │
+│  17 provider impls  │  │  TF-IDF RAG    │  │  billing.db (SQLite)       │
 │  PricingHistory     │  │  Conv. memory  │  │  Free signup → API key     │
 │  BenchmarkService   │  │  LLM backend   │  │  Stripe checkout/webhook   │
 │  Router             │  │  (GPT-4o-mini  │  │  Tier sync (free/pro/ent)  │
@@ -106,7 +106,12 @@ llm-pricing-mcp-server/
 │       ├── perplexity_pricing.py
 │       ├── bedrock_pricing.py
 │       ├── anyscale_pricing.py
-│       └── ai21_pricing.py
+│       ├── ai21_pricing.py
+│       ├── xai_pricing.py
+│       ├── deepseek_pricing.py
+│       ├── cerebras_pricing.py
+│       ├── nvidia_pricing.py
+│       └── replicate_pricing.py
 │
 ├── agent/
 │   ├── pricing_agent.py             # High-level agent entry point
