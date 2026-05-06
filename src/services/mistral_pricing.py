@@ -85,6 +85,8 @@ class MistralPricingService(BasePricingProvider):
         """
         super().__init__("Mistral AI")
         self.api_key = api_key or getattr(settings, 'mistral_api_key', None)
+        self._live_model_api_endpoint = "https://api.mistral.ai/v1/models"
+        self._live_model_api_key = self.api_key
 
     async def fetch_pricing_data(self) -> List[PricingMetrics]:
         """

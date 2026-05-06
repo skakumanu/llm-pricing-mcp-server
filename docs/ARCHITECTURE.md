@@ -1,12 +1,12 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.39.0 | **Last updated**: 2026-05-04
+**Version**: v1.42.0 | **Last updated**: 2026-05-05
 
 ---
 
 ## System Overview
 
-A production FastAPI service that aggregates real-time LLM pricing data from 12 providers (87+ models), exposes it via REST API and MCP protocol, and layers on a ReAct agent, self-serve SaaS billing, and a suite of browser UIs.
+A production FastAPI service that aggregates real-time LLM pricing data from 17 providers (110+ models), exposes it via REST API and MCP protocol, and layers on a ReAct agent, self-serve SaaS billing, and a suite of browser UIs.
 
 - **Primary deployment**: Fly.io (`llm-pricing-api.fly.dev`) — shared-cpu-1x, 512 MB, ~$3.40/mo
 - **Secondary deployment**: Azure App Service (`llm-pricing-api.azurewebsites.net`) — parallel cutover pending
@@ -40,7 +40,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 12 
 │  Pricing Services   │  │  Agent / RAG   │  │  Billing Service           │
 │                     │  │                │  │                            │
 │  PricingAggregator  │  │  ReAct loop    │  │  BillingService            │
-│  12 provider impls  │  │  TF-IDF RAG    │  │  billing.db (SQLite)       │
+│  17 provider impls  │  │  TF-IDF RAG    │  │  billing.db (SQLite)       │
 │  PricingHistory     │  │  Conv. memory  │  │  Free signup → API key     │
 │  BenchmarkService   │  │  LLM backend   │  │  Stripe checkout/webhook   │
 │  Router             │  │  (GPT-4o-mini  │  │  Tier sync (free/pro/ent)  │
@@ -106,7 +106,12 @@ llm-pricing-mcp-server/
 │       ├── perplexity_pricing.py
 │       ├── bedrock_pricing.py
 │       ├── anyscale_pricing.py
-│       └── ai21_pricing.py
+│       ├── ai21_pricing.py
+│       ├── xai_pricing.py
+│       ├── deepseek_pricing.py
+│       ├── cerebras_pricing.py
+│       ├── nvidia_pricing.py
+│       └── replicate_pricing.py
 │
 ├── agent/
 │   ├── pricing_agent.py             # High-level agent entry point
@@ -184,9 +189,15 @@ Incoming request
 ```
 
 ### 3. Provider Pattern
-Each of 12 LLM providers implements `BasePricingProvider`:
-- `fetch_pricing() -> list[PricingMetrics]`
-- `get_models() -> list[str]`
+Each of 17 LLM providers implements `BasePricingProvider`:
+- `fetch_pricing_data() -> list[PricingMetrics]` — returns static pricing (with live data fallback where available)
+- `get_pricing_with_status()` — wraps `fetch_pricing_data()`, applies **live model sync**, returns `(data, status)`
+
+#### Live Model Sync (automatic, per provider)
+`BasePricingProvider._fetch_live_model_ids()` queries the provider's `/v1/models` API (cached 6 h).
+`_apply_live_filter()` removes models absent from the live list — keeps any model whose name is an exact
+or prefix match in the live set. Falls back to the full static list if the API is unreachable or no key is set.
+Enabled for: OpenAI, Anthropic, Groq, Mistral AI, Together AI, Fireworks AI, xAI, DeepSeek, Cerebras, NVIDIA NIM.
 
 `PricingAggregatorService` fetches all providers concurrently (`asyncio.gather`), merges results, and caches with a configurable TTL. Adding a new provider = new file + registration in aggregator.
 

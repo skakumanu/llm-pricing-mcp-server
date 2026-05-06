@@ -14,6 +14,11 @@ from src.services.perplexity_pricing import PerplexityPricingService
 from src.services.ai21_pricing import AI21PricingService
 from src.services.anyscale_pricing import AnyscalePricingService
 from src.services.bedrock_pricing import BedrockPricingService
+from src.services.xai_pricing import XAIPricingService
+from src.services.deepseek_pricing import DeepSeekPricingService
+from src.services.cerebras_pricing import CerebrasPricingService
+from src.services.nvidia_pricing import NVIDIAPricingService
+from src.services.replicate_pricing import ReplicatePricingService
 
 
 class PricingAggregatorService:
@@ -33,6 +38,11 @@ class PricingAggregatorService:
         self.ai21_service = AI21PricingService()
         self.anyscale_service = AnyscalePricingService()
         self.bedrock_service = BedrockPricingService()
+        self.xai_service = XAIPricingService()
+        self.deepseek_service = DeepSeekPricingService()
+        self.cerebras_service = CerebrasPricingService()
+        self.nvidia_service = NVIDIAPricingService()
+        self.replicate_service = ReplicatePricingService()
 
     async def get_all_pricing_async(self) -> tuple[List[PricingMetrics], List[ProviderStatusInfo]]:
         """
@@ -60,6 +70,11 @@ class PricingAggregatorService:
             self.ai21_service.get_pricing_with_status(),
             self.anyscale_service.get_pricing_with_status(),
             self.bedrock_service.get_pricing_with_status(),
+            self.xai_service.get_pricing_with_status(),
+            self.deepseek_service.get_pricing_with_status(),
+            self.cerebras_service.get_pricing_with_status(),
+            self.nvidia_service.get_pricing_with_status(),
+            self.replicate_service.get_pricing_with_status(),
         ]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -133,6 +148,18 @@ class PricingAggregatorService:
             pricing_data, status = await self.ai21_service.get_pricing_with_status()
         elif provider_lower == "anyscale":
             pricing_data, status = await self.anyscale_service.get_pricing_with_status()
+        elif provider_lower == "bedrock" or provider_lower == "amazon bedrock":
+            pricing_data, status = await self.bedrock_service.get_pricing_with_status()
+        elif provider_lower == "xai" or provider_lower == "x.ai":
+            pricing_data, status = await self.xai_service.get_pricing_with_status()
+        elif provider_lower == "deepseek":
+            pricing_data, status = await self.deepseek_service.get_pricing_with_status()
+        elif provider_lower == "cerebras":
+            pricing_data, status = await self.cerebras_service.get_pricing_with_status()
+        elif provider_lower == "nvidia" or provider_lower == "nvidia nim":
+            pricing_data, status = await self.nvidia_service.get_pricing_with_status()
+        elif provider_lower == "replicate":
+            pricing_data, status = await self.replicate_service.get_pricing_with_status()
         else:
             return [], []
 

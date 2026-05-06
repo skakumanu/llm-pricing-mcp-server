@@ -3,7 +3,7 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A production-ready **Model Context Protocol (MCP)** server for LLM pricing data. Provides a RESTful API (FastAPI), **15 MCP tools** over STDIO and HTTP, a conversational Agent + RAG pipeline, browser-based UIs, and a self-serve billing dashboard — for pricing data from **12 major LLM providers**.
+A production-ready **Model Context Protocol (MCP)** server for LLM pricing data. Provides a RESTful API (FastAPI), **15 MCP tools** over STDIO and HTTP, a conversational Agent + RAG pipeline, browser-based UIs, and a self-serve billing dashboard — for pricing data from **17 major LLM providers**.
 
 **Live at**: https://llm-pricing-api.fly.dev
 
@@ -18,7 +18,7 @@ A production-ready **Model Context Protocol (MCP)** server for LLM pricing data.
 - MCP Protocol version: `2024-11-05`
 
 ### RESTful API
-- Real-time pricing from 12 providers (87+ models), async fetching with smart caching
+- Real-time pricing from 17 providers (110+ models), async fetching with smart caching
 - Cost estimation: single model (`POST /cost-estimate`) and batch comparison (`POST /cost-estimate/batch`)
 - Performance metrics, use-case recommendations, pricing history, trends
 - Router recommendation (`POST /router/recommend`) with feedback loop

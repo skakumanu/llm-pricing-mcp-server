@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     perplexity_api_key: Optional[str] = None
     ai21_api_key: Optional[str] = None
     anyscale_api_key: Optional[str] = None
+    xai_api_key: Optional[str] = None
+    deepseek_api_key: Optional[str] = None
+    cerebras_api_key: Optional[str] = None
+    nvidia_api_key: Optional[str] = None
+    replicate_api_key: Optional[str] = None
 
     # API Authentication
     mcp_api_key: Optional[str] = None
@@ -40,7 +45,7 @@ class Settings(BaseSettings):
     app_name: str = "LLM Pricing MCP Server"
     app_version: str = __version__
     app_description: str = (
-        "Dynamic pricing comparison server for LLM models across 12 major providers"
+        "Dynamic pricing comparison server for LLM models across 17 major providers"
         " with geolocation and health checks"
     )
 
