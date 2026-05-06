@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     cerebras_api_key: Optional[str] = None
     nvidia_api_key: Optional[str] = None
     replicate_api_key: Optional[str] = None
+    salesforce_api_key: Optional[str] = None
+    promptql_api_key: Optional[str] = None
+    snowflake_api_key: Optional[str] = None
+    oracle_api_key: Optional[str] = None
 
     # API Authentication
     mcp_api_key: Optional[str] = None
