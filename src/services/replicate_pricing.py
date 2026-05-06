@@ -3,6 +3,7 @@ from typing import List, Optional
 import logging
 from src.models.pricing import PricingMetrics
 from src.services.base_provider import BasePricingProvider
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,9 @@ class ReplicatePricingService(BasePricingProvider):
     def __init__(self, api_key: Optional[str] = None):
         """Initialize the Replicate pricing service."""
         super().__init__("Replicate")
-        self.api_key = api_key
+        self.api_key = api_key or getattr(settings, 'replicate_api_key', None)
+        # Replicate uses a paginated API with a different response schema;
+        # live sync is not enabled — static pricing is used directly.
 
     async def fetch_pricing_data(self) -> List[PricingMetrics]:
         """

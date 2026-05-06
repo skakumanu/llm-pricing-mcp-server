@@ -3,6 +3,7 @@ from typing import List, Optional
 import logging
 from src.models.pricing import PricingMetrics
 from src.services.base_provider import BasePricingProvider
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,9 @@ class XAIPricingService(BasePricingProvider):
     def __init__(self, api_key: Optional[str] = None):
         """Initialize the xAI pricing service."""
         super().__init__("xAI")
-        self.api_key = api_key
+        self.api_key = api_key or getattr(settings, 'xai_api_key', None)
+        self._live_model_api_endpoint = "https://api.x.ai/v1/models"
+        self._live_model_api_key = self.api_key
 
     async def fetch_pricing_data(self) -> List[PricingMetrics]:
         """

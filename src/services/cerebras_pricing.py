@@ -3,6 +3,7 @@ from typing import List, Optional
 import logging
 from src.models.pricing import PricingMetrics
 from src.services.base_provider import BasePricingProvider
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,9 @@ class CerebrasPricingService(BasePricingProvider):
     def __init__(self, api_key: Optional[str] = None):
         """Initialize the Cerebras pricing service."""
         super().__init__("Cerebras")
-        self.api_key = api_key
+        self.api_key = api_key or getattr(settings, 'cerebras_api_key', None)
+        self._live_model_api_endpoint = "https://api.cerebras.ai/v1/models"
+        self._live_model_api_key = self.api_key
 
     async def fetch_pricing_data(self) -> List[PricingMetrics]:
         """
