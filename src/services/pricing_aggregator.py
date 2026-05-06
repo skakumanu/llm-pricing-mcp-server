@@ -19,6 +19,10 @@ from src.services.deepseek_pricing import DeepSeekPricingService
 from src.services.cerebras_pricing import CerebrasPricingService
 from src.services.nvidia_pricing import NVIDIAPricingService
 from src.services.replicate_pricing import ReplicatePricingService
+from src.services.salesforce_pricing import SalesforcePricingService
+from src.services.promptql_pricing import PromptQLPricingService
+from src.services.snowflake_pricing import SnowflakePricingService
+from src.services.oracle_pricing import OraclePricingService
 
 
 class PricingAggregatorService:
@@ -43,6 +47,10 @@ class PricingAggregatorService:
         self.cerebras_service = CerebrasPricingService()
         self.nvidia_service = NVIDIAPricingService()
         self.replicate_service = ReplicatePricingService()
+        self.salesforce_service = SalesforcePricingService()
+        self.promptql_service = PromptQLPricingService()
+        self.snowflake_service = SnowflakePricingService()
+        self.oracle_service = OraclePricingService()
 
     async def get_all_pricing_async(self) -> tuple[List[PricingMetrics], List[ProviderStatusInfo]]:
         """
@@ -75,6 +83,10 @@ class PricingAggregatorService:
             self.cerebras_service.get_pricing_with_status(),
             self.nvidia_service.get_pricing_with_status(),
             self.replicate_service.get_pricing_with_status(),
+            self.salesforce_service.get_pricing_with_status(),
+            self.promptql_service.get_pricing_with_status(),
+            self.snowflake_service.get_pricing_with_status(),
+            self.oracle_service.get_pricing_with_status(),
         ]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -160,6 +172,14 @@ class PricingAggregatorService:
             pricing_data, status = await self.nvidia_service.get_pricing_with_status()
         elif provider_lower == "replicate":
             pricing_data, status = await self.replicate_service.get_pricing_with_status()
+        elif provider_lower == "salesforce" or provider_lower == "salesforce einstein":
+            pricing_data, status = await self.salesforce_service.get_pricing_with_status()
+        elif provider_lower == "promptql":
+            pricing_data, status = await self.promptql_service.get_pricing_with_status()
+        elif provider_lower == "snowflake" or provider_lower == "snowflake cortex":
+            pricing_data, status = await self.snowflake_service.get_pricing_with_status()
+        elif provider_lower == "oracle" or provider_lower == "oracle oci":
+            pricing_data, status = await self.oracle_service.get_pricing_with_status()
         else:
             return [], []
 
