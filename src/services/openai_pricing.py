@@ -83,6 +83,8 @@ class OpenAIPricingService(BasePricingProvider):
         """
         super().__init__("OpenAI")
         self.api_key = api_key or settings.openai_api_key
+        self._live_model_api_endpoint = "https://api.openai.com/v1/models"
+        self._live_model_api_key = self.api_key
 
     async def fetch_pricing_data(self) -> List[PricingMetrics]:
         """

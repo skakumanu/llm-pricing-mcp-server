@@ -87,6 +87,10 @@ class AnthropicPricingService(BasePricingProvider):
         """
         super().__init__("Anthropic")
         self.api_key = api_key or settings.anthropic_api_key
+        self._live_model_api_endpoint = "https://api.anthropic.com/v1/models"
+        self._live_model_api_key = self.api_key
+        self._live_model_auth_header = "x-api-key"
+        self._live_model_extra_headers = {"anthropic-version": "2023-06-01"}
 
     async def fetch_pricing_data(self) -> List[PricingMetrics]:
         """

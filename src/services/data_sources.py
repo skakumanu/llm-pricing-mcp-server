@@ -146,6 +146,51 @@ PRICING_SOURCES = {
         requires_auth=False,  # Pricing page is public
         cache_ttl_seconds=7200,
     ),
+    "xAI": PricingDataSource(
+        provider="xAI",
+        source_type=DataSourceType.HYBRID,
+        api_endpoint="https://api.x.ai/v1/models",
+        pricing_url="https://x.ai/api",
+        public_health_check="https://x.ai/",
+        requires_auth=True,
+        cache_ttl_seconds=7200,
+    ),
+    "DeepSeek": PricingDataSource(
+        provider="DeepSeek",
+        source_type=DataSourceType.HYBRID,
+        api_endpoint="https://api.deepseek.com/v1/models",
+        pricing_url="https://platform.deepseek.com/docs/pricing",
+        public_health_check="https://platform.deepseek.com/",
+        requires_auth=True,
+        cache_ttl_seconds=7200,
+    ),
+    "Cerebras": PricingDataSource(
+        provider="Cerebras",
+        source_type=DataSourceType.HYBRID,
+        api_endpoint="https://api.cerebras.ai/v1/models",
+        pricing_url="https://inference.cerebras.ai/",
+        public_health_check="https://inference.cerebras.ai/",
+        requires_auth=True,
+        cache_ttl_seconds=7200,
+    ),
+    "NVIDIA NIM": PricingDataSource(
+        provider="NVIDIA NIM",
+        source_type=DataSourceType.HYBRID,
+        api_endpoint="https://integrate.api.nvidia.com/v1/models",
+        pricing_url="https://build.nvidia.com/explore/discover",
+        public_health_check="https://build.nvidia.com/",
+        requires_auth=True,
+        cache_ttl_seconds=7200,
+    ),
+    "Replicate": PricingDataSource(
+        provider="Replicate",
+        source_type=DataSourceType.HYBRID,
+        api_endpoint="https://api.replicate.com/v1/models",
+        pricing_url="https://replicate.com/pricing",
+        public_health_check="https://status.replicate.com/",
+        requires_auth=True,
+        cache_ttl_seconds=7200,
+    ),
 }
 
 # Performance data sources for each provider
@@ -244,6 +289,46 @@ PERFORMANCE_SOURCES = {
         api_endpoint="https://bedrock.amazonaws.com/",  # Requires AWS credentials
         health_check_endpoint="https://status.aws.amazon.com/",
         public_status_page="https://status.aws.amazon.com/",  # Public: no auth
+        cache_ttl_seconds=300,
+    ),
+    "xAI": PerformanceDataSource(
+        provider="xAI",
+        source_type=DataSourceType.HYBRID,
+        api_endpoint="https://api.x.ai/v1/models",
+        health_check_endpoint="https://api.x.ai/v1/models",
+        public_status_page="https://x.ai/",
+        cache_ttl_seconds=300,
+    ),
+    "DeepSeek": PerformanceDataSource(
+        provider="DeepSeek",
+        source_type=DataSourceType.HYBRID,
+        api_endpoint="https://api.deepseek.com/v1/models",
+        health_check_endpoint="https://api.deepseek.com/v1/models",
+        public_status_page="https://platform.deepseek.com/",
+        cache_ttl_seconds=300,
+    ),
+    "Cerebras": PerformanceDataSource(
+        provider="Cerebras",
+        source_type=DataSourceType.HYBRID,
+        api_endpoint="https://api.cerebras.ai/v1/models",
+        health_check_endpoint="https://api.cerebras.ai/v1/models",
+        public_status_page="https://inference.cerebras.ai/",
+        cache_ttl_seconds=300,
+    ),
+    "NVIDIA NIM": PerformanceDataSource(
+        provider="NVIDIA NIM",
+        source_type=DataSourceType.HYBRID,
+        api_endpoint="https://integrate.api.nvidia.com/v1/models",
+        health_check_endpoint="https://integrate.api.nvidia.com/v1/models",
+        public_status_page="https://build.nvidia.com/",
+        cache_ttl_seconds=300,
+    ),
+    "Replicate": PerformanceDataSource(
+        provider="Replicate",
+        source_type=DataSourceType.HYBRID,
+        api_endpoint="https://api.replicate.com/v1/models",
+        health_check_endpoint="https://api.replicate.com/v1/models",
+        public_status_page="https://status.replicate.com/",
         cache_ttl_seconds=300,
     ),
 }

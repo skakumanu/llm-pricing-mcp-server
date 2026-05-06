@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.41.0 | **Last updated**: 2026-05-05
+**Version**: v1.42.0 | **Last updated**: 2026-05-05
 
 ---
 
@@ -189,9 +189,15 @@ Incoming request
 ```
 
 ### 3. Provider Pattern
-Each of 12 LLM providers implements `BasePricingProvider`:
-- `fetch_pricing() -> list[PricingMetrics]`
-- `get_models() -> list[str]`
+Each of 17 LLM providers implements `BasePricingProvider`:
+- `fetch_pricing_data() -> list[PricingMetrics]` — returns static pricing (with live data fallback where available)
+- `get_pricing_with_status()` — wraps `fetch_pricing_data()`, applies **live model sync**, returns `(data, status)`
+
+#### Live Model Sync (automatic, per provider)
+`BasePricingProvider._fetch_live_model_ids()` queries the provider's `/v1/models` API (cached 6 h).
+`_apply_live_filter()` removes models absent from the live list — keeps any model whose name is an exact
+or prefix match in the live set. Falls back to the full static list if the API is unreachable or no key is set.
+Enabled for: OpenAI, Anthropic, Groq, Mistral AI, Together AI, Fireworks AI, xAI, DeepSeek, Cerebras, NVIDIA NIM.
 
 `PricingAggregatorService` fetches all providers concurrently (`asyncio.gather`), merges results, and caches with a configurable TTL. Adding a new provider = new file + registration in aggregator.
 
