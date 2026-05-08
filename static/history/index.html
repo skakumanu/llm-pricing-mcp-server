@@ -246,7 +246,30 @@
     </div>
     <div class="field">
       <label for="providerInput">Provider</label>
-      <input id="providerInput" type="text" placeholder="e.g. openai" autocomplete="off" />
+      <input id="providerInput" type="text" placeholder="e.g. openai" list="provider-suggestions" autocomplete="off" />
+      <datalist id="provider-suggestions">
+        <option value="openai">
+        <option value="anthropic">
+        <option value="google">
+        <option value="groq">
+        <option value="mistral">
+        <option value="cohere">
+        <option value="together">
+        <option value="fireworks">
+        <option value="perplexity">
+        <option value="ai21">
+        <option value="anyscale">
+        <option value="bedrock">
+        <option value="xai">
+        <option value="deepseek">
+        <option value="cerebras">
+        <option value="nvidia">
+        <option value="replicate">
+        <option value="salesforce">
+        <option value="promptql">
+        <option value="snowflake">
+        <option value="oracle">
+      </datalist>
     </div>
     <div class="field" style="max-width:130px">
       <label for="daysSelect">Window</label>

@@ -30,9 +30,10 @@
     display: flex; align-items: center; gap: 4px;
     padding: 0 16px; height: 52px;
   }
-  .nav-brand { font-weight: 700; font-size: 15px; color: var(--text); text-decoration: none; margin-right: 8px; }
+  .nav-brand { font-weight: 700; font-size: 15px; color: var(--accent); text-decoration: none; margin-right: 8px; }
   .main-nav a { color: var(--muted); text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: 13px; transition: all .15s; white-space: nowrap; }
-  .main-nav a:hover, .main-nav a.active { background: var(--surface2); color: var(--text); }
+  .main-nav a:hover { background: var(--surface2); color: var(--text); }
+  .main-nav a.active { background: var(--surface2); color: var(--accent); font-weight: 600; }
   .nav-spacer { flex: 1; }
   .hamburger { display: none; background: none; border: none; color: var(--text); font-size: 20px; cursor: pointer; padding: 4px 8px; }
   .nav-links { display: flex; align-items: center; gap: 2px; }
