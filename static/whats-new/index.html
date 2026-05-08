@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>What's New — LLM Pricing API</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3347;
+    --accent: #7c6af7;
+    --accent2: #5b4fe0;
+    --text: #e2e8f0;
+    --muted: #8892a4;
+    --success: #48bb78;
+    --warn: #ed8936;
+    --danger: #f56565;
+    --info: #63b3ed;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 1.6; }
+
+  /* ── Nav ── */
+  .main-nav {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 4px;
+    padding: 0 16px; height: 52px;
+  }
+  .nav-brand { font-weight: 700; font-size: 15px; color: var(--text); text-decoration: none; margin-right: 8px; }
+  .main-nav a { color: var(--muted); text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: 13px; transition: all .15s; white-space: nowrap; }
+  .main-nav a:hover, .main-nav a.active { background: var(--surface2); color: var(--text); }
+  .nav-spacer { flex: 1; }
+  .hamburger { display: none; background: none; border: none; color: var(--text); font-size: 20px; cursor: pointer; padding: 4px 8px; }
+  .nav-links { display: flex; align-items: center; gap: 2px; }
+  @media (max-width: 640px) {
+    .hamburger { display: block; }
+    .nav-links { display: none; flex-direction: column; position: absolute; top: 52px; left: 0; right: 0; background: var(--surface); border-bottom: 1px solid var(--border); padding: 8px 16px; gap: 2px; }
+    .nav-links.open { display: flex; }
+    .nav-links a { padding: 10px 12px; width: 100%; }
+  }
+
+  /* ── Layout ── */
+  .container { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  /* ── Hero ── */
+  .hero { margin-bottom: 48px; }
+  .hero h1 { font-size: 28px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+  .hero p { color: var(--muted); font-size: 15px; max-width: 540px; }
+
+  /* ── Release card ── */
+  .release { position: relative; padding-left: 28px; margin-bottom: 48px; }
+  .release::before {
+    content: ''; position: absolute; left: 7px; top: 24px; bottom: -24px;
+    width: 2px; background: var(--border);
+  }
+  .release:last-child::before { display: none; }
+  .release-dot {
+    position: absolute; left: 0; top: 14px;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--surface2); border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .release.latest .release-dot { background: var(--accent); border-color: var(--accent); }
+
+  .release-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .version-badge {
+    font-size: 15px; font-weight: 700; color: var(--text);
+    background: var(--surface2); border: 1px solid var(--border);
+    padding: 3px 10px; border-radius: 6px;
+  }
+  .release.latest .version-badge { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .release-date { color: var(--muted); font-size: 12px; }
+  .release-tag {
+    font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: .4px;
+  }
+  .tag-feature { background: #1a2a1a; color: var(--success); border: 1px solid #2a4a2a; }
+  .tag-fix     { background: #2a1a1a; color: var(--danger); border: 1px solid #4a2a2a; }
+  .tag-docs    { background: #1a1f2e; color: var(--info);   border: 1px solid #2a3a4e; }
+  .tag-security { background: #2a2010; color: var(--warn); border: 1px solid #4a3a20; }
+  .tag-ui      { background: #24183c; color: #c4b5fd; border: 1px solid #3c2a5c; }
+  .tag-perf    { background: #1a2a2a; color: #4dd0e1; border: 1px solid #2a4a4a; }
+
+  .release-body { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; }
+  .release-title { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 14px; }
+
+  .section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 14px 0 6px; }
+  .section-label:first-child { margin-top: 0; }
+
+  .change-list { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+  .change-list li { display: flex; align-items: flex-start; gap: 8px; color: var(--text); font-size: 13.5px; }
+  .change-list li::before { content: ''; flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-top: 7px; }
+
+  /* ── Provider pills ── */
+  .provider-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .provider-pill {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 12px; font-size: 12px; color: var(--text);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .provider-pill .count { color: var(--accent); font-weight: 600; }
+
+  /* ── Stats strip ── */
+  .stats-strip { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; }
+  .stat-chip { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 14px; font-size: 12px; color: var(--muted); }
+  .stat-chip strong { color: var(--text); }
+
+  /* ── Divider line ── */
+  hr.release-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+  /* ── Footer ── */
+  .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); }
+  .footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<nav class="main-nav">
+  <a href="/" class="nav-brand">LLM Pricing</a>
+  <button class="hamburger" onclick="this.nextElementSibling.classList.toggle('open')">&#9776;</button>
+  <div class="nav-links">
+    <a href="/calculator">Calculator</a>
+    <a href="/compare">Compare</a>
+    <a href="/history">History</a>
+    <a href="/trends">Trends</a>
+    <a href="/chat">Chat</a>
+    <a href="/mcp-setup">MCP</a>
+    <a href="/api-docs">Docs</a>
+    <a href="/billing">Billing</a>
+    <a href="/whats-new" class="active">What's New</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <div class="hero">
+    <h1>What's New</h1>
+    <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
+  </div>
+
+  <!-- v1.44.0 -->
+  <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.44.0</span>
+      <span class="release-date">May 6, 2026</span>
+      <span class="release-tag tag-ui">UI</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">What's New page &amp; release history</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li>This page — a dedicated What's New / release history hub surfacing every version with dates, change types, and provider details</li>
+        <li>Navigation link added to all 13 browser UIs</li>
+        <li>Timeline layout with version badges, change-type tags, and provider pills</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.43.0 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.43.0</span>
+      <span class="release-date">May 6, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">4 new enterprise providers — 21 total, 133+ models</div>
+      <div class="section-label">New providers</div>
+      <div class="provider-grid">
+        <div class="provider-pill">Salesforce <span class="count">5 models</span></div>
+        <div class="provider-pill">PromptQL <span class="count">3 models</span></div>
+        <div class="provider-pill">Snowflake <span class="count">7 models</span></div>
+        <div class="provider-pill">Oracle OCI <span class="count">8 models</span></div>
+      </div>
+      <div class="section-label" style="margin-top:16px;">Highlights</div>
+      <ul class="change-list">
+        <li><strong>Salesforce</strong> — Einstein LLM Large/Standard (CRM-native AI with Trust Layer), xGen-7B-8K/4K, CodeGen2.5-7B open-source models</li>
+        <li><strong>PromptQL</strong> — NL-to-query inference for structured data; smart/fast/mini tiers with schema-aware deterministic execution</li>
+        <li><strong>Snowflake Cortex</strong> — Snowflake Arctic (480B MoE), Llama 3.1 70B/8B, Mistral Large/7B, Mixtral-8x7B, Reka Flash; data never leaves Snowflake</li>
+        <li><strong>Oracle OCI Generative AI</strong> — Llama 3.1 405B/70B, Llama 3.2 90B/11B Vision, Cohere Command R+/R, Llama 3 70B; sovereign cloud with on-demand pricing</li>
+        <li>New env vars: <code>SALESFORCE_API_KEY</code>, <code>PROMPTQL_API_KEY</code>, <code>SNOWFLAKE_API_KEY</code>, <code>ORACLE_API_KEY</code></li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">Providers <strong>17 → 21</strong></div>
+        <div class="stat-chip">Models <strong>110+ → 133+</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.42.0 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.42.0</span>
+      <span class="release-date">May 6, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+      <span class="release-tag tag-perf">Live Sync</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Live model sync — auto-remove deprecated models</div>
+      <div class="section-label">Live model sync (new base capability)</div>
+      <ul class="change-list">
+        <li><code>BasePricingProvider._fetch_live_model_ids()</code> — queries each provider's <code>/v1/models</code> API on a 6-hour cache; no extra requests on every call</li>
+        <li><code>_apply_live_filter()</code> — removes models absent from the live list; exact + prefix matching handles versioned aliases (e.g. <code>gpt-4o</code> ↔ <code>gpt-4o-2024-11-20</code>)</li>
+        <li>Conservative fallback — if filtering would empty the list (naming mismatch), serves full static list and logs a warning</li>
+        <li>Deprecated models are logged at INFO level: <code>[OpenAI] Removed 2 deprecated model(s): [...]</code></li>
+      </ul>
+      <div class="section-label">Live sync enabled for 10 providers</div>
+      <div class="provider-grid">
+        <div class="provider-pill">OpenAI</div>
+        <div class="provider-pill">Anthropic</div>
+        <div class="provider-pill">Groq</div>
+        <div class="provider-pill">Mistral AI</div>
+        <div class="provider-pill">Together AI</div>
+        <div class="provider-pill">Fireworks AI</div>
+        <div class="provider-pill">xAI</div>
+        <div class="provider-pill">DeepSeek</div>
+        <div class="provider-pill">Cerebras</div>
+        <div class="provider-pill">NVIDIA NIM</div>
+      </div>
+      <hr class="release-divider">
+      <div class="section-label">Also in v1.41.0 (bundled)</div>
+      <div class="provider-grid">
+        <div class="provider-pill">xAI (Grok) <span class="count">5 models</span></div>
+        <div class="provider-pill">DeepSeek <span class="count">4 models</span></div>
+        <div class="provider-pill">Cerebras <span class="count">4 models</span></div>
+        <div class="provider-pill">NVIDIA NIM <span class="count">6 models</span></div>
+        <div class="provider-pill">Replicate <span class="count">5 models</span></div>
+      </div>
+      <ul class="change-list" style="margin-top:10px;">
+        <li><strong>xAI</strong> — Grok-3, Grok-3-mini, Grok-2, Grok-2-mini, Grok-Vision-Beta with real-time X/Twitter data awareness</li>
+        <li><strong>DeepSeek</strong> — deepseek-chat (V3), deepseek-reasoner (R1), V2.5, Coder-V2; lowest-cost reasoning in the market</li>
+        <li><strong>Cerebras</strong> — Llama 3.1/3.3 variants running at 2000+ tok/s on wafer-scale chips</li>
+        <li><strong>NVIDIA NIM</strong> — Llama-3.1-405B/70B/8B, Nemotron-4-340B, Mixtral-8x22B, Gemma-2-27B</li>
+        <li><strong>Replicate</strong> — Llama-3-70B/8B, Llama-2-70B, Mistral-7B, Mixtral-8x7B; serverless pay-per-prediction</li>
+        <li>New env vars: <code>XAI_API_KEY</code>, <code>DEEPSEEK_API_KEY</code>, <code>CEREBRAS_API_KEY</code>, <code>NVIDIA_API_KEY</code>, <code>REPLICATE_API_KEY</code></li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">Providers <strong>12 → 17</strong></div>
+        <div class="stat-chip">Models <strong>87+ → 110+</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.40.x -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.40.1</span>
+      <span class="release-date">May 5, 2026</span>
+      <span class="release-tag tag-ui">UI</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Dark Swagger/ReDoc theme + MCP ↔ Docs navigation</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li>Custom dark theme for <code>/docs</code> (Swagger UI) and <code>/redoc</code> — now matches the site design system instead of default white background</li>
+        <li>Fixed broken navigation between MCP Setup page and API Docs — "Swagger UI" link in MCP setup now correctly opens <code>/api-docs</code></li>
+        <li><code>/api-docs</code> embeds SwaggerUIBundle and Redoc.init directly (no iframe) to prevent double nav bars</li>
+      </ul>
+      <hr class="release-divider">
+      <div class="release-title" style="margin-top:0">v1.40.0 — MCP Setup + API Docs pages</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong>/mcp-setup</strong> — MCP integration hub with 5-tab client setup (Remote HTTP, Claude Desktop, VS Code, Cursor, Perplexity), live connection test, all 15 tools as cards with copy-to-clipboard prompts</li>
+        <li><strong>/api-docs</strong> — API reference with Swagger UI, ReDoc, and static endpoint table (3-view toolbar); 12 endpoint groups, method badges</li>
+        <li>Navigation links added to all 10 existing browser UIs</li>
+        <li>Both pages added to unauthenticated paths — no API key required</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.39.0 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.39.0</span>
+      <span class="release-date">May 4, 2026</span>
+      <span class="release-tag tag-docs">Docs</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">OpenAPI tags, grouped docs &amp; Perplexity integration guide</div>
+      <ul class="change-list">
+        <li>OpenAPI endpoint tags — all routes grouped into 10 logical sections in Swagger UI</li>
+        <li>Rich app metadata: contact info, license, full API description</li>
+        <li><code>docs/PERPLEXITY_INTEGRATION.md</code> — step-by-step guide for Perplexity desktop MCP config (macOS + Windows), all 15 tools with curl examples</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.38.x -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.38.7</span>
+      <span class="release-date">May 2026</span>
+      <span class="release-tag tag-security">Security</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Dependency security patches + MCP fixes</div>
+      <ul class="change-list">
+        <li><strong>Security</strong> — python-dotenv 1.2.1 → 1.2.2 (symlink-following vulnerability fix)</li>
+        <li><strong>Security</strong> — pytest 9.0.2 → 9.0.3 (tmpdir handling fix)</li>
+        <li><strong>Fix</strong> — PricingAlertService now correctly initialized in MCP server <code>main()</code></li>
+        <li><strong>Fix</strong> — MCP server stability improvements and error handling</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.37.0 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.37.0</span>
+      <span class="release-date">April 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Stripe SaaS billing &amp; self-serve API keys</div>
+      <ul class="change-list">
+        <li><strong>BillingService</strong> — SQLite-backed customer table, idempotent free-tier signup, per-customer API keys (<code>POST /billing/signup</code>)</li>
+        <li><strong>Stripe integration</strong> — checkout sessions, webhooks (HMAC-verified), billing portal, tier sync (free / pro / enterprise)</li>
+        <li><strong>Auth middleware</strong> — billing DB checked first; falls back to global <code>MCP_API_KEY</code>; fully backward-compatible</li>
+        <li>Rate-limit buckets keyed by customer ID for billing users; IP:tier for unauthenticated</li>
+        <li>Stripe optional — checkout/portal/webhook return 503 without <code>STRIPE_SECRET_KEY</code>; free signup always works</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.36.0 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.36.0</span>
+      <span class="release-date">March 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Fly.io deployment + API tiers + router feedback loop</div>
+      <ul class="change-list">
+        <li><strong>Fly.io</strong> — production deployment at <code>llm-pricing-api.fly.dev</code>; shared-cpu-1x, 512 MB, persistent 1 GB volume; ~$3.40/mo</li>
+        <li><strong>API key tiers</strong> — <code>X-Api-Key-Tier: free|pro|enterprise</code>; token-bucket limits 30/120/600 req/min; <code>GET /rate-limits/tiers</code></li>
+        <li><strong>Router feedback loop</strong> — <code>routing_id</code> UUID on every recommendation; <code>POST /router/feedback</code>; <code>acceptance_rate</code> in savings stats</li>
+        <li><strong>Streaming router</strong> — <code>POST /router/recommend/stream</code> SSE endpoint with 10-event sequence</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.35.0 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.35.0</span>
+      <span class="release-date">March 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">LLM router, quality scores, savings tracker &amp; OpenAI proxy</div>
+      <ul class="change-list">
+        <li><strong>LLM Router</strong> — <code>POST /router/recommend</code>; scores models by task type, cost, quality; returns ranked recommendations</li>
+        <li><strong>Quality Value Index</strong> — <code>quality_score</code> (0-100) + <code>quality_value_score</code> on every model; Hugging Face leaderboard fallback (24 h cache)</li>
+        <li><strong>Savings tracker</strong> — per-org router savings via <code>GET /telemetry/savings</code> + <code>X-Organization-Id</code> header</li>
+        <li><strong>OpenAI-compatible proxy</strong> — <code>POST /v1/chat/completions</code>; routing recommendation in OpenAI response format</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>Full changelog on <a href="https://github.com/skakumanu/llm-pricing-mcp-server" target="_blank">GitHub</a> &nbsp;·&nbsp; <a href="/api-docs">API Docs</a> &nbsp;·&nbsp; <a href="/mcp-setup">MCP Setup</a></p>
+  </div>
+
+</div>
+</body>
+</html>

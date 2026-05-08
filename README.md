@@ -48,6 +48,9 @@ A production-ready **Model Context Protocol (MCP)** server for LLM pricing data.
 | `/billing` | Self-serve signup + upgrade dashboard |
 | `/conversations` | Conversation history viewer |
 | `/admin` | Server stats, rate limits, customers |
+| `/mcp-setup` | MCP integration hub |
+| `/api-docs` | API reference (Swagger/ReDoc) |
+| `/whats-new` | Release notes timeline |
 
 All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font, `#0f1117` background, `#7c6af7` accent) and are fully mobile-responsive with a sticky hamburger navigation bar.
 

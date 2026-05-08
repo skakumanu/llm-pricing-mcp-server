@@ -239,6 +239,13 @@ if _static_dir.exists():
             StaticFiles(directory=str(_api_docs_dir), html=True),
             name="api_docs_static",
         )
+    _whats_new_dir = _static_dir / "whats-new"
+    if _whats_new_dir.exists():
+        app.mount(
+            "/whats-new",
+            StaticFiles(directory=str(_whats_new_dir), html=True),
+            name="whats_new_static",
+        )
     # Admin page served directly (not as a static mount) so /admin/stats
     # and /admin/rate-limits API routes are not shadowed by StaticFiles.
 
@@ -289,6 +296,7 @@ _unauthenticated_paths = {
     "/chat",
     "/mcp-setup",
     "/api-docs",
+    "/whats-new",
     "/v1/chat/completions",
     "/rate-limits/tiers",
     "/billing",
@@ -365,6 +373,7 @@ async def security_middleware(request: Request, call_next):
         or path.startswith("/providers") or path.startswith("/landing")
         or path.startswith("/mcp")
         or path.startswith("/mcp-setup") or path.startswith("/api-docs")
+        or path.startswith("/whats-new")
         or path == "/admin" or path in _unauthenticated_paths
         or request.method == "OPTIONS"
     ):
