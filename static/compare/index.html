@@ -422,7 +422,7 @@ async function init() {
   await loadData();
   populateSlots();
   // Pre-select two popular models if available
-  const defaults = ["gpt-4o", "claude-sonnet-4-6", "gemini-1.5-pro", "gpt-4o-mini"];
+  const defaults = ["gpt-4o", "claude-3-5-sonnet-20241022", "gemini-2.0-flash", "deepseek-chat"];
   let picked = 0;
   for (const name of defaults) {
     if (picked >= 2) break;
