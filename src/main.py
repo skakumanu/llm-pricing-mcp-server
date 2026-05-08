@@ -72,7 +72,7 @@ logger.info("Imports completed successfully")
 _openapi_tags = [
     {
         "name": "Pricing",
-        "description": "Live LLM model pricing data across 12+ providers. Supports filtering by provider.",
+        "description": "Live LLM model pricing data across 21 providers (133+ models). Supports filtering by provider.",
     },
     {
         "name": "Pricing History",
