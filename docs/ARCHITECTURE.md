@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.43.0 | **Last updated**: 2026-05-06
+**Version**: v1.44.0 | **Last updated**: 2026-05-07
 
 ---
 
@@ -25,12 +25,13 @@ A production FastAPI service that aggregates real-time LLM pricing data from 21 
 ┌─────────────────────────────────▼───────────────────────────────────────────┐
 │  Presentation Layer (src/main.py + mcp/)                                    │
 │                                                                             │
-│  REST API              MCP (15 tools)          Browser UIs (12 pages)       │
+│  REST API              MCP (15 tools)          Browser UIs (13 pages)       │
 │  /pricing              STDIO transport          /  /chat  /calculator        │
 │  /router/recommend     HTTP POST /mcp           /compare  /history           │
 │  /billing/*            JSON-RPC 2.0             /trends   /widget            │
 │  /agent/chat           MCP 2024-11-05           /billing  /admin             │
 │  /v1/chat/completions                           /mcp-setup  /api-docs        │
+│                                                 /whats-new                   │
 │                                                                             │
 │  Security middleware: billing DB key → global MCP_API_KEY fallback          │
 │  Rate limiting: per {ip}:{tier} token-bucket (30/120/600 req/min)           │
@@ -143,7 +144,8 @@ llm-pricing-mcp-server/
 │   ├── widget/index.html            # /widget — embeddable pricing table
 │   ├── conversations/index.html     # /conversations — conversation history viewer
 │   ├── mcp-setup/index.html         # /mcp-setup — MCP integration hub (5 client tabs, live test, all 15 tools)
-│   └── api-docs/index.html          # /api-docs — API reference (Swagger/ReDoc iframe + endpoint table)
+│   ├── api-docs/index.html          # /api-docs — API reference (Swagger/ReDoc iframe + endpoint table)
+│   └── whats-new/index.html         # /whats-new — release notes timeline (v1.35.0 → current)
 │
 ├── .github/workflows/
 │   ├── ci-cd.yml                    # Full CI/CD: test→lint→osv→bandit→gitleaks→deploy
@@ -230,7 +232,7 @@ POST /billing/webhook       → verify HMAC sig → update tier in billing.db
 Tier changes propagate to rate limits automatically: next request reads tier from `billing.db`.
 
 ### 7. UI Design System
-All 9 browser UIs share the same CSS custom properties (defined in each page's `:root`):
+All 13 browser UIs share the same CSS custom properties (defined in each page's `:root`):
 
 | Variable | Value |
 |----------|-------|
