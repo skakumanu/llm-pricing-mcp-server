@@ -16,13 +16,66 @@ class AnthropicPricingService(BasePricingProvider):
     # Anthropic pricing data (per 1k tokens in USD) - updated from their official pricing page
     # Source: https://www.anthropic.com/api
     STATIC_PRICING = {
+        "claude-opus-4-6": {
+            "input": 0.015,
+            "output": 0.075,
+            "context_window": 200000,
+            "use_cases": ["Frontier reasoning", "Complex research", "Advanced coding", "Agentic workflows"],
+            "strengths": ["State-of-the-art intelligence", "Vision capable", "Function calling", "200K context"],
+            "best_for": "Most demanding tasks requiring top-tier Claude 4 intelligence",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+            "batch_available": True,
+        },
+        "claude-sonnet-4-6": {
+            "input": 0.003,
+            "output": 0.015,
+            "context_window": 200000,
+            "use_cases": ["Advanced coding", "Complex analysis", "Agentic tasks", "Content creation"],
+            "strengths": ["High intelligence", "Cost-effective", "Vision + text", "Reliable"],
+            "best_for": "Production workloads needing Claude 4 intelligence at Sonnet pricing",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+            "batch_available": True,
+        },
+        "claude-3-7-sonnet-20250219": {
+            "input": 0.003,
+            "output": 0.015,
+            "context_window": 200000,
+            "use_cases": ["Extended reasoning", "Complex math", "Advanced research", "Multi-step tasks"],
+            "strengths": ["Hybrid reasoning", "Vision capable", "Function calling", "Batch available"],
+            "best_for": "Tasks requiring extended thinking and deep reasoning with vision support",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+            "batch_available": True,
+            "is_reasoning_model": True,
+        },
+        "claude-haiku-4-5-20251001": {
+            "input": 0.0008,
+            "output": 0.004,
+            "context_window": 200000,
+            "use_cases": ["Fast responses", "High-volume processing", "Real-time chat", "Agentic workflows"],
+            "strengths": ["Fastest Claude 4 class", "Affordable", "Vision capable", "Function calling"],
+            "best_for": "High-speed cost-efficient applications on Claude 4 generation",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+            "batch_available": True,
+        },
         "claude-3-5-sonnet-20241022": {
             "input": 0.003,
             "output": 0.015,
             "context_window": 200000,
             "use_cases": ["Advanced coding", "Complex analysis", "Content creation", "Research", "Agentic workflows"],
             "strengths": ["Best Sonnet version", "Excellent coding", "Strong reasoning", "Computer use"],
-            "best_for": "Production systems requiring best-in-class performance at reasonable cost"
+            "best_for": "Production systems requiring best-in-class performance at reasonable cost",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+            "batch_available": True,
         },
         "claude-3-5-sonnet-20240620": {
             "input": 0.003,
@@ -30,7 +83,11 @@ class AnthropicPricingService(BasePricingProvider):
             "context_window": 200000,
             "use_cases": ["Advanced coding", "Data analysis", "Visual processing", "Complex tasks"],
             "strengths": ["Graduate-level reasoning", "Vision + text", "Improved coding"],
-            "best_for": "Applications requiring strong reasoning and coding capabilities"
+            "best_for": "Applications requiring strong reasoning and coding capabilities",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+            "batch_available": True,
         },
         "claude-3-5-haiku-20241022": {
             "input": 0.001,
@@ -43,7 +100,11 @@ class AnthropicPricingService(BasePricingProvider):
                 "Cost-effective intelligence"
             ],
             "strengths": ["Fastest Claude", "Improved intelligence", "Affordable", "Large context"],
-            "best_for": "High-speed intelligent applications with cost constraints"
+            "best_for": "High-speed intelligent applications with cost constraints",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+            "batch_available": True,
         },
         "claude-3-opus-20240229": {
             "input": 0.015,
@@ -51,7 +112,11 @@ class AnthropicPricingService(BasePricingProvider):
             "context_window": 200000,
             "use_cases": ["Research analysis", "Complex problem solving", "Advanced coding", "Strategic planning"],
             "strengths": ["Superior intelligence", "Nuanced understanding", "Excellent at analysis"],
-            "best_for": "Most demanding tasks requiring top-tier intelligence"
+            "best_for": "Most demanding tasks requiring top-tier intelligence",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+            "batch_available": True,
         },
         "claude-3-sonnet-20240229": {
             "input": 0.003,
@@ -59,7 +124,10 @@ class AnthropicPricingService(BasePricingProvider):
             "context_window": 200000,
             "use_cases": ["Content creation", "Data processing", "Code review", "Research assistance"],
             "strengths": ["Balanced performance/cost", "Large context", "Versatile"],
-            "best_for": "Balanced workloads needing intelligence and efficiency"
+            "best_for": "Balanced workloads needing intelligence and efficiency",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "claude-3-haiku-20240307": {
             "input": 0.00025,
@@ -67,7 +135,10 @@ class AnthropicPricingService(BasePricingProvider):
             "context_window": 200000,
             "use_cases": ["Real-time chat", "Document processing", "Quick analysis", "Moderation"],
             "strengths": ["Fast responses", "Ultra-low cost", "Huge context"],
-            "best_for": "High-speed applications requiring instant responses"
+            "best_for": "High-speed applications requiring instant responses",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "batch_available": True,
         },
         "claude-2.1": {
             "input": 0.008,
@@ -75,7 +146,7 @@ class AnthropicPricingService(BasePricingProvider):
             "context_window": 200000,
             "use_cases": ["Long document Q&A", "Summarization", "General chat"],
             "strengths": ["Proven reliability", "Large context", "Stable"],
-            "best_for": "Production systems requiring stability"
+            "best_for": "Production systems requiring stability",
         },
     }
 
@@ -179,7 +250,12 @@ class AnthropicPricingService(BasePricingProvider):
                         latency_ms=metrics.get("latency_ms", 350.0),
                         use_cases=static_info.get("use_cases"),
                         strengths=static_info.get("strengths"),
-                        best_for=static_info.get("best_for")
+                        best_for=static_info.get("best_for"),
+                        supports_vision=static_info.get("supports_vision", False),
+                        supports_function_calling=static_info.get("supports_function_calling", False),
+                        supports_json_mode=static_info.get("supports_json_mode", False),
+                        batch_available=static_info.get("batch_available", False),
+                        is_reasoning_model=static_info.get("is_reasoning_model", False),
                     )
                 )
 
@@ -253,7 +329,12 @@ class AnthropicPricingService(BasePricingProvider):
                     latency_ms=350.0,
                     use_cases=pricing_info.get("use_cases"),
                     strengths=pricing_info.get("strengths"),
-                    best_for=pricing_info.get("best_for")
+                    best_for=pricing_info.get("best_for"),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list

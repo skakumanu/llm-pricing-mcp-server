@@ -34,6 +34,12 @@ class PricingMetrics(BaseModel):
     best_for: Optional[str] = Field(None, description="Quick summary of what this model is best for")
     # Quality / value
     quality_score: Optional[float] = Field(None, description="Benchmark quality score 0-100")
+    # Capability flags
+    supports_vision: bool = Field(False, description="Whether the model supports image/vision input")
+    supports_function_calling: bool = Field(False, description="Whether the model supports function/tool calling")
+    supports_json_mode: bool = Field(False, description="Whether the model supports structured JSON output mode")
+    batch_available: bool = Field(False, description="Whether batch processing API is available for this model")
+    is_reasoning_model: bool = Field(False, description="Whether this is a reasoning/thinking model (e.g., o1, R1)")
 
     @computed_field
     @property
