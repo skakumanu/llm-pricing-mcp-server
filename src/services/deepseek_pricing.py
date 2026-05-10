@@ -23,7 +23,9 @@ class DeepSeekPricingService(BasePricingProvider):
                 "Summarization", "Q&A"
             ],
             "strengths": ["Extremely affordable", "Strong coding", "Multi-lingual", "DeepSeek V3"],
-            "best_for": "Cost-sensitive applications needing strong general-purpose capability"
+            "best_for": "Cost-sensitive applications needing strong general-purpose capability",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "deepseek-reasoner": {
             "input": 0.00055,
@@ -34,7 +36,22 @@ class DeepSeekPricingService(BasePricingProvider):
                 "Multi-step problem solving", "Advanced coding"
             ],
             "strengths": ["Chain-of-thought reasoning", "Math/science", "Very affordable", "R1 model"],
-            "best_for": "Reasoning-heavy tasks (math, science, logic) at a fraction of frontier model costs"
+            "best_for": "Reasoning-heavy tasks (math, science, logic) at a fraction of frontier model costs",
+            "supports_function_calling": True,
+            "is_reasoning_model": True,
+        },
+        "deepseek-r1": {
+            "input": 0.00055,
+            "output": 0.00219,
+            "context_window": 64000,
+            "use_cases": [
+                "Advanced reasoning", "Complex math", "Scientific tasks",
+                "Multi-step analysis", "Code reasoning"
+            ],
+            "strengths": ["Open-source reasoning", "R1 architecture", "Very affordable", "Chain-of-thought"],
+            "best_for": "Open-source reasoning model rivaling frontier models at minimal cost",
+            "supports_function_calling": True,
+            "is_reasoning_model": True,
         },
         "deepseek-v2.5": {
             "input": 0.00014,
@@ -45,7 +62,9 @@ class DeepSeekPricingService(BasePricingProvider):
                 "Document processing", "Multi-turn chat"
             ],
             "strengths": ["128K context", "Ultra-affordable", "Strong coding", "Open-source"],
-            "best_for": "Long-document processing and coding with extreme cost efficiency"
+            "best_for": "Long-document processing and coding with extreme cost efficiency",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "deepseek-coder-v2": {
             "input": 0.00014,
@@ -59,7 +78,9 @@ class DeepSeekPricingService(BasePricingProvider):
                 "Specialized for code", "128K context", "Multi-language",
                 "Ultra-affordable"
             ],
-            "best_for": "High-volume coding tasks requiring excellent performance at minimal cost"
+            "best_for": "High-volume coding tasks requiring excellent performance at minimal cost",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
     }
 
@@ -103,7 +124,12 @@ class DeepSeekPricingService(BasePricingProvider):
                     latency_ms=800.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list

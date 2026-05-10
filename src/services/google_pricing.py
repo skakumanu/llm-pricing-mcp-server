@@ -16,6 +16,36 @@ class GooglePricingService(BasePricingProvider):
     # Google Gemini pricing data (per 1k tokens in USD)
     # Source: https://ai.google.dev/pricing
     STATIC_PRICING = {
+        "gemini-2.5-pro": {
+            "input": 0.00125,
+            "output": 0.010,
+            "context_window": 1048576,
+            "use_cases": [
+                "Complex reasoning", "Advanced coding", "Scientific analysis",
+                "Long document understanding", "Multi-step research"
+            ],
+            "strengths": ["Frontier reasoning", "1M context", "Vision + audio", "Thinking mode"],
+            "best_for": "Most demanding reasoning and analysis tasks with Google's latest model",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+            "is_reasoning_model": True,
+        },
+        "gemini-2.5-flash": {
+            "input": 0.00015,
+            "output": 0.0035,
+            "context_window": 1048576,
+            "use_cases": [
+                "Fast reasoning", "Code generation", "Data analysis",
+                "Real-time applications", "Cost-effective thinking"
+            ],
+            "strengths": ["Fast thinking model", "Affordable", "1M context", "Multimodal"],
+            "best_for": "Cost-effective thinking and reasoning at high speed",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+            "is_reasoning_model": True,
+        },
         "gemini-2.0-flash": {
             "input": 0.0001,
             "output": 0.0004,
@@ -27,7 +57,10 @@ class GooglePricingService(BasePricingProvider):
                 "Multi-turn conversations"
             ],
             "strengths": ["Improved intelligence", "Faster responses", "Native tool use", "1M context"],
-            "best_for": "Production applications needing latest Gemini capabilities with speed"
+            "best_for": "Production applications needing latest Gemini capabilities with speed",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "gemini-1.5-pro": {
             "input": 0.00125,
@@ -43,7 +76,10 @@ class GooglePricingService(BasePricingProvider):
             "best_for": (
                 "General-purpose applications requiring "
                 "balanced performance and cost"
-            )
+            ),
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "gemini-1.5-flash": {
             "input": 0.000075,
@@ -51,7 +87,10 @@ class GooglePricingService(BasePricingProvider):
             "context_window": 1048576,
             "use_cases": ["Fast document processing", "Real-time chat", "Quick summarization", "Content extraction"],
             "strengths": ["Extremely fast", "Affordable", "1M token context"],
-            "best_for": "Speed-critical applications with large documents"
+            "best_for": "Speed-critical applications with large documents",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "gemini-1.5-flash-8b": {
             "input": 0.0000375,
@@ -62,7 +101,9 @@ class GooglePricingService(BasePricingProvider):
                 "Edge deployment", "Cost-sensitive workloads"
             ],
             "strengths": ["Lowest cost", "Very fast", "1M context", "Compact model"],
-            "best_for": "High-throughput applications with strict budget constraints"
+            "best_for": "High-throughput applications with strict budget constraints",
+            "supports_vision": True,
+            "supports_function_calling": True,
         },
         "gemini-1.0-pro": {
             "input": 0.0005,
@@ -70,7 +111,8 @@ class GooglePricingService(BasePricingProvider):
             "context_window": 32760,
             "use_cases": ["General-purpose AI", "Chatbots", "Content moderation", "Text classification"],
             "strengths": ["Balanced performance", "Good for most tasks", "Proven stability"],
-            "best_for": "General-purpose applications across various domains"
+            "best_for": "General-purpose applications across various domains",
+            "supports_function_calling": True,
         },
     }
 
@@ -170,7 +212,12 @@ class GooglePricingService(BasePricingProvider):
                         latency_ms=metrics.get("latency_ms", 250.0),
                         use_cases=static_info.get("use_cases"),
                         strengths=static_info.get("strengths"),
-                        best_for=static_info.get("best_for")
+                        best_for=static_info.get("best_for"),
+                        supports_vision=static_info.get("supports_vision", False),
+                        supports_function_calling=static_info.get("supports_function_calling", False),
+                        supports_json_mode=static_info.get("supports_json_mode", False),
+                        batch_available=static_info.get("batch_available", False),
+                        is_reasoning_model=static_info.get("is_reasoning_model", False),
                     )
                 )
 
@@ -242,7 +289,12 @@ class GooglePricingService(BasePricingProvider):
                     latency_ms=250.0,
                     use_cases=pricing_info.get("use_cases"),
                     strengths=pricing_info.get("strengths"),
-                    best_for=pricing_info.get("best_for")
+                    best_for=pricing_info.get("best_for"),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
