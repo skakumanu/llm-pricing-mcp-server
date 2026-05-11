@@ -25,7 +25,9 @@ class MistralPricingService(BasePricingProvider):
                 "Multi-step planning", "128K context tasks"
             ],
             "strengths": ["Latest flagship", "Enhanced reasoning", "128K context", "Function calling"],
-            "best_for": "Complex tasks with long context requiring best reasoning"
+            "best_for": "Complex tasks with long context requiring best reasoning",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "mistral-large-latest": {
             "input": 0.004,
@@ -33,7 +35,9 @@ class MistralPricingService(BasePricingProvider):
             "context_window": 32000,
             "use_cases": ["Complex reasoning", "Advanced analytics", "Code generation", "Multi-step planning"],
             "strengths": ["Excellent reasoning", "Strong code skills", "Well-balanced"],
-            "best_for": "Complex tasks requiring strong reasoning and code understanding"
+            "best_for": "Complex tasks requiring strong reasoning and code understanding",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "mistral-small-2": {
             "input": 0.0006,
@@ -41,7 +45,9 @@ class MistralPricingService(BasePricingProvider):
             "context_window": 128000,
             "use_cases": ["Cost-effective long context", "FAQ automation", "Text classification", "RAG applications"],
             "strengths": ["Latest small model", "128K context", "Best price/performance", "Fast"],
-            "best_for": "High-volume long-context applications with budget constraints"
+            "best_for": "High-volume long-context applications with budget constraints",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "mistral-small-latest": {
             "input": 0.001,
@@ -49,7 +55,9 @@ class MistralPricingService(BasePricingProvider):
             "context_window": 32000,
             "use_cases": ["Customer support", "FAQ automation", "Text classification", "Simple tasks"],
             "strengths": ["Lightweight", "Affordable", "Fast responses"],
-            "best_for": "High-volume applications requiring fast, affordable responses"
+            "best_for": "High-volume applications requiring fast, affordable responses",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "codestral-latest": {
             "input": 0.001,
@@ -57,7 +65,9 @@ class MistralPricingService(BasePricingProvider):
             "context_window": 32000,
             "use_cases": ["Code completion", "Code generation", "Bug fixing", "Refactoring"],
             "strengths": ["Specialized for code", "Fast inference", "Multi-language support"],
-            "best_for": "Dedicated coding assistance and code generation tasks"
+            "best_for": "Dedicated coding assistance and code generation tasks",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "open-mistral-nemo": {
             "input": 0.0003,
@@ -65,7 +75,9 @@ class MistralPricingService(BasePricingProvider):
             "context_window": 128000,
             "use_cases": ["Edge deployment", "Self-hosted RAG", "Privacy-focused apps", "Cost optimization"],
             "strengths": ["Open source", "128K context", "Ultra-affordable", "Apache 2.0"],
-            "best_for": "Self-hosted applications needing long context at minimal cost"
+            "best_for": "Self-hosted applications needing long context at minimal cost",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "open-mixtral-8x7b": {
             "input": 0.0007,
@@ -73,7 +85,8 @@ class MistralPricingService(BasePricingProvider):
             "context_window": 32000,
             "use_cases": ["Advanced open-source use", "Custom deployment", "High-performance inference"],
             "strengths": ["Mixture of experts", "Self-hostable", "Good performance"],
-            "best_for": "Advanced use cases with self-hosted open-source requirements"
+            "best_for": "Advanced use cases with self-hosted open-source requirements",
+            "supports_function_calling": True,
         },
     }
 
@@ -175,7 +188,12 @@ class MistralPricingService(BasePricingProvider):
                         latency_ms=metrics.get("latency_ms", 280.0),
                         use_cases=static_info.get("use_cases"),
                         strengths=static_info.get("strengths"),
-                        best_for=static_info.get("best_for")
+                        best_for=static_info.get("best_for"),
+                        supports_vision=static_info.get("supports_vision", False),
+                        supports_function_calling=static_info.get("supports_function_calling", False),
+                        supports_json_mode=static_info.get("supports_json_mode", False),
+                        batch_available=static_info.get("batch_available", False),
+                        is_reasoning_model=static_info.get("is_reasoning_model", False),
                     )
                 )
 
@@ -247,7 +265,12 @@ class MistralPricingService(BasePricingProvider):
                     latency_ms=280.0,
                     use_cases=pricing_info.get("use_cases"),
                     strengths=pricing_info.get("strengths"),
-                    best_for=pricing_info.get("best_for")
+                    best_for=pricing_info.get("best_for"),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
@@ -276,7 +299,12 @@ class MistralPricingService(BasePricingProvider):
                     latency_ms=280.0,
                     use_cases=pricing_info.get("use_cases"),
                     strengths=pricing_info.get("strengths"),
-                    best_for=pricing_info.get("best_for")
+                    best_for=pricing_info.get("best_for"),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list

@@ -269,7 +269,7 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/health`, `/health/live`, `/health/ready`, `/health/detailed` | None | Health probes |
-| GET | `/pricing` | None | All model pricing |
+| GET | `/pricing` | None | All model pricing; supports `provider`, `supports_vision`, `supports_function_calling`, `supports_json_mode`, `batch_available`, `is_reasoning_model` query filters |
 | GET | `/models` | None | Model list |
 | GET | `/pricing/public` | None | Embed-safe public pricing |
 | GET | `/pricing/history` | None | Historical price snapshots |

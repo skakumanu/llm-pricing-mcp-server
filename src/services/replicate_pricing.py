@@ -26,7 +26,8 @@ class ReplicatePricingService(BasePricingProvider):
                 "Strong open-source model", "Easy API", "Serverless deployment",
                 "Pay-per-prediction"
             ],
-            "best_for": "Projects needing serverless open-source LLM deployment without infrastructure"
+            "best_for": "Projects needing serverless open-source LLM deployment without infrastructure",
+            "supports_function_calling": True,
         },
         "meta/meta-llama-3-8b-instruct": {
             "input": 0.00005,
@@ -39,7 +40,8 @@ class ReplicatePricingService(BasePricingProvider):
             "strengths": [
                 "Ultra-affordable", "Serverless", "Fast", "No infra management"
             ],
-            "best_for": "High-volume, cost-sensitive tasks with serverless convenience"
+            "best_for": "High-volume, cost-sensitive tasks with serverless convenience",
+            "supports_function_calling": True,
         },
         "meta/llama-2-70b-chat": {
             "input": 0.00065,
@@ -79,7 +81,8 @@ class ReplicatePricingService(BasePricingProvider):
                 "Mixture of experts", "Long context", "Good quality",
                 "Serverless deployment"
             ],
-            "best_for": "Balanced capability and cost for multilingual workloads on serverless"
+            "best_for": "Balanced capability and cost for multilingual workloads on serverless",
+            "supports_function_calling": True,
         },
     }
 
@@ -123,7 +126,12 @@ class ReplicatePricingService(BasePricingProvider):
                     latency_ms=600.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
@@ -147,7 +155,12 @@ class ReplicatePricingService(BasePricingProvider):
                     latency_ms=600.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list

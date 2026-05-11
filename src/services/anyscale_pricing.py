@@ -22,7 +22,9 @@ class AnyscalePricingService(BasePricingProvider):
             "context_window": 32768,
             "use_cases": ["Complex reasoning", "Research", "Advanced analysis", "Enterprise"],
             "strengths": ["Largest Llama", "Ray-optimized", "Scalable", "Strong reasoning"],
-            "best_for": "Large-scale enterprise applications requiring top reasoning"
+            "best_for": "Large-scale enterprise applications requiring top reasoning",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "meta-llama/Meta-Llama-3.1-70B-Instruct": {
             "input": 0.001,
@@ -30,7 +32,9 @@ class AnyscalePricingService(BasePricingProvider):
             "context_window": 32768,
             "use_cases": ["General purpose", "Code", "Analysis", "Production"],
             "strengths": ["Well-balanced", "Ray-optimized", "Scalable"],
-            "best_for": "Production applications at scale"
+            "best_for": "Production applications at scale",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "meta-llama/Meta-Llama-3.1-8B-Instruct": {
             "input": 0.00015,
@@ -38,7 +42,9 @@ class AnyscalePricingService(BasePricingProvider):
             "context_window": 32768,
             "use_cases": ["High-volume", "Simple tasks", "Cost-effective"],
             "strengths": ["Affordable", "Fast", "Scalable"],
-            "best_for": "High-volume cost-effective applications"
+            "best_for": "High-volume cost-effective applications",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "mistralai/Mixtral-8x7B-Instruct-v0.1": {
             "input": 0.0005,
@@ -46,7 +52,8 @@ class AnyscalePricingService(BasePricingProvider):
             "context_window": 32768,
             "use_cases": ["Code", "Multilingual", "Reasoning"],
             "strengths": ["MoE", "Versatile", "Ray-optimized"],
-            "best_for": "Balanced performance at scale"
+            "best_for": "Balanced performance at scale",
+            "supports_function_calling": True,
         },
         "mistralai/Mistral-7B-Instruct-v0.1": {
             "input": 0.00015,
@@ -130,7 +137,12 @@ class AnyscalePricingService(BasePricingProvider):
                     latency_ms=perf.get("latency_ms", 250.0),
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
@@ -182,7 +194,12 @@ class AnyscalePricingService(BasePricingProvider):
                     latency_ms=250.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list

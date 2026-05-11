@@ -182,6 +182,8 @@
     .badge-tier-low { background: rgba(72,187,120,.12); color: var(--success); }
     .badge-tier-medium { background: rgba(237,137,54,.12); color: var(--warn); }
     .badge-tier-high { background: rgba(245,101,101,.12); color: var(--danger); }
+    .badge-cap { background: rgba(78,205,196,.12); color: var(--accent2); font-size: 11px; }
+    .badge-reason { background: rgba(237,137,54,.12); color: var(--warn); font-size: 11px; }
 
     /* ── Cost section ── */
     .card-section { padding: 14px 16px; border-bottom: 1px solid var(--border); }
@@ -771,10 +773,18 @@ function renderUseCaseSection(uc) {
   const strengthsHtml = (uc.strengths || []).slice(0, 4).map(s =>
     `<span class="strength-tag">${s}</span>`
   ).join("");
+  const capBadges = [
+    uc.supports_vision          && '<span class="badge badge-cap">👁 Vision</span>',
+    uc.supports_function_calling && '<span class="badge badge-cap">⚙ Functions</span>',
+    uc.supports_json_mode       && '<span class="badge badge-cap">{ } JSON</span>',
+    uc.batch_available          && '<span class="badge badge-cap">⚡ Batch</span>',
+    uc.is_reasoning_model       && '<span class="badge badge-reason">🧠 Reasoning</span>',
+  ].filter(Boolean).join("");
   return `
     <div class="card-section">
       <div class="section-title">Best For</div>
       ${uc.best_for ? `<p class="best-for-text">${uc.best_for}</p>` : ""}
+      ${capBadges ? `<div class="badge-row" style="margin-top:8px">${capBadges}</div>` : ""}
       ${useCasesHtml ? `<ul class="use-case-list">${useCasesHtml}</ul>` : ""}
       ${strengthsHtml ? `<div class="strengths-list" style="margin-top:10px">${strengthsHtml}</div>` : ""}
     </div>

@@ -324,6 +324,7 @@
             <th>Provider</th>
             <th>Input ($/1M)</th>
             <th>Output ($/1M)</th>
+            <th>Capabilities</th>
           </tr>
         </thead>
         <tbody id="tableBody"></tbody>
@@ -334,6 +335,20 @@
 
 <script>
   let chart = null;
+  let capMap = {};  // model_name → capability flags
+
+  // Load capability data from live pricing API on page load
+  (async () => {
+    try {
+      const res = await fetch("/pricing");
+      if (res.ok) {
+        const data = await res.json();
+        for (const m of (data.models || [])) {
+          capMap[m.model_name] = m;
+        }
+      }
+    } catch (e) { /* silently ignore */ }
+  })();
 
   function fmt1M(perToken) {
     const val = perToken * 1_000_000;
@@ -477,12 +492,21 @@
     tbody.innerHTML = "";
     sorted.forEach(s => {
       const tr = document.createElement("tr");
+      const cap = capMap[s.model_name] || {};
+      const capBadges = [
+        cap.supports_vision            && '<span style="background:rgba(78,205,196,.15);color:#4ecdc4;padding:1px 5px;border-radius:4px;font-size:10px;white-space:nowrap">👁 Vision</span>',
+        cap.supports_function_calling  && '<span style="background:rgba(78,205,196,.15);color:#4ecdc4;padding:1px 5px;border-radius:4px;font-size:10px;white-space:nowrap">⚙ FC</span>',
+        cap.supports_json_mode         && '<span style="background:rgba(78,205,196,.15);color:#4ecdc4;padding:1px 5px;border-radius:4px;font-size:10px;white-space:nowrap">{ } JSON</span>',
+        cap.batch_available            && '<span style="background:rgba(78,205,196,.15);color:#4ecdc4;padding:1px 5px;border-radius:4px;font-size:10px;white-space:nowrap">⚡ Batch</span>',
+        cap.is_reasoning_model         && '<span style="background:rgba(237,137,54,.15);color:#ed8936;padding:1px 5px;border-radius:4px;font-size:10px;white-space:nowrap">🧠 Reasoning</span>',
+      ].filter(Boolean).join(" ");
       tr.innerHTML = `
         <td>${fmtDate(s.captured_at)}</td>
         <td>${escHtml(s.model_name)}</td>
         <td><span class="badge badge-blue">${escHtml(s.provider)}</span></td>
         <td>${fmt1M(s.cost_per_input_token)}</td>
         <td><span class="badge badge-green">${fmt1M(s.cost_per_output_token)}</span></td>
+        <td style="min-width:120px">${capBadges || '<span style="color:#555">—</span>'}</td>
       `;
       tbody.appendChild(tr);
     });

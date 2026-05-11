@@ -26,7 +26,9 @@ class NVIDIAPricingService(BasePricingProvider):
                 "Largest Llama model", "NVIDIA-optimized inference",
                 "128K context", "Enterprise reliability"
             ],
-            "best_for": "Enterprise workloads needing largest open-source model with NVIDIA optimization"
+            "best_for": "Enterprise workloads needing largest open-source model with NVIDIA optimization",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "meta/llama-3.1-70b-instruct": {
             "input": 0.00099,
@@ -40,7 +42,9 @@ class NVIDIAPricingService(BasePricingProvider):
                 "Strong performance", "NVIDIA-optimized", "Long context",
                 "Balanced cost"
             ],
-            "best_for": "General enterprise AI with strong capability and NVIDIA infrastructure"
+            "best_for": "General enterprise AI with strong capability and NVIDIA infrastructure",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "meta/llama-3.1-8b-instruct": {
             "input": 0.0002,
@@ -53,7 +57,9 @@ class NVIDIAPricingService(BasePricingProvider):
             "strengths": [
                 "Very affordable", "NVIDIA speed", "Long context", "Fast inference"
             ],
-            "best_for": "High-throughput enterprise applications with cost constraints"
+            "best_for": "High-throughput enterprise applications with cost constraints",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "nvidia/nemotron-4-340b-instruct": {
             "input": 0.0042,
@@ -81,7 +87,8 @@ class NVIDIAPricingService(BasePricingProvider):
                 "Mixture of experts", "Large context", "Multi-language",
                 "NVIDIA-optimized"
             ],
-            "best_for": "Multilingual enterprise applications needing strong reasoning and long context"
+            "best_for": "Multilingual enterprise applications needing strong reasoning and long context",
+            "supports_function_calling": True,
         },
         "google/gemma-2-27b-it": {
             "input": 0.00054,
@@ -138,7 +145,12 @@ class NVIDIAPricingService(BasePricingProvider):
                     latency_ms=400.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
@@ -162,7 +174,12 @@ class NVIDIAPricingService(BasePricingProvider):
                     latency_ms=400.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list

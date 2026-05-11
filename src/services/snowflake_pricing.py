@@ -49,7 +49,9 @@ class SnowflakePricingService(BasePricingProvider):
                 "Strong open-source model", "128K context", "Snowflake data integration",
                 "No data egress"
             ],
-            "best_for": "General-purpose Snowflake AI with long-context reasoning on warehouse data"
+            "best_for": "General-purpose Snowflake AI with long-context reasoning on warehouse data",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "llama3.1-8b": {
             "input": 0.0003,
@@ -63,7 +65,9 @@ class SnowflakePricingService(BasePricingProvider):
                 "Very affordable", "Fast inference", "128K context",
                 "Snowflake integration"
             ],
-            "best_for": "High-throughput, cost-sensitive Snowflake data pipelines"
+            "best_for": "High-throughput, cost-sensitive Snowflake data pipelines",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "mistral-large": {
             "input": 0.0153,
@@ -77,7 +81,8 @@ class SnowflakePricingService(BasePricingProvider):
                 "Mistral Large quality", "Multilingual", "Strong reasoning",
                 "Enterprise-grade via Snowflake"
             ],
-            "best_for": "Complex enterprise reasoning and multilingual tasks within Snowflake"
+            "best_for": "Complex enterprise reasoning and multilingual tasks within Snowflake",
+            "supports_function_calling": True,
         },
         "mistral-7b": {
             "input": 0.0018,
@@ -118,7 +123,8 @@ class SnowflakePricingService(BasePricingProvider):
                 "Long context (100K)", "Reka quality", "Available in Cortex",
                 "Enterprise reliability"
             ],
-            "best_for": "Long-document and multimodal enterprise tasks within Snowflake Cortex"
+            "best_for": "Long-document and multimodal enterprise tasks within Snowflake Cortex",
+            "supports_vision": True,
         },
     }
 
@@ -162,7 +168,12 @@ class SnowflakePricingService(BasePricingProvider):
                     latency_ms=550.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
@@ -186,7 +197,12 @@ class SnowflakePricingService(BasePricingProvider):
                     latency_ms=550.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
