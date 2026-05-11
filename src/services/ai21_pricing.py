@@ -22,7 +22,8 @@ class AI21PricingService(BasePricingProvider):
             "context_window": 256000,
             "use_cases": ["Long documents", "Complex analysis", "Enterprise tasks", "Research"],
             "strengths": ["Hybrid SSM-Transformer", "256K context", "Enterprise-grade", "Strong reasoning"],
-            "best_for": "Enterprise applications with very long context requirements"
+            "best_for": "Enterprise applications with very long context requirements",
+            "supports_function_calling": True,
         },
         "jamba-1.5-mini": {
             "input": 0.0002,
@@ -122,7 +123,12 @@ class AI21PricingService(BasePricingProvider):
                     latency_ms=perf.get("latency_ms", 350.0),
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
@@ -174,7 +180,12 @@ class AI21PricingService(BasePricingProvider):
                     latency_ms=350.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list

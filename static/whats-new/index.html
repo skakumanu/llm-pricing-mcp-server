@@ -142,8 +142,54 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.44.0 -->
+  <!-- v1.46.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.46.0</span>
+      <span class="release-date">May 9, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+      <span class="release-tag tag-ui">UI</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Capability flag UI &amp; API filters — 150+ models</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong>Capability filters on <code>GET /pricing</code></strong> — filter by <code>supports_vision</code>, <code>supports_function_calling</code>, <code>supports_json_mode</code>, <code>batch_available</code>, <code>is_reasoning_model</code></li>
+        <li><strong>Compare page</strong> — capability badges (👁 Vision, ⚙ Functions, { } JSON, ⚡ Batch, 🧠 Reasoning) in every model card</li>
+        <li><strong>Calculator page</strong> — capability badges shown for the selected model</li>
+        <li><strong>History &amp; Trends pages</strong> — Capabilities column showing live flags for each model in the table</li>
+        <li>STATIC_PRICING capability flags populated for all 16 remaining providers (Groq, Mistral, Cohere, Together AI, Fireworks, Perplexity, AI21, Cerebras, NVIDIA NIM, Replicate, Bedrock, Anyscale, Salesforce, PromptQL, Snowflake, Oracle OCI)</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">Models <strong>133+ → 150+</strong></div>
+        <div class="stat-chip">Providers <strong>21</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.45.0 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.45.0</span>
+      <span class="release-date">May 9, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Model capability flags — vision, function calling, JSON mode, batch, reasoning</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong>5 new bool fields on PricingMetrics</strong>: <code>supports_vision</code>, <code>supports_function_calling</code>, <code>supports_json_mode</code>, <code>batch_available</code>, <code>is_reasoning_model</code></li>
+        <li>Capability flags populated for OpenAI, Anthropic, Google Gemini, DeepSeek, xAI (Grok) — 5 providers with all flags accurate</li>
+        <li>New <code>GET /pricing/use-cases</code> API response includes all capability fields</li>
+        <li>OpenAPI schema updated to expose capability fields on model responses</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.44.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.44.0</span>

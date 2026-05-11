@@ -18,7 +18,7 @@ A production-ready **Model Context Protocol (MCP)** server for LLM pricing data.
 - MCP Protocol version: `2024-11-05`
 
 ### RESTful API
-- Real-time pricing from 21 providers (133+ models), async fetching with smart caching
+- Real-time pricing from 21 providers (150+ models), async fetching with smart caching
 - Cost estimation: single model (`POST /cost-estimate`) and batch comparison (`POST /cost-estimate/batch`)
 - Performance metrics, use-case recommendations, pricing history, trends
 - Router recommendation (`POST /router/recommend`) with feedback loop

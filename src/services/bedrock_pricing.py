@@ -22,7 +22,10 @@ class BedrockPricingService(BasePricingProvider):
             "context_window": 200000,
             "use_cases": ["Advanced coding", "Agentic workflows", "Complex analysis", "Enterprise AI"],
             "strengths": ["Best Sonnet on Bedrock", "Computer use", "AWS integration", "Enterprise support"],
-            "best_for": "Production AWS workloads requiring Claude 3.5 with enterprise reliability"
+            "best_for": "Production AWS workloads requiring Claude 3.5 with enterprise reliability",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "anthropic.claude-3-5-sonnet-20240620-v1:0": {
             "input": 0.003,
@@ -30,7 +33,10 @@ class BedrockPricingService(BasePricingProvider):
             "context_window": 200000,
             "use_cases": ["Complex tasks", "Vision + text", "Coding", "Research"],
             "strengths": ["Strong reasoning", "Multimodal", "AWS native", "Reliable"],
-            "best_for": "AWS applications needing powerful multimodal Claude capabilities"
+            "best_for": "AWS applications needing powerful multimodal Claude capabilities",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "anthropic.claude-3-opus-20240229-v1:0": {
             "input": 0.015,
@@ -38,7 +44,10 @@ class BedrockPricingService(BasePricingProvider):
             "context_window": 200000,
             "use_cases": ["Strategic analysis", "Research", "Complex reasoning", "High-stakes decisions"],
             "strengths": ["Highest intelligence", "Deep analysis", "Enterprise-grade", "AWS secure"],
-            "best_for": "Mission-critical AWS applications demanding maximum intelligence"
+            "best_for": "Mission-critical AWS applications demanding maximum intelligence",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "anthropic.claude-3-sonnet-20240229-v1:0": {
             "input": 0.003,
@@ -46,7 +55,10 @@ class BedrockPricingService(BasePricingProvider):
             "context_window": 200000,
             "use_cases": ["Content creation", "Analysis", "Code review", "Customer support"],
             "strengths": ["Balanced", "AWS integration", "Cost-effective", "Reliable"],
-            "best_for": "General-purpose AWS workloads with balanced performance needs"
+            "best_for": "General-purpose AWS workloads with balanced performance needs",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "anthropic.claude-3-haiku-20240307-v1:0": {
             "input": 0.00025,
@@ -54,7 +66,10 @@ class BedrockPricingService(BasePricingProvider):
             "context_window": 200000,
             "use_cases": ["Real-time chat", "High-volume processing", "Quick analysis", "Moderation"],
             "strengths": ["Ultra-fast", "Lowest cost Claude", "Large context", "AWS native"],
-            "best_for": "High-throughput AWS applications requiring speed and affordability"
+            "best_for": "High-throughput AWS applications requiring speed and affordability",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "meta.llama3-1-405b-instruct-v1:0": {
             "input": 0.00532,
@@ -62,7 +77,9 @@ class BedrockPricingService(BasePricingProvider):
             "context_window": 128000,
             "use_cases": ["Complex reasoning", "Long documents", "Research", "Enterprise chat"],
             "strengths": ["Largest Llama", "Open source", "AWS managed", "Long context"],
-            "best_for": "AWS workloads needing largest open-source model with managed infrastructure"
+            "best_for": "AWS workloads needing largest open-source model with managed infrastructure",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "meta.llama3-1-70b-instruct-v1:0": {
             "input": 0.00099,
@@ -70,7 +87,9 @@ class BedrockPricingService(BasePricingProvider):
             "context_window": 128000,
             "use_cases": ["General purpose", "Code generation", "Analysis", "Creative work"],
             "strengths": ["Well-balanced", "Cost-effective", "AWS managed", "Long context"],
-            "best_for": "Balanced AWS applications requiring open-source flexibility"
+            "best_for": "Balanced AWS applications requiring open-source flexibility",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "meta.llama3-1-8b-instruct-v1:0": {
             "input": 0.00022,
@@ -78,7 +97,9 @@ class BedrockPricingService(BasePricingProvider):
             "context_window": 128000,
             "use_cases": ["High-volume", "Simple tasks", "Real-time processing", "Edge deployment"],
             "strengths": ["Very affordable", "Fast", "AWS managed", "Scalable"],
-            "best_for": "High-volume AWS workloads with cost constraints"
+            "best_for": "High-volume AWS workloads with cost constraints",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "mistral.mistral-large-2407-v1:0": {
             "input": 0.003,
@@ -86,7 +107,9 @@ class BedrockPricingService(BasePricingProvider):
             "context_window": 128000,
             "use_cases": ["Enterprise tasks", "Code generation", "Reasoning", "Multilingual"],
             "strengths": ["Mistral flagship", "128K context", "AWS integration", "Strong reasoning"],
-            "best_for": "Enterprise AWS applications needing Mistral's latest capabilities"
+            "best_for": "Enterprise AWS applications needing Mistral's latest capabilities",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "mistral.mistral-small-2402-v1:0": {
             "input": 0.001,
@@ -102,7 +125,8 @@ class BedrockPricingService(BasePricingProvider):
             "context_window": 128000,
             "use_cases": ["Enterprise RAG", "Search", "Document analysis", "Long context"],
             "strengths": ["RAG-optimized", "AWS native", "Tool use", "Citations"],
-            "best_for": "AWS RAG applications requiring enterprise-grade retrieval"
+            "best_for": "AWS RAG applications requiring enterprise-grade retrieval",
+            "supports_function_calling": True,
         },
         "cohere.command-r-v1:0": {
             "input": 0.0005,
@@ -110,7 +134,8 @@ class BedrockPricingService(BasePricingProvider):
             "context_window": 128000,
             "use_cases": ["Cost-effective RAG", "FAQ systems", "Document Q&A", "Search"],
             "strengths": ["Affordable RAG", "Good retrieval", "AWS managed", "Long context"],
-            "best_for": "Cost-effective AWS RAG systems with strong retrieval needs"
+            "best_for": "Cost-effective AWS RAG systems with strong retrieval needs",
+            "supports_function_calling": True,
         },
         "amazon.titan-text-premier-v1:0": {
             "input": 0.0005,
@@ -212,7 +237,12 @@ class BedrockPricingService(BasePricingProvider):
                         latency_ms=metrics.get("latency_ms", 600.0),
                         use_cases=pricing_info.get("use_cases"),
                         strengths=pricing_info.get("strengths"),
-                        best_for=pricing_info.get("best_for")
+                        best_for=pricing_info.get("best_for"),
+                        supports_vision=pricing_info.get("supports_vision", False),
+                        supports_function_calling=pricing_info.get("supports_function_calling", False),
+                        supports_json_mode=pricing_info.get("supports_json_mode", False),
+                        batch_available=pricing_info.get("batch_available", False),
+                        is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                     )
                 )
 
@@ -241,6 +271,11 @@ class BedrockPricingService(BasePricingProvider):
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
                     best_for=pricing_info.get("best_for"),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                     source=f"{self.provider_name} Official Pricing (Fallback - Static)",
                     throughput=self._estimate_throughput(model_id),
                     latency_ms=self._estimate_latency(model_id),

@@ -32,7 +32,8 @@ class OraclePricingService(BasePricingProvider):
                 "Largest Llama model", "OCI sovereign cloud", "128K context",
                 "Enterprise compliance", "GDPR-ready regions"
             ],
-            "best_for": "Enterprise workloads needing frontier open-source capability with Oracle cloud compliance"
+            "best_for": "Enterprise workloads needing frontier open-source capability with Oracle cloud compliance",
+            "supports_function_calling": True,
         },
         "meta.llama-3.1-70b-instruct": {
             "input": 0.00093,
@@ -46,7 +47,8 @@ class OraclePricingService(BasePricingProvider):
                 "Strong performance", "OCI integration", "Long context",
                 "Competitive pricing"
             ],
-            "best_for": "General enterprise AI with strong Llama capability on Oracle infrastructure"
+            "best_for": "General enterprise AI with strong Llama capability on Oracle infrastructure",
+            "supports_function_calling": True,
         },
         "meta.llama-3.2-90b-vision-instruct": {
             "input": 0.00096,
@@ -60,7 +62,9 @@ class OraclePricingService(BasePricingProvider):
                 "Vision + text", "128K context", "OCI data residency",
                 "Enterprise security"
             ],
-            "best_for": "Multimodal enterprise applications with Oracle cloud data governance"
+            "best_for": "Multimodal enterprise applications with Oracle cloud data governance",
+            "supports_vision": True,
+            "supports_function_calling": True,
         },
         "meta.llama-3.2-11b-vision-instruct": {
             "input": 0.00018,
@@ -73,7 +77,9 @@ class OraclePricingService(BasePricingProvider):
             "strengths": [
                 "Affordable vision", "128K context", "OCI integration", "Fast"
             ],
-            "best_for": "High-volume, cost-effective multimodal tasks on Oracle OCI"
+            "best_for": "High-volume, cost-effective multimodal tasks on Oracle OCI",
+            "supports_vision": True,
+            "supports_function_calling": True,
         },
         "cohere.command-r-plus": {
             "input": 0.003,
@@ -87,7 +93,8 @@ class OraclePricingService(BasePricingProvider):
                 "Best-in-class RAG", "128K context", "Tool use", "Multilingual",
                 "OCI enterprise deployment"
             ],
-            "best_for": "Enterprise RAG and search applications with Oracle's secure cloud infrastructure"
+            "best_for": "Enterprise RAG and search applications with Oracle's secure cloud infrastructure",
+            "supports_function_calling": True,
         },
         "cohere.command-r": {
             "input": 0.0005,
@@ -101,7 +108,8 @@ class OraclePricingService(BasePricingProvider):
                 "Affordable RAG", "128K context", "Multilingual",
                 "Cost-effective enterprise"
             ],
-            "best_for": "High-volume enterprise RAG pipelines at low cost on Oracle OCI"
+            "best_for": "High-volume enterprise RAG pipelines at low cost on Oracle OCI",
+            "supports_function_calling": True,
         },
         "cohere.command-r-08-2024": {
             "input": 0.0005,
@@ -115,7 +123,8 @@ class OraclePricingService(BasePricingProvider):
                 "Latest Command R", "Improved reasoning", "128K context",
                 "OCI enterprise"
             ],
-            "best_for": "Updated Command R for enterprise RAG with latest improvements on OCI"
+            "best_for": "Updated Command R for enterprise RAG with latest improvements on OCI",
+            "supports_function_calling": True,
         },
         "meta.llama-3-70b-instruct": {
             "input": 0.00099,
@@ -172,7 +181,12 @@ class OraclePricingService(BasePricingProvider):
                     latency_ms=500.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
@@ -196,7 +210,12 @@ class OraclePricingService(BasePricingProvider):
                     latency_ms=500.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list

@@ -452,7 +452,18 @@
         \$${fmtRate(model.cost_per_output_token)}/token output
         &nbsp;·&nbsp; (\$${fmtUSD(model.cost_per_input_token * 1e6)}/1M input,
         \$${fmtUSD(model.cost_per_output_token * 1e6)}/1M output)
-      </div>`;
+      </div>
+
+      ${(() => {
+        const caps = [
+          model.supports_vision           && '<span style="background:rgba(78,205,196,.15);color:#4ecdc4;padding:2px 7px;border-radius:4px;font-size:11px">👁 Vision</span>',
+          model.supports_function_calling && '<span style="background:rgba(78,205,196,.15);color:#4ecdc4;padding:2px 7px;border-radius:4px;font-size:11px">⚙ Functions</span>',
+          model.supports_json_mode        && '<span style="background:rgba(78,205,196,.15);color:#4ecdc4;padding:2px 7px;border-radius:4px;font-size:11px">{ } JSON</span>',
+          model.batch_available           && '<span style="background:rgba(78,205,196,.15);color:#4ecdc4;padding:2px 7px;border-radius:4px;font-size:11px">⚡ Batch</span>',
+          model.is_reasoning_model        && '<span style="background:rgba(237,137,54,.15);color:#ed8936;padding:2px 7px;border-radius:4px;font-size:11px">🧠 Reasoning</span>',
+        ].filter(Boolean);
+        return caps.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${caps.join("")}</div>` : "";
+      })()}`;
   }
 
   function scaleCard(label, cost) {

@@ -298,6 +298,7 @@
             <th data-col="output_change_pct">Output Δ%</th>
             <th data-col="last_input">Input now ($/1M)</th>
             <th data-col="last_output">Output now ($/1M)</th>
+            <th>Capabilities</th>
           </tr>
         </thead>
         <tbody id="tableBody"></tbody>
@@ -315,6 +316,18 @@
   let _trends   = [];   // current data
   let _sortCol  = "input_change_pct";
   let _sortAsc  = false;  // biggest change first
+  let capMap    = {};   // model_name → capability flags
+
+  // Load capability data on page load
+  (async () => {
+    try {
+      const res = await fetch("/pricing");
+      if (res.ok) {
+        const data = await res.json();
+        for (const m of (data.models || [])) capMap[m.model_name] = m;
+      }
+    } catch (e) { /* silently ignore */ }
+  })();
 
   function fmt(perToken) {
     return "$" + (perToken * 1_000_000).toFixed(2);
@@ -429,6 +442,14 @@
                                       '<span class="badge badge-flat">— Flat</span>';
 
       const tr = document.createElement("tr");
+      const cap = capMap[t.model_name] || {};
+      const capBadges = [
+        cap.supports_vision           && '<span style="background:rgba(78,205,196,.15);color:#4ecdc4;padding:1px 5px;border-radius:4px;font-size:10px;white-space:nowrap">👁</span>',
+        cap.supports_function_calling && '<span style="background:rgba(78,205,196,.15);color:#4ecdc4;padding:1px 5px;border-radius:4px;font-size:10px;white-space:nowrap">⚙ FC</span>',
+        cap.supports_json_mode        && '<span style="background:rgba(78,205,196,.15);color:#4ecdc4;padding:1px 5px;border-radius:4px;font-size:10px;white-space:nowrap">{ }</span>',
+        cap.batch_available           && '<span style="background:rgba(78,205,196,.15);color:#4ecdc4;padding:1px 5px;border-radius:4px;font-size:10px;white-space:nowrap">⚡</span>',
+        cap.is_reasoning_model        && '<span style="background:rgba(237,137,54,.15);color:#ed8936;padding:1px 5px;border-radius:4px;font-size:10px;white-space:nowrap">🧠</span>',
+      ].filter(Boolean).join(" ");
       tr.innerHTML = `
         <td class="rank">${i + 1}</td>
         <td>${esc(t.model_name)}</td>
@@ -438,6 +459,7 @@
         <td class="${pctClass(t.output_change_pct)}">${fmtPct(t.output_change_pct)}</td>
         <td>${fmt(t.last_input)}</td>
         <td>${fmt(t.last_output)}</td>
+        <td style="min-width:90px">${capBadges || '<span style="color:#555">—</span>'}</td>
       `;
       tbody.appendChild(tr);
     });

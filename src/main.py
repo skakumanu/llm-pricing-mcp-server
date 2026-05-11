@@ -72,7 +72,7 @@ logger.info("Imports completed successfully")
 _openapi_tags = [
     {
         "name": "Pricing",
-        "description": "Live LLM model pricing data across 21 providers (133+ models). Supports filtering by provider.",
+        "description": "Live LLM model pricing data across 21 providers (150+ models). Supports filtering by provider and capability.",
     },
     {
         "name": "Pricing History",
@@ -980,7 +980,12 @@ async def get_pricing(
     provider: Optional[str] = Query(
         None,
         description="Filter by provider (e.g., 'openai', 'anthropic', 'google', 'cohere', 'mistral')"
-    )
+    ),
+    supports_vision: Optional[bool] = Query(None, description="Filter to vision-capable models"),
+    supports_function_calling: Optional[bool] = Query(None, description="Filter to function-calling models"),
+    supports_json_mode: Optional[bool] = Query(None, description="Filter to JSON-mode models"),
+    batch_available: Optional[bool] = Query(None, description="Filter to batch-API models"),
+    is_reasoning_model: Optional[bool] = Query(None, description="Filter to reasoning/chain-of-thought models"),
 ):
     """
     Get aggregated pricing data from multiple LLM providers.
@@ -993,6 +998,11 @@ async def get_pricing(
 
     Args:
         provider: Optional provider filter
+        supports_vision: Filter to vision-capable models
+        supports_function_calling: Filter to function-calling models
+        supports_json_mode: Filter to JSON-mode models
+        batch_available: Filter to batch-API models
+        is_reasoning_model: Filter to reasoning models
 
     Returns:
         PricingResponse: Aggregated pricing data with metrics and provider status
@@ -1002,6 +1012,18 @@ async def get_pricing(
         models, provider_status = await aggregator.get_pricing_by_provider_async(provider)
     else:
         models, provider_status = await aggregator.get_all_pricing_async()
+
+    # Apply capability filters
+    if supports_vision is not None:
+        models = [m for m in models if m.supports_vision == supports_vision]
+    if supports_function_calling is not None:
+        models = [m for m in models if m.supports_function_calling == supports_function_calling]
+    if supports_json_mode is not None:
+        models = [m for m in models if m.supports_json_mode == supports_json_mode]
+    if batch_available is not None:
+        models = [m for m in models if m.batch_available == batch_available]
+    if is_reasoning_model is not None:
+        models = [m for m in models if m.is_reasoning_model == is_reasoning_model]
 
     # Track provider usage
     telemetry = get_telemetry_service()

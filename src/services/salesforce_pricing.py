@@ -28,7 +28,8 @@ class SalesforcePricingService(BasePricingProvider):
                 "Deep Salesforce CRM integration", "Enterprise security",
                 "Pre-trained on business data", "Trust Layer built-in"
             ],
-            "best_for": "Enterprise Salesforce-native AI with built-in CRM context and compliance"
+            "best_for": "Enterprise Salesforce-native AI with built-in CRM context and compliance",
+            "supports_function_calling": True,
         },
         "einstein-llm-standard": {
             "input": 0.0015,
@@ -128,7 +129,12 @@ class SalesforcePricingService(BasePricingProvider):
                     latency_ms=600.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
@@ -152,7 +158,12 @@ class SalesforcePricingService(BasePricingProvider):
                     latency_ms=600.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list

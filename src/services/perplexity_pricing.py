@@ -22,7 +22,8 @@ class PerplexityPricingService(BasePricingProvider):
             "context_window": 127072,
             "use_cases": ["Research with reasoning", "Complex analysis", "Search-augmented tasks", "Deep research"],
             "strengths": ["Search integration", "Strong reasoning", "Up-to-date info", "Citations"],
-            "best_for": "Research tasks requiring reasoning and current information"
+            "best_for": "Research tasks requiring reasoning and current information",
+            "is_reasoning_model": True,
         },
         "sonar": {
             "input": 0.0005,
@@ -106,7 +107,12 @@ class PerplexityPricingService(BasePricingProvider):
                     latency_ms=perf.get("latency_ms", 400.0),
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
@@ -158,7 +164,12 @@ class PerplexityPricingService(BasePricingProvider):
                     latency_ms=400.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list

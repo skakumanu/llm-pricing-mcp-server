@@ -30,7 +30,9 @@ class CerebrasPricingService(BasePricingProvider):
             "best_for": (
                 "Applications requiring the fastest possible inference "
                 "with open-source model quality"
-            )
+            ),
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "llama3.1-70b": {
             "input": 0.0006,
@@ -44,7 +46,9 @@ class CerebrasPricingService(BasePricingProvider):
                 "Extremely fast inference", "Strong capability", "Competitive pricing",
                 "Wafer-scale chip speed"
             ],
-            "best_for": "High-quality real-time AI applications needing speed and capability"
+            "best_for": "High-quality real-time AI applications needing speed and capability",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "llama3.3-70b": {
             "input": 0.00085,
@@ -58,7 +62,9 @@ class CerebrasPricingService(BasePricingProvider):
                 "Latest Llama 3.3", "Ultra-fast on Cerebras", "Strong reasoning",
                 "Cost-effective"
             ],
-            "best_for": "State-of-the-art open-source capability with unmatched inference speed"
+            "best_for": "State-of-the-art open-source capability with unmatched inference speed",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "llama-3.2-3b": {
             "input": 0.00006,
@@ -72,7 +78,8 @@ class CerebrasPricingService(BasePricingProvider):
                 "Blazing fast", "Tiny model", "Near-zero cost",
                 "Cerebras wafer-scale speed"
             ],
-            "best_for": "IoT and edge deployments requiring extreme speed and minimal cost"
+            "best_for": "IoT and edge deployments requiring extreme speed and minimal cost",
+            "supports_function_calling": True,
         },
     }
 
@@ -116,7 +123,12 @@ class CerebrasPricingService(BasePricingProvider):
                     latency_ms=50.0,    # Ultra-low latency wafer-scale chip
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
@@ -140,7 +152,12 @@ class CerebrasPricingService(BasePricingProvider):
                     latency_ms=50.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
