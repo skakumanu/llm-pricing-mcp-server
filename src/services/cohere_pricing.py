@@ -22,7 +22,9 @@ class CoherePricingService(BasePricingProvider):
             "context_window": 128000,
             "use_cases": ["Enterprise search", "Advanced RAG", "Long document analysis", "Complex reasoning"],
             "strengths": ["Latest Command R+", "Enhanced retrieval", "Improved reasoning", "Tool use"],
-            "best_for": "Enterprise applications requiring best-in-class RAG and reasoning"
+            "best_for": "Enterprise applications requiring best-in-class RAG and reasoning",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "command-r-plus": {
             "input": 0.003,
@@ -30,7 +32,9 @@ class CoherePricingService(BasePricingProvider):
             "context_window": 128000,
             "use_cases": ["Enterprise search", "RAG systems", "Long document analysis", "Complex reasoning"],
             "strengths": ["Enterprise-optimized", "Excellent for RAG", "Strong context window"],
-            "best_for": "Enterprise applications requiring long-context understanding"
+            "best_for": "Enterprise applications requiring long-context understanding",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "command-r-08-2024": {
             "input": 0.00015,
@@ -38,7 +42,9 @@ class CoherePricingService(BasePricingProvider):
             "context_window": 128000,
             "use_cases": ["Customer support", "FAQ automation", "Cost-effective RAG", "Document Q&A"],
             "strengths": ["Latest Command R", "Best price/performance", "Strong retrieval", "Tool use"],
-            "best_for": "Cost-effective applications needing latest RAG capabilities"
+            "best_for": "Cost-effective applications needing latest RAG capabilities",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "command-r": {
             "input": 0.0005,
@@ -46,7 +52,9 @@ class CoherePricingService(BasePricingProvider):
             "context_window": 128000,
             "use_cases": ["Customer support automation", "FAQ systems", "Information retrieval", "Document Q&A"],
             "strengths": ["Cost-effective RAG", "Good retrieval capabilities", "Large context"],
-            "best_for": "Mid-tier applications needing retrieval-augmented generation"
+            "best_for": "Mid-tier applications needing retrieval-augmented generation",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "command": {
             "input": 0.001,
@@ -162,7 +170,12 @@ class CoherePricingService(BasePricingProvider):
                         latency_ms=metrics.get("latency_ms", 300.0),
                         use_cases=static_info.get("use_cases"),
                         strengths=static_info.get("strengths"),
-                        best_for=static_info.get("best_for")
+                        best_for=static_info.get("best_for"),
+                        supports_vision=static_info.get("supports_vision", False),
+                        supports_function_calling=static_info.get("supports_function_calling", False),
+                        supports_json_mode=static_info.get("supports_json_mode", False),
+                        batch_available=static_info.get("batch_available", False),
+                        is_reasoning_model=static_info.get("is_reasoning_model", False),
                     )
                 )
 
@@ -234,7 +247,12 @@ class CoherePricingService(BasePricingProvider):
                     latency_ms=300.0,
                     use_cases=pricing_info.get("use_cases"),
                     strengths=pricing_info.get("strengths"),
-                    best_for=pricing_info.get("best_for")
+                    best_for=pricing_info.get("best_for"),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
@@ -263,7 +281,12 @@ class CoherePricingService(BasePricingProvider):
                     latency_ms=300.0,
                     use_cases=pricing_info.get("use_cases"),
                     strengths=pricing_info.get("strengths"),
-                    best_for=pricing_info.get("best_for")
+                    best_for=pricing_info.get("best_for"),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list

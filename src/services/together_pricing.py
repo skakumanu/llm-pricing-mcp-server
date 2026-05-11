@@ -22,7 +22,9 @@ class TogetherPricingService(BasePricingProvider):
             "context_window": 131072,
             "use_cases": ["Latest Llama capabilities", "Complex reasoning", "Code generation", "Long context"],
             "strengths": ["Latest Llama 3.3", "Enhanced reasoning", "128K context", "GPT-4 level performance"],
-            "best_for": "Applications needing latest open-source capabilities at scale"
+            "best_for": "Applications needing latest open-source capabilities at scale",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo": {
             "input": 0.005,
@@ -30,7 +32,9 @@ class TogetherPricingService(BasePricingProvider):
             "context_window": 130000,
             "use_cases": ["Complex reasoning", "Research", "Advanced analysis", "Long documents"],
             "strengths": ["Largest Llama model", "Strong reasoning", "Long context"],
-            "best_for": "Complex tasks requiring state-of-the-art open-source reasoning"
+            "best_for": "Complex tasks requiring state-of-the-art open-source reasoning",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo": {
             "input": 0.00088,
@@ -38,7 +42,9 @@ class TogetherPricingService(BasePricingProvider):
             "context_window": 131072,
             "use_cases": ["General purpose", "Code generation", "Analysis", "Creative work"],
             "strengths": ["Well-balanced", "Long context", "Cost-effective"],
-            "best_for": "General-purpose applications with long context needs"
+            "best_for": "General-purpose applications with long context needs",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "meta-llama/Meta-Llama-3.2-3B-Instruct-Turbo": {
             "input": 0.00006,
@@ -46,7 +52,8 @@ class TogetherPricingService(BasePricingProvider):
             "context_window": 131072,
             "use_cases": ["Edge deployment", "Ultra-high-volume", "Mobile apps", "Real-time"],
             "strengths": ["Compact", "Ultra-fast", "Very cheap", "Long context"],
-            "best_for": "Edge and mobile applications requiring minimal resources"
+            "best_for": "Edge and mobile applications requiring minimal resources",
+            "supports_function_calling": True,
         },
         "Qwen/Qwen2.5-72B-Instruct-Turbo": {
             "input": 0.0009,
@@ -54,7 +61,9 @@ class TogetherPricingService(BasePricingProvider):
             "context_window": 131072,
             "use_cases": ["Multilingual", "Code generation", "Math reasoning", "Analysis"],
             "strengths": ["Latest Qwen", "Excellent multilingual", "Strong math", "128K context"],
-            "best_for": "Multilingual applications requiring strong reasoning and code"
+            "best_for": "Multilingual applications requiring strong reasoning and code",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "Qwen/Qwen2.5-7B-Instruct-Turbo": {
             "input": 0.0003,
@@ -62,7 +71,9 @@ class TogetherPricingService(BasePricingProvider):
             "context_window": 131072,
             "use_cases": ["Cost-effective multilingual", "Efficient deployment", "High-volume"],
             "strengths": ["Affordable", "Multilingual", "Long context", "Fast"],
-            "best_for": "Budget-friendly multilingual applications with long context"
+            "best_for": "Budget-friendly multilingual applications with long context",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "mistralai/Mixtral-8x7B-Instruct-v0.1": {
             "input": 0.0006,
@@ -70,7 +81,8 @@ class TogetherPricingService(BasePricingProvider):
             "context_window": 32768,
             "use_cases": ["Code generation", "Multilingual", "Reasoning", "General chat"],
             "strengths": ["Mixture of experts", "Versatile", "Good performance"],
-            "best_for": "Applications needing balanced performance and affordability"
+            "best_for": "Applications needing balanced performance and affordability",
+            "supports_function_calling": True,
         },
         "google/gemma-2-27b-it": {
             "input": 0.0008,
@@ -181,7 +193,12 @@ class TogetherPricingService(BasePricingProvider):
                     latency_ms=perf.get("latency_ms", 300.0),
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
@@ -244,7 +261,12 @@ class TogetherPricingService(BasePricingProvider):
                     latency_ms=300.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list

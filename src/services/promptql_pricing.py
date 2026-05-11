@@ -37,7 +37,9 @@ class PromptQLPricingService(BasePricingProvider):
             "best_for": (
                 "Enterprise data teams needing natural-language access to structured data "
                 "with verifiable, deterministic query execution"
-            )
+            ),
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "promptql-fast": {
             "input": 0.0008,
@@ -51,7 +53,9 @@ class PromptQLPricingService(BasePricingProvider):
                 "Low latency", "Cost-effective for BI", "Schema-aware",
                 "Batch query support"
             ],
-            "best_for": "High-throughput analytics Q&A workloads at lower cost"
+            "best_for": "High-throughput analytics Q&A workloads at lower cost",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "promptql-mini": {
             "input": 0.0002,
@@ -108,7 +112,12 @@ class PromptQLPricingService(BasePricingProvider):
                     latency_ms=500.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
@@ -132,7 +141,12 @@ class PromptQLPricingService(BasePricingProvider):
                     latency_ms=500.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list

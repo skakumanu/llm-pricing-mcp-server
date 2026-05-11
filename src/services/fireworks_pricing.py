@@ -22,7 +22,9 @@ class FireworksPricingService(BasePricingProvider):
             "context_window": 131072,
             "use_cases": ["Latest Llama", "Complex reasoning", "Code generation", "Long context"],
             "strengths": ["Latest Llama 3.3", "Enhanced intelligence", "Ultra-fast", "128K context"],
-            "best_for": "Applications needing cutting-edge Llama with fastest inference"
+            "best_for": "Applications needing cutting-edge Llama with fastest inference",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "accounts/fireworks/models/llama-v3p2-90b-vision-instruct": {
             "input": 0.0009,
@@ -30,7 +32,9 @@ class FireworksPricingService(BasePricingProvider):
             "context_window": 131072,
             "use_cases": ["Vision + text", "Image analysis", "Multimodal reasoning", "Visual Q&A"],
             "strengths": ["Multimodal", "Large vision model", "Fast", "Long context"],
-            "best_for": "Multimodal applications requiring vision understanding at speed"
+            "best_for": "Multimodal applications requiring vision understanding at speed",
+            "supports_vision": True,
+            "supports_function_calling": True,
         },
         "accounts/fireworks/models/llama-v3p1-405b-instruct": {
             "input": 0.003,
@@ -38,7 +42,9 @@ class FireworksPricingService(BasePricingProvider):
             "context_window": 131072,
             "use_cases": ["Complex reasoning", "Research", "Advanced tasks", "Long-form"],
             "strengths": ["Largest Llama", "Fast inference", "Long context"],
-            "best_for": "Complex tasks requiring top-tier reasoning with fast inference"
+            "best_for": "Complex tasks requiring top-tier reasoning with fast inference",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "accounts/fireworks/models/llama-v3p1-70b-instruct": {
             "input": 0.0009,
@@ -46,7 +52,9 @@ class FireworksPricingService(BasePricingProvider):
             "context_window": 131072,
             "use_cases": ["General purpose", "Code", "Analysis", "Creative"],
             "strengths": ["Well-balanced", "Fast", "Long context"],
-            "best_for": "General applications needing balanced performance"
+            "best_for": "General applications needing balanced performance",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "accounts/fireworks/models/qwen2p5-72b-instruct": {
             "input": 0.0009,
@@ -54,7 +62,9 @@ class FireworksPricingService(BasePricingProvider):
             "context_window": 131072,
             "use_cases": ["Multilingual", "Math reasoning", "Code generation", "Analysis"],
             "strengths": ["Latest Qwen", "Excellent multilingual", "Strong math", "128K context"],
-            "best_for": "Multilingual applications with strong reasoning needs"
+            "best_for": "Multilingual applications with strong reasoning needs",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "accounts/fireworks/models/mixtral-8x7b-instruct": {
             "input": 0.0005,
@@ -62,7 +72,8 @@ class FireworksPricingService(BasePricingProvider):
             "context_window": 32768,
             "use_cases": ["Code", "Multilingual", "Reasoning"],
             "strengths": ["MoE architecture", "Versatile", "Fast"],
-            "best_for": "Balanced performance and cost"
+            "best_for": "Balanced performance and cost",
+            "supports_function_calling": True,
         },
         "accounts/fireworks/models/yi-large": {
             "input": 0.003,
@@ -146,7 +157,12 @@ class FireworksPricingService(BasePricingProvider):
                     latency_ms=perf.get("latency_ms", 200.0),
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
@@ -198,7 +214,12 @@ class FireworksPricingService(BasePricingProvider):
                     latency_ms=200.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list

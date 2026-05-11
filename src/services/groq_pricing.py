@@ -22,7 +22,8 @@ class GroqPricingService(BasePricingProvider):
             "context_window": 8192,
             "use_cases": ["Vision + text", "Image understanding", "Visual Q&A", "Multimodal analysis"],
             "strengths": ["Multimodal", "Fast on Groq", "Open source", "Latest Llama"],
-            "best_for": "Open-source multimodal applications needing ultra-fast inference"
+            "best_for": "Open-source multimodal applications needing ultra-fast inference",
+            "supports_vision": True,
         },
         "llama-3.2-11b-vision": {
             "input": 0.00018,
@@ -30,7 +31,8 @@ class GroqPricingService(BasePricingProvider):
             "context_window": 8192,
             "use_cases": ["Edge vision tasks", "Cost-effective multimodal", "Mobile deployment"],
             "strengths": ["Compact", "Vision capable", "Very fast", "Affordable"],
-            "best_for": "Edge and mobile vision applications with speed requirements"
+            "best_for": "Edge and mobile vision applications with speed requirements",
+            "supports_vision": True,
         },
         "llama-3.2-3b": {
             "input": 0.00006,
@@ -60,7 +62,9 @@ class GroqPricingService(BasePricingProvider):
             "best_for": (
                 "Complex tasks requiring state-of-the-art reasoning "
                 "with ultra-fast inference"
-            )
+            ),
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "llama-3.1-70b": {
             "input": 0.00059,
@@ -68,7 +72,9 @@ class GroqPricingService(BasePricingProvider):
             "context_window": 131072,
             "use_cases": ["General purpose", "Code generation", "Data analysis", "Creative writing"],
             "strengths": ["Great balance", "Fast inference", "Long context"],
-            "best_for": "High-performance applications needing speed and quality"
+            "best_for": "High-performance applications needing speed and quality",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "llama-3.1-8b": {
             "input": 0.00005,
@@ -76,7 +82,9 @@ class GroqPricingService(BasePricingProvider):
             "context_window": 131072,
             "use_cases": ["High-volume tasks", "Real-time processing", "Simple Q&A", "Classification"],
             "strengths": ["Ultra-fast", "Very affordable", "Long context"],
-            "best_for": "High-throughput applications with cost constraints"
+            "best_for": "High-throughput applications with cost constraints",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "mixtral-8x7b": {
             "input": 0.00024,
@@ -84,7 +92,9 @@ class GroqPricingService(BasePricingProvider):
             "context_window": 32768,
             "use_cases": ["Code generation", "Multilingual tasks", "Reasoning"],
             "strengths": ["Mixture of experts", "Fast", "Good quality"],
-            "best_for": "Applications needing balanced performance and speed"
+            "best_for": "Applications needing balanced performance and speed",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
         },
         "gemma-2-9b": {
             "input": 0.0002,
@@ -203,7 +213,12 @@ class GroqPricingService(BasePricingProvider):
                     latency_ms=perf.get("latency_ms", 100.0),  # Very low latency
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
@@ -267,7 +282,12 @@ class GroqPricingService(BasePricingProvider):
                     latency_ms=100.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    supports_vision=pricing_info.get("supports_vision", False),
+                    supports_function_calling=pricing_info.get("supports_function_calling", False),
+                    supports_json_mode=pricing_info.get("supports_json_mode", False),
+                    batch_available=pricing_info.get("batch_available", False),
+                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
                 )
             )
         return pricing_list
