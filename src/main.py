@@ -1587,6 +1587,9 @@ async def router_recommend(req: RouterRequest, request: Request):
         min_context_window=req.min_context_window,
         preferred_provider=req.preferred_provider,
         task_type=req.task_type,
+        prefer_low_latency=req.prefer_low_latency,
+        exclude_reasoning_models=req.exclude_reasoning_models,
+        ide_context=req.ide_context,
     )
     router = get_router()
     result = await router.get_optimal_model(constraints)
@@ -1710,6 +1713,19 @@ async def router_recommend_stream(req: RouterRequest, request: Request):
         "chat": ["chat", "conversation", "general", "assistant"],
         "analysis": ["analysis", "reasoning", "research", "data"],
         "summarization": ["summar", "extract", "document"],
+        "code_completion": ["code", "coding", "completion", "inline", "programming"],
+        "code_chat": ["chat", "code", "coding", "assistant", "conversation"],
+        "code_refactor": ["refactor", "code", "coding", "improvement", "analysis"],
+        "agentic_coding": ["agentic", "code", "coding", "tool", "agent", "multi-step"],
+    }
+
+    _IDE_NATIVE_PROVIDERS = {
+        "copilot": ["github copilot"],
+        "cursor": ["cursor"],
+        "windsurf": ["windsurf", "codeium"],
+        "claude_code": ["anthropic"],
+        "jetbrains": ["jetbrains ai"],
+        "amazon_q": ["amazon q developer"],
     }
 
     async def generate():
@@ -1741,6 +1757,8 @@ async def router_recommend_stream(req: RouterRequest, request: Request):
                     if kws and m.use_cases:
                         if not any(kw in " ".join(m.use_cases).lower() for kw in kws):
                             continue
+                if req.exclude_reasoning_models and m.is_reasoning_model:
+                    continue
                 candidates.append(m)
 
             if not candidates:
@@ -1751,10 +1769,23 @@ async def router_recommend_stream(req: RouterRequest, request: Request):
             yield _event("candidates_ready", {"count": len(candidates)})
 
             # --- Scoring ---
+            _latency_sensitive = req.task_type in ("code_completion",) or req.prefer_low_latency
+
             def _score(m) -> float:
                 base = m.quality_value_score or 0.0
                 if req.preferred_provider and m.provider.lower() == req.preferred_provider.lower():
                     base *= 1.10
+                if req.ide_context:
+                    native = _IDE_NATIVE_PROVIDERS.get(req.ide_context.lower(), [])
+                    if any(np in m.provider.lower() for np in native):
+                        base *= 1.15
+                if _latency_sensitive and m.latency_ms is not None:
+                    if m.latency_ms <= 300:
+                        base *= 1.20
+                    elif m.latency_ms >= 2000:
+                        base *= 0.70
+                if req.task_type in ("code_completion", "code_chat") and m.is_reasoning_model:
+                    base *= 0.60
                 return base
 
             candidates.sort(key=_score, reverse=True)

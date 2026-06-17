@@ -40,6 +40,23 @@ class PricingMetrics(BaseModel):
     supports_json_mode: bool = Field(False, description="Whether the model supports structured JSON output mode")
     batch_available: bool = Field(False, description="Whether batch processing API is available for this model")
     is_reasoning_model: bool = Field(False, description="Whether this is a reasoning/thinking model (e.g., o1, R1)")
+    # IDE and subscription fields
+    pricing_model: str = Field(
+        default="per_token",
+        description="Pricing model type: 'per_token', 'subscription', or 'hybrid'",
+    )
+    subscription_monthly_usd: Optional[float] = Field(
+        None,
+        description="Monthly subscription cost in USD (for subscription-based tools like Copilot, Cursor)",
+    )
+    supports_inline_completion: bool = Field(
+        False,
+        description="Whether the model/tool supports real-time inline code completion",
+    )
+    ide_native: bool = Field(
+        False,
+        description="Whether this is an IDE-native tool (GitHub Copilot, Cursor, Windsurf, etc.)",
+    )
 
     @computed_field
     @property
@@ -428,7 +445,26 @@ class RouterRequest(BaseModel):
         None, description="Preferred provider name (10% score boost applied)"
     )
     task_type: Optional[str] = Field(
-        None, description="Task type hint: 'code' | 'chat' | 'analysis' | 'summarization'"
+        None,
+        description=(
+            "Task type hint: 'code' | 'chat' | 'analysis' | 'summarization' | "
+            "'code_completion' | 'code_chat' | 'code_refactor' | 'agentic_coding'"
+        ),
+    )
+    prefer_low_latency: bool = Field(
+        False,
+        description="Prioritise lower-latency models; important for inline code completions",
+    )
+    exclude_reasoning_models: bool = Field(
+        False,
+        description="Exclude slow thinking/reasoning models (e.g. o1, o3, R1, claude-3-7-sonnet)",
+    )
+    ide_context: Optional[str] = Field(
+        None,
+        description=(
+            "IDE context hint — boosts IDE-native tools when set: "
+            "'copilot' | 'cursor' | 'windsurf' | 'claude_code' | 'jetbrains' | 'amazon_q'"
+        ),
     )
 
 
