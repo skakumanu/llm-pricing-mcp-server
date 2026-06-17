@@ -1778,7 +1778,10 @@ async def router_recommend_stream(req: RouterRequest, request: Request):
                 if req.ide_context:
                     native = _IDE_NATIVE_PROVIDERS.get(req.ide_context.lower(), [])
                     if any(np in m.provider.lower() for np in native):
-                        base *= 1.15
+                        if getattr(m, "ide_native", False):
+                            base *= 5.0
+                        else:
+                            base *= 1.15
                 if _latency_sensitive and m.latency_ms is not None:
                     if m.latency_ms <= 300:
                         base *= 1.20

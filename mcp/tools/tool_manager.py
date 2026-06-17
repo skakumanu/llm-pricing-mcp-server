@@ -15,6 +15,7 @@ from mcp.tools.get_pricing_export_url import GetPricingExportUrlTool
 from mcp.tools.list_conversations import ListConversationsTool
 from mcp.tools.delete_conversation import DeleteConversationTool
 from mcp.tools.ask_agent import AskAgentTool
+from mcp.tools.get_ide_pricing import GetIDEPricingTool
 
 
 class ToolManager:
@@ -358,6 +359,40 @@ class ToolManager:
                         },
                     },
                     "required": ["conversation_id"],
+                },
+            },
+            "get_ide_pricing": {
+                "instance": GetIDEPricingTool(),
+                "name": "get_ide_pricing",
+                "description": (
+                    "Get subscription pricing for AI coding IDE tools: GitHub Copilot, Cursor, "
+                    "Windsurf, Claude.ai, JetBrains AI, Amazon Q Developer, and Tabnine. "
+                    "Returns monthly subscription cost, inline completion support, context window, "
+                    "and per-tool strengths. Use this when the user asks to compare IDE AI tools, "
+                    "subscription-based coding assistants, or wants to know which IDE AI fits their budget."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "provider": {
+                            "type": "string",
+                            "description": (
+                                "Filter by provider name (partial match, case-insensitive). "
+                                "Examples: 'GitHub Copilot', 'Cursor', 'Windsurf', 'JetBrains', 'Amazon Q', 'Tabnine'"
+                            ),
+                        },
+                        "max_monthly": {
+                            "type": "number",
+                            "description": "Only return plans at or below this monthly USD price (e.g. 20 for $20/mo)",
+                            "minimum": 0,
+                        },
+                        "inline_only": {
+                            "type": "boolean",
+                            "description": "If true, only return tools that support real-time inline code completion",
+                            "default": False,
+                        },
+                    },
+                    "required": [],
                 },
             },
             "ask_agent": {

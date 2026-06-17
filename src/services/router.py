@@ -126,11 +126,14 @@ class ModelRouter:
             ):
                 base *= 1.10
 
-            # IDE-native providers get a 15% boost when ide_context is specified
+            # ide_context: native IDE tools get a strong boost; same provider, non-native gets a mild one
             if constraints.ide_context:
                 native_providers = self._IDE_NATIVE_PROVIDERS.get(constraints.ide_context.lower(), [])
                 if any(np in m.provider.lower() for np in native_providers):
-                    base *= 1.15
+                    if getattr(m, "ide_native", False):
+                        base *= 5.0   # strong: user is in this IDE, prefer its own tooling
+                    else:
+                        base *= 1.15  # mild: matching provider but not an IDE-native tool
 
             # Latency-sensitive tasks: penalise slow models, reward fast ones
             if _latency_sensitive and m.latency_ms is not None:
