@@ -362,6 +362,7 @@ class PricingSnapshotRecord(BaseModel):
     cost_per_input_token: float = Field(..., description="Input token cost in USD")
     cost_per_output_token: float = Field(..., description="Output token cost in USD")
     captured_at: float = Field(..., description="Unix timestamp of the snapshot")
+    subscription_monthly_usd: Optional[float] = Field(None, description="Monthly subscription cost in USD (for subscription-based tools)")
 
 
 class PricingHistoryResponse(BaseModel):
@@ -394,6 +395,28 @@ class PricingTrendsResponse(BaseModel):
 
     trends: List[PricingTrendRecord] = Field(..., description="Models with largest price changes")
     days: int = Field(..., description="Look-back window in days")
+
+
+class SubscriptionTrendRecord(BaseModel):
+    """Price trend for a single subscription-based tool over a time period."""
+
+    model_config = ConfigDict(protected_namespaces=())
+
+    model_name: str
+    provider: str
+    subscription_change_pct: float
+    direction: str  # 'increased', 'decreased', 'unchanged'
+    first_seen: float
+    last_seen: float
+    first_price: float
+    last_price: float
+
+
+class SubscriptionTrendsResponse(BaseModel):
+    """Response for GET /pricing/subscription-trends."""
+
+    trends: List[SubscriptionTrendRecord]
+    days: int
 
 
 class PricingAlertRequest(BaseModel):

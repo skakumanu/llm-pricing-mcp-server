@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS pricing_snapshots (
     model_name TEXT NOT NULL,
     provider TEXT NOT NULL,
     cost_per_input_token REAL NOT NULL,
-    cost_per_output_token REAL NOT NULL
+    cost_per_output_token REAL NOT NULL,
+    subscription_monthly_usd REAL
 )
 """
 
@@ -24,12 +25,13 @@ ON pricing_snapshots (provider, model_name, captured_at)
 
 _INSERT = """
 INSERT INTO pricing_snapshots
-    (captured_at, model_name, provider, cost_per_input_token, cost_per_output_token)
-VALUES (?, ?, ?, ?, ?)
+    (captured_at, model_name, provider, cost_per_input_token, cost_per_output_token, subscription_monthly_usd)
+VALUES (?, ?, ?, ?, ?, ?)
 """
 
 _HISTORY_QUERY = """
-SELECT model_name, provider, cost_per_input_token, cost_per_output_token, captured_at
+SELECT model_name, provider, cost_per_input_token, cost_per_output_token, captured_at,
+       subscription_monthly_usd
 FROM pricing_snapshots
 WHERE captured_at >= ?
 {where_extra}
@@ -69,6 +71,36 @@ _TOTAL_QUERY = """
 SELECT COUNT(*) FROM pricing_snapshots WHERE captured_at >= ? {where_extra}
 """
 
+_SUBSCRIPTION_TRENDS_QUERY = """
+SELECT
+    o.model_name,
+    o.provider,
+    o.subscription_monthly_usd AS first_price,
+    n.subscription_monthly_usd AS last_price,
+    o.captured_at              AS first_seen,
+    n.captured_at              AS last_seen
+FROM pricing_snapshots o
+JOIN pricing_snapshots n
+  ON o.model_name = n.model_name AND o.provider = n.provider
+WHERE o.subscription_monthly_usd IS NOT NULL
+AND n.subscription_monthly_usd IS NOT NULL
+AND o.captured_at = (
+    SELECT MIN(captured_at) FROM pricing_snapshots
+    WHERE model_name = o.model_name AND provider = o.provider
+      AND captured_at >= :cutoff AND subscription_monthly_usd IS NOT NULL
+)
+AND n.captured_at = (
+    SELECT MAX(captured_at) FROM pricing_snapshots
+    WHERE model_name = n.model_name AND provider = n.provider
+      AND subscription_monthly_usd IS NOT NULL
+)
+AND o.captured_at < n.captured_at
+ORDER BY ABS(
+    (n.subscription_monthly_usd - o.subscription_monthly_usd) / MAX(o.subscription_monthly_usd, 1e-12)
+) DESC
+LIMIT :limit
+"""
+
 
 class PricingHistoryService:
     """Records periodic snapshots of live pricing and exposes history/trend queries."""
@@ -83,6 +115,11 @@ class PricingHistoryService:
         async with aiosqlite.connect(self._db_path) as db:
             await db.execute(_CREATE_TABLE)
             await db.execute(_CREATE_INDEX)
+            try:
+                await db.execute("ALTER TABLE pricing_snapshots ADD COLUMN subscription_monthly_usd REAL")
+                await db.commit()
+            except Exception:
+                pass  # column already exists
             await db.commit()
 
     async def record_snapshot(self, models) -> int:
@@ -90,7 +127,14 @@ class PricingHistoryService:
         import aiosqlite
         now = time.time()
         rows = [
-            (now, m.model_name, m.provider, m.cost_per_input_token, m.cost_per_output_token)
+            (
+                now,
+                m.model_name,
+                m.provider,
+                m.cost_per_input_token,
+                m.cost_per_output_token,
+                getattr(m, 'subscription_monthly_usd', None),
+            )
             for m in models
         ]
         async with aiosqlite.connect(self._db_path) as db:
@@ -178,6 +222,47 @@ class PricingHistoryService:
                 "last_input": last_in,
                 "first_output": first_out,
                 "last_output": last_out,
+            })
+        return trends
+
+    async def get_subscription_trends(
+        self, days: int = 30, limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """Return models with the largest subscription price change over the last `days` days."""
+        import aiosqlite
+        cutoff = time.time() - days * 86400
+
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(_SUBSCRIPTION_TRENDS_QUERY, {"cutoff": cutoff, "limit": limit}) as cur:
+                rows = await cur.fetchall()
+
+        trends = []
+        for r in rows:
+            first_price = r["first_price"]
+            last_price = r["last_price"]
+
+            if first_price == 0:
+                change_pct = 0.0
+            else:
+                change_pct = round((last_price - first_price) / first_price * 100, 2)
+
+            if abs(change_pct) < 0.1:
+                direction = "unchanged"
+            elif change_pct < 0:
+                direction = "decreased"
+            else:
+                direction = "increased"
+
+            trends.append({
+                "model_name": r["model_name"],
+                "provider": r["provider"],
+                "subscription_change_pct": change_pct,
+                "direction": direction,
+                "first_seen": r["first_seen"],
+                "last_seen": r["last_seen"],
+                "first_price": first_price,
+                "last_price": last_price,
             })
         return trends
 

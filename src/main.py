@@ -30,7 +30,7 @@ from src.models.pricing import (  # noqa: E402
     PerformanceResponse, PerformanceMetrics, ModelUseCase, UseCaseResponse, TelemetryResponse,
     EndpointMetricResponse, ProviderAdoptionResponse, FeatureUsageResponse, TelemetryOverallStats,
     ClientLocationStats, BrowserStats,
-    PricingHistoryResponse, PricingTrendsResponse,
+    PricingHistoryResponse, PricingTrendsResponse, SubscriptionTrendsResponse, SubscriptionTrendRecord,
     PricingAlertRequest, PricingAlertRecord, PricingAlertListResponse,
     ConversationSummary, ConversationListResponse,
     RouterRequest, RouterResponse, RouterFeedbackRequest, RouterFeedbackResponse,
@@ -217,6 +217,13 @@ if _static_dir.exists():
             "/compare",
             StaticFiles(directory=str(_compare_dir), html=True),
             name="compare_static",
+        )
+    _ide_compare_dir = _static_dir / "ide-compare"
+    if _ide_compare_dir.exists():
+        app.mount(
+            "/ide-compare",
+            StaticFiles(directory=str(_ide_compare_dir), html=True),
+            name="ide_compare_static",
         )
     _widget_dir = _static_dir / "widget"
     if _widget_dir.exists():
@@ -2306,6 +2313,17 @@ async def pricing_trends(
     svc = get_pricing_history_service()
     trends = await svc.get_trends(days=days, limit=limit)
     return PricingTrendsResponse(trends=trends, days=days)
+
+
+@app.get("/pricing/subscription-trends", response_model=SubscriptionTrendsResponse, tags=["Pricing"])
+async def subscription_price_trends(
+    days: int = Query(30, ge=1, le=365, description="Look-back window in days"),
+    limit: int = Query(20, ge=1, le=100, description="Max models to return"),
+):
+    """Return IDE/subscription tools whose monthly price changed the most."""
+    svc = get_pricing_history_service()
+    trends = await svc.get_subscription_trends(days=days, limit=limit)
+    return SubscriptionTrendsResponse(trends=trends, days=days)
 
 
 # ---------------------------------------------------------------------------
