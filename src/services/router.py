@@ -27,6 +27,10 @@ class RouterConstraints:
     prefer_low_latency: bool = False
     exclude_reasoning_models: bool = False
     ide_context: Optional[str] = None  # "copilot"|"cursor"|"windsurf"|"claude_code"|"jetbrains"|"amazon_q"
+    monthly_budget_usd: Optional[float] = None
+    estimated_monthly_requests: int = 1000
+    avg_input_tokens: int = 500
+    avg_output_tokens: int = 200
 
 
 @dataclass
@@ -108,6 +112,25 @@ class ModelRouter:
             if constraints.exclude_reasoning_models and m.is_reasoning_model:
                 continue
 
+            if constraints.monthly_budget_usd is not None:
+                pricing_model = getattr(m, "pricing_model", "per_token")
+                sub_price = getattr(m, "subscription_monthly_usd", None)
+                if pricing_model == "subscription" and sub_price is not None:
+                    # subscription tool: monthly cost IS the subscription price
+                    if sub_price > constraints.monthly_budget_usd:
+                        continue
+                else:
+                    # per-token tool: project monthly cost from request estimates
+                    projected = (
+                        constraints.estimated_monthly_requests
+                        * (
+                            constraints.avg_input_tokens * m.cost_per_input_token
+                            + constraints.avg_output_tokens * m.cost_per_output_token
+                        )
+                    )
+                    if projected > constraints.monthly_budget_usd:
+                        continue
+
             candidates.append(m)
 
         if not candidates:
@@ -155,7 +178,23 @@ class ModelRouter:
 
         best_score = score_model(best)
         avg_cost_1m = (best.cost_per_input_token + best.cost_per_output_token) / 2 * 1_000_000
-        reason = _build_reason(best, best_score, avg_cost_1m, constraints)
+
+        best_projected = None
+        if constraints.monthly_budget_usd is not None:
+            pricing_model = getattr(best, "pricing_model", "per_token")
+            sub_price = getattr(best, "subscription_monthly_usd", None)
+            if pricing_model == "subscription" and sub_price is not None:
+                best_projected = sub_price
+            else:
+                best_projected = (
+                    constraints.estimated_monthly_requests
+                    * (
+                        constraints.avg_input_tokens * best.cost_per_input_token
+                        + constraints.avg_output_tokens * best.cost_per_output_token
+                    )
+                )
+
+        reason = _build_reason(best, best_score, avg_cost_1m, constraints, projected_monthly=best_projected)
 
         return RouterResult(
             recommended=best,
@@ -165,7 +204,13 @@ class ModelRouter:
         )
 
 
-def _build_reason(model, score: float, cost_1m: float, c: RouterConstraints) -> str:
+def _build_reason(
+    model,
+    score: float,
+    cost_1m: float,
+    c: RouterConstraints,
+    projected_monthly: Optional[float] = None,
+) -> str:
     parts = [
         f"{model.model_name} ({model.provider})",
         f"quality_value_score={score:.2f}",
@@ -185,6 +230,8 @@ def _build_reason(model, score: float, cost_1m: float, c: RouterConstraints) -> 
         parts.append("reasoning models excluded")
     if c.prefer_low_latency and model.latency_ms is not None:
         parts.append(f"latency={model.latency_ms:.0f}ms")
+    if projected_monthly is not None:
+        parts.append(f"projected_monthly=${projected_monthly:.2f}")
     return "; ".join(parts)
 
 

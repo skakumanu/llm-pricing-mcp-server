@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS routing_savings (
     baseline_cost_per_1m REAL,
     savings_per_1m REAL,
     task_type TEXT,
-    routing_id TEXT
+    routing_id TEXT,
+    ide_context TEXT
 )
 """
 
@@ -48,8 +49,8 @@ _INSERT = """
 INSERT INTO routing_savings
     (org_id, api_key_tier, requested_at,
      recommended_model, recommended_provider, recommended_cost_per_1m,
-     baseline_model, baseline_cost_per_1m, savings_per_1m, task_type, routing_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     baseline_model, baseline_cost_per_1m, savings_per_1m, task_type, routing_id, ide_context)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _INSERT_FEEDBACK = """
@@ -60,12 +61,25 @@ VALUES (?, ?, ?, ?, ?)
 _QUERY = """
 SELECT id, org_id, api_key_tier, requested_at,
        recommended_model, recommended_provider, recommended_cost_per_1m,
-       baseline_model, baseline_cost_per_1m, savings_per_1m, task_type
+       baseline_model, baseline_cost_per_1m, savings_per_1m, task_type, ide_context
 FROM routing_savings
 WHERE requested_at >= ?
 {where_extra}
 ORDER BY requested_at DESC
 LIMIT ?
+"""
+
+_IDE_BREAKDOWN_QUERY = """
+SELECT
+    ide_context,
+    COUNT(*) AS total_decisions,
+    COALESCE(SUM(savings_per_1m), 0.0) AS total_savings,
+    COUNT(CASE WHEN rf.was_used = 1 THEN 1 END) * 1.0 / NULLIF(COUNT(rf.id), 0) AS acceptance_rate
+FROM routing_savings rs
+LEFT JOIN routing_feedback rf ON rs.routing_id = rf.routing_id
+WHERE rs.requested_at >= ?
+GROUP BY ide_context
+ORDER BY total_decisions DESC
 """
 
 _TOTAL_QUERY = """
@@ -107,6 +121,10 @@ class SavingsTrackerService:
                 await db.execute("ALTER TABLE routing_savings ADD COLUMN routing_id TEXT")
             except _aiosqlite.OperationalError:
                 pass  # nosec B110 — column already exists, this is intentional
+            try:
+                await db.execute("ALTER TABLE routing_savings ADD COLUMN ide_context TEXT")
+            except _aiosqlite.OperationalError:
+                pass  # nosec B110 — column already exists, this is intentional
             await db.commit()
 
     async def record_routing(
@@ -120,6 +138,7 @@ class SavingsTrackerService:
         baseline_cost_per_1m: Optional[float] = None,
         task_type: Optional[str] = None,
         routing_id: Optional[str] = None,
+        ide_context: Optional[str] = None,
     ) -> None:
         """Persist a routing decision."""
         import aiosqlite
@@ -140,6 +159,7 @@ class SavingsTrackerService:
                 savings,
                 task_type,
                 routing_id,
+                ide_context,
             ))
             await db.commit()
 
@@ -183,6 +203,24 @@ class SavingsTrackerService:
         if row is None or row[0] is None:
             return None
         return round(float(row[0]), 4)
+
+    async def get_ide_breakdown(self, days: int = 30) -> List[Dict[str, Any]]:
+        """Return routing decision counts, savings, and acceptance rate grouped by ide_context."""
+        import aiosqlite
+        cutoff = time.time() - days * 86400
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(_IDE_BREAKDOWN_QUERY, (cutoff,)) as cur:
+                rows = await cur.fetchall()
+        return [
+            {
+                "ide_context": r["ide_context"],
+                "total_decisions": r["total_decisions"],
+                "total_savings_per_1m": round(float(r["total_savings"]), 4),
+                "acceptance_rate": round(float(r["acceptance_rate"]), 4) if r["acceptance_rate"] is not None else None,
+            }
+            for r in rows
+        ]
 
     async def get_savings(
         self,

@@ -489,6 +489,30 @@ class RouterRequest(BaseModel):
             "'copilot' | 'cursor' | 'windsurf' | 'claude_code' | 'jetbrains' | 'amazon_q'"
         ),
     )
+    monthly_budget_usd: Optional[float] = Field(
+        None,
+        description=(
+            "Monthly spend ceiling in USD. Combined with estimated_monthly_requests, "
+            "avg_input_tokens, and avg_output_tokens to compute projected monthly cost "
+            "and hard-filter models that exceed it. For subscription tools, filters by "
+            "subscription_monthly_usd <= monthly_budget_usd."
+        ),
+    )
+    estimated_monthly_requests: int = Field(
+        1000,
+        ge=1,
+        description="Estimated number of API requests per month (used with monthly_budget_usd)",
+    )
+    avg_input_tokens: int = Field(
+        500,
+        ge=1,
+        description="Average input tokens per request (used with monthly_budget_usd)",
+    )
+    avg_output_tokens: int = Field(
+        200,
+        ge=1,
+        description="Average output tokens per request (used with monthly_budget_usd)",
+    )
 
 
 class RouterResponse(BaseModel):
@@ -538,6 +562,7 @@ class SavingsRecord(BaseModel):
     baseline_cost_per_1m: Optional[float] = Field(None, description="Baseline model cost per 1M tokens")
     savings_per_1m: Optional[float] = Field(None, description="Cost savings per 1M tokens vs baseline")
     task_type: Optional[str] = Field(None, description="Task type hint provided by caller")
+    ide_context: Optional[str] = Field(None, description="IDE context hint used in the routing request")
 
 
 class SavingsResponse(BaseModel):
@@ -551,6 +576,21 @@ class SavingsResponse(BaseModel):
     acceptance_rate: Optional[float] = Field(
         None, description="Fraction of routing decisions where the recommendation was used (0-1)"
     )
+
+
+class IDEBreakdownRecord(BaseModel):
+    """Routing analytics broken down by IDE context."""
+    ide_context: Optional[str] = Field(None, description="IDE context value (None = no context provided)")
+    total_decisions: int = Field(..., description="Total routing decisions with this ide_context")
+    total_savings_per_1m: float = Field(..., description="Sum of savings_per_1m for this ide_context")
+    acceptance_rate: Optional[float] = Field(None, description="Fraction of decisions where recommendation was used")
+
+
+class IDEBreakdownResponse(BaseModel):
+    """Response for GET /telemetry/ide-savings."""
+    breakdown: List[IDEBreakdownRecord] = Field(..., description="Per-IDE-context analytics")
+    days: int = Field(..., description="Look-back window in days")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class ConversationSummary(BaseModel):

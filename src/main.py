@@ -35,6 +35,7 @@ from src.models.pricing import (  # noqa: E402
     ConversationSummary, ConversationListResponse,
     RouterRequest, RouterResponse, RouterFeedbackRequest, RouterFeedbackResponse,
     SavingsResponse, SavingsRecord,
+    IDEBreakdownResponse, IDEBreakdownRecord,
 )
 from src.services.pricing_history import init_pricing_history_service, get_pricing_history_service  # noqa: E402
 from src.services.pricing_alerts import init_pricing_alert_service, get_pricing_alert_service  # noqa: E402
@@ -1597,6 +1598,10 @@ async def router_recommend(req: RouterRequest, request: Request):
         prefer_low_latency=req.prefer_low_latency,
         exclude_reasoning_models=req.exclude_reasoning_models,
         ide_context=req.ide_context,
+        monthly_budget_usd=req.monthly_budget_usd,
+        estimated_monthly_requests=req.estimated_monthly_requests,
+        avg_input_tokens=req.avg_input_tokens,
+        avg_output_tokens=req.avg_output_tokens,
     )
     router = get_router()
     result = await router.get_optimal_model(constraints)
@@ -1638,6 +1643,7 @@ async def router_recommend(req: RouterRequest, request: Request):
             baseline_cost_per_1m=baseline_cost_1m,
             task_type=req.task_type,
             routing_id=routing_id,
+            ide_context=req.ide_context,
         )
     except Exception as exc:
         logger.warning("Failed to record routing savings: %s", exc)
@@ -1676,6 +1682,19 @@ async def telemetry_savings(
         org_id=org_id,
         days=days,
         acceptance_rate=result.get("acceptance_rate"),
+    )
+
+
+@app.get("/telemetry/ide-savings", tags=["Telemetry"])
+async def ide_savings_breakdown(
+    days: int = Query(30, ge=1, le=365, description="Look-back window in days"),
+):
+    """Return routing decision counts, total savings, and acceptance rate broken down by IDE context."""
+    tracker = get_savings_tracker()
+    breakdown = await tracker.get_ide_breakdown(days=days)
+    return IDEBreakdownResponse(
+        breakdown=[IDEBreakdownRecord(**r) for r in breakdown],
+        days=days,
     )
 
 
@@ -1766,6 +1785,22 @@ async def router_recommend_stream(req: RouterRequest, request: Request):
                             continue
                 if req.exclude_reasoning_models and m.is_reasoning_model:
                     continue
+                if req.monthly_budget_usd is not None:
+                    pricing_model = getattr(m, "pricing_model", "per_token")
+                    sub_price = getattr(m, "subscription_monthly_usd", None)
+                    if pricing_model == "subscription" and sub_price is not None:
+                        if sub_price > req.monthly_budget_usd:
+                            continue
+                    else:
+                        projected = (
+                            req.estimated_monthly_requests
+                            * (
+                                req.avg_input_tokens * m.cost_per_input_token
+                                + req.avg_output_tokens * m.cost_per_output_token
+                            )
+                        )
+                        if projected > req.monthly_budget_usd:
+                            continue
                 candidates.append(m)
 
             if not candidates:
@@ -1843,6 +1878,7 @@ async def router_recommend_stream(req: RouterRequest, request: Request):
                     baseline_cost_per_1m=baseline_cost_1m,
                     task_type=req.task_type,
                     routing_id=stream_routing_id,
+                    ide_context=req.ide_context,
                 )
             except Exception as exc:
                 logger.warning("Failed to record stream routing savings: %s", exc)
