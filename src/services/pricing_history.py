@@ -118,7 +118,7 @@ class PricingHistoryService:
             try:
                 await db.execute("ALTER TABLE pricing_snapshots ADD COLUMN subscription_monthly_usd REAL")
                 await db.commit()
-            except Exception:
+            except Exception:  # nosec B110
                 pass  # column already exists
             await db.commit()
 
