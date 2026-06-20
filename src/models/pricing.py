@@ -40,6 +40,23 @@ class PricingMetrics(BaseModel):
     supports_json_mode: bool = Field(False, description="Whether the model supports structured JSON output mode")
     batch_available: bool = Field(False, description="Whether batch processing API is available for this model")
     is_reasoning_model: bool = Field(False, description="Whether this is a reasoning/thinking model (e.g., o1, R1)")
+    # IDE and subscription fields
+    pricing_model: str = Field(
+        default="per_token",
+        description="Pricing model type: 'per_token', 'subscription', or 'hybrid'",
+    )
+    subscription_monthly_usd: Optional[float] = Field(
+        None,
+        description="Monthly subscription cost in USD (for subscription-based tools like Copilot, Cursor)",
+    )
+    supports_inline_completion: bool = Field(
+        False,
+        description="Whether the model/tool supports real-time inline code completion",
+    )
+    ide_native: bool = Field(
+        False,
+        description="Whether this is an IDE-native tool (GitHub Copilot, Cursor, Windsurf, etc.)",
+    )
 
     @computed_field
     @property
@@ -345,6 +362,7 @@ class PricingSnapshotRecord(BaseModel):
     cost_per_input_token: float = Field(..., description="Input token cost in USD")
     cost_per_output_token: float = Field(..., description="Output token cost in USD")
     captured_at: float = Field(..., description="Unix timestamp of the snapshot")
+    subscription_monthly_usd: Optional[float] = Field(None, description="Monthly subscription cost in USD (for subscription-based tools)")
 
 
 class PricingHistoryResponse(BaseModel):
@@ -377,6 +395,28 @@ class PricingTrendsResponse(BaseModel):
 
     trends: List[PricingTrendRecord] = Field(..., description="Models with largest price changes")
     days: int = Field(..., description="Look-back window in days")
+
+
+class SubscriptionTrendRecord(BaseModel):
+    """Price trend for a single subscription-based tool over a time period."""
+
+    model_config = ConfigDict(protected_namespaces=())
+
+    model_name: str
+    provider: str
+    subscription_change_pct: float
+    direction: str  # 'increased', 'decreased', 'unchanged'
+    first_seen: float
+    last_seen: float
+    first_price: float
+    last_price: float
+
+
+class SubscriptionTrendsResponse(BaseModel):
+    """Response for GET /pricing/subscription-trends."""
+
+    trends: List[SubscriptionTrendRecord]
+    days: int
 
 
 class PricingAlertRequest(BaseModel):
@@ -428,7 +468,50 @@ class RouterRequest(BaseModel):
         None, description="Preferred provider name (10% score boost applied)"
     )
     task_type: Optional[str] = Field(
-        None, description="Task type hint: 'code' | 'chat' | 'analysis' | 'summarization'"
+        None,
+        description=(
+            "Task type hint: 'code' | 'chat' | 'analysis' | 'summarization' | "
+            "'code_completion' | 'code_chat' | 'code_refactor' | 'agentic_coding'"
+        ),
+    )
+    prefer_low_latency: bool = Field(
+        False,
+        description="Prioritise lower-latency models; important for inline code completions",
+    )
+    exclude_reasoning_models: bool = Field(
+        False,
+        description="Exclude slow thinking/reasoning models (e.g. o1, o3, R1, claude-3-7-sonnet)",
+    )
+    ide_context: Optional[str] = Field(
+        None,
+        description=(
+            "IDE context hint — boosts IDE-native tools when set: "
+            "'copilot' | 'cursor' | 'windsurf' | 'claude_code' | 'jetbrains' | 'amazon_q'"
+        ),
+    )
+    monthly_budget_usd: Optional[float] = Field(
+        None,
+        description=(
+            "Monthly spend ceiling in USD. Combined with estimated_monthly_requests, "
+            "avg_input_tokens, and avg_output_tokens to compute projected monthly cost "
+            "and hard-filter models that exceed it. For subscription tools, filters by "
+            "subscription_monthly_usd <= monthly_budget_usd."
+        ),
+    )
+    estimated_monthly_requests: int = Field(
+        1000,
+        ge=1,
+        description="Estimated number of API requests per month (used with monthly_budget_usd)",
+    )
+    avg_input_tokens: int = Field(
+        500,
+        ge=1,
+        description="Average input tokens per request (used with monthly_budget_usd)",
+    )
+    avg_output_tokens: int = Field(
+        200,
+        ge=1,
+        description="Average output tokens per request (used with monthly_budget_usd)",
     )
 
 
@@ -479,6 +562,7 @@ class SavingsRecord(BaseModel):
     baseline_cost_per_1m: Optional[float] = Field(None, description="Baseline model cost per 1M tokens")
     savings_per_1m: Optional[float] = Field(None, description="Cost savings per 1M tokens vs baseline")
     task_type: Optional[str] = Field(None, description="Task type hint provided by caller")
+    ide_context: Optional[str] = Field(None, description="IDE context hint used in the routing request")
 
 
 class SavingsResponse(BaseModel):
@@ -492,6 +576,21 @@ class SavingsResponse(BaseModel):
     acceptance_rate: Optional[float] = Field(
         None, description="Fraction of routing decisions where the recommendation was used (0-1)"
     )
+
+
+class IDEBreakdownRecord(BaseModel):
+    """Routing analytics broken down by IDE context."""
+    ide_context: Optional[str] = Field(None, description="IDE context value (None = no context provided)")
+    total_decisions: int = Field(..., description="Total routing decisions with this ide_context")
+    total_savings_per_1m: float = Field(..., description="Sum of savings_per_1m for this ide_context")
+    acceptance_rate: Optional[float] = Field(None, description="Fraction of decisions where recommendation was used")
+
+
+class IDEBreakdownResponse(BaseModel):
+    """Response for GET /telemetry/ide-savings."""
+    breakdown: List[IDEBreakdownRecord] = Field(..., description="Per-IDE-context analytics")
+    days: int = Field(..., description="Look-back window in days")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class ConversationSummary(BaseModel):

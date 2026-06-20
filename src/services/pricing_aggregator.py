@@ -23,6 +23,7 @@ from src.services.salesforce_pricing import SalesforcePricingService
 from src.services.promptql_pricing import PromptQLPricingService
 from src.services.snowflake_pricing import SnowflakePricingService
 from src.services.oracle_pricing import OraclePricingService
+from src.services.ide_pricing import IDEPricingService
 
 
 class PricingAggregatorService:
@@ -51,6 +52,7 @@ class PricingAggregatorService:
         self.promptql_service = PromptQLPricingService()
         self.snowflake_service = SnowflakePricingService()
         self.oracle_service = OraclePricingService()
+        self.ide_service = IDEPricingService()
 
     async def get_all_pricing_async(self) -> tuple[List[PricingMetrics], List[ProviderStatusInfo]]:
         """
@@ -87,6 +89,7 @@ class PricingAggregatorService:
             self.promptql_service.get_pricing_with_status(),
             self.snowflake_service.get_pricing_with_status(),
             self.oracle_service.get_pricing_with_status(),
+            self.ide_service.get_pricing_with_status(),
         ]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
