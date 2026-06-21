@@ -78,11 +78,6 @@ jobs:
     permissions:
       contents: read
 
-    env:
-      ACR_NAME: llmpricingacr
-      ACR_LOGIN_SERVER: llmpricingacr.azurecr.io
-      IMAGE_NAME: llm-pricing-api
-
     steps:
     - uses: actions/checkout@v4
 
@@ -114,91 +109,6 @@ jobs:
       uses: gitleaks/gitleaks-action@v2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  deploy:
-    needs: [test, lint, osv_scan, security, secret_scan]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    if: github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-
-    env:
-      ACR_NAME: llmpricingacr
-      ACR_LOGIN_SERVER: llmpricingacr.azurecr.io
-      IMAGE_NAME: llm-pricing-api
-
-    steps:
-    - uses: actions/checkout@v4
-    - name: Azure Login with OIDC
-      uses: azure/login@v2
-      with:
-        client-id: 8c36eab2-8e8a-40eb-aef2-69ca6655fdcf
-        tenant-id: 61deb976-deca-4bb6-8118-55936023b8fc
-        subscription-id: faa433ef-c9e9-48c8-842b-42986d4be235
-
-    - name: Get Deployment Secrets from Key Vault
-      id: kvsecrets
-      run: |
-        WEBAPP=$(az keyvault secret show --vault-name llm-pricing-vault --name azure-webapp-name --query value -o tsv)
-        RG=$(az keyvault secret show --vault-name llm-pricing-vault --name azure-resource-group --query value -o tsv)
-        echo "azure-webapp-name=$WEBAPP" >> "$GITHUB_OUTPUT"
-        echo "azure-resource-group=$RG" >> "$GITHUB_OUTPUT"
-
-    - name: ACR Login
-      run: |
-        az acr login --name "$ACR_NAME"
-
-    - name: Build and Push Image
-      run: |
-        IMAGE_SHA="$ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}"
-        IMAGE_LATEST="$ACR_LOGIN_SERVER/$IMAGE_NAME:latest"
-
-        docker build -t "$IMAGE_SHA" -t "$IMAGE_LATEST" .
-        docker push "$IMAGE_SHA"
-        docker push "$IMAGE_LATEST"
-
-    - name: Deploy to Production
-      run: |
-        IMAGE_SHA="$ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}"
-
-        az webapp config container set \
-          --resource-group "${{ steps.kvsecrets.outputs.azure-resource-group }}" \
-          --name "${{ steps.kvsecrets.outputs.azure-webapp-name }}" \
-          --container-image-name "DOCKER|$IMAGE_SHA"
-
-        az webapp restart \
-          --resource-group "${{ steps.kvsecrets.outputs.azure-resource-group }}" \
-          --name "${{ steps.kvsecrets.outputs.azure-webapp-name }}"
-
-        echo "OK: Production deployment complete"
-
-    - name: Health Check - Production
-      run: |
-        echo "Validating production health..."
-        PROD_URL="https://${{ steps.kvsecrets.outputs.azure-webapp-name }}.azurewebsites.net/health"
-        EXPECTED_VERSION=$(grep '__version__' src/__init__.py | cut -d'"' -f2)
-        echo "Expecting version: $EXPECTED_VERSION"
-
-        for attempt in $(seq 1 18); do
-          echo "Health check attempt $attempt/18..."
-          RESPONSE=$(curl -s --max-time 10 "$PROD_URL" || echo "")
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$PROD_URL" || echo "000")
-
-          if [ "$HTTP_CODE" = "200" ]; then
-            if echo "$RESPONSE" | grep -q "\"version\":\"$EXPECTED_VERSION\""; then
-              echo "OK: Production is healthy and running v$EXPECTED_VERSION"
-              exit 0
-            fi
-            echo "Version not yet updated (want $EXPECTED_VERSION, response: $RESPONSE), waiting..."
-          else
-            echo "HTTP $HTTP_CODE, waiting..."
-          fi
-          sleep 10
-        done
-
-        echo "WARN: Production health check timeout after 3 minutes"
-        exit 0
 
   deploy_fly:
     needs: [test, lint, osv_scan, security, secret_scan]

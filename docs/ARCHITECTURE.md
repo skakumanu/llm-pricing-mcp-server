@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.48.0 | **Last updated**: 2026-06-21
+**Version**: v1.49.0 | **Last updated**: 2026-06-21
 
 ---
 
@@ -9,7 +9,6 @@
 A production FastAPI service that aggregates real-time LLM pricing data from 26 providers (150+ models), exposes it via REST API and MCP protocol, and layers on a ReAct agent, self-serve SaaS billing, and a suite of browser UIs.
 
 - **Primary deployment**: Fly.io (`llm-pricing-api.fly.dev`) — shared-cpu-1x, 512 MB, ~$3.40/mo
-- **Secondary deployment**: Azure App Service (`llm-pricing-api.azurewebsites.net`) — parallel cutover pending
 - **CI/CD**: GitHub Actions → test → lint → bandit → OSV scan → gitleaks → Fly.io deploy
 
 ---
@@ -319,14 +318,13 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 
 ```
 PR / push to master
-  ├── test        pytest (625+ tests, coverage report)
+  ├── test        pytest (667+ tests, coverage report)
   ├── lint        flake8 (syntax errors + undefined names)
   ├── osv_scan    Google OSV Scanner (dependency CVEs)
   ├── security    bandit (Python SAST)
   └── secret_scan gitleaks (full git history scan for leaked credentials)
             │
-            └─ all pass? ──► deploy       Azure App Service (Docker via ACR)
-                        └──► deploy_fly   Fly.io (flyctl deploy --remote-only)
+            └─ all pass? ──► deploy_fly   Fly.io (flyctl deploy --remote-only)
                                   │
                                   └─ health check: /health version matches src/__init__.py
 ```
