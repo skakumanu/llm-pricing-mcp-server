@@ -54,6 +54,12 @@ jobs:
             --title "chore(sync): sync develop from master" \
             --body "$(printf 'Automated PR to keep \`develop\` in sync with \`master\`.\n\nAll changes here were already CI-tested on master. Merge once the checks pass to restore git-flow hygiene.')" \
             --base develop \
-            --head "$BRANCH"
-
-          echo "✅ Sync PR created — merge once CI passes"
+            --head "$BRANCH" \
+            && echo "✅ Sync PR created — merge once CI passes" \
+            || {
+              echo "⚠️  gh pr create blocked — GITHUB_TOKEN lacks PR-creation permission."
+              echo "    Fix: GitHub → repo Settings → Actions → General → enable"
+              echo "    'Allow GitHub Actions to create and approve pull requests'."
+              echo "ℹ️  Branch '$BRANCH' was pushed — create the PR manually or via the API."
+              exit 0
+            }
