@@ -3,7 +3,7 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A production-ready **Model Context Protocol (MCP)** server for LLM pricing data. Provides a RESTful API (FastAPI), **15 MCP tools** over STDIO and HTTP, a conversational Agent + RAG pipeline, browser-based UIs, and a self-serve billing dashboard — for pricing data from **21 major LLM providers**.
+A production-ready **Model Context Protocol (MCP)** server for LLM pricing data. Provides a RESTful API (FastAPI), **15 MCP tools** over STDIO and HTTP, a conversational Agent + RAG pipeline, browser-based UIs, and a self-serve billing dashboard — for pricing data from **26 major LLM providers**.
 
 **Live at**: https://llm-pricing-api.fly.dev
 
@@ -18,7 +18,7 @@ A production-ready **Model Context Protocol (MCP)** server for LLM pricing data.
 - MCP Protocol version: `2024-11-05`
 
 ### RESTful API
-- Real-time pricing from 21 providers (150+ models), async fetching with smart caching
+- Real-time pricing from 26 providers (150+ models), async fetching with smart caching
 - Cost estimation: single model (`POST /cost-estimate`) and batch comparison (`POST /cost-estimate/batch`)
 - Performance metrics, use-case recommendations, pricing history, trends
 - Router recommendation (`POST /router/recommend`) with feedback loop
@@ -71,7 +71,7 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 - Protected endpoints (`/billing/me`, `/router/recommend`, `/router/feedback`, `/billing/portal`) require a billing API key or the global `MCP_API_KEY`
 - Rate limiting per client IP + tier bucket
 - Request size limit (1MB default)
-- 625 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 667 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
@@ -386,7 +386,7 @@ BILLING_BASE_URL=https://llm-pricing-api.fly.dev
 ```
 llm-pricing-mcp-server/
 ├── src/
-│   ├── __init__.py                  # Version (1.39.0)
+│   ├── __init__.py                  # Version (1.48.0)
 │   ├── main.py                      # FastAPI app + all endpoints
 │   ├── config/settings.py           # Pydantic settings
 │   ├── models/                      # Pydantic models (pricing, billing, router, …)
@@ -420,7 +420,7 @@ llm-pricing-mcp-server/
 │   ├── widget/                      # /widget
 │   ├── billing/                     # /billing
 │   └── admin/                       # /admin
-├── tests/                           # 625 tests
+├── tests/                           # 667 tests
 ├── docs/                            # Extended documentation
 ├── .github/workflows/ci-cd.yml      # CI/CD pipeline
 ├── Dockerfile
@@ -440,7 +440,7 @@ llm-pricing-mcp-server/
 ## Testing
 
 ```bash
-# Run all 625 tests
+# Run all 667 tests
 pytest
 
 # With coverage
@@ -505,7 +505,7 @@ Configuration in `fly.toml`. Persistent volume at `/app/data/` stores all SQLite
 ### GitHub Actions CI/CD
 
 The `.github/workflows/ci-cd.yml` pipeline:
-1. Runs all 625 tests on every PR
+1. Runs all 667 tests on every PR
 2. Deploys to Fly.io on `master` push (via `FLY_API_TOKEN` secret)
 3. Performs a health check after deploy
 

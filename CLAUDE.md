@@ -128,7 +128,7 @@ Config is in `.pre-commit-config.yaml` (gitleaks + branch guard + large-file che
 ## CI/CD Gates
 
 Every PR and `master` push runs **all five gates** before deploy:
-1. `test` — pytest (625+ tests)
+1. `test` — pytest (667+ tests)
 2. `lint` — flake8
 3. `osv_scan` — dependency vulnerability scan
 4. `security` — bandit static analysis
