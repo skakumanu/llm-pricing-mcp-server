@@ -23,6 +23,11 @@ from src.services.salesforce_pricing import SalesforcePricingService
 from src.services.promptql_pricing import PromptQLPricingService
 from src.services.snowflake_pricing import SnowflakePricingService
 from src.services.oracle_pricing import OraclePricingService
+from src.services.ide_pricing import IDEPricingService
+from src.services.azure_openai_pricing import AzureOpenAIPricingService
+from src.services.vertex_pricing import VertexAIPricingService
+from src.services.huggingface_pricing import HuggingFacePricingService
+from src.services.cloudflare_pricing import CloudflareAIPricingService
 
 
 class PricingAggregatorService:
@@ -51,6 +56,11 @@ class PricingAggregatorService:
         self.promptql_service = PromptQLPricingService()
         self.snowflake_service = SnowflakePricingService()
         self.oracle_service = OraclePricingService()
+        self.ide_service = IDEPricingService()
+        self.azure_openai_service = AzureOpenAIPricingService()
+        self.vertex_service = VertexAIPricingService()
+        self.huggingface_service = HuggingFacePricingService()
+        self.cloudflare_service = CloudflareAIPricingService()
 
     async def get_all_pricing_async(self) -> tuple[List[PricingMetrics], List[ProviderStatusInfo]]:
         """
@@ -87,6 +97,11 @@ class PricingAggregatorService:
             self.promptql_service.get_pricing_with_status(),
             self.snowflake_service.get_pricing_with_status(),
             self.oracle_service.get_pricing_with_status(),
+            self.ide_service.get_pricing_with_status(),
+            self.azure_openai_service.get_pricing_with_status(),
+            self.vertex_service.get_pricing_with_status(),
+            self.huggingface_service.get_pricing_with_status(),
+            self.cloudflare_service.get_pricing_with_status(),
         ]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -180,6 +195,14 @@ class PricingAggregatorService:
             pricing_data, status = await self.snowflake_service.get_pricing_with_status()
         elif provider_lower == "oracle" or provider_lower == "oracle oci":
             pricing_data, status = await self.oracle_service.get_pricing_with_status()
+        elif provider_lower == "azure" or provider_lower == "azure openai":
+            pricing_data, status = await self.azure_openai_service.get_pricing_with_status()
+        elif provider_lower == "vertex" or provider_lower == "vertex ai":
+            pricing_data, status = await self.vertex_service.get_pricing_with_status()
+        elif provider_lower == "huggingface" or provider_lower == "hugging face":
+            pricing_data, status = await self.huggingface_service.get_pricing_with_status()
+        elif provider_lower == "cloudflare" or provider_lower == "cloudflare ai":
+            pricing_data, status = await self.cloudflare_service.get_pricing_with_status()
         else:
             return [], []
 

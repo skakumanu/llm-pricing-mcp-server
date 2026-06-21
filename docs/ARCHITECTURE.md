@@ -1,15 +1,14 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.45.0 | **Last updated**: 2026-05-09
+**Version**: v1.49.0 | **Last updated**: 2026-06-21
 
 ---
 
 ## System Overview
 
-A production FastAPI service that aggregates real-time LLM pricing data from 21 providers (150+ models), exposes it via REST API and MCP protocol, and layers on a ReAct agent, self-serve SaaS billing, and a suite of browser UIs.
+A production FastAPI service that aggregates real-time LLM pricing data from 26 providers (150+ models), exposes it via REST API and MCP protocol, and layers on a ReAct agent, self-serve SaaS billing, and a suite of browser UIs.
 
 - **Primary deployment**: Fly.io (`llm-pricing-api.fly.dev`) — shared-cpu-1x, 512 MB, ~$3.40/mo
-- **Secondary deployment**: Azure App Service (`llm-pricing-api.azurewebsites.net`) — parallel cutover pending
 - **CI/CD**: GitHub Actions → test → lint → bandit → OSV scan → gitleaks → Fly.io deploy
 
 ---
@@ -41,7 +40,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 21 
 │  Pricing Services   │  │  Agent / RAG   │  │  Billing Service           │
 │                     │  │                │  │                            │
 │  PricingAggregator  │  │  ReAct loop    │  │  BillingService            │
-│  21 provider impls  │  │  TF-IDF RAG    │  │  billing.db (SQLite)       │
+│  26 provider impls  │  │  TF-IDF RAG    │  │  billing.db (SQLite)       │
 │  PricingHistory     │  │  Conv. memory  │  │  Free signup → API key     │
 │  BenchmarkService   │  │  LLM backend   │  │  Stripe checkout/webhook   │
 │  Router             │  │  (GPT-4o-mini  │  │  Tier sync (free/pro/ent)  │
@@ -116,7 +115,11 @@ llm-pricing-mcp-server/
 │       ├── salesforce_pricing.py
 │       ├── promptql_pricing.py
 │       ├── snowflake_pricing.py
-│       └── oracle_pricing.py
+│       ├── oracle_pricing.py
+│       ├── azure_openai_pricing.py
+│       ├── vertex_pricing.py
+│       ├── huggingface_pricing.py
+│       └── cloudflare_pricing.py
 │
 ├── agent/
 │   ├── pricing_agent.py             # High-level agent entry point
@@ -151,7 +154,7 @@ llm-pricing-mcp-server/
 │   ├── ci-cd.yml                    # Full CI/CD: test→lint→osv→bandit→gitleaks→deploy
 │   └── sync-develop.yml             # Auto-sync develop ← master after deploy
 │
-├── tests/                           # 625 pytest tests (as of v1.40.0)
+├── tests/                           # 667 pytest tests (as of v1.48.0)
 ├── docs/
 │   └── ARCHITECTURE.md              # THIS FILE — update on every structural change
 ├── fly.toml                         # Fly.io app config (volume, health checks)
@@ -195,7 +198,7 @@ Incoming request
 ```
 
 ### 3. Provider Pattern
-Each of 17 LLM providers implements `BasePricingProvider`:
+Each of 26 LLM providers implements `BasePricingProvider`:
 - `fetch_pricing_data() -> list[PricingMetrics]` — returns static pricing (with live data fallback where available)
 - `get_pricing_with_status()` — wraps `fetch_pricing_data()`, applies **live model sync**, returns `(data, status)`
 
@@ -315,14 +318,13 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 
 ```
 PR / push to master
-  ├── test        pytest (625+ tests, coverage report)
+  ├── test        pytest (667+ tests, coverage report)
   ├── lint        flake8 (syntax errors + undefined names)
   ├── osv_scan    Google OSV Scanner (dependency CVEs)
   ├── security    bandit (Python SAST)
   └── secret_scan gitleaks (full git history scan for leaked credentials)
             │
-            └─ all pass? ──► deploy       Azure App Service (Docker via ACR)
-                        └──► deploy_fly   Fly.io (flyctl deploy --remote-only)
+            └─ all pass? ──► deploy_fly   Fly.io (flyctl deploy --remote-only)
                                   │
                                   └─ health check: /health version matches src/__init__.py
 ```

@@ -183,3 +183,67 @@ def test_telemetry_savings_no_org_filter(mock_savings_tracker):
     with patch("src.main.get_savings_tracker", return_value=mock_savings_tracker):
         resp = client.get("/telemetry/savings", headers={"x-api-key": "test"})
     assert resp.status_code in (200, 401)
+
+
+# ---------------------------------------------------------------------------
+# ide_context tests — SavingsTrackerService
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_record_routing_stores_ide_context(svc):
+    await svc.record_routing(
+        recommended_model="gpt-4o-mini",
+        recommended_provider="openai",
+        recommended_cost_per_1m=0.375,
+        ide_context="cursor",
+    )
+    result = await svc.get_savings(days=1)
+    assert result["records"][0]["ide_context"] == "cursor"
+
+
+@pytest.mark.asyncio
+async def test_record_routing_ide_context_none(svc):
+    await svc.record_routing(
+        recommended_model="gpt-4o-mini",
+        recommended_provider="openai",
+        recommended_cost_per_1m=0.375,
+    )
+    result = await svc.get_savings(days=1)
+    assert result["records"][0]["ide_context"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_ide_breakdown_empty(svc):
+    result = await svc.get_ide_breakdown(days=30)
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_get_ide_breakdown_groups_by_context(svc):
+    await svc.record_routing("m1", "openai", 1.0, ide_context="copilot")
+    await svc.record_routing("m2", "openai", 1.0, ide_context="copilot")
+    await svc.record_routing("m3", "anthropic", 2.0, ide_context="cursor")
+
+    result = await svc.get_ide_breakdown(days=1)
+    by_context = {r["ide_context"]: r for r in result}
+
+    assert by_context["copilot"]["total_decisions"] == 2
+    assert by_context["cursor"]["total_decisions"] == 1
+
+
+def test_ide_breakdown_response_model():
+    from src.models.pricing import IDEBreakdownResponse, IDEBreakdownRecord
+    record = IDEBreakdownRecord(
+        ide_context="cursor",
+        total_decisions=5,
+        total_savings_per_1m=12.5,
+        acceptance_rate=0.8,
+    )
+    response = IDEBreakdownResponse(
+        breakdown=[record],
+        days=30,
+    )
+    assert len(response.breakdown) == 1
+    assert response.breakdown[0].ide_context == "cursor"
+    assert response.breakdown[0].total_decisions == 5
+    assert response.days == 30

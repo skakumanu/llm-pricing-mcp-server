@@ -13,6 +13,7 @@ sys.path.insert(0, str(project_root))
 from fastapi.testclient import TestClient  # noqa: E402
 from src.main import app  # noqa: E402
 from src.services.pricing_history import PricingHistoryService  # noqa: E402
+from src.models.pricing import SubscriptionTrendRecord, SubscriptionTrendsResponse  # noqa: E402
 
 client = TestClient(app)
 
@@ -33,12 +34,13 @@ async def svc(db_path):
     return s
 
 
-def _make_model(name="gpt-4o", provider="openai", inp=0.005, out=0.015):
+def _make_model(name="gpt-4o", provider="openai", inp=0.005, out=0.015, subscription=None):
     m = MagicMock()
     m.model_name = name
     m.provider = provider
     m.cost_per_input_token = inp
     m.cost_per_output_token = out
+    m.subscription_monthly_usd = subscription
     return m
 
 
@@ -271,3 +273,130 @@ class TestPricingTrendsEndpoint:
         with _patch_history_service():
             resp = client.get("/pricing/trends?days=14")
         assert resp.json()["days"] == 14
+
+
+# ---------------------------------------------------------------------------
+# subscription_monthly_usd unit tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_record_snapshot_stores_subscription_monthly_usd(svc):
+    """record_snapshot() stores subscription_monthly_usd for a model that has it."""
+    import aiosqlite
+    model = _make_model("copilot", "github", subscription=10.0)
+    await svc.record_snapshot([model])
+    async with aiosqlite.connect(svc._db_path) as db:
+        async with db.execute(
+            "SELECT subscription_monthly_usd FROM pricing_snapshots WHERE model_name = ?",
+            ("copilot",),
+        ) as cur:
+            row = await cur.fetchone()
+    assert row is not None
+    assert row[0] == pytest.approx(10.0)
+
+
+@pytest.mark.asyncio
+async def test_record_snapshot_stores_null_for_missing_subscription(svc):
+    """record_snapshot() stores NULL subscription_monthly_usd for models lacking the field."""
+    import aiosqlite
+    # Use a plain MagicMock without subscription_monthly_usd attribute
+    m = MagicMock(spec=["model_name", "provider", "cost_per_input_token", "cost_per_output_token"])
+    m.model_name = "gpt-4o"
+    m.provider = "openai"
+    m.cost_per_input_token = 0.005
+    m.cost_per_output_token = 0.015
+    await svc.record_snapshot([m])
+    async with aiosqlite.connect(svc._db_path) as db:
+        async with db.execute(
+            "SELECT subscription_monthly_usd FROM pricing_snapshots WHERE model_name = ?",
+            ("gpt-4o",),
+        ) as cur:
+            row = await cur.fetchone()
+    assert row is not None
+    assert row[0] is None
+
+
+@pytest.mark.asyncio
+async def test_get_history_returns_subscription_monthly_usd(svc):
+    """get_history() includes subscription_monthly_usd in snapshot dicts."""
+    model = _make_model("copilot", "github", subscription=10.0)
+    await svc.record_snapshot([model])
+    result = await svc.get_history(model_name="copilot")
+    assert result["total"] == 1
+    snap = result["snapshots"][0]
+    assert "subscription_monthly_usd" in snap
+    assert snap["subscription_monthly_usd"] == pytest.approx(10.0)
+
+
+@pytest.mark.asyncio
+async def test_get_subscription_trends_empty_when_no_subscription_data(svc):
+    """get_subscription_trends() returns an empty list when no subscription data exists."""
+    # Insert models without subscription prices
+    await svc.record_snapshot([_make_model("gpt-4o", "openai")])
+    trends = await svc.get_subscription_trends()
+    assert trends == []
+
+
+@pytest.mark.asyncio
+async def test_get_subscription_trends_detects_price_change(db_path):
+    """get_subscription_trends() detects subscription price increases."""
+    import aiosqlite
+    svc = PricingHistoryService(db_path)
+    await svc.initialize()
+
+    now = time.time()
+    earlier = now - 86400  # one day ago
+
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute(
+            "INSERT INTO pricing_snapshots (captured_at, model_name, provider, "
+            "cost_per_input_token, cost_per_output_token, subscription_monthly_usd) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (earlier, "copilot", "github", 0.0, 0.0, 10.0),
+        )
+        await db.execute(
+            "INSERT INTO pricing_snapshots (captured_at, model_name, provider, "
+            "cost_per_input_token, cost_per_output_token, subscription_monthly_usd) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (now, "copilot", "github", 0.0, 0.0, 19.0),
+        )
+        await db.commit()
+
+    trends = await svc.get_subscription_trends(days=7)
+    assert len(trends) == 1
+    assert trends[0]["model_name"] == "copilot"
+    assert trends[0]["direction"] == "increased"
+    assert trends[0]["subscription_change_pct"] == pytest.approx(90.0, abs=0.1)
+
+
+def test_subscription_trend_record_instantiation():
+    """SubscriptionTrendRecord can be instantiated with all required fields."""
+    record = SubscriptionTrendRecord(
+        model_name="copilot",
+        provider="github",
+        subscription_change_pct=90.0,
+        direction="increased",
+        first_seen=1700000000.0,
+        last_seen=1700086400.0,
+        first_price=10.0,
+        last_price=19.0,
+    )
+    assert record.model_name == "copilot"
+    assert record.direction == "increased"
+
+
+def test_subscription_trends_response_instantiation():
+    """SubscriptionTrendsResponse can be instantiated with a list of trends."""
+    record = SubscriptionTrendRecord(
+        model_name="cursor",
+        provider="cursor",
+        subscription_change_pct=-10.0,
+        direction="decreased",
+        first_seen=1700000000.0,
+        last_seen=1700086400.0,
+        first_price=20.0,
+        last_price=18.0,
+    )
+    response = SubscriptionTrendsResponse(trends=[record], days=30)
+    assert response.days == 30
+    assert len(response.trends) == 1

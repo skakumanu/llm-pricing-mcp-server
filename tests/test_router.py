@@ -211,3 +211,68 @@ def test_router_recommend_json_body_required():
         headers={"Content-Type": "text/plain", "x-api-key": "test"},
     )
     assert resp.status_code in (400, 401, 422)
+
+
+# ---------------------------------------------------------------------------
+# Monthly budget tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_monthly_budget_filters_expensive_model():
+    """monthly_budget_usd should filter models whose projected monthly cost exceeds the cap."""
+    # At 1000 req/mo, 500 input + 200 output tokens:
+    # claude-opus: (500*0.000015 + 200*0.000075) * 1000 = (0.0075 + 0.015) * 1000 = $22.50/mo  → filtered
+    # gpt-4o-mini: (500*0.00000015 + 200*0.0000006) * 1000 = (0.000075 + 0.00012) * 1000 = $0.195/mo → passes
+    router = ModelRouter(_make_aggregator())
+    with patch("src.services.router.enrich_models", AsyncMock(side_effect=lambda x: x)):
+        result = await router.get_optimal_model(
+            RouterConstraints(monthly_budget_usd=5.0, estimated_monthly_requests=1000,
+                              avg_input_tokens=500, avg_output_tokens=200)
+        )
+    assert result is not None
+    # claude-opus should be filtered; gpt-4o-mini or gemini-flash should win
+    assert result.recommended.model_name != "claude-opus"
+
+
+@pytest.mark.asyncio
+async def test_monthly_budget_subscription_filter():
+    """monthly_budget_usd should filter subscription tools by subscription_monthly_usd."""
+    cheap_sub = PricingMetrics(
+        model_name="copilot-individual", provider="GitHub Copilot",
+        cost_per_input_token=0.0005, cost_per_output_token=0.001,
+        use_cases=["code"], pricing_model="subscription", subscription_monthly_usd=10.0,
+    )
+    expensive_sub = PricingMetrics(
+        model_name="copilot-enterprise", provider="GitHub Copilot",
+        cost_per_input_token=0.0004, cost_per_output_token=0.0008,
+        use_cases=["code"], pricing_model="subscription", subscription_monthly_usd=39.0,
+    )
+    cheap_sub.quality_score = 70
+    expensive_sub.quality_score = 85
+    router = ModelRouter(_make_aggregator(models=[cheap_sub, expensive_sub]))
+    with patch("src.services.router.enrich_models", AsyncMock(side_effect=lambda x: x)):
+        result = await router.get_optimal_model(RouterConstraints(monthly_budget_usd=15.0))
+    assert result is not None
+    assert result.recommended.model_name == "copilot-individual"
+
+
+@pytest.mark.asyncio
+async def test_monthly_budget_none_no_filter():
+    """When monthly_budget_usd is None, no budget filtering is applied."""
+    router = ModelRouter(_make_aggregator())
+    with patch("src.services.router.enrich_models", AsyncMock(side_effect=lambda x: x)):
+        result = await router.get_optimal_model(RouterConstraints(monthly_budget_usd=None))
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_monthly_budget_reason_includes_projection():
+    """When monthly_budget_usd is set, reason should include projected_monthly."""
+    router = ModelRouter(_make_aggregator())
+    with patch("src.services.router.enrich_models", AsyncMock(side_effect=lambda x: x)):
+        result = await router.get_optimal_model(
+            RouterConstraints(monthly_budget_usd=50.0, estimated_monthly_requests=1000,
+                              avg_input_tokens=500, avg_output_tokens=200)
+        )
+    assert result is not None
+    assert "projected_monthly=$" in result.reason
