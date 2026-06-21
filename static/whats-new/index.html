@@ -142,8 +142,39 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.46.0 -->
+  <!-- v1.48.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.48.0</span>
+      <span class="release-date">Jun 21, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">4 new cloud &amp; edge providers — 26 total, 150+ models</div>
+      <div class="section-label">New providers</div>
+      <div class="provider-grid">
+        <div class="provider-pill">Azure OpenAI <span class="count">9 models</span></div>
+        <div class="provider-pill">Vertex AI <span class="count">9 models</span></div>
+        <div class="provider-pill">Hugging Face <span class="count">14 models</span></div>
+        <div class="provider-pill">Cloudflare AI <span class="count">10 models</span></div>
+      </div>
+      <div class="section-label" style="margin-top:16px;">Highlights</div>
+      <ul class="change-list">
+        <li><strong>Azure OpenAI</strong> — PAYG East US pricing for GPT-4o, GPT-4o-mini, o1, o1-mini, o3-mini, GPT-4-Turbo, GPT-3.5-Turbo, text-embedding-3-large/small; enterprise SLA and VNet support</li>
+        <li><strong>Vertex AI</strong> — GCP-native Gemini 2.0/1.5/1.0 family plus PaLM 2 (text-bison, code-bison) and multimodal embeddings; distinct from AI Studio with enterprise compliance</li>
+        <li><strong>Hugging Face</strong> — Serverless Inference API pricing for 14 open-source models (Llama 3.x, Mistral, Mixtral, Qwen 2.5, Phi-3.5/4, Gemma 2, DeepSeek R1); optional live API sync when <code>HUGGINGFACE_API_KEY</code> is set</li>
+        <li><strong>Cloudflare AI</strong> — Edge inference at 80ms latency; Neuron-derived per-token pricing for Llama, Mistral, Phi-2, Qwen AWQ, DeepSeek R1 distilled, and Stable Diffusion XL via Cloudflare's global CDN</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">Providers <strong>21 → 26</strong></div>
+        <div class="stat-chip">Tests <strong>667</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.46.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.46.0</span>
