@@ -318,14 +318,13 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 
 ```
 PR / push to master
-  ├── test        pytest (625+ tests, coverage report)
+  ├── test        pytest (667+ tests, coverage report)
   ├── lint        flake8 (syntax errors + undefined names)
   ├── osv_scan    Google OSV Scanner (dependency CVEs)
   ├── security    bandit (Python SAST)
   └── secret_scan gitleaks (full git history scan for leaked credentials)
             │
-            └─ all pass? ──► deploy       Azure App Service (Docker via ACR)
-                        └──► deploy_fly   Fly.io (flyctl deploy --remote-only)
+            └─ all pass? ──► deploy_fly   Fly.io (flyctl deploy --remote-only)
                                   │
                                   └─ health check: /health version matches src/__init__.py
 ```

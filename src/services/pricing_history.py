@@ -161,7 +161,6 @@ class PricingHistoryService:
         limit: int = 100,
     ) -> Dict[str, Any]:
         """Return snapshots within the last `days` days, optionally filtered."""
-        import aiosqlite
         cutoff = time.time() - days * 86400
         extra_clauses, params = [], [cutoff]
 
