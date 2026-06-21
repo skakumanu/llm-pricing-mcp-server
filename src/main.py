@@ -985,9 +985,10 @@ async def get_models(
 
 @app.get("/pricing", response_model=PricingResponse, tags=["Pricing"])
 async def get_pricing(
+    response: Response,
     provider: Optional[str] = Query(
         None,
-        description="Filter by provider (e.g., 'openai', 'anthropic', 'google', 'cohere', 'mistral')"
+        description="Filter by provider (e.g., 'openai', 'anthropic', 'google', 'azure', 'vertex ai')"
     ),
     supports_vision: Optional[bool] = Query(None, description="Filter to vision-capable models"),
     supports_function_calling: Optional[bool] = Query(None, description="Filter to function-calling models"),
@@ -1043,6 +1044,7 @@ async def get_pricing(
         )
         telemetry.track_provider_usage(model.provider, model.model_name, estimated_cost)
 
+    response.headers["Cache-Control"] = "public, max-age=300"
     return PricingResponse(
         models=models,
         total_models=len(models),

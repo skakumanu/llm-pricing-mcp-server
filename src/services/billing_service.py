@@ -3,6 +3,7 @@ import logging
 import secrets
 import time
 import uuid
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -10,6 +11,15 @@ from typing import Optional
 import aiosqlite
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def _open_db(db_path: str):
+    """Open an aiosqlite connection with WAL mode and busy timeout pre-configured."""
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute("PRAGMA journal_mode=WAL")
+        await db.execute("PRAGMA busy_timeout=5000")
+        yield db
 
 _billing_service: Optional["BillingService"] = None
 
@@ -64,13 +74,13 @@ class BillingService:
         db_path = Path(self._db_path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
         logger.info("Initializing billing DB at %s", self._db_path)
-        async with aiosqlite.connect(self._db_path) as db:
+        async with _open_db(self._db_path) as db:
             await db.execute(_CREATE_TABLE)
             await db.commit()
 
     async def get_or_create_customer(self, email: str) -> CustomerRecord:
         """Idempotent free-tier signup — returns existing customer if email already registered."""
-        async with aiosqlite.connect(self._db_path) as db:
+        async with _open_db(self._db_path) as db:
             async with db.execute(
                 "SELECT id, email, stripe_customer_id, stripe_subscription_id, "
                 "api_key, tier, org_id, created_at, updated_at FROM customers WHERE email = ?",
@@ -104,7 +114,7 @@ class BillingService:
             )
 
     async def get_customer_by_api_key(self, api_key: str) -> Optional[CustomerRecord]:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with _open_db(self._db_path) as db:
             async with db.execute(
                 "SELECT id, email, stripe_customer_id, stripe_subscription_id, "
                 "api_key, tier, org_id, created_at, updated_at FROM customers WHERE api_key = ?",
@@ -114,7 +124,7 @@ class BillingService:
         return _row_to_customer(row) if row else None
 
     async def get_customer_by_stripe_id(self, stripe_customer_id: str) -> Optional[CustomerRecord]:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with _open_db(self._db_path) as db:
             async with db.execute(
                 "SELECT id, email, stripe_customer_id, stripe_subscription_id, "
                 "api_key, tier, org_id, created_at, updated_at "
@@ -126,7 +136,7 @@ class BillingService:
 
     async def get_all_customers(self, limit: int = 500) -> list:
         """Return all customers ordered by created_at desc (for admin view)."""
-        async with aiosqlite.connect(self._db_path) as db:
+        async with _open_db(self._db_path) as db:
             async with db.execute(
                 "SELECT id, email, stripe_customer_id, stripe_subscription_id, "
                 "api_key, tier, org_id, created_at, updated_at "
@@ -144,7 +154,7 @@ class BillingService:
         stripe_subscription_id: Optional[str] = None,
     ) -> None:
         now = time.time()
-        async with aiosqlite.connect(self._db_path) as db:
+        async with _open_db(self._db_path) as db:
             if stripe_customer_id is not None and stripe_subscription_id is not None:
                 await db.execute(
                     "UPDATE customers SET tier = ?, stripe_customer_id = ?, "

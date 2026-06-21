@@ -1,10 +1,22 @@
 """Pricing history service: snapshot live prices periodically and expose trends."""
 import logging
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import aiosqlite
+
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def _open_db(db_path: str):
+    """Open an aiosqlite connection with WAL mode and busy timeout pre-configured."""
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute("PRAGMA journal_mode=WAL")
+        await db.execute("PRAGMA busy_timeout=5000")
+        yield db
 
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS pricing_snapshots (
@@ -110,9 +122,8 @@ class PricingHistoryService:
 
     async def initialize(self) -> None:
         """Create the snapshots table and index if they don't exist."""
-        import aiosqlite
         Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
-        async with aiosqlite.connect(self._db_path) as db:
+        async with _open_db(self._db_path) as db:
             await db.execute(_CREATE_TABLE)
             await db.execute(_CREATE_INDEX)
             try:
@@ -124,7 +135,6 @@ class PricingHistoryService:
 
     async def record_snapshot(self, models) -> int:
         """Persist a snapshot of current pricing. Returns the number of rows inserted."""
-        import aiosqlite
         now = time.time()
         rows = [
             (
@@ -137,7 +147,7 @@ class PricingHistoryService:
             )
             for m in models
         ]
-        async with aiosqlite.connect(self._db_path) as db:
+        async with _open_db(self._db_path) as db:
             await db.executemany(_INSERT, rows)
             await db.commit()
         logger.info("Pricing snapshot: %d models recorded", len(rows))
@@ -166,7 +176,7 @@ class PricingHistoryService:
         history_sql = _HISTORY_QUERY.format(where_extra=where_extra)
         total_sql = _TOTAL_QUERY.format(where_extra=where_extra)
 
-        async with aiosqlite.connect(self._db_path) as db:
+        async with _open_db(self._db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(total_sql, params) as cur:
                 total = (await cur.fetchone())[0]
@@ -180,10 +190,9 @@ class PricingHistoryService:
         self, days: int = 30, limit: int = 20
     ) -> List[Dict[str, Any]]:
         """Return models with the largest price change over the last `days` days."""
-        import aiosqlite
         cutoff = time.time() - days * 86400
 
-        async with aiosqlite.connect(self._db_path) as db:
+        async with _open_db(self._db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(_TRENDS_QUERY, {"cutoff": cutoff, "limit": limit}) as cur:
                 rows = await cur.fetchall()
@@ -229,10 +238,9 @@ class PricingHistoryService:
         self, days: int = 30, limit: int = 20
     ) -> List[Dict[str, Any]]:
         """Return models with the largest subscription price change over the last `days` days."""
-        import aiosqlite
         cutoff = time.time() - days * 86400
 
-        async with aiosqlite.connect(self._db_path) as db:
+        async with _open_db(self._db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(_SUBSCRIPTION_TRENDS_QUERY, {"cutoff": cutoff, "limit": limit}) as cur:
                 rows = await cur.fetchall()

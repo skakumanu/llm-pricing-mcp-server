@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.48.0 | **Last updated**: 2026-06-21
+**Version**: v1.49.0 | **Last updated**: 2026-06-21
 
 ---
 
@@ -9,7 +9,6 @@
 A production FastAPI service that aggregates real-time LLM pricing data from 26 providers (150+ models), exposes it via REST API and MCP protocol, and layers on a ReAct agent, self-serve SaaS billing, and a suite of browser UIs.
 
 - **Primary deployment**: Fly.io (`llm-pricing-api.fly.dev`) — shared-cpu-1x, 512 MB, ~$3.40/mo
-- **Secondary deployment**: Azure App Service (`llm-pricing-api.azurewebsites.net`) — parallel cutover pending
 - **CI/CD**: GitHub Actions → test → lint → bandit → OSV scan → gitleaks → Fly.io deploy
 
 ---
