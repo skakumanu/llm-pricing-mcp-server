@@ -15,6 +15,9 @@ class MistralPricingService(BasePricingProvider):
 
     # Mistral AI pricing data (per 1k tokens in USD)
     # Source: https://mistral.ai/technology/#pricing
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-10"
+
     STATIC_PRICING = {
         "mistral-large-2": {
             "input": 0.003,

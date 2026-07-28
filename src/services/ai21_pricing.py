@@ -15,6 +15,9 @@ class AI21PricingService(BasePricingProvider):
 
     # AI21 Labs pricing data (per 1k tokens in USD)
     # Source: https://www.ai21.com/pricing
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-10"
+
     STATIC_PRICING = {
         "jamba-1.5-large": {
             "input": 0.002,

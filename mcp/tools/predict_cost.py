@@ -58,6 +58,7 @@ class PredictCostTool:
             candidates = [
                 m for m in all_pricing
                 if m.pricing_model == "per_token"
+                and m.price_confirmed  # never rank a model whose price we don't know
                 and (not require_fn_calling or m.supports_function_calling)
                 and (not require_vision or m.supports_vision)
                 and (min_context is None or (m.context_window or 0) >= min_context)

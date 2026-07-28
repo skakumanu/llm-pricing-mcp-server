@@ -13,6 +13,9 @@ class NVIDIAPricingService(BasePricingProvider):
 
     # NVIDIA NIM pricing data (per 1k tokens in USD)
     # Source: https://build.nvidia.com/explore/discover
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-10"
+
     STATIC_PRICING = {
         "meta/llama-3.1-405b-instruct": {
             "input": 0.00399,

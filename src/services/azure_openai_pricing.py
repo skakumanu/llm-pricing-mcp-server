@@ -16,6 +16,9 @@ class AzureOpenAIPricingService(BasePricingProvider):
     """
 
     # Per 1k tokens in USD (PAYG, East US)
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-06-20"
+
     STATIC_PRICING = {
         "gpt-4o": {
             "input": 0.0025, "output": 0.010,

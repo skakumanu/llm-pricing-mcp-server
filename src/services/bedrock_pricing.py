@@ -15,6 +15,9 @@ class BedrockPricingService(BasePricingProvider):
 
     # Amazon Bedrock pricing data (per 1k tokens in USD) - us-east-1 region
     # Source: https://aws.amazon.com/bedrock/pricing/
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-10"
+
     STATIC_PRICING = {
         "anthropic.claude-3-5-sonnet-20241022-v2:0": {
             "input": 0.003,

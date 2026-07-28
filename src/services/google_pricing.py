@@ -15,6 +15,9 @@ class GooglePricingService(BasePricingProvider):
 
     # Google Gemini pricing data (per 1k tokens in USD)
     # Source: https://ai.google.dev/pricing
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-09"
+
     STATIC_PRICING = {
         "gemini-2.5-pro": {
             "input": 0.00125,
