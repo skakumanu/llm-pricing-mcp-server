@@ -31,8 +31,9 @@ class DeepSeekPricingService(BasePricingProvider):
             "supports_json_mode": True,
         },
         "deepseek-reasoner": {
-            "input": 0.00055,
-            "output": 0.00219,
+            "input": 0.00028,
+            "output": 0.00042,
+            "price_as_of": "2026-07-28",
             "context_window": 64000,
             "use_cases": [
                 "Complex reasoning", "Math problems", "Scientific analysis",

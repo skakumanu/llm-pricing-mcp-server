@@ -94,8 +94,9 @@ class OpenAIPricingService(BasePricingProvider):
             "is_reasoning_model": True,
         },
         "o3": {
-            "input": 0.010,
-            "output": 0.040,
+            "input": 0.002,
+            "output": 0.008,
+            "price_as_of": "2026-07-28",
             "context_window": 200000,
             "use_cases": ["Frontier reasoning", "Complex math", "Advanced research", "Multi-step problem solving"],
             "strengths": ["Top-tier reasoning", "200K context", "Science & math", "Function calling"],

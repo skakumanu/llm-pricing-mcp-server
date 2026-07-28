@@ -35,8 +35,9 @@ class GooglePricingService(BasePricingProvider):
             "is_reasoning_model": True,
         },
         "gemini-2.5-flash": {
-            "input": 0.00015,
-            "output": 0.0035,
+            "input": 0.0003,
+            "output": 0.0025,
+            "price_as_of": "2026-07-28",
             "context_window": 1048576,
             "use_cases": [
                 "Fast reasoning", "Code generation", "Data analysis",

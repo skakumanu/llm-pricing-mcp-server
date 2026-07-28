@@ -30,8 +30,9 @@ class CoherePricingService(BasePricingProvider):
             "supports_json_mode": True,
         },
         "command-r-plus": {
-            "input": 0.003,
-            "output": 0.015,
+            "input": 0.0025,
+            "output": 0.01,
+            "price_as_of": "2026-07-28",
             "context_window": 128000,
             "use_cases": ["Enterprise search", "RAG systems", "Long document analysis", "Complex reasoning"],
             "strengths": ["Enterprise-optimized", "Excellent for RAG", "Strong context window"],
@@ -50,8 +51,9 @@ class CoherePricingService(BasePricingProvider):
             "supports_json_mode": True,
         },
         "command-r": {
-            "input": 0.0005,
-            "output": 0.0015,
+            "input": 0.00015,
+            "output": 0.0006,
+            "price_as_of": "2026-07-28",
             "context_window": 128000,
             "use_cases": ["Customer support automation", "FAQ systems", "Information retrieval", "Document Q&A"],
             "strengths": ["Cost-effective RAG", "Good retrieval capabilities", "Large context"],

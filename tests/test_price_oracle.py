@@ -19,6 +19,16 @@ from src.services.price_oracle import (  # noqa: E402
 
 
 RAW = {
+    # Same model name under two different hosts, at genuinely different rates.
+    # This is the shape that made name-only matching unsafe.
+    "fireworks_ai/accounts/fireworks/models/shared-name": {
+        "mode": "chat", "litellm_provider": "fireworks_ai",
+        "input_cost_per_token": 5e-07, "output_cost_per_token": 5e-07,
+    },
+    "mistral/shared-name": {
+        "mode": "chat", "litellm_provider": "mistral",
+        "input_cost_per_token": 2e-06, "output_cost_per_token": 6e-06,
+    },
     "cheap-model": {
         "mode": "chat",
         "litellm_provider": "acme",
@@ -117,6 +127,62 @@ class TestLookup:
 
     async def test_empty_name_returns_none(self, oracle):
         assert oracle.lookup("") is None
+
+
+@pytest.mark.asyncio
+class TestProviderAwareLookup:
+    """The same model name under two hosts carries different rates.
+
+    Matching on name alone picked whichever entry came first, which reported false
+    drift and would have replaced correct prices with another vendor's.
+    """
+
+    async def test_prefers_matching_provider(self, oracle):
+        rec = oracle.lookup("shared-name", "Mistral AI")
+        assert rec.model_key == "mistral/shared-name"
+        assert rec.input_per_1k == pytest.approx(0.002)
+
+    async def test_other_provider_gets_its_own_entry(self, oracle):
+        rec = oracle.lookup("shared-name", "Fireworks AI")
+        assert rec.model_key == "fireworks_ai/accounts/fireworks/models/shared-name"
+
+    async def test_falls_back_to_any_entry_when_not_strict(self, oracle):
+        assert oracle.lookup("shared-name", "Snowflake") is not None
+
+    async def test_strict_mode_refuses_cross_vendor_match(self, oracle):
+        """Snowflake has no first-party registry presence — better nothing than wrong."""
+        assert oracle.lookup("shared-name", "Snowflake", require_provider_match=True) is None
+
+    async def test_strict_mode_allows_matching_provider(self, oracle):
+        rec = oracle.lookup("shared-name", "Mistral AI", require_provider_match=True)
+        assert rec.model_key == "mistral/shared-name"
+
+    async def test_unknown_provider_name_is_not_a_match(self, oracle):
+        assert oracle.lookup("shared-name", "Nonexistent Co", require_provider_match=True) is None
+
+
+@pytest.mark.asyncio
+class TestCrossVendorSafety:
+    async def test_drift_not_reported_across_vendors(self, oracle):
+        """A Snowflake-hosted model must not be compared to Fireworks' rate."""
+        m = _pm("shared-name", inp=9e-06, out=9e-06, confirmed=True, provider="Snowflake")
+        assert oracle.find_drift([m]) == []
+
+    async def test_drift_reported_within_same_vendor(self, oracle):
+        m = _pm("shared-name", inp=4e-06, out=6e-06, confirmed=True, provider="Mistral AI")
+        found = oracle.find_drift([m])
+        assert len(found) == 1
+        assert found[0].pct_difference == pytest.approx(100.0)
+
+    async def test_fill_refuses_cross_vendor_price(self, oracle):
+        m = _pm("shared-name", provider="Snowflake")
+        assert oracle.fill_missing_prices([m]) == 0
+        assert m.price_confirmed is False
+
+    async def test_fill_uses_same_vendor_price(self, oracle):
+        m = _pm("shared-name", provider="Mistral AI")
+        assert oracle.fill_missing_prices([m]) == 1
+        assert m.cost_per_input_token == pytest.approx(2e-06)
 
 
 # ---------------------------------------------------------------------------
