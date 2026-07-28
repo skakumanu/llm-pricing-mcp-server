@@ -20,6 +20,81 @@ class OpenAIPricingService(BasePricingProvider):
     PRICE_AS_OF = "2026-05-09"
 
     STATIC_PRICING = {
+        "gpt-5": {
+            # Listed from the provider's current lineup. Price left unset and
+            # price_confirmed=False so the price oracle fills it from the registry
+            # rather than a hand-typed guess.
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 272000,
+            "use_cases": ['Complex reasoning', 'Advanced coding', 'Agentic workflows', 'Analysis'],
+            "strengths": ["Current generation", "272,000 token context"],
+            "best_for": "Frontier general-purpose model. Pricing sourced from the reference registry.",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+        },
+        "gpt-5-mini": {
+            # Listed from the provider's current lineup. Price left unset and
+            # price_confirmed=False so the price oracle fills it from the registry
+            # rather than a hand-typed guess.
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 272000,
+            "use_cases": ['Production apps', 'Coding', 'Chat', 'Summarisation'],
+            "strengths": ["Current generation", "272,000 token context"],
+            "best_for": "Balanced cost and capability. Pricing sourced from the reference registry.",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+        },
+        "gpt-5-nano": {
+            # Listed from the provider's current lineup. Price left unset and
+            # price_confirmed=False so the price oracle fills it from the registry
+            # rather than a hand-typed guess.
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 272000,
+            "use_cases": ['High-volume classification', 'Extraction', 'Routing'],
+            "strengths": ["Current generation", "272,000 token context"],
+            "best_for": "Cheapest GPT-5 tier. Pricing sourced from the reference registry.",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+        },
+        "gpt-5.4": {
+            # Listed from the provider's current lineup. Price left unset and
+            # price_confirmed=False so the price oracle fills it from the registry
+            # rather than a hand-typed guess.
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 1050000,
+            "use_cases": ['Long-document analysis', 'Research', 'Agentic workflows'],
+            "strengths": ["Current generation", "1,050,000 token context"],
+            "best_for": "Long-context frontier model. Pricing sourced from the reference registry.",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+        },
+        "gpt-5.5": {
+            # Listed from the provider's current lineup. Price left unset and
+            # price_confirmed=False so the price oracle fills it from the registry
+            # rather than a hand-typed guess.
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 1050000,
+            "use_cases": ['Frontier reasoning', 'Complex research', 'Advanced coding'],
+            "strengths": ["Current generation", "1,050,000 token context"],
+            "best_for": "Most capable GPT-5 generation. Pricing sourced from the reference registry.",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+        },
         "gpt-4o": {
             "input": 0.0025,
             "output": 0.010,

@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.54.1 | **Last updated**: 2026-07-28
+**Version**: v1.55.0 | **Last updated**: 2026-07-28
 
 ---
 
@@ -10,6 +10,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 26 
 
 - **Primary deployment**: Fly.io (`llm-pricing-api.fly.dev`) — shared-cpu-1x, 512 MB, ~$3.40/mo
 - **CI/CD**: GitHub Actions → test → lint → bandit → OSV scan → gitleaks → Fly.io deploy
+- **Weekly price audit**: scheduled workflow re-runs `check_price_drift` and refreshes the vendored registry snapshot, opening an issue/PR when either drifts
 
 ---
 

@@ -17,6 +17,21 @@ class DeepSeekPricingService(BasePricingProvider):
     PRICE_AS_OF = "2026-05-09"
 
     STATIC_PRICING = {
+        "deepseek-v3": {
+            # Listed from the provider's current lineup. Price left unset and
+            # price_confirmed=False so the price oracle fills it from the registry
+            # rather than a hand-typed guess.
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 65536,
+            "use_cases": ['Coding', 'Chat', 'High-volume analysis'],
+            "strengths": ["Current generation", "65,536 token context"],
+            "best_for": "Cost-efficient general model. Pricing sourced from the reference registry.",
+            "supports_vision": False,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+        },
         "deepseek-chat": {
             "input": 0.00027,
             "output": 0.0011,

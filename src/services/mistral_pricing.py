@@ -19,6 +19,36 @@ class MistralPricingService(BasePricingProvider):
     PRICE_AS_OF = "2026-05-10"
 
     STATIC_PRICING = {
+        "mistral-medium-latest": {
+            # Listed from the provider's current lineup. Price left unset and
+            # price_confirmed=False so the price oracle fills it from the registry
+            # rather than a hand-typed guess.
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 262144,
+            "use_cases": ['Production apps', 'Coding', 'Multilingual'],
+            "strengths": ["Current generation", "262,144 token context"],
+            "best_for": "Mid-tier Mistral model. Pricing sourced from the reference registry.",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+        },
+        "magistral-medium-latest": {
+            # Listed from the provider's current lineup. Price left unset and
+            # price_confirmed=False so the price oracle fills it from the registry
+            # rather than a hand-typed guess.
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 40000,
+            "use_cases": ['Step-by-step reasoning', 'Math', 'Analysis'],
+            "strengths": ["Current generation", "40,000 token context"],
+            "best_for": "Mistral reasoning model. Pricing sourced from the reference registry.",
+            "supports_vision": False,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+        },
         "mistral-large-2": {
             "input": 0.003,
             "output": 0.009,

@@ -247,6 +247,52 @@ class TestAggregatorGating:
 
 
 # ---------------------------------------------------------------------------
+# Current-generation catalogue coverage
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+class TestCurrentGenerationModelsArePriced:
+    """Recent releases must be listed AND priced.
+
+    These entries carry input/output 0.0 with price_confirmed=False in
+    STATIC_PRICING by design — the price oracle fills them from the registry so
+    nobody hand-types a rate. If the oracle stops resolving one (a renamed
+    registry key, a provider-alias miss), the model would silently drop out of
+    every cost comparison. This catches that.
+    """
+
+    CURRENT = [
+        "claude-opus-5", "claude-sonnet-5", "claude-fable-5",
+        "gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5.4", "gpt-5.5",
+        "gemini-3-pro-preview", "gemini-3-flash-preview",
+        "gemini-3.5-flash", "gemini-3.6-flash",
+        "grok-4", "grok-4-fast-reasoning",
+        "mistral-medium-latest", "magistral-medium-latest",
+        "deepseek-v3",
+    ]
+
+    async def test_all_present_in_default_output(self):
+        from src.services.pricing_aggregator import PricingAggregatorService
+        models, _ = await PricingAggregatorService().get_all_pricing_async()
+        names = {m.model_name for m in models}
+        missing = [n for n in self.CURRENT if n not in names]
+        assert not missing, (
+            "current-generation models absent from default output — the oracle "
+            f"failed to price them: {missing}"
+        )
+
+    async def test_all_have_a_real_price(self):
+        from src.services.pricing_aggregator import PricingAggregatorService
+        models, _ = await PricingAggregatorService().get_all_pricing_async()
+        by = {m.model_name: m for m in models}
+        unpriced = [
+            n for n in self.CURRENT
+            if n in by and (by[n].cost_per_input_token <= 0 or not by[n].price_confirmed)
+        ]
+        assert not unpriced, f"listed but still unpriced: {unpriced}"
+
+
+# ---------------------------------------------------------------------------
 # Every provider declares provenance
 # ---------------------------------------------------------------------------
 

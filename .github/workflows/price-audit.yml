@@ -1,0 +1,157 @@
+name: Weekly price audit
+
+# Curated prices in STATIC_PRICING are hand-maintained and drift silently. A
+# one-off audit found 12 wrong prices, several off by 3-16x, which had been
+# serving live for months. This job re-runs that audit on a schedule and opens
+# an issue when drift reappears, so the next round is caught in a week rather
+# than whenever someone happens to look.
+#
+# It also refreshes the vendored registry snapshot, which is the offline
+# fallback and goes stale the same way.
+
+on:
+  schedule:
+    # Mondays 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run drift audit
+        id: audit
+        run: |
+          python - <<'PY' > audit.txt 2>/dev/null
+          import asyncio, sys
+          sys.path.insert(0, '.')
+          from mcp.tools.check_price_drift import CheckPriceDriftTool
+
+          async def main():
+              r = await CheckPriceDriftTool().execute({"threshold_pct": 5, "limit": 200})
+              if not r.get("success"):
+                  print(f"AUDIT_FAILED: {r.get('error')}")
+                  return
+              print(f"COUNT={r['drift_count']}")
+              print(f"CHECKED={r['models_checked']}")
+              print()
+              print(r["summary"])
+              if r["findings"]:
+                  print()
+                  print("| Model | Provider | Ours ($/1M) | Registry ($/1M) | Diff | Direction |")
+                  print("|---|---|---|---|---|---|")
+                  for f in r["findings"]:
+                      print(f"| `{f['model_name']}` | {f['provider']} | "
+                            f"{f['our_input_cost_per_1m_usd']:.4f} | "
+                            f"{f['registry_input_cost_per_1m_usd']:.4f} | "
+                            f"{f['pct_difference']:.0f}% | {f['direction']} |")
+          asyncio.run(main())
+          PY
+
+          cat audit.txt
+          COUNT=$(grep -oP '^COUNT=\K\d+' audit.txt || echo "-1")
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Open an issue when drift is found
+        if: steps.audit.outputs.count != '0' && steps.audit.outputs.count != '-1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Reuse a single rolling issue rather than filing a new one each week.
+          EXISTING=$(gh issue list --state open --label price-drift \
+            --json number --jq '.[0].number' || true)
+
+          BODY=$(printf 'The weekly audit found curated prices that disagree with the reference registry.\n\nA wrong price is worse than a missing one — these feed `estimate_cost`, `compare_costs`, `predict_cost`, `optimize_workload`, and the router.\n\n%s\n\n---\nRun `check_price_drift` locally to reproduce. Nothing was changed automatically.' "$(tail -n +2 audit.txt)")
+
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "$BODY"
+            echo "Commented on existing issue #$EXISTING"
+          else
+            gh issue create \
+              --title "Price drift detected: ${{ steps.audit.outputs.count }} model(s)" \
+              --label price-drift \
+              --body "$BODY" \
+              || echo "Could not create issue — ensure the 'price-drift' label exists."
+          fi
+
+      - name: Report a clean audit
+        if: steps.audit.outputs.count == '0'
+        run: echo "No curated price differs from the registry by more than 5%."
+
+      - name: Fail the run if the audit could not complete
+        if: steps.audit.outputs.count == '-1'
+        run: |
+          echo "The audit did not produce a result — the registry was unreachable"
+          echo "and the vendored snapshot was unusable."
+          exit 1
+
+  refresh-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Rebuild the vendored snapshot
+        run: |
+          curl -sS --max-time 60 -o /tmp/registry.json \
+            "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
+          python - <<'PY'
+          import json
+          raw = json.load(open('/tmp/registry.json'))
+          KEEP = ["input_cost_per_token","output_cost_per_token","cache_read_input_token_cost",
+                  "max_input_tokens","max_output_tokens","supports_vision",
+                  "supports_function_calling","litellm_provider","mode"]
+          trim = {k: {f: v[f] for f in KEEP if f in v}
+                  for k, v in raw.items()
+                  if isinstance(v, dict) and v.get("mode") == "chat"
+                  and "input_cost_per_token" in v}
+          # Refuse to write a suspiciously small snapshot over a good one.
+          assert len(trim) > 500, f"snapshot too small ({len(trim)} models) — refusing to write"
+          with open('data/model_prices_snapshot.json', 'w') as fh:
+              json.dump(trim, fh, separators=(',', ':'), sort_keys=True)
+          print(f"snapshot rebuilt: {len(trim)} models")
+          PY
+
+      - name: Open a PR when the snapshot changed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git diff --quiet -- data/model_prices_snapshot.json; then
+            echo "Snapshot unchanged — nothing to do."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          BRANCH="ci/refresh-price-snapshot-$(date +%Y%m%d)"
+          git checkout -b "$BRANCH"
+          git add data/model_prices_snapshot.json
+          git commit -m "chore(pricing): refresh vendored price registry snapshot"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --title "chore(pricing): refresh vendored price registry snapshot" \
+            --body "Automated refresh of the offline price-registry fallback. Only \`data/model_prices_snapshot.json\` changes; no curated price is touched." \
+            --base develop \
+            --head "$BRANCH" \
+            || echo "gh pr create blocked — branch '$BRANCH' was pushed; open the PR manually."
