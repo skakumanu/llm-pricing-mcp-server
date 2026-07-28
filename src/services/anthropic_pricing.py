@@ -15,7 +15,55 @@ class AnthropicPricingService(BasePricingProvider):
 
     # Anthropic pricing data (per 1k tokens in USD) - updated from their official pricing page
     # Source: https://www.anthropic.com/api
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-09"
+
     STATIC_PRICING = {
+        # ── Claude 5 family ──────────────────────────────────────────────────
+        # These models are current but their per-token rates have NOT been
+        # confirmed against Anthropic's published pricing. They are listed so
+        # they show up in the catalogue, and marked price_confirmed=False so the
+        # cost-ranking tools skip them rather than treating 0.0 as "cheapest".
+        # Replace the zeros and flip the flag once the rates are verified.
+        "claude-opus-5": {
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 200000,
+            "use_cases": ["Frontier reasoning", "Complex research", "Advanced coding", "Agentic workflows"],
+            "strengths": ["Most capable Claude model", "Vision capable", "Function calling", "200K context"],
+            "best_for": "The most demanding reasoning and agentic work. Pricing not yet confirmed.",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+            "batch_available": True,
+        },
+        "claude-sonnet-5": {
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 200000,
+            "use_cases": ["Production applications", "Coding", "Agentic workflows", "High-volume analysis"],
+            "strengths": ["Strong capability/cost balance", "Vision capable", "Function calling", "200K context"],
+            "best_for": "The default production workhorse. Pricing not yet confirmed.",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+            "batch_available": True,
+        },
+        "claude-fable-5": {
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 200000,
+            "use_cases": ["Creative writing", "Long-form content", "Narrative generation"],
+            "strengths": ["Tuned for creative and narrative work", "200K context"],
+            "best_for": "Creative and long-form writing. Pricing not yet confirmed.",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+            "batch_available": True,
+        },
         "claude-opus-4-6": {
             "input": 0.015,
             "output": 0.075,
@@ -256,6 +304,7 @@ class AnthropicPricingService(BasePricingProvider):
                         supports_json_mode=static_info.get("supports_json_mode", False),
                         batch_available=static_info.get("batch_available", False),
                         is_reasoning_model=static_info.get("is_reasoning_model", False),
+                        price_confirmed=static_info.get("price_confirmed", True),
                     )
                 )
 
@@ -335,6 +384,7 @@ class AnthropicPricingService(BasePricingProvider):
                     supports_json_mode=pricing_info.get("supports_json_mode", False),
                     batch_available=pricing_info.get("batch_available", False),
                     is_reasoning_model=pricing_info.get("is_reasoning_model", False),
+                    price_confirmed=pricing_info.get("price_confirmed", True),
                 )
             )
         return pricing_list
@@ -379,7 +429,9 @@ class AnthropicPricingService(BasePricingProvider):
                     context_window=pricing_info["context_window"],
                     currency="USD",
                     unit="per_token",
-                    source="Anthropic Official Pricing (Static)"
+                    source="Anthropic Official Pricing (Static)",
+                    price_as_of=pricing_info.get("price_as_of", AnthropicPricingService.PRICE_AS_OF),
+                    price_confirmed=pricing_info.get("price_confirmed", True),
                 )
             )
         return pricing_list

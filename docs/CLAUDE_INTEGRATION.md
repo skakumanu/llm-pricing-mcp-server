@@ -1,6 +1,6 @@
 # Claude Desktop Integration Guide
 
-**Version**: 1.38.0
+**Version**: see `src/__init__.py` (single source of truth)
 **Last Updated**: March 2026
 **Status**: Production-ready
 

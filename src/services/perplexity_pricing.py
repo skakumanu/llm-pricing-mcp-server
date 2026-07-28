@@ -15,6 +15,9 @@ class PerplexityPricingService(BasePricingProvider):
 
     # Perplexity AI pricing data (per 1k tokens in USD)
     # Source: https://docs.perplexity.ai/docs/pricing
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-10"
+
     STATIC_PRICING = {
         "sonar-reasoning": {
             "input": 0.001,

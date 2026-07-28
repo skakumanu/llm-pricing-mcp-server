@@ -13,6 +13,9 @@ class DeepSeekPricingService(BasePricingProvider):
 
     # DeepSeek pricing data (per 1k tokens in USD)
     # Source: https://platform.deepseek.com/docs/pricing
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-09"
+
     STATIC_PRICING = {
         "deepseek-chat": {
             "input": 0.00027,

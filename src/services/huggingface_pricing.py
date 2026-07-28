@@ -20,6 +20,9 @@ class HuggingFacePricingService(BasePricingProvider):
     """
 
     # Per 1k tokens in USD (Serverless Inference API)
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-06-20"
+
     STATIC_PRICING = {
         "meta-llama/Llama-3.3-70B-Instruct": {
             "input": 0.00059, "output": 0.00079,

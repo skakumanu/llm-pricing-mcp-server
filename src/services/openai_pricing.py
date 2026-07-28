@@ -16,6 +16,9 @@ class OpenAIPricingService(BasePricingProvider):
 
     # OpenAI pricing data (per 1k tokens in USD) - updated from their official pricing page
     # Source: https://openai.com/api/pricing/
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-09"
+
     STATIC_PRICING = {
         "gpt-4o": {
             "input": 0.0025,

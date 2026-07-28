@@ -15,6 +15,9 @@ class AnyscalePricingService(BasePricingProvider):
 
     # Anyscale pricing data (per 1k tokens in USD)
     # Source: https://www.anyscale.com/pricing
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-10"
+
     STATIC_PRICING = {
         "meta-llama/Meta-Llama-3.1-405B-Instruct": {
             "input": 0.0015,

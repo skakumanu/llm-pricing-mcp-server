@@ -23,6 +23,9 @@ class SalesforcePricingService(BasePricingProvider):
     labelled accordingly.
     """
 
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-06-20"
+
     STATIC_PRICING = {
         # ── Commercial products ──────────────────────────────────────────────
         "agentforce": {

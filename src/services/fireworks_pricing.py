@@ -15,6 +15,9 @@ class FireworksPricingService(BasePricingProvider):
 
     # Fireworks AI pricing data (per 1k tokens in USD)
     # Source: https://fireworks.ai/pricing
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-10"
+
     STATIC_PRICING = {
         "accounts/fireworks/models/llama-v3p3-70b-instruct": {
             "input": 0.0009,

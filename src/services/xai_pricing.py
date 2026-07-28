@@ -13,6 +13,9 @@ class XAIPricingService(BasePricingProvider):
 
     # xAI pricing data (per 1k tokens in USD)
     # Source: https://x.ai/api
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-09"
+
     STATIC_PRICING = {
         "grok-3": {
             "input": 0.003,
