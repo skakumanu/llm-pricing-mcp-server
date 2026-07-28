@@ -19,6 +19,9 @@ class CloudflareAIPricingService(BasePricingProvider):
     # Per 1k tokens in USD — derived from Neuron pricing
     # ~0.2 Neurons/token for 7-8B models at $0.011/1000 Neurons
     # ~0.84 Neurons/token for 70B models
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-06-20"
+
     STATIC_PRICING = {
         "@cf/meta/llama-3.1-8b-instruct": {
             "input": 0.0000022, "output": 0.0000022,

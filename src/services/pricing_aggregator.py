@@ -62,13 +62,23 @@ class PricingAggregatorService:
         self.huggingface_service = HuggingFacePricingService()
         self.cloudflare_service = CloudflareAIPricingService()
 
-    async def get_all_pricing_async(self) -> tuple[List[PricingMetrics], List[ProviderStatusInfo]]:
+    async def get_all_pricing_async(
+        self, include_unconfirmed: bool = False
+    ) -> tuple[List[PricingMetrics], List[ProviderStatusInfo]]:
         """
         Aggregate pricing data from all providers asynchronously.
 
         This method fetches data from all providers concurrently and handles
         partial failures gracefully. If a provider fails, its data is skipped
         but other providers' data is still returned.
+
+        Args:
+            include_unconfirmed: Include models whose per-token price has not been
+                confirmed (newly released or discovered from a provider's live model
+                list). Excluded by default: their price is a 0.0 placeholder, which
+                would read as "free" to every cost ranking, tier, and estimate
+                downstream. Opt in only where the caller wants a catalogue rather
+                than a costing.
 
         Returns:
             Tuple of (all_pricing_data, provider_statuses)
@@ -136,6 +146,9 @@ class PricingAggregatorService:
             # Add pricing data if available
             if pricing_data:
                 all_pricing.extend(pricing_data)
+
+        if not include_unconfirmed:
+            all_pricing = [m for m in all_pricing if m.price_confirmed]
 
         return all_pricing, provider_statuses
 

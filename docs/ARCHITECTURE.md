@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.52.1 | **Last updated**: 2026-07-28
+**Version**: v1.53.0 | **Last updated**: 2026-07-28
 
 ---
 
@@ -80,7 +80,7 @@ llm-pricing-mcp-server/
 │   │   ├── pricing.py               # PricingMetrics, PerformanceMetrics, RouterResponse, …
 │   │   └── billing.py               # SignupRequest/Response, CheckoutRequest, CustomerDashboard
 │   └── services/
-│       ├── base_provider.py         # Abstract BasePricingProvider
+│       ├── base_provider.py         # BasePricingProvider: live sync (filter + discover), price provenance
 │       ├── pricing_aggregator.py    # Orchestrates + caches all provider data (async)
 │       ├── pricing_history.py       # SQLite price-history + routing_feedback tables
 │       ├── benchmark_service.py     # Quality scores: static table + HF API fallback (24h TTL)

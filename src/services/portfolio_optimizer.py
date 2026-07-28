@@ -91,6 +91,8 @@ def _qualifies(model, wl: Workload, global_min_quality: Optional[float]) -> bool
     """Whether a model satisfies a workload's hard constraints."""
     if getattr(model, "pricing_model", "per_token") != "per_token":
         return False  # subscription tools aren't per-request allocatable
+    if not getattr(model, "price_confirmed", True):
+        return False  # an unconfirmed price must never win on cost
     if wl.require_function_calling and not model.supports_function_calling:
         return False
     if wl.require_vision and not model.supports_vision:

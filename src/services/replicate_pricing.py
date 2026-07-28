@@ -13,6 +13,9 @@ class ReplicatePricingService(BasePricingProvider):
 
     # Replicate LLM pricing data (per 1k tokens in USD)
     # Source: https://replicate.com/pricing
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-10"
+
     STATIC_PRICING = {
         "meta/meta-llama-3-70b-instruct": {
             "input": 0.00065,

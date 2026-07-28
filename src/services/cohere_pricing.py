@@ -15,6 +15,9 @@ class CoherePricingService(BasePricingProvider):
 
     # Cohere pricing data (per 1k tokens in USD)
     # Source: https://cohere.com/pricing
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-10"
+
     STATIC_PRICING = {
         "command-r-plus-08-2024": {
             "input": 0.0025,

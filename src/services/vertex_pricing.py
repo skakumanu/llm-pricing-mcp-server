@@ -16,6 +16,9 @@ class VertexAIPricingService(BasePricingProvider):
     """
 
     # Per 1k tokens in USD
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-06-20"
+
     STATIC_PRICING = {
         "gemini-2.0-flash": {
             "input": 0.0001, "output": 0.0004,

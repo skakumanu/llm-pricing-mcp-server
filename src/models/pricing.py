@@ -1,7 +1,12 @@
 """Pydantic models for pricing data validation."""
 from pydantic import BaseModel, Field, ConfigDict, computed_field
 from typing import Optional, List
-from datetime import datetime, UTC
+from datetime import date, datetime, UTC
+
+# A hand-maintained price older than this is flagged stale. Providers change
+# per-token rates often enough that a quarter-old number should not be trusted
+# silently for budgeting.
+PRICE_STALE_AFTER_DAYS = 90
 
 
 class TokenVolumePrice(BaseModel):
@@ -57,6 +62,46 @@ class PricingMetrics(BaseModel):
         False,
         description="Whether this is an IDE-native tool (GitHub Copilot, Cursor, Windsurf, etc.)",
     )
+    # Price provenance — when this model's per-token price was last confirmed against
+    # the provider's published rates. Prices are maintained by hand, so this is the
+    # honest signal for how much to trust a number.
+    price_as_of: Optional[str] = Field(
+        None,
+        description="ISO date (YYYY-MM-DD) when this price was last confirmed against the provider",
+    )
+    price_confirmed: bool = Field(
+        True,
+        description=(
+            "False when the model is known to exist but its per-token price has not been "
+            "confirmed. Such models are listed for discoverability but excluded from cost "
+            "ranking and budget math, so an unknown price is never mistaken for a cheap one."
+        ),
+    )
+
+    @computed_field
+    @property
+    def price_age_days(self) -> Optional[int]:
+        """Days since the price was last confirmed. None when unknown."""
+        if not self.price_as_of:
+            return None
+        try:
+            confirmed = date.fromisoformat(self.price_as_of)
+        except (ValueError, TypeError):
+            return None
+        return max(0, (datetime.now(UTC).date() - confirmed).days)
+
+    @computed_field
+    @property
+    def price_is_stale(self) -> bool:
+        """True when the price is older than the staleness threshold, or undated.
+
+        An undated price counts as stale: unknown provenance is not a clean bill
+        of health, and callers making budget decisions should see that.
+        """
+        age = self.price_age_days
+        if age is None:
+            return True
+        return age > PRICE_STALE_AFTER_DAYS
 
     @computed_field
     @property
