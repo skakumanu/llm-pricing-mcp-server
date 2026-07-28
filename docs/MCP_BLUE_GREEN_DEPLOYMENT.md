@@ -1,6 +1,6 @@
 # MCP Server Blue-Green Deployment Guide
 
-**Version**: 1.6.0  
+**Version**: see `src/__init__.py` (single source of truth)
 **Last Updated**: February 20, 2026  
 **Status**: ✅ Production Deployed (All tests passing)
 

@@ -1,8 +1,7 @@
 # MCP Server Testing Guide
 
 **Last Updated**: February 20, 2026  
-**Version**: 1.6.0
-
+**Version**: see `src/__init__.py` (single source of truth)
 ## Overview
 
 This guide covers all testing approaches for the MCP server, from quick validation to comprehensive integration testing. The server includes **3 automated test suites** designed for different scenarios:
@@ -755,7 +754,7 @@ All should work without issues.
 ### Latest Test Run (v1.6.0)
 
 **Date**: February 20, 2026  
-**Version**: 1.6.0  
+**Version**: see `src/__init__.py` (single source of truth)
 **Environment**: Production blue-green deployment
 
 **quick_validate.py Results**:

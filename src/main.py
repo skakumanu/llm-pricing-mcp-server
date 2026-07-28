@@ -23,6 +23,7 @@ from typing import Any, Optional, Deque, Dict, List  # noqa: E402
 import asyncio  # noqa: E402
 import time  # noqa: E402
 import uuid  # noqa: E402
+from src import __version__  # noqa: E402
 from src.config.settings import settings  # noqa: E402
 from src.models.pricing import (  # noqa: E402
     PricingResponse, ServerInfo, EndpointInfo, CostEstimateRequest, CostEstimateResponse,
@@ -2829,7 +2830,8 @@ async def openai_proxy(req: _ProxyRequest):
 # ---------------------------------------------------------------------------
 
 _MCP_SERVER_NAME = "LLM Pricing MCP Server"
-_MCP_SERVER_VERSION = "1.1.0"
+# Single-sourced from src/__init__.py — MCP clients see the real release version.
+_MCP_SERVER_VERSION = __version__
 _MCP_PROTOCOL_VERSION = "2024-11-05"
 
 # Lazily initialized ToolManager — shared across requests

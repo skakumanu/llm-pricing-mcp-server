@@ -1,6 +1,6 @@
 # MCP Server — Quick Start & Validation Guide
 
-**Version**: 1.38.0
+**Version**: see `src/__init__.py` (single source of truth)
 **Protocol**: MCP 2024-11-05, JSON-RPC 2.0
 **Transports**: STDIO (local) · HTTP POST (remote)
 
@@ -36,7 +36,7 @@ Expected response:
   "result": {
     "protocolVersion": "2024-11-05",
     "capabilities": {"tools": {}},
-    "serverInfo": {"name": "LLM Pricing MCP Server", "version": "1.1.0"}
+    "serverInfo": {"name": "LLM Pricing MCP Server", "version": "<current release>"}
   },
   "id": 1
 }
@@ -129,7 +129,7 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp -H "Content-Type: application/j
 # tools/list
 curl -X POST https://llm-pricing-api.fly.dev/mcp -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
-# → result.tools has 14 entries
+# → result.tools has 18 entries
 
 # tools/call
 curl -X POST https://llm-pricing-api.fly.dev/mcp -H "Content-Type: application/json" \

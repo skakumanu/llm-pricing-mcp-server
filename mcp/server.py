@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from mcp.tools.tool_manager import ToolManager  # noqa: E402
+from src import __version__  # noqa: E402
 from src.services.telemetry import get_telemetry_service  # noqa: E402
 
 # Configure logging - disabled for MCP stdio mode to avoid interference
@@ -27,7 +28,7 @@ class MCPServer:
 
     def __init__(self):
         """Initialize the MCP server."""
-        self.version = "1.1.0"
+        self.version = __version__
         self.name = "LLM Pricing MCP Server"
         self.tool_manager = ToolManager()
         self.telemetry = get_telemetry_service()
