@@ -1,5 +1,5 @@
 """Task profiles mapping named task types to expected I/O token ratios."""
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 # Each profile: output_fixed is an absolute token count; output_ratio multiplies input_tokens.
 # Exactly one of the two is set per profile.

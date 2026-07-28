@@ -53,6 +53,73 @@ class BasePricingProvider(ABC):
         # How long to cache the live model list (seconds); default 6 hours
         self._live_model_ttl_seconds: int = 21600
 
+    def build_metrics(
+        self,
+        model_name: str,
+        info: dict,
+        source: str,
+        *,
+        cost_per_input_token: Optional[float] = None,
+        cost_per_output_token: Optional[float] = None,
+        throughput: Optional[float] = None,
+        latency_ms: Optional[float] = None,
+        provider: Optional[str] = None,
+        **extra,
+    ) -> PricingMetrics:
+        """Build a PricingMetrics from a STATIC_PRICING entry.
+
+        Every provider used to construct PricingMetrics inline, two or three times
+        apiece — 51 near-identical call sites. Adding one field to the model meant
+        editing all of them, and missing some was silent: ``price_confirmed`` was
+        dropped by 24 sites, so a $0.00 placeholder came back marked *confirmed*
+        and sorted as the cheapest option. This is the one place that mapping
+        lives now.
+
+        Args:
+            model_name: Model identifier.
+            info: The model's ``STATIC_PRICING`` entry. Prices in it are per 1k
+                tokens, matching the file format.
+            source: Where this price came from, for display.
+            cost_per_input_token / cost_per_output_token: Per-token costs, already
+                converted. Pass these when the price came from a live API; omit to
+                derive them from *info*.
+            throughput / latency_ms: Provider performance defaults.
+            provider: Overrides ``self.provider_name``.
+            **extra: Any other PricingMetrics field, for the rare special case.
+        """
+        if cost_per_input_token is None:
+            cost_per_input_token = info.get("input", 0.0) / 1000
+        if cost_per_output_token is None:
+            cost_per_output_token = info.get("output", 0.0) / 1000
+
+        fields = dict(
+            model_name=model_name,
+            provider=provider or self.provider_name,
+            cost_per_input_token=cost_per_input_token,
+            cost_per_output_token=cost_per_output_token,
+            context_window=info.get("context_window"),
+            currency="USD",
+            unit="per_token",
+            source=source,
+            throughput=throughput,
+            latency_ms=latency_ms,
+            use_cases=info.get("use_cases"),
+            strengths=info.get("strengths"),
+            best_for=info.get("best_for"),
+            supports_vision=info.get("supports_vision", False),
+            supports_function_calling=info.get("supports_function_calling", False),
+            supports_json_mode=info.get("supports_json_mode", False),
+            batch_available=info.get("batch_available", False),
+            is_reasoning_model=info.get("is_reasoning_model", False),
+            # Provenance travels with the data rather than being stamped later, so
+            # it survives callers that bypass get_pricing_with_status().
+            price_confirmed=info.get("price_confirmed", True),
+        )
+        if info.get("price_as_of"):
+            fields["price_as_of"] = info["price_as_of"]
+        fields.update(extra)
+        return PricingMetrics(**fields)
+
     @abstractmethod
     async def fetch_pricing_data(self) -> List[PricingMetrics]:
         """
