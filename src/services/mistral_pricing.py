@@ -19,6 +19,36 @@ class MistralPricingService(BasePricingProvider):
     PRICE_AS_OF = "2026-05-10"
 
     STATIC_PRICING = {
+        "mistral-medium-latest": {
+            # Listed from the provider's current lineup. Price left unset and
+            # price_confirmed=False so the price oracle fills it from the registry
+            # rather than a hand-typed guess.
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 262144,
+            "use_cases": ['Production apps', 'Coding', 'Multilingual'],
+            "strengths": ["Current generation", "262,144 token context"],
+            "best_for": "Mid-tier Mistral model. Pricing sourced from the reference registry.",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+        },
+        "magistral-medium-latest": {
+            # Listed from the provider's current lineup. Price left unset and
+            # price_confirmed=False so the price oracle fills it from the registry
+            # rather than a hand-typed guess.
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 40000,
+            "use_cases": ['Step-by-step reasoning', 'Math', 'Analysis'],
+            "strengths": ["Current generation", "40,000 token context"],
+            "best_for": "Mistral reasoning model. Pricing sourced from the reference registry.",
+            "supports_vision": False,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+        },
         "mistral-large-2": {
             "input": 0.003,
             "output": 0.009,
@@ -199,6 +229,7 @@ class MistralPricingService(BasePricingProvider):
                         supports_json_mode=static_info.get("supports_json_mode", False),
                         batch_available=static_info.get("batch_available", False),
                         is_reasoning_model=static_info.get("is_reasoning_model", False),
+                        price_confirmed=static_info.get("price_confirmed", True),
                     )
                 )
 
@@ -254,31 +285,15 @@ class MistralPricingService(BasePricingProvider):
         Returns:
             List of PricingMetrics with static data
         """
-        pricing_list = []
-        for model_name, pricing_info in self.STATIC_PRICING.items():
-            pricing_list.append(
-                PricingMetrics(
-                    model_name=model_name,
-                    provider=self.provider_name,
-                    cost_per_input_token=pricing_info["input"] / 1000,
-                    cost_per_output_token=pricing_info["output"] / 1000,
-                    context_window=pricing_info["context_window"],
-                    currency="USD",
-                    unit="per_token",
-                    source="Mistral Pricing (Fallback - Static)",
-                    throughput=90.0,
-                    latency_ms=280.0,
-                    use_cases=pricing_info.get("use_cases"),
-                    strengths=pricing_info.get("strengths"),
-                    best_for=pricing_info.get("best_for"),
-                    supports_vision=pricing_info.get("supports_vision", False),
-                    supports_function_calling=pricing_info.get("supports_function_calling", False),
-                    supports_json_mode=pricing_info.get("supports_json_mode", False),
-                    batch_available=pricing_info.get("batch_available", False),
-                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
-                )
+        return [
+            self.build_metrics(
+                model_name, pricing_info,
+                source="Mistral Pricing (Fallback - Static)",
+                throughput=90.0,
+                latency_ms=280.0,
             )
-        return pricing_list
+            for model_name, pricing_info in self.STATIC_PRICING.items()
+        ]
 
     @staticmethod
     def get_pricing_data() -> List[PricingMetrics]:
@@ -287,32 +302,7 @@ class MistralPricingService(BasePricingProvider):
         Returns:
             List of PricingMetrics for Mistral models
         """
-        # Return static pricing data for backward compatibility
-        pricing_list = []
-        for model_name, pricing_info in MistralPricingService.STATIC_PRICING.items():
-            pricing_list.append(
-                PricingMetrics(
-                    model_name=model_name,
-                    provider="Mistral AI",
-                    cost_per_input_token=pricing_info["input"] / 1000,
-                    cost_per_output_token=pricing_info["output"] / 1000,
-                    context_window=pricing_info["context_window"],
-                    currency="USD",
-                    unit="per_token",
-                    source="Mistral Pricing (Static)",
-                    throughput=90.0,
-                    latency_ms=280.0,
-                    use_cases=pricing_info.get("use_cases"),
-                    strengths=pricing_info.get("strengths"),
-                    best_for=pricing_info.get("best_for"),
-                    supports_vision=pricing_info.get("supports_vision", False),
-                    supports_function_calling=pricing_info.get("supports_function_calling", False),
-                    supports_json_mode=pricing_info.get("supports_json_mode", False),
-                    batch_available=pricing_info.get("batch_available", False),
-                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
-                )
-            )
-        return pricing_list
+        return MistralPricingService()._get_static_pricing_data()
 
     async def _verify_api_key(self) -> bool:
         """

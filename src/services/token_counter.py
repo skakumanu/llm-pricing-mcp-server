@@ -1,6 +1,6 @@
 """Token counting utilities using tiktoken."""
 import logging
-from typing import Optional
+
 
 logger = logging.getLogger(__name__)
 

@@ -19,6 +19,66 @@ class GooglePricingService(BasePricingProvider):
     PRICE_AS_OF = "2026-05-09"
 
     STATIC_PRICING = {
+        "gemini-3-pro-preview": {
+            # Listed from the provider's current lineup. Price left unset and
+            # price_confirmed=False so the price oracle fills it from the registry
+            # rather than a hand-typed guess.
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 1048576,
+            "use_cases": ['Complex reasoning', 'Long-context analysis', 'Multimodal'],
+            "strengths": ["Current generation", "1,048,576 token context"],
+            "best_for": "Frontier Gemini 3 reasoning model. Pricing sourced from the reference registry.",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+        },
+        "gemini-3-flash-preview": {
+            # Listed from the provider's current lineup. Price left unset and
+            # price_confirmed=False so the price oracle fills it from the registry
+            # rather than a hand-typed guess.
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 1048576,
+            "use_cases": ['High-volume tasks', 'Chat', 'Summarisation'],
+            "strengths": ["Current generation", "1,048,576 token context"],
+            "best_for": "Fast Gemini 3 tier. Pricing sourced from the reference registry.",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+        },
+        "gemini-3.5-flash": {
+            # Listed from the provider's current lineup. Price left unset and
+            # price_confirmed=False so the price oracle fills it from the registry
+            # rather than a hand-typed guess.
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 1048576,
+            "use_cases": ['Production apps', 'Chat', 'Multimodal'],
+            "strengths": ["Current generation", "1,048,576 token context"],
+            "best_for": "Gemini 3.5 fast tier. Pricing sourced from the reference registry.",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+        },
+        "gemini-3.6-flash": {
+            # Listed from the provider's current lineup. Price left unset and
+            # price_confirmed=False so the price oracle fills it from the registry
+            # rather than a hand-typed guess.
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 1048576,
+            "use_cases": ['Production apps', 'Chat', 'Multimodal'],
+            "strengths": ["Current generation", "1,048,576 token context"],
+            "best_for": "Latest Gemini fast tier. Pricing sourced from the reference registry.",
+            "supports_vision": True,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+        },
         "gemini-2.5-pro": {
             "input": 0.00125,
             "output": 0.010,
@@ -222,6 +282,7 @@ class GooglePricingService(BasePricingProvider):
                         supports_json_mode=static_info.get("supports_json_mode", False),
                         batch_available=static_info.get("batch_available", False),
                         is_reasoning_model=static_info.get("is_reasoning_model", False),
+                        price_confirmed=static_info.get("price_confirmed", True),
                     )
                 )
 
@@ -277,31 +338,15 @@ class GooglePricingService(BasePricingProvider):
         Returns:
             List of PricingMetrics with static data
         """
-        pricing_list = []
-        for model_name, pricing_info in self.STATIC_PRICING.items():
-            pricing_list.append(
-                PricingMetrics(
-                    model_name=model_name,
-                    provider=self.provider_name,
-                    cost_per_input_token=pricing_info["input"] / 1000,
-                    cost_per_output_token=pricing_info["output"] / 1000,
-                    context_window=pricing_info["context_window"],
-                    currency="USD",
-                    unit="per_token",
-                    source="Google AI Pricing (Fallback - Static)",
-                    throughput=120.0,
-                    latency_ms=250.0,
-                    use_cases=pricing_info.get("use_cases"),
-                    strengths=pricing_info.get("strengths"),
-                    best_for=pricing_info.get("best_for"),
-                    supports_vision=pricing_info.get("supports_vision", False),
-                    supports_function_calling=pricing_info.get("supports_function_calling", False),
-                    supports_json_mode=pricing_info.get("supports_json_mode", False),
-                    batch_available=pricing_info.get("batch_available", False),
-                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
-                )
+        return [
+            self.build_metrics(
+                model_name, pricing_info,
+                source="Google AI Pricing (Fallback - Static)",
+                throughput=120.0,
+                latency_ms=250.0,
             )
-        return pricing_list
+            for model_name, pricing_info in self.STATIC_PRICING.items()
+        ]
 
     @staticmethod
     def get_pricing_data() -> List[PricingMetrics]:
@@ -310,27 +355,7 @@ class GooglePricingService(BasePricingProvider):
         Returns:
             List of PricingMetrics for Google models
         """
-        # Return static pricing data for backward compatibility
-        pricing_list = []
-        for model_name, pricing_info in GooglePricingService.STATIC_PRICING.items():
-            pricing_list.append(
-                PricingMetrics(
-                    model_name=model_name,
-                    provider="Google",
-                    cost_per_input_token=pricing_info["input"] / 1000,
-                    cost_per_output_token=pricing_info["output"] / 1000,
-                    context_window=pricing_info["context_window"],
-                    currency="USD",
-                    unit="per_token",
-                    source="Google AI Pricing (Static)",
-                    throughput=120.0,
-                    latency_ms=250.0,
-                    use_cases=pricing_info.get("use_cases"),
-                    strengths=pricing_info.get("strengths"),
-                    best_for=pricing_info.get("best_for")
-                )
-            )
-        return pricing_list
+        return GooglePricingService()._get_static_pricing_data()
 
     async def _verify_api_key(self) -> bool:
         """
