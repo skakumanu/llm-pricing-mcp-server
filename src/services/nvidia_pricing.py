@@ -154,6 +154,7 @@ class NVIDIAPricingService(BasePricingProvider):
                     supports_json_mode=pricing_info.get("supports_json_mode", False),
                     batch_available=pricing_info.get("batch_available", False),
                     is_reasoning_model=pricing_info.get("is_reasoning_model", False),
+                    price_confirmed=pricing_info.get("price_confirmed", True),
                 )
             )
         return pricing_list
@@ -183,6 +184,7 @@ class NVIDIAPricingService(BasePricingProvider):
                     supports_json_mode=pricing_info.get("supports_json_mode", False),
                     batch_available=pricing_info.get("batch_available", False),
                     is_reasoning_model=pricing_info.get("is_reasoning_model", False),
+                    price_confirmed=pricing_info.get("price_confirmed", True),
                 )
             )
         return pricing_list

@@ -17,6 +17,36 @@ class XAIPricingService(BasePricingProvider):
     PRICE_AS_OF = "2026-05-09"
 
     STATIC_PRICING = {
+        "grok-4": {
+            # Listed from the provider's current lineup. Price left unset and
+            # price_confirmed=False so the price oracle fills it from the registry
+            # rather than a hand-typed guess.
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 256000,
+            "use_cases": ['Complex reasoning', 'Coding', 'Analysis'],
+            "strengths": ["Current generation", "256,000 token context"],
+            "best_for": "Frontier Grok model. Pricing sourced from the reference registry.",
+            "supports_vision": False,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+        },
+        "grok-4-fast-reasoning": {
+            # Listed from the provider's current lineup. Price left unset and
+            # price_confirmed=False so the price oracle fills it from the registry
+            # rather than a hand-typed guess.
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 2000000,
+            "use_cases": ['High-volume reasoning', 'Long-context analysis'],
+            "strengths": ["Current generation", "2,000,000 token context"],
+            "best_for": "Fast reasoning at very low cost. Pricing sourced from the reference registry.",
+            "supports_vision": False,
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+        },
         "grok-3": {
             "input": 0.003,
             "output": 0.015,
@@ -157,6 +187,7 @@ class XAIPricingService(BasePricingProvider):
                     supports_json_mode=pricing_info.get("supports_json_mode", False),
                     batch_available=pricing_info.get("batch_available", False),
                     is_reasoning_model=pricing_info.get("is_reasoning_model", False),
+                    price_confirmed=pricing_info.get("price_confirmed", True),
                 )
             )
         return pricing_list
@@ -180,7 +211,8 @@ class XAIPricingService(BasePricingProvider):
                     latency_ms=500.0,
                     use_cases=pricing_info.get("use_cases", []),
                     strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", "")
+                    best_for=pricing_info.get("best_for", ""),
+                    price_confirmed=pricing_info.get("price_confirmed", True)
                 )
             )
         return pricing_list
