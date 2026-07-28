@@ -149,8 +149,9 @@ class BedrockPricingService(BasePricingProvider):
             "best_for": "AWS-first applications needing native Amazon AI with full support"
         },
         "amazon.titan-text-express-v1": {
-            "input": 0.0002,
-            "output": 0.0006,
+            "input": 0.0013,
+            "output": 0.0017,
+            "price_as_of": "2026-07-28",
             "context_window": 8000,
             "use_cases": ["Simple tasks", "High-volume", "Cost optimization", "Text generation"],
             "strengths": ["Very affordable", "Fast", "AWS native", "Simple deployment"],
