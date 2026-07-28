@@ -33,8 +33,9 @@ class MistralPricingService(BasePricingProvider):
             "supports_json_mode": True,
         },
         "mistral-large-latest": {
-            "input": 0.004,
-            "output": 0.012,
+            "input": 0.0005,
+            "output": 0.0015,
+            "price_as_of": "2026-07-28",
             "context_window": 32000,
             "use_cases": ["Complex reasoning", "Advanced analytics", "Code generation", "Multi-step planning"],
             "strengths": ["Excellent reasoning", "Strong code skills", "Well-balanced"],
@@ -53,8 +54,9 @@ class MistralPricingService(BasePricingProvider):
             "supports_json_mode": True,
         },
         "mistral-small-latest": {
-            "input": 0.001,
-            "output": 0.003,
+            "input": 6e-05,
+            "output": 0.00018,
+            "price_as_of": "2026-07-28",
             "context_window": 32000,
             "use_cases": ["Customer support", "FAQ automation", "Text classification", "Simple tasks"],
             "strengths": ["Lightweight", "Affordable", "Fast responses"],

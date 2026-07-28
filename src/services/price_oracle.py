@@ -44,6 +44,53 @@ SNAPSHOT_PATH = Path(__file__).resolve().parents[2] / "data" / "model_prices_sna
 DEFAULT_TTL_SECONDS = 86_400  # 24h
 DRIFT_THRESHOLD_PCT = 5.0
 
+# Our provider names -> the ``litellm_provider`` values that represent the same
+# first party. The same model hosted by different vendors carries genuinely
+# different rates (mistral-7b costs one thing on Fireworks and another on
+# Snowflake), so a name-only match across providers compares unlike things and
+# would "correct" a right price to a wrong one.
+PROVIDER_ALIASES: Dict[str, frozenset] = {
+    "openai": frozenset({"openai", "text-completion-openai"}),
+    "anthropic": frozenset({"anthropic"}),
+    "google": frozenset({"gemini", "vertex_ai-language-models", "vertex_ai"}),
+    "google vertex ai": frozenset({"vertex_ai-language-models", "vertex_ai", "gemini"}),
+    "mistral ai": frozenset({"mistral"}),
+    "cohere": frozenset({"cohere", "cohere_chat"}),
+    "groq": frozenset({"groq"}),
+    "deepseek": frozenset({"deepseek"}),
+    "xai": frozenset({"xai"}),
+    "perplexity ai": frozenset({"perplexity"}),
+    "amazon bedrock": frozenset({"bedrock", "bedrock_converse"}),
+    "azure openai": frozenset({"azure", "azure_ai", "azure_text"}),
+    "together ai": frozenset({"together_ai"}),
+    "fireworks ai": frozenset({"fireworks_ai"}),
+    "cerebras": frozenset({"cerebras"}),
+    "nvidia nim": frozenset({"nvidia_nim"}),
+    "replicate": frozenset({"replicate"}),
+    "cloudflare ai": frozenset({"cloudflare"}),
+    "ai21": frozenset({"ai21", "ai21_chat"}),
+    "oracle cloud": frozenset({"oci"}),
+    "hugging face": frozenset({"huggingface"}),
+    "anyscale": frozenset({"anyscale"}),
+    # Providers with no first-party registry presence are deliberately absent:
+    # Snowflake and PromptQL resell other vendors' models at their own rates, so
+    # there is nothing safe to compare against.
+}
+
+
+def _aliases_for(provider: Optional[str]) -> Optional[frozenset]:
+    """Registry provider values that count as the same first party as *provider*.
+
+    Falls back to the provider's own lowercased name when it has no explicit
+    mapping, so a provider whose name already matches the registry's works without
+    being enumerated — and one that genuinely has no registry presence still
+    matches nothing, which is the outcome we want.
+    """
+    if not provider:
+        return None
+    key = provider.strip().lower()
+    return PROVIDER_ALIASES.get(key) or frozenset({key, key.replace(" ", "_"), key.replace(" ", "")})
+
 
 @dataclass
 class PriceRecord:
@@ -165,26 +212,49 @@ class PriceOracle:
 
     # -- lookup ------------------------------------------------------------
 
-    def lookup(self, model_name: str) -> Optional[PriceRecord]:
+    def lookup(
+        self,
+        model_name: str,
+        provider: Optional[str] = None,
+        require_provider_match: bool = False,
+    ) -> Optional[PriceRecord]:
         """Find a registry price for a model name.
 
         Registry keys are sometimes bare (``claude-sonnet-5``) and sometimes
         namespaced (``anthropic/claude-sonnet-5``, ``us.anthropic.claude-opus-5``),
-        so try the bare name first and then any key whose final segment matches.
+        so match on the final segment when there is no exact hit.
+
+        When *provider* is given, entries from that first party win. This matters:
+        ``mixtral-8x7b`` exists in the registry only under Fireworks, and applying
+        that rate to the Snowflake-hosted model would replace a correct price with
+        a wrong one. Set *require_provider_match* to return nothing rather than
+        fall back to another vendor's entry.
         """
         if not model_name:
             return None
         name = model_name.lower()
+        aliases = _aliases_for(provider)
 
+        candidates = []
         exact = self._records.get(name)
         if exact:
-            return exact
-
+            candidates.append(exact)
         for key, rec in self._records.items():
             tail = key.rsplit("/", 1)[-1].rsplit(".", 1)[-1]
-            if tail == name:
-                return rec
-        return None
+            if tail == name and rec not in candidates:
+                candidates.append(rec)
+
+        if not candidates:
+            return None
+
+        if aliases:
+            for rec in candidates:
+                if rec.provider and rec.provider.lower() in aliases:
+                    return rec
+
+        if require_provider_match:
+            return None
+        return candidates[0]
 
     @property
     def loaded(self) -> bool:
@@ -217,7 +287,9 @@ class PriceOracle:
         for m in models:
             if getattr(m, "price_confirmed", True):
                 continue
-            rec = self.lookup(m.model_name)
+            # Require the same first party. A price from another host is not this
+            # model's price, and a wrong number is worse than a missing one.
+            rec = self.lookup(m.model_name, m.provider, require_provider_match=True)
             if rec is None:
                 continue
 
@@ -256,7 +328,9 @@ class PriceOracle:
             if (m.source or "").startswith("LiteLLM price registry"):
                 continue
 
-            rec = self.lookup(m.model_name)
+            # Only compare like with like — see lookup() for why cross-vendor
+            # matches would report false drift.
+            rec = self.lookup(m.model_name, m.provider, require_provider_match=True)
             if rec is None:
                 continue
 

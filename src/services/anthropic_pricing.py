@@ -65,8 +65,9 @@ class AnthropicPricingService(BasePricingProvider):
             "batch_available": True,
         },
         "claude-opus-4-6": {
-            "input": 0.015,
-            "output": 0.075,
+            "input": 0.005,
+            "output": 0.025,
+            "price_as_of": "2026-07-28",
             "context_window": 200000,
             "use_cases": ["Frontier reasoning", "Complex research", "Advanced coding", "Agentic workflows"],
             "strengths": ["State-of-the-art intelligence", "Vision capable", "Function calling", "200K context"],
@@ -102,8 +103,9 @@ class AnthropicPricingService(BasePricingProvider):
             "is_reasoning_model": True,
         },
         "claude-haiku-4-5-20251001": {
-            "input": 0.0008,
-            "output": 0.004,
+            "input": 0.001,
+            "output": 0.005,
+            "price_as_of": "2026-07-28",
             "context_window": 200000,
             "use_cases": ["Fast responses", "High-volume processing", "Real-time chat", "Agentic workflows"],
             "strengths": ["Fastest Claude 4 class", "Affordable", "Vision capable", "Function calling"],

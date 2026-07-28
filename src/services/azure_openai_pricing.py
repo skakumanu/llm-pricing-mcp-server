@@ -45,7 +45,8 @@ class AzureOpenAIPricingService(BasePricingProvider):
             "is_reasoning_model": True, "supports_function_calling": True,
         },
         "o1-mini": {
-            "input": 0.003, "output": 0.012,
+            "input": 0.00121, "output": 0.00484,
+            "price_as_of": "2026-07-28",
             "context_window": 128000,
             "use_cases": ["Coding", "Reasoning", "STEM tasks"],
             "strengths": ["Affordable reasoning", "Fast", "Code focus"],
