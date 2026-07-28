@@ -50,6 +50,24 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
             "Compare costs for multiple LLM models side-by-side",
         ),
         (
+            "predict_cost",
+            (
+                "Predict the real cost of an LLM call from the actual prompt text, without "
+                "needing token counts. Counts tokens, infers the task type, estimates output "
+                "length, and ranks every model cheapest-first including prompt-cache savings. "
+                "Use when the user pastes a prompt and asks what it will cost, or which model "
+                "to pick for it."
+            ),
+        ),
+        (
+            "get_ide_pricing",
+            (
+                "Get subscription pricing for AI coding IDE tools (GitHub Copilot, Cursor, "
+                "Windsurf, Claude.ai, JetBrains AI, Amazon Q, Tabnine). Use when the user asks "
+                "about IDE assistants, coding subscriptions, or monthly per-seat AI tooling."
+            ),
+        ),
+        (
             "get_performance_metrics",
             "Get throughput, latency, and context window metrics for LLM models",
         ),
