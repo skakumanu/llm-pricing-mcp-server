@@ -8,7 +8,7 @@
 
 ## What's Available
 
-14 MCP tools across two transports:
+17 MCP tools across two transports:
 
 | Transport | Endpoint | Use case |
 |-----------|----------|----------|
@@ -42,7 +42,7 @@ Expected response:
 }
 ```
 
-### List all 14 tools
+### List all 17 tools
 
 ```bash
 curl -X POST https://llm-pricing-api.fly.dev/mcp \
@@ -89,13 +89,15 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 
 ---
 
-## All 14 Tools
+## All 17 Tools
 
 | Tool | Required args | Optional args |
 |------|--------------|---------------|
 | `get_all_pricing` | — | — |
 | `estimate_cost` | `model_name`, `input_tokens`, `output_tokens` | — |
 | `compare_costs` | `model_names[]`, `input_tokens`, `output_tokens` | — |
+| `predict_cost` | `prompt` | `task_type`, `cache_hit_ratio`, `top_n`, `require_function_calling`, `require_vision`, `min_context_tokens` |
+| `get_ide_pricing` | — | `provider`, `max_monthly`, `inline_only` |
 | `get_performance_metrics` | — | `provider`, `include_cost` |
 | `get_use_cases` | — | `provider` |
 | `get_telemetry` | — | `include_details`, `limit` |
@@ -107,6 +109,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 | `get_pricing_export_url` | — | `format`, `model_name`, `provider`, `days`, `limit` |
 | `list_conversations` | — | `limit` |
 | `delete_conversation` | `conversation_id` | — |
+| `ask_agent` | `message` | `conversation_id`, `autonomous` |
 
 ---
 
