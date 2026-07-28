@@ -127,54 +127,18 @@ class DeepSeekPricingService(BasePricingProvider):
 
     def _get_static_pricing_data(self) -> List[PricingMetrics]:
         """Get static pricing metrics for DeepSeek models."""
-        pricing_list = []
-        for model_name, pricing_info in self.STATIC_PRICING.items():
-            pricing_list.append(
-                PricingMetrics(
-                    model_name=model_name,
-                    provider="DeepSeek",
-                    cost_per_input_token=pricing_info["input"] / 1000,
-                    cost_per_output_token=pricing_info["output"] / 1000,
-                    context_window=pricing_info["context_window"],
-                    currency="USD",
-                    unit="per_token",
-                    source="DeepSeek Official Pricing (Static)",
-                    throughput=60.0,
-                    latency_ms=800.0,
-                    use_cases=pricing_info.get("use_cases", []),
-                    strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", ""),
-                    supports_vision=pricing_info.get("supports_vision", False),
-                    supports_function_calling=pricing_info.get("supports_function_calling", False),
-                    supports_json_mode=pricing_info.get("supports_json_mode", False),
-                    batch_available=pricing_info.get("batch_available", False),
-                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
-                    price_confirmed=pricing_info.get("price_confirmed", True),
-                )
+        return [
+            self.build_metrics(
+                model_name, pricing_info,
+                source="DeepSeek Official Pricing (Static)",
+                throughput=60.0,
+                latency_ms=800.0,
+                provider="DeepSeek",
             )
-        return pricing_list
+            for model_name, pricing_info in self.STATIC_PRICING.items()
+        ]
 
     @staticmethod
     def get_pricing_data() -> List[PricingMetrics]:
         """Synchronous method for backward compatibility."""
-        pricing_list = []
-        for model_name, pricing_info in DeepSeekPricingService.STATIC_PRICING.items():
-            pricing_list.append(
-                PricingMetrics(
-                    model_name=model_name,
-                    provider="DeepSeek",
-                    cost_per_input_token=pricing_info["input"] / 1000,
-                    cost_per_output_token=pricing_info["output"] / 1000,
-                    context_window=pricing_info["context_window"],
-                    currency="USD",
-                    unit="per_token",
-                    source="DeepSeek Official Pricing (Static)",
-                    throughput=60.0,
-                    latency_ms=800.0,
-                    use_cases=pricing_info.get("use_cases", []),
-                    strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", ""),
-                    price_confirmed=pricing_info.get("price_confirmed", True)
-                )
-            )
-        return pricing_list
+        return DeepSeekPricingService()._get_static_pricing_data()

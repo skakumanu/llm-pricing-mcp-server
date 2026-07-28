@@ -296,7 +296,6 @@ class TestCurrentGenerationModelsArePriced:
 # price_confirmed must survive every code path, not just the aggregator's
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 class TestUnconfirmedFlagSurvivesDirectPaths:
     """Providers build PricingMetrics in several places and callers use all of them.
 
@@ -327,6 +326,7 @@ class TestUnconfirmedFlagSurvivesDirectPaths:
                     out.append((path.stem, cls, unconfirmed))
         return out
 
+    @pytest.mark.asyncio
     async def test_async_path_preserves_flag(self):
         leaks = []
         for stem, cls, unconfirmed in self._providers_with_unconfirmed_entries():
