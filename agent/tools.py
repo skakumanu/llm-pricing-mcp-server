@@ -60,6 +60,16 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
             ),
         ),
         (
+            "optimize_workload",
+            (
+                "Optimise a multi-task workload by assigning the cheapest qualifying model "
+                "to each task instead of one model for everything. Returns a per-task "
+                "allocation, total monthly cost, and the saving versus the best single-model "
+                "deployment. Use when the user wants to cut LLM spend across several task "
+                "types or asks whether tiered model routing is worth it."
+            ),
+        ),
+        (
             "get_ide_pricing",
             (
                 "Get subscription pricing for AI coding IDE tools (GitHub Copilot, Cursor, "

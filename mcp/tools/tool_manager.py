@@ -17,6 +17,7 @@ from mcp.tools.delete_conversation import DeleteConversationTool
 from mcp.tools.ask_agent import AskAgentTool
 from mcp.tools.get_ide_pricing import GetIDEPricingTool
 from mcp.tools.predict_cost import PredictCostTool
+from mcp.tools.optimize_workload import OptimizeWorkloadTool
 
 
 class ToolManager:
@@ -465,6 +466,105 @@ class ToolManager:
                         },
                     },
                     "required": ["prompt"],
+                },
+            },
+            "optimize_workload": {
+                "instance": OptimizeWorkloadTool(),
+                "name": "optimize_workload",
+                "description": (
+                    "Optimise a multi-task LLM workload by assigning the cheapest qualifying "
+                    "model to each task instead of running everything through one model. "
+                    "Takes a list of workloads (task type + monthly volume + optional quality "
+                    "floor and capability requirements) and returns a per-task model allocation, "
+                    "the total monthly cost, and the saving versus the best single-model "
+                    "deployment. If a monthly budget is given, leftover headroom is spent on the "
+                    "most cost-efficient quality upgrades. Use when the user asks how to cut LLM "
+                    "spend across several task types, or whether tiered model routing is worth it."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "workloads": {
+                            "type": "array",
+                            "description": "One entry per task type in the workload mix",
+                            "minItems": 1,
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "task_type": {
+                                        "type": "string",
+                                        "description": "Task category driving the input/output token ratio",
+                                        "enum": [
+                                            "classification", "extraction", "summarization", "qa",
+                                            "code_generation", "translation", "chat",
+                                            "content_generation", "reasoning", "function_calling",
+                                            "data_analysis", "rewrite",
+                                        ],
+                                    },
+                                    "monthly_requests": {
+                                        "type": "integer",
+                                        "description": "Expected requests per month for this task",
+                                        "minimum": 0,
+                                    },
+                                    "avg_input_tokens": {
+                                        "type": "integer",
+                                        "description": "Average prompt size in tokens (default: 500)",
+                                        "default": 500,
+                                        "minimum": 1,
+                                    },
+                                    "avg_output_tokens": {
+                                        "type": "integer",
+                                        "description": (
+                                            "Average completion size in tokens. Derived from the "
+                                            "task profile when omitted."
+                                        ),
+                                        "minimum": 1,
+                                    },
+                                    "min_quality_score": {
+                                        "type": "number",
+                                        "description": "Quality floor (0-100) for this task specifically",
+                                        "minimum": 0,
+                                        "maximum": 100,
+                                    },
+                                    "require_function_calling": {
+                                        "type": "boolean",
+                                        "description": "Task needs tool/function calling (default: false)",
+                                        "default": False,
+                                    },
+                                    "require_vision": {
+                                        "type": "boolean",
+                                        "description": "Task needs image input (default: false)",
+                                        "default": False,
+                                    },
+                                    "min_context_tokens": {
+                                        "type": "integer",
+                                        "description": "Minimum context window required for this task",
+                                        "minimum": 1,
+                                    },
+                                    "label": {
+                                        "type": "string",
+                                        "description": "Friendly name for this workload in the output",
+                                    },
+                                },
+                                "required": ["task_type", "monthly_requests"],
+                            },
+                        },
+                        "monthly_budget_usd": {
+                            "type": "number",
+                            "description": (
+                                "Total monthly budget in USD. Leftover headroom is spent on the "
+                                "most cost-efficient quality upgrades."
+                            ),
+                            "exclusiveMinimum": 0,
+                        },
+                        "min_quality_score": {
+                            "type": "number",
+                            "description": "Global quality floor (0-100) applied to every workload",
+                            "minimum": 0,
+                            "maximum": 100,
+                        },
+                    },
+                    "required": ["workloads"],
                 },
             },
             "ask_agent": {

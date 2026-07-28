@@ -8,7 +8,7 @@
 
 ## What's Available
 
-17 MCP tools across two transports:
+18 MCP tools across two transports:
 
 | Transport | Endpoint | Use case |
 |-----------|----------|----------|
@@ -42,7 +42,7 @@ Expected response:
 }
 ```
 
-### List all 17 tools
+### List all 18 tools
 
 ```bash
 curl -X POST https://llm-pricing-api.fly.dev/mcp \
@@ -89,7 +89,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 
 ---
 
-## All 17 Tools
+## All 18 Tools
 
 | Tool | Required args | Optional args |
 |------|--------------|---------------|
@@ -97,6 +97,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 | `estimate_cost` | `model_name`, `input_tokens`, `output_tokens` | — |
 | `compare_costs` | `model_names[]`, `input_tokens`, `output_tokens` | — |
 | `predict_cost` | `prompt` | `task_type`, `cache_hit_ratio`, `top_n`, `require_function_calling`, `require_vision`, `min_context_tokens` |
+| `optimize_workload` | `workloads[]` | `monthly_budget_usd`, `min_quality_score` |
 | `get_ide_pricing` | — | `provider`, `max_monthly`, `inline_only` |
 | `get_performance_metrics` | — | `provider`, `include_cost` |
 | `get_use_cases` | — | `provider` |

@@ -165,7 +165,7 @@
       </div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.75rem 1.1rem;font-size:.82rem;">
         <div style="color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">Tools</div>
-        <span style="color:var(--success);font-weight:600">17 tools · No auth required</span>
+        <span style="color:var(--success);font-weight:600">18 tools · No auth required</span>
       </div>
     </div>
   </div>
@@ -205,7 +205,7 @@
           <div class="step-num">2</div>
           <div class="step-body">
             <h4>Restart your client</h4>
-            <p>After saving the config, restart Claude Desktop / VS Code / Cursor. The 17 tools will appear automatically.</p>
+            <p>After saving the config, restart Claude Desktop / VS Code / Cursor. The 18 tools will appear automatically.</p>
           </div>
         </div>
         <div class="step">
@@ -363,14 +363,14 @@ pip install -r requirements.txt</div>
           <div class="step-num">2</div>
           <div class="step-body">
             <h4>Restart Perplexity</h4>
-            <p>After saving, restart the desktop app. All 17 pricing tools will be available in your conversations.</p>
+            <p>After saving, restart the desktop app. All 18 pricing tools will be available in your conversations.</p>
           </div>
         </div>
         <div class="step">
           <div class="step-num">3</div>
           <div class="step-body">
             <h4>Verify</h4>
-            <p>Ask: <em>"What LLM pricing tools do you have available?"</em> — Perplexity should list all 17 tools.</p>
+            <p>Ask: <em>"What LLM pricing tools do you have available?"</em> — Perplexity should list all 18 tools.</p>
           </div>
         </div>
       </div>
@@ -378,10 +378,10 @@ pip install -r requirements.txt</div>
 
   </div><!-- /section -->
 
-  <!-- All 17 tools -->
+  <!-- All 18 tools -->
   <div class="section">
     <div class="section-label">Available Tools</div>
-    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">All 17 tools are accessible via MCP. <span style="color:var(--accent)">Purple</span> = required arg · <span style="color:var(--muted)">Grey</span> = optional.</p>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">All 18 tools are accessible via MCP. <span style="color:var(--accent)">Purple</span> = required arg · <span style="color:var(--muted)">Grey</span> = optional.</p>
     <div class="tool-grid">
       <div class="tool-card">
         <div class="tool-name">get_all_pricing</div>
@@ -402,6 +402,11 @@ pip install -r requirements.txt</div>
         <div class="tool-name">predict_cost</div>
         <div class="tool-desc">Paste a prompt — get every model ranked cheapest-first. Counts tokens, infers the task, estimates output length, and factors in prompt-cache savings.</div>
         <div class="tool-args"><span class="req">prompt</span><span>task_type</span><span>cache_hit_ratio</span><span>top_n</span><span>require_function_calling</span><span>require_vision</span><span>min_context_tokens</span></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">optimize_workload</div>
+        <div class="tool-desc">Route each task to its own cheapest qualifying model instead of one model for everything. Reports the saving versus a single-model deployment.</div>
+        <div class="tool-args"><span class="req">workloads[]</span><span>monthly_budget_usd</span><span>min_quality_score</span></div>
       </div>
       <div class="tool-card">
         <div class="tool-name">get_ide_pricing</div>
