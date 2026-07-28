@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.49.0 | **Last updated**: 2026-06-21
+**Version**: v1.51.1 | **Last updated**: 2026-07-28
 
 ---
 
@@ -24,7 +24,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 26 
 ┌─────────────────────────────────▼───────────────────────────────────────────┐
 │  Presentation Layer (src/main.py + mcp/)                                    │
 │                                                                             │
-│  REST API              MCP (15 tools)          Browser UIs (13 pages)       │
+│  REST API              MCP (17 tools)          Browser UIs (13 pages)       │
 │  /pricing              STDIO transport          /  /chat  /calculator        │
 │  /router/recommend     HTTP POST /mcp           /compare  /history           │
 │  /billing/*            JSON-RPC 2.0             /trends   /widget            │
@@ -85,6 +85,9 @@ llm-pricing-mcp-server/
 │       ├── pricing_history.py       # SQLite price-history + routing_feedback tables
 │       ├── benchmark_service.py     # Quality scores: static table + HF API fallback (24h TTL)
 │       ├── router.py                # LLM routing recommendation engine
+│       ├── task_profiles.py         # 12 task I/O-ratio profiles + keyword task inference
+│       ├── token_counter.py         # tiktoken token counting + prompt-cache savings math
+│       ├── ide_pricing.py           # Subscription pricing for AI coding IDE tools
 │       ├── savings_tracker.py       # Per-org router savings + acceptance_rate
 │       ├── billing_service.py       # BillingService: customers table, Stripe sync
 │       ├── pricing_alerts.py        # Webhook alert registration + delivery
@@ -126,7 +129,7 @@ llm-pricing-mcp-server/
 │   ├── react_loop.py                # ReAct (Reason + Act) loop implementation
 │   ├── llm_backend.py               # AnthropicBackend + OpenAIBackend (switch via env)
 │   ├── conversation.py              # SQLite conversation memory, turn limit
-│   └── tools.py                     # 15 MCP tool bindings for agent use
+│   └── tools.py                     # 15 MCP tool bindings for agent use (+ RAG search)
 │
 ├── mcp/
 │   ├── server.py                    # MCP STDIO transport (Claude Desktop)
@@ -146,7 +149,7 @@ llm-pricing-mcp-server/
 │   ├── trends/index.html            # /trends — price-change leaderboard
 │   ├── widget/index.html            # /widget — embeddable pricing table
 │   ├── conversations/index.html     # /conversations — conversation history viewer
-│   ├── mcp-setup/index.html         # /mcp-setup — MCP integration hub (5 client tabs, live test, all 15 tools)
+│   ├── mcp-setup/index.html         # /mcp-setup — MCP integration hub (5 client tabs, live test, all 17 tools)
 │   ├── api-docs/index.html          # /api-docs — API reference (Swagger/ReDoc iframe + endpoint table)
 │   └── whats-new/index.html         # /whats-new — release notes timeline (v1.35.0 → current)
 │
@@ -213,13 +216,14 @@ Enabled for: OpenAI, Anthropic, Groq, Mistral AI, Together AI, Fireworks AI, xAI
 ### 4. MCP Dual Transport
 - **STDIO** (`mcp/server.py`): JSON-RPC 2.0 over stdin/stdout for Claude Desktop local integration
 - **HTTP** (`POST /mcp`): Same JSON-RPC 2.0 payload over HTTP for remote MCP clients — no local install needed
-- Protocol version: `2024-11-05`; 15 tools exposed
+- Protocol version: `2024-11-05`; 17 tools exposed
 
 ### 5. Agent Architecture (ReAct Loop)
 ```
 User message
   → react_loop.py: think → select tool → execute → observe → repeat
-  → tools.py: wraps all 14 MCP tools as callable Python functions
+  → tools.py: wraps 15 of the 17 MCP tools as callable Python functions
+      (excludes ask_agent to prevent recursion, and get_telemetry as server-ops only)
   → llm_backend.py: AnthropicBackend | OpenAIBackend (switch via AGENT_LLM_PROVIDER env)
   → conversation.py: persist turns to SQLite, enforce max_turns limit
   → SSE stream: events [start, thinking, tool_call, tool_result, …, answer, done]
