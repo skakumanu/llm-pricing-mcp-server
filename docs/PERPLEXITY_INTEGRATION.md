@@ -1,6 +1,6 @@
 # Perplexity MCP Integration Guide
 
-**Version**: 1.39.1
+**Version**: see `src/__init__.py` (single source of truth)
 **Protocol**: MCP 2024-11-05, JSON-RPC 2.0
 **Live server**: https://llm-pricing-api.fly.dev
 

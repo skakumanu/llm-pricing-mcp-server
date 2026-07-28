@@ -1,3 +1,5 @@
 """MCP Server Package"""
-__version__ = "1.1.0"
+# Single-sourced from the app version so MCP clients see the real release.
+from src import __version__  # noqa: F401
+
 __author__ = "LLM Pricing MCP"
