@@ -282,6 +282,7 @@ class GooglePricingService(BasePricingProvider):
                         supports_json_mode=static_info.get("supports_json_mode", False),
                         batch_available=static_info.get("batch_available", False),
                         is_reasoning_model=static_info.get("is_reasoning_model", False),
+                        price_confirmed=static_info.get("price_confirmed", True),
                     )
                 )
 
@@ -359,6 +360,7 @@ class GooglePricingService(BasePricingProvider):
                     supports_json_mode=pricing_info.get("supports_json_mode", False),
                     batch_available=pricing_info.get("batch_available", False),
                     is_reasoning_model=pricing_info.get("is_reasoning_model", False),
+                    price_confirmed=pricing_info.get("price_confirmed", True),
                 )
             )
         return pricing_list
@@ -387,7 +389,8 @@ class GooglePricingService(BasePricingProvider):
                     latency_ms=250.0,
                     use_cases=pricing_info.get("use_cases"),
                     strengths=pricing_info.get("strengths"),
-                    best_for=pricing_info.get("best_for")
+                    best_for=pricing_info.get("best_for"),
+                    price_confirmed=pricing_info.get("price_confirmed", True)
                 )
             )
         return pricing_list

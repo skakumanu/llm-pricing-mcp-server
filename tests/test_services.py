@@ -12,8 +12,12 @@ def test_openai_pricing_service():
 
     assert len(pricing_data) > 0
     assert all(model.provider == "OpenAI" for model in pricing_data)
-    assert all(model.cost_per_input_token > 0 for model in pricing_data)
-    assert all(model.cost_per_output_token > 0 for model in pricing_data)
+    # Unconfirmed-price models hold a 0.0 placeholder by design; assert the rate
+    # invariant only over models that claim a confirmed price.
+    priced = [m for m in pricing_data if m.price_confirmed]
+    assert priced, "at least one model should have a confirmed price"
+    assert all(model.cost_per_input_token > 0 for model in priced)
+    assert all(model.cost_per_output_token > 0 for model in priced)
 
 
 def test_anthropic_pricing_service():

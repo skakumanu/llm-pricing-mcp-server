@@ -293,6 +293,70 @@ class TestCurrentGenerationModelsArePriced:
 
 
 # ---------------------------------------------------------------------------
+# price_confirmed must survive every code path, not just the aggregator's
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+class TestUnconfirmedFlagSurvivesDirectPaths:
+    """Providers build PricingMetrics in several places and callers use all of them.
+
+    The aggregator stamps provenance centrally, which masked the fact that most
+    providers dropped ``price_confirmed`` in their own builders: a direct call to
+    ``fetch_pricing_data()`` or ``get_pricing_data()`` returned a $0.00 placeholder
+    marked *confirmed*, which would sort as the cheapest option anywhere. CI caught
+    it on OpenAI; it was latent in four other providers.
+    """
+
+    @staticmethod
+    def _providers_with_unconfirmed_entries():
+        import importlib
+        from src.services.base_provider import BasePricingProvider
+        out = []
+        for path in sorted((project_root / "src" / "services").glob("*_pricing.py")):
+            mod = importlib.import_module(f"src.services.{path.stem}")
+            for attr in dir(mod):
+                cls = getattr(mod, attr)
+                if not (isinstance(cls, type) and issubclass_safe(cls, BasePricingProvider)):
+                    continue
+                static = getattr(cls, "STATIC_PRICING", None) or {}
+                unconfirmed = [
+                    k for k, v in static.items()
+                    if isinstance(v, dict) and v.get("price_confirmed") is False
+                ]
+                if unconfirmed:
+                    out.append((path.stem, cls, unconfirmed))
+        return out
+
+    async def test_async_path_preserves_flag(self):
+        leaks = []
+        for stem, cls, unconfirmed in self._providers_with_unconfirmed_entries():
+            by = {m.model_name: m for m in await cls().fetch_pricing_data()}
+            leaks += [
+                f"{stem}.fetch_pricing_data(): {n}"
+                for n in unconfirmed if n in by and by[n].price_confirmed
+            ]
+        assert not leaks, "0.0 prices marked confirmed:\n" + "\n".join(leaks)
+
+    def test_sync_path_preserves_flag(self):
+        leaks = []
+        for stem, cls, unconfirmed in self._providers_with_unconfirmed_entries():
+            if not hasattr(cls, "get_pricing_data"):
+                continue
+            by = {m.model_name: m for m in cls.get_pricing_data()}
+            leaks += [
+                f"{stem}.get_pricing_data(): {n}"
+                for n in unconfirmed if n in by and by[n].price_confirmed
+            ]
+        assert not leaks, "0.0 prices marked confirmed:\n" + "\n".join(leaks)
+
+    def test_the_guard_has_something_to_check(self):
+        """Fail loudly if the fixtures stop covering any unconfirmed model."""
+        assert self._providers_with_unconfirmed_entries(), (
+            "no provider declares an unconfirmed entry — this guard is now vacuous"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Every provider declares provenance
 # ---------------------------------------------------------------------------
 

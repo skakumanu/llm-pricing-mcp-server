@@ -195,6 +195,7 @@ class SalesforcePricingService(BasePricingProvider):
                     supports_json_mode=info.get("supports_json_mode", False),
                     batch_available=info.get("batch_available", False),
                     is_reasoning_model=info.get("is_reasoning_model", False),
+                    price_confirmed=info.get("price_confirmed", True),
                 )
             )
         return pricing_list
