@@ -196,6 +196,41 @@ class TestUnconfirmedExcludedFromCosting:
 
 
 # ---------------------------------------------------------------------------
+# Aggregator gates unconfirmed models
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+class TestAggregatorGating:
+    """Unconfirmed models must not reach the ~20 downstream consumers that read
+    cost_per_input_token, derive a cost tier, or sort by price. Gating once in the
+    aggregator protects all of them, rather than auditing each call site.
+    """
+
+    async def test_default_excludes_unconfirmed(self):
+        from src.services.pricing_aggregator import PricingAggregatorService
+        models, _ = await PricingAggregatorService().get_all_pricing_async()
+        leaked = [m.model_name for m in models if not m.price_confirmed]
+        assert not leaked, f"unconfirmed models leaked into default output: {leaked}"
+
+    async def test_opt_in_includes_unconfirmed(self):
+        from src.services.pricing_aggregator import PricingAggregatorService
+        models, _ = await PricingAggregatorService().get_all_pricing_async(
+            include_unconfirmed=True
+        )
+        assert any(not m.price_confirmed for m in models), (
+            "include_unconfirmed=True should surface the catalogue-only models"
+        )
+
+    async def test_no_zero_priced_model_in_default_output(self):
+        """A 0.0 rate would read as free to every downstream cost calculation."""
+        from src.services.pricing_aggregator import PricingAggregatorService
+        models, _ = await PricingAggregatorService().get_all_pricing_async()
+        per_token = [m for m in models if m.pricing_model == "per_token"]
+        zero = [m.model_name for m in per_token if m.cost_per_input_token == 0]
+        assert not zero, f"zero-priced models in default output: {zero}"
+
+
+# ---------------------------------------------------------------------------
 # Every provider declares provenance
 # ---------------------------------------------------------------------------
 

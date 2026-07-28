@@ -304,6 +304,7 @@ class AnthropicPricingService(BasePricingProvider):
                         supports_json_mode=static_info.get("supports_json_mode", False),
                         batch_available=static_info.get("batch_available", False),
                         is_reasoning_model=static_info.get("is_reasoning_model", False),
+                        price_confirmed=static_info.get("price_confirmed", True),
                     )
                 )
 
@@ -383,6 +384,7 @@ class AnthropicPricingService(BasePricingProvider):
                     supports_json_mode=pricing_info.get("supports_json_mode", False),
                     batch_available=pricing_info.get("batch_available", False),
                     is_reasoning_model=pricing_info.get("is_reasoning_model", False),
+                    price_confirmed=pricing_info.get("price_confirmed", True),
                 )
             )
         return pricing_list
@@ -427,7 +429,9 @@ class AnthropicPricingService(BasePricingProvider):
                     context_window=pricing_info["context_window"],
                     currency="USD",
                     unit="per_token",
-                    source="Anthropic Official Pricing (Static)"
+                    source="Anthropic Official Pricing (Static)",
+                    price_as_of=pricing_info.get("price_as_of", AnthropicPricingService.PRICE_AS_OF),
+                    price_confirmed=pricing_info.get("price_confirmed", True),
                 )
             )
         return pricing_list
