@@ -18,6 +18,7 @@ from mcp.tools.ask_agent import AskAgentTool
 from mcp.tools.get_ide_pricing import GetIDEPricingTool
 from mcp.tools.predict_cost import PredictCostTool
 from mcp.tools.optimize_workload import OptimizeWorkloadTool
+from mcp.tools.check_price_drift import CheckPriceDriftTool
 
 
 class ToolManager:
@@ -565,6 +566,41 @@ class ToolManager:
                         },
                     },
                     "required": ["workloads"],
+                },
+            },
+            "check_price_drift": {
+                "instance": CheckPriceDriftTool(),
+                "name": "check_price_drift",
+                "description": (
+                    "Audit this server's own pricing data against an external reference "
+                    "registry and report models whose price has drifted. Prices here are "
+                    "hand-maintained and go stale silently; this surfaces the disagreements "
+                    "so they can be corrected. Reports only — no price is changed. Use when "
+                    "the user asks whether the pricing data is accurate or up to date, or "
+                    "wants to audit a specific provider's rates."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "threshold_pct": {
+                            "type": "number",
+                            "description": "Minimum % difference to report (default: 5)",
+                            "default": 5.0,
+                            "minimum": 0,
+                        },
+                        "provider": {
+                            "type": "string",
+                            "description": "Limit the audit to one provider (partial, case-insensitive)",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum findings to return (default: 50, max: 200)",
+                            "default": 50,
+                            "minimum": 1,
+                            "maximum": 200,
+                        },
+                    },
+                    "required": [],
                 },
             },
             "ask_agent": {

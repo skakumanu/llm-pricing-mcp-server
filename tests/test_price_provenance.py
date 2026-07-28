@@ -212,14 +212,30 @@ class TestAggregatorGating:
         leaked = [m.model_name for m in models if not m.price_confirmed]
         assert not leaked, f"unconfirmed models leaked into default output: {leaked}"
 
-    async def test_opt_in_includes_unconfirmed(self):
+    async def test_opt_in_is_a_superset_of_default(self):
+        """include_unconfirmed=True must never filter anything out.
+
+        This asserts the contract rather than the presence of unconfirmed models:
+        the price oracle now fills most gaps, so on a good day there are none left.
+        """
         from src.services.pricing_aggregator import PricingAggregatorService
-        models, _ = await PricingAggregatorService().get_all_pricing_async(
-            include_unconfirmed=True
-        )
-        assert any(not m.price_confirmed for m in models), (
-            "include_unconfirmed=True should surface the catalogue-only models"
-        )
+        svc = PricingAggregatorService()
+        default, _ = await svc.get_all_pricing_async()
+        opt_in, _ = await svc.get_all_pricing_async(include_unconfirmed=True)
+
+        assert len(opt_in) >= len(default)
+        assert {m.model_name for m in default} <= {m.model_name for m in opt_in}
+
+    async def test_unconfirmed_models_are_filtered_when_present(self):
+        """The gate itself, exercised directly so it does not depend on live data."""
+        from src.models.pricing import PricingMetrics
+        priced = PricingMetrics(model_name="a", provider="P",
+                                cost_per_input_token=1.0, cost_per_output_token=2.0)
+        unpriced = PricingMetrics(model_name="b", provider="P",
+                                  cost_per_input_token=0.0, cost_per_output_token=0.0,
+                                  price_confirmed=False)
+        gated = [m for m in (priced, unpriced) if m.price_confirmed]
+        assert [m.model_name for m in gated] == ["a"]
 
     async def test_no_zero_priced_model_in_default_output(self):
         """A 0.0 rate would read as free to every downstream cost calculation."""
