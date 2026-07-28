@@ -427,5 +427,5 @@ For questions:
 ---
 
 **Status**: Implementation complete and PR-ready
-**Version**: 1.0.0
+**Version**: see `src/__init__.py` (single source of truth)
 **Last Updated**: 2024
