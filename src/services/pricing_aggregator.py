@@ -1,5 +1,6 @@
 """Service for aggregating pricing data from multiple providers."""
 import asyncio
+import logging
 from typing import List, Optional
 from src.models.pricing import PricingMetrics, ProviderStatusInfo
 from src.services.openai_pricing import OpenAIPricingService
@@ -28,6 +29,9 @@ from src.services.azure_openai_pricing import AzureOpenAIPricingService
 from src.services.vertex_pricing import VertexAIPricingService
 from src.services.huggingface_pricing import HuggingFacePricingService
 from src.services.cloudflare_pricing import CloudflareAIPricingService
+from src.services.price_oracle import get_price_oracle
+
+logger = logging.getLogger(__name__)
 
 
 class PricingAggregatorService:
@@ -146,6 +150,17 @@ class PricingAggregatorService:
             # Add pricing data if available
             if pricing_data:
                 all_pricing.extend(pricing_data)
+
+        # Give unpriced models a real rate from the reference registry before
+        # gating. A model that gets filled here becomes usable for costing instead
+        # of being dropped. Curated prices are never overwritten — drift against
+        # them is reported separately via check_price_drift.
+        try:
+            oracle = get_price_oracle()
+            await oracle.load()
+            oracle.fill_missing_prices(all_pricing)
+        except Exception as e:  # never let the oracle break pricing
+            logger.warning("Price oracle unavailable, serving curated prices only: %s", e)
 
         if not include_unconfirmed:
             all_pricing = [m for m in all_pricing if m.price_confirmed]

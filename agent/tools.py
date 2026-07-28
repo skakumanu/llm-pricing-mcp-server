@@ -70,6 +70,14 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
             ),
         ),
         (
+            "check_price_drift",
+            (
+                "Audit this server's own pricing data against an external reference "
+                "registry and report models whose price has drifted. Use when the user "
+                "asks whether the pricing data is accurate, current, or trustworthy."
+            ),
+        ),
+        (
             "get_ide_pricing",
             (
                 "Get subscription pricing for AI coding IDE tools (GitHub Copilot, Cursor, "
