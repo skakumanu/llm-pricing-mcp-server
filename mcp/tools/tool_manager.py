@@ -16,6 +16,7 @@ from mcp.tools.list_conversations import ListConversationsTool
 from mcp.tools.delete_conversation import DeleteConversationTool
 from mcp.tools.ask_agent import AskAgentTool
 from mcp.tools.get_ide_pricing import GetIDEPricingTool
+from mcp.tools.predict_cost import PredictCostTool
 
 
 class ToolManager:
@@ -393,6 +394,77 @@ class ToolManager:
                         },
                     },
                     "required": [],
+                },
+            },
+            "predict_cost": {
+                "instance": PredictCostTool(),
+                "name": "predict_cost",
+                "description": (
+                    "Predict the real cost of an LLM call from your actual prompt text — "
+                    "no need to know token counts in advance. Counts tokens locally, infers "
+                    "the task type (or accepts one explicitly), estimates output length from "
+                    "empirical I/O profiles, and returns all models ranked cheapest-first with "
+                    "effective cost after prompt-cache savings. Also surfaces the best "
+                    "quality-per-dollar pick. Use this before making any LLM API call to avoid "
+                    "surprise bills."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "prompt": {
+                            "type": "string",
+                            "description": "The actual prompt text to cost-estimate (required)",
+                        },
+                        "task_type": {
+                            "type": "string",
+                            "description": (
+                                "Task type for output-length estimation. Auto-inferred from prompt "
+                                "if omitted. Options: classification, extraction, summarization, qa, "
+                                "code_generation, translation, chat, content_generation, reasoning, "
+                                "function_calling, data_analysis, rewrite"
+                            ),
+                            "enum": [
+                                "classification", "extraction", "summarization", "qa",
+                                "code_generation", "translation", "chat", "content_generation",
+                                "reasoning", "function_calling", "data_analysis", "rewrite",
+                            ],
+                        },
+                        "top_n": {
+                            "type": "integer",
+                            "description": "Number of models to return, ranked cheapest-first (default: 10, max: 50)",
+                            "default": 10,
+                            "minimum": 1,
+                            "maximum": 50,
+                        },
+                        "cache_hit_ratio": {
+                            "type": "number",
+                            "description": (
+                                "Fraction of calls that hit the prompt cache (0–1). "
+                                "Set this if you have a large reusable system prompt. "
+                                "Supported providers: Anthropic (10% cache rate), "
+                                "OpenAI (50%), Google (25%). Default: 0"
+                            ),
+                            "default": 0.0,
+                            "minimum": 0.0,
+                            "maximum": 1.0,
+                        },
+                        "require_function_calling": {
+                            "type": "boolean",
+                            "description": "Only include models that support function/tool calling (default: false)",
+                            "default": False,
+                        },
+                        "require_vision": {
+                            "type": "boolean",
+                            "description": "Only include models that support image/vision input (default: false)",
+                            "default": False,
+                        },
+                        "min_context_tokens": {
+                            "type": "integer",
+                            "description": "Minimum context window size required in tokens (optional)",
+                            "minimum": 1,
+                        },
+                    },
+                    "required": ["prompt"],
                 },
             },
             "ask_agent": {
