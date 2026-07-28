@@ -15,6 +15,9 @@ class TogetherPricingService(BasePricingProvider):
 
     # Together AI pricing data (per 1k tokens in USD)
     # Source: https://www.together.ai/pricing
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-10"
+
     STATIC_PRICING = {
         "meta-llama/Llama-3.3-70B-Instruct-Turbo": {
             "input": 0.00088,

@@ -1,6 +1,6 @@
 # MCP Server — Quick Start & Validation Guide
 
-**Version**: 1.38.0
+**Version**: see `src/__init__.py` (single source of truth)
 **Protocol**: MCP 2024-11-05, JSON-RPC 2.0
 **Transports**: STDIO (local) · HTTP POST (remote)
 
@@ -8,7 +8,7 @@
 
 ## What's Available
 
-17 MCP tools across two transports:
+19 MCP tools across two transports:
 
 | Transport | Endpoint | Use case |
 |-----------|----------|----------|
@@ -36,13 +36,13 @@ Expected response:
   "result": {
     "protocolVersion": "2024-11-05",
     "capabilities": {"tools": {}},
-    "serverInfo": {"name": "LLM Pricing MCP Server", "version": "1.1.0"}
+    "serverInfo": {"name": "LLM Pricing MCP Server", "version": "<current release>"}
   },
   "id": 1
 }
 ```
 
-### List all 17 tools
+### List all 19 tools
 
 ```bash
 curl -X POST https://llm-pricing-api.fly.dev/mcp \
@@ -89,7 +89,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 
 ---
 
-## All 17 Tools
+## All 19 Tools
 
 | Tool | Required args | Optional args |
 |------|--------------|---------------|
@@ -97,6 +97,8 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 | `estimate_cost` | `model_name`, `input_tokens`, `output_tokens` | — |
 | `compare_costs` | `model_names[]`, `input_tokens`, `output_tokens` | — |
 | `predict_cost` | `prompt` | `task_type`, `cache_hit_ratio`, `top_n`, `require_function_calling`, `require_vision`, `min_context_tokens` |
+| `optimize_workload` | `workloads[]` | `monthly_budget_usd`, `min_quality_score` |
+| `check_price_drift` | — | `threshold_pct`, `provider`, `limit` |
 | `get_ide_pricing` | — | `provider`, `max_monthly`, `inline_only` |
 | `get_performance_metrics` | — | `provider`, `include_cost` |
 | `get_use_cases` | — | `provider` |
@@ -128,7 +130,7 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp -H "Content-Type: application/j
 # tools/list
 curl -X POST https://llm-pricing-api.fly.dev/mcp -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
-# → result.tools has 14 entries
+# → result.tools has 19 entries
 
 # tools/call
 curl -X POST https://llm-pricing-api.fly.dev/mcp -H "Content-Type: application/json" \

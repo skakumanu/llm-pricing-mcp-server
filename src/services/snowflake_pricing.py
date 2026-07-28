@@ -19,6 +19,9 @@ class SnowflakePricingService(BasePricingProvider):
     # Snowflake Cortex AI pricing data (per 1k tokens in USD)
     # Credit costs per 1M tokens × $3.00/credit = USD per 1M; divide by 1000 for per-1k.
     # Source: https://www.snowflake.com/en/data-cloud/cortex/
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-10"
+
     STATIC_PRICING = {
         "snowflake-arctic": {
             "input": 0.0018,

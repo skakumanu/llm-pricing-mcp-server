@@ -14,6 +14,9 @@ class CerebrasPricingService(BasePricingProvider):
     # Cerebras pricing data (per 1k tokens in USD)
     # Source: https://inference.cerebras.ai/
     # Cerebras is known for ultra-fast inference (2000+ tok/s) via custom wafer-scale chips
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-10"
+
     STATIC_PRICING = {
         "llama3.1-8b": {
             "input": 0.0001,

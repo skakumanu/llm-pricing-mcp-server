@@ -23,6 +23,8 @@ EXPECTED_TOOLS = {
     "estimate_cost",
     "compare_costs",
     "predict_cost",
+    "optimize_workload",
+    "check_price_drift",
     "get_performance_metrics",
     "get_use_cases",
     "get_ide_pricing",
@@ -54,7 +56,7 @@ class TestToolRegistry:
         assert set(registry.tools.keys()) == EXPECTED_TOOLS
 
     def test_registry_count(self, registry):
-        assert len(registry.tools) == 17
+        assert len(registry.tools) == 19
 
     def test_every_tool_has_instance_and_schema(self, registry):
         for name, meta in registry.tools.items():
@@ -111,7 +113,7 @@ class TestDocsStayInSync:
     COUNT_RE = re.compile(r"\b(\d{1,3})\s+(?:MCP\s+|pricing\s+)?tools?\b", re.IGNORECASE)
 
     # Counts that legitimately are not the registry total.
-    ALLOWED_OTHER_COUNTS = {15}  # agent binds 15 of 17 (ask_agent + get_telemetry excluded)
+    ALLOWED_OTHER_COUNTS = {17}  # agent binds 17 of 19 (ask_agent + get_telemetry excluded)
 
     def test_docs_report_correct_tool_count(self, registry):
         total = len(registry.tools)

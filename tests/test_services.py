@@ -23,8 +23,13 @@ def test_anthropic_pricing_service():
 
     assert len(pricing_data) > 0
     assert all(model.provider == "Anthropic" for model in pricing_data)
-    assert all(model.cost_per_input_token > 0 for model in pricing_data)
-    assert all(model.cost_per_output_token > 0 for model in pricing_data)
+    # Only models with a confirmed price carry a real rate. Models listed with
+    # price_confirmed=False are awaiting verification and hold a 0.0 placeholder.
+    priced = [m for m in pricing_data if m.price_confirmed]
+    assert priced, "at least one Anthropic model should have a confirmed price"
+    assert all(model.cost_per_input_token > 0 for model in priced)
+    assert all(model.cost_per_output_token > 0 for model in priced)
+    assert all(m.cost_per_input_token == 0 for m in pricing_data if not m.price_confirmed)
 
 
 def test_pricing_aggregator_all_pricing():

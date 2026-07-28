@@ -25,6 +25,11 @@ class BasePricingProvider(ABC):
     # Shared in-memory cache for live model IDs: {cache_key: (frozenset, expires_at)}
     _live_model_cache: dict = {}
 
+    # ISO date (YYYY-MM-DD) this provider's prices were last confirmed against its
+    # published rates. Subclasses should set this whenever they touch STATIC_PRICING.
+    # Models that set their own price_as_of keep it; the rest inherit this.
+    PRICE_AS_OF: Optional[str] = None
+
     def __init__(self, provider_name: str):
         """Initialize the provider.
 
@@ -173,6 +178,91 @@ class BasePricingProvider(ABC):
         # Safety: never return an empty list — fall back to unfiltered
         return kept if kept else pricing_list
 
+    # Live model lists include non-chat artefacts. Skip anything matching these.
+    _DISCOVERY_EXCLUDE = (
+        "embed", "embedding", "whisper", "tts", "dall-e", "moderation",
+        "rerank", "audio", "transcribe", "realtime", "image", "search",
+        "codex-mini", "computer-use",
+    )
+
+    def _discover_new_models(
+        self,
+        pricing_list: List[PricingMetrics],
+        live_ids: FrozenSet[str],
+    ) -> List[PricingMetrics]:
+        """Append models the provider is serving that STATIC_PRICING doesn't know about.
+
+        The live sync used to be subtractive only: it removed retired models but had no
+        way to surface newly released ones, so a hand-edit was the only way a new model
+        ever appeared. Discovered models are added with ``price_confirmed=False`` and a
+        zero price — they show up in the catalogue but are excluded from cost ranking,
+        so a newly released model is visible without inventing a rate for it.
+        """
+        known = set()
+        for m in pricing_list:
+            name = m.model_name.lower()
+            known.add(name)
+            known.add(name.split(":")[-1])
+
+        discovered = []
+        for live_id in sorted(live_ids):
+            lid = live_id.lower()
+            if any(tok in lid for tok in self._DISCOVERY_EXCLUDE):
+                continue
+            # Skip if a static entry already covers it exactly or by prefix
+            if lid in known or any(lid.startswith(k) or k.startswith(lid) for k in known):
+                continue
+            discovered.append(
+                PricingMetrics(
+                    model_name=live_id,
+                    provider=self.provider_name,
+                    cost_per_input_token=0.0,
+                    cost_per_output_token=0.0,
+                    currency="USD",
+                    unit="per_token",
+                    source=f"{self.provider_name} live model list (pricing not yet confirmed)",
+                    price_confirmed=False,
+                    best_for=(
+                        "Discovered from the provider's live model list. Pricing has not "
+                        "been confirmed, so this model is excluded from cost comparisons."
+                    ),
+                )
+            )
+
+        if discovered:
+            logger.info(
+                "[%s] Discovered %d model(s) absent from STATIC_PRICING: %s",
+                self.provider_name, len(discovered), [m.model_name for m in discovered],
+            )
+        return pricing_list + discovered
+
+    def _stamp_price_as_of(self, pricing_list: List[PricingMetrics]) -> List[PricingMetrics]:
+        """Attach price provenance without touching each provider's builder.
+
+        Providers construct PricingMetrics in several places apiece, so both
+        provenance fields are applied here at the single choke point:
+
+        - ``price_as_of``: falls back to the provider-level ``PRICE_AS_OF``. A model
+          that sets its own keeps it, so one entry can be refreshed independently.
+        - ``price_confirmed``: read from the model's ``STATIC_PRICING`` entry. Models
+          marked unconfirmed are listed for discoverability but excluded from cost
+          ranking, so a placeholder price can never masquerade as the cheapest option.
+        """
+        static = getattr(self, "STATIC_PRICING", None) or {}
+
+        for model in pricing_list:
+            if self.PRICE_AS_OF and not model.price_as_of:
+                model.price_as_of = self.PRICE_AS_OF
+
+            entry = static.get(model.model_name)
+            if isinstance(entry, dict):
+                if entry.get("price_confirmed") is False:
+                    model.price_confirmed = False
+                if entry.get("price_as_of"):
+                    model.price_as_of = entry["price_as_of"]
+
+        return pricing_list
+
     async def get_pricing_with_status(self) -> tuple[List[PricingMetrics], ProviderStatus]:
         """
         Fetch pricing data, apply live model filtering, and return with provider status.
@@ -187,6 +277,11 @@ class BasePricingProvider(ABC):
             live_ids = await self._fetch_live_model_ids()
             if live_ids:
                 pricing_data = self._apply_live_filter(pricing_data, live_ids)
+                # Additive half: surface models the provider serves that we don't price yet
+                pricing_data = self._discover_new_models(pricing_data, live_ids)
+
+            # Attach price provenance so callers can judge how fresh a number is
+            pricing_data = self._stamp_price_as_of(pricing_data)
 
             status = ProviderStatus(
                 provider_name=self.provider_name,

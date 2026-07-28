@@ -19,6 +19,9 @@ class PromptQLPricingService(BasePricingProvider):
 
     # PromptQL pricing data (per 1k tokens in USD)
     # Source: https://promptql.io/pricing
+    # Prices last confirmed against the provider's published rates on this date.
+    PRICE_AS_OF = "2026-05-10"
+
     STATIC_PRICING = {
         "promptql-smart": {
             "input": 0.003,
