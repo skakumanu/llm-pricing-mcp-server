@@ -73,6 +73,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Provision our own label rather than depending on someone having
+          # created it by hand — gh issue create fails outright on an unknown
+          # label, which would silently cost us the whole report. --force makes
+          # this idempotent.
+          gh label create price-drift \
+            --description "Curated price disagrees with the reference registry" \
+            --color D93F0B --force \
+            || echo "Could not create the label; will attempt the issue without it."
+
           # Reuse a single rolling issue rather than filing a new one each week.
           EXISTING=$(gh issue list --state open --label price-drift \
             --json number --jq '.[0].number' || true)
@@ -83,11 +92,14 @@ jobs:
             gh issue comment "$EXISTING" --body "$BODY"
             echo "Commented on existing issue #$EXISTING"
           else
+            # Fall back to an unlabelled issue rather than losing the report.
             gh issue create \
               --title "Price drift detected: ${{ steps.audit.outputs.count }} model(s)" \
               --label price-drift \
               --body "$BODY" \
-              || echo "Could not create issue — ensure the 'price-drift' label exists."
+            || gh issue create \
+              --title "Price drift detected: ${{ steps.audit.outputs.count }} model(s)" \
+              --body "$BODY"
           fi
 
       - name: Report a clean audit
