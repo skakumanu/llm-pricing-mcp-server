@@ -181,6 +181,7 @@ class CoherePricingService(BasePricingProvider):
                         supports_json_mode=static_info.get("supports_json_mode", False),
                         batch_available=static_info.get("batch_available", False),
                         is_reasoning_model=static_info.get("is_reasoning_model", False),
+                        price_confirmed=static_info.get("price_confirmed", True),
                     )
                 )
 
@@ -236,31 +237,15 @@ class CoherePricingService(BasePricingProvider):
         Returns:
             List of PricingMetrics with static data
         """
-        pricing_list = []
-        for model_name, pricing_info in self.STATIC_PRICING.items():
-            pricing_list.append(
-                PricingMetrics(
-                    model_name=model_name,
-                    provider=self.provider_name,
-                    cost_per_input_token=pricing_info["input"] / 1000,
-                    cost_per_output_token=pricing_info["output"] / 1000,
-                    context_window=pricing_info["context_window"],
-                    currency="USD",
-                    unit="per_token",
-                    source="Cohere Official Pricing (Fallback - Static)",
-                    throughput=100.0,
-                    latency_ms=300.0,
-                    use_cases=pricing_info.get("use_cases"),
-                    strengths=pricing_info.get("strengths"),
-                    best_for=pricing_info.get("best_for"),
-                    supports_vision=pricing_info.get("supports_vision", False),
-                    supports_function_calling=pricing_info.get("supports_function_calling", False),
-                    supports_json_mode=pricing_info.get("supports_json_mode", False),
-                    batch_available=pricing_info.get("batch_available", False),
-                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
-                )
+        return [
+            self.build_metrics(
+                model_name, pricing_info,
+                source="Cohere Official Pricing (Fallback - Static)",
+                throughput=100.0,
+                latency_ms=300.0,
             )
-        return pricing_list
+            for model_name, pricing_info in self.STATIC_PRICING.items()
+        ]
 
     @staticmethod
     def get_pricing_data() -> List[PricingMetrics]:
@@ -269,32 +254,7 @@ class CoherePricingService(BasePricingProvider):
         Returns:
             List of PricingMetrics for Cohere models
         """
-        # Return static pricing data for backward compatibility
-        pricing_list = []
-        for model_name, pricing_info in CoherePricingService.STATIC_PRICING.items():
-            pricing_list.append(
-                PricingMetrics(
-                    model_name=model_name,
-                    provider="Cohere",
-                    cost_per_input_token=pricing_info["input"] / 1000,
-                    cost_per_output_token=pricing_info["output"] / 1000,
-                    context_window=pricing_info["context_window"],
-                    currency="USD",
-                    unit="per_token",
-                    source="Cohere Official Pricing (Static)",
-                    throughput=100.0,
-                    latency_ms=300.0,
-                    use_cases=pricing_info.get("use_cases"),
-                    strengths=pricing_info.get("strengths"),
-                    best_for=pricing_info.get("best_for"),
-                    supports_vision=pricing_info.get("supports_vision", False),
-                    supports_function_calling=pricing_info.get("supports_function_calling", False),
-                    supports_json_mode=pricing_info.get("supports_json_mode", False),
-                    batch_available=pricing_info.get("batch_available", False),
-                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
-                )
-            )
-        return pricing_list
+        return CoherePricingService()._get_static_pricing_data()
 
     async def _verify_api_key(self) -> bool:
         """

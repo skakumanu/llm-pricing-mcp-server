@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.54.1 | **Last updated**: 2026-07-28
+**Version**: v1.55.1 | **Last updated**: 2026-07-28
 
 ---
 
@@ -10,6 +10,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 26 
 
 - **Primary deployment**: Fly.io (`llm-pricing-api.fly.dev`) — shared-cpu-1x, 512 MB, ~$3.40/mo
 - **CI/CD**: GitHub Actions → test → lint → bandit → OSV scan → gitleaks → Fly.io deploy
+- **Weekly price audit**: scheduled workflow re-runs `check_price_drift` and refreshes the vendored registry snapshot, opening an issue/PR when either drifts
 
 ---
 
@@ -80,7 +81,7 @@ llm-pricing-mcp-server/
 │   │   ├── pricing.py               # PricingMetrics, PerformanceMetrics, RouterResponse, …
 │   │   └── billing.py               # SignupRequest/Response, CheckoutRequest, CustomerDashboard
 │   └── services/
-│       ├── base_provider.py         # BasePricingProvider: live sync (filter + discover), price provenance
+│       ├── base_provider.py         # BasePricingProvider: build_metrics() shared builder, live sync, provenance
 │       ├── pricing_aggregator.py    # Orchestrates + caches all provider data (async)
 │       ├── pricing_history.py       # SQLite price-history + routing_feedback tables
 │       ├── benchmark_service.py     # Quality scores: static table + HF API fallback (24h TTL)

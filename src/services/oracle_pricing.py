@@ -168,57 +168,18 @@ class OraclePricingService(BasePricingProvider):
 
     def _get_static_pricing_data(self) -> List[PricingMetrics]:
         """Get static pricing metrics for Oracle OCI Generative AI models."""
-        pricing_list = []
-        for model_name, pricing_info in self.STATIC_PRICING.items():
-            pricing_list.append(
-                PricingMetrics(
-                    model_name=model_name,
-                    provider="Oracle OCI",
-                    cost_per_input_token=pricing_info["input"] / 1000,
-                    cost_per_output_token=pricing_info["output"] / 1000,
-                    context_window=pricing_info["context_window"],
-                    currency="USD",
-                    unit="per_token",
-                    source="Oracle OCI Generative AI Pricing (Static)",
-                    throughput=100.0,
-                    latency_ms=500.0,
-                    use_cases=pricing_info.get("use_cases", []),
-                    strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", ""),
-                    supports_vision=pricing_info.get("supports_vision", False),
-                    supports_function_calling=pricing_info.get("supports_function_calling", False),
-                    supports_json_mode=pricing_info.get("supports_json_mode", False),
-                    batch_available=pricing_info.get("batch_available", False),
-                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
-                )
+        return [
+            self.build_metrics(
+                model_name, pricing_info,
+                source="Oracle OCI Generative AI Pricing (Static)",
+                throughput=100.0,
+                latency_ms=500.0,
+                provider="Oracle OCI",
             )
-        return pricing_list
+            for model_name, pricing_info in self.STATIC_PRICING.items()
+        ]
 
     @staticmethod
     def get_pricing_data() -> List[PricingMetrics]:
         """Synchronous method for backward compatibility."""
-        pricing_list = []
-        for model_name, pricing_info in OraclePricingService.STATIC_PRICING.items():
-            pricing_list.append(
-                PricingMetrics(
-                    model_name=model_name,
-                    provider="Oracle OCI",
-                    cost_per_input_token=pricing_info["input"] / 1000,
-                    cost_per_output_token=pricing_info["output"] / 1000,
-                    context_window=pricing_info["context_window"],
-                    currency="USD",
-                    unit="per_token",
-                    source="Oracle OCI Generative AI Pricing (Static)",
-                    throughput=100.0,
-                    latency_ms=500.0,
-                    use_cases=pricing_info.get("use_cases", []),
-                    strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", ""),
-                    supports_vision=pricing_info.get("supports_vision", False),
-                    supports_function_calling=pricing_info.get("supports_function_calling", False),
-                    supports_json_mode=pricing_info.get("supports_json_mode", False),
-                    batch_available=pricing_info.get("batch_available", False),
-                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
-                )
-            )
-        return pricing_list
+        return OraclePricingService()._get_static_pricing_data()

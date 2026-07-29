@@ -247,6 +247,7 @@ class BedrockPricingService(BasePricingProvider):
                         supports_json_mode=pricing_info.get("supports_json_mode", False),
                         batch_available=pricing_info.get("batch_available", False),
                         is_reasoning_model=pricing_info.get("is_reasoning_model", False),
+                        price_confirmed=pricing_info.get("price_confirmed", True),
                     )
                 )
 
@@ -280,6 +281,7 @@ class BedrockPricingService(BasePricingProvider):
                     supports_json_mode=pricing_info.get("supports_json_mode", False),
                     batch_available=pricing_info.get("batch_available", False),
                     is_reasoning_model=pricing_info.get("is_reasoning_model", False),
+                    price_confirmed=pricing_info.get("price_confirmed", True),
                     source=f"{self.provider_name} Official Pricing (Fallback - Static)",
                     throughput=self._estimate_throughput(model_id),
                     latency_ms=self._estimate_latency(model_id),

@@ -173,31 +173,16 @@ class SalesforcePricingService(BasePricingProvider):
 
     def _get_static_pricing_data(self) -> List[PricingMetrics]:
         """Build PricingMetrics list from static data."""
-        pricing_list = []
-        for model_name, info in self.STATIC_PRICING.items():
-            pricing_list.append(
-                PricingMetrics(
-                    model_name=model_name,
-                    provider="Salesforce",
-                    cost_per_input_token=info["input"] / 1000,
-                    cost_per_output_token=info["output"] / 1000,
-                    context_window=info["context_window"],
-                    currency="USD",
-                    unit="per_token",
-                    source="Salesforce AI Pricing (Static — see best_for for billing model)",
-                    throughput=70.0,
-                    latency_ms=700.0,
-                    use_cases=info.get("use_cases", []),
-                    strengths=info.get("strengths", []),
-                    best_for=info.get("best_for", ""),
-                    supports_vision=info.get("supports_vision", False),
-                    supports_function_calling=info.get("supports_function_calling", False),
-                    supports_json_mode=info.get("supports_json_mode", False),
-                    batch_available=info.get("batch_available", False),
-                    is_reasoning_model=info.get("is_reasoning_model", False),
-                )
+        return [
+            self.build_metrics(
+                model_name, info,
+                source="Salesforce AI Pricing (Static — see best_for for billing model)",
+                throughput=70.0,
+                latency_ms=700.0,
+                provider="Salesforce",
             )
-        return pricing_list
+            for model_name, info in self.STATIC_PRICING.items()
+        ]
 
     @staticmethod
     def get_pricing_data() -> List[PricingMetrics]:

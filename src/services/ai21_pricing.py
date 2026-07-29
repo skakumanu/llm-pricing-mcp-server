@@ -132,6 +132,7 @@ class AI21PricingService(BasePricingProvider):
                     supports_json_mode=pricing_info.get("supports_json_mode", False),
                     batch_available=pricing_info.get("batch_available", False),
                     is_reasoning_model=pricing_info.get("is_reasoning_model", False),
+                    price_confirmed=pricing_info.get("price_confirmed", True),
                 )
             )
         return pricing_list
@@ -167,28 +168,4 @@ class AI21PricingService(BasePricingProvider):
     @staticmethod
     def get_pricing_data() -> List[PricingMetrics]:
         """Synchronous method for backward compatibility."""
-        pricing_list = []
-        for model_name, pricing_info in AI21PricingService.STATIC_PRICING.items():
-            pricing_list.append(
-                PricingMetrics(
-                    model_name=model_name,
-                    provider="AI21 Labs",
-                    cost_per_input_token=pricing_info["input"] / 1000,
-                    cost_per_output_token=pricing_info["output"] / 1000,
-                    context_window=pricing_info["context_window"],
-                    currency="USD",
-                    unit="per_token",
-                    source="AI21 Labs Official Pricing (Static)",
-                    throughput=70.0,
-                    latency_ms=350.0,
-                    use_cases=pricing_info.get("use_cases", []),
-                    strengths=pricing_info.get("strengths", []),
-                    best_for=pricing_info.get("best_for", ""),
-                    supports_vision=pricing_info.get("supports_vision", False),
-                    supports_function_calling=pricing_info.get("supports_function_calling", False),
-                    supports_json_mode=pricing_info.get("supports_json_mode", False),
-                    batch_available=pricing_info.get("batch_available", False),
-                    is_reasoning_model=pricing_info.get("is_reasoning_model", False),
-                )
-            )
-        return pricing_list
+        return AI21PricingService()._get_static_pricing_data({})
