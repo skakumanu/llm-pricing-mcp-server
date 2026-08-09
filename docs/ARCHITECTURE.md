@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.55.3 | **Last updated**: 2026-07-28
+**Version**: v1.55.4 | **Last updated**: 2026-07-28
 
 ---
 
@@ -137,7 +137,6 @@ llm-pricing-mcp-server/
 │
 ├── mcp/
 │   ├── server.py                    # MCP STDIO transport (Claude Desktop)
-│   ├── server_azure.py              # MCP HTTP transport variant
 │   ├── tools/                       # Per-tool MCP handler modules
 │   ├── schemas/                     # MCP JSON-RPC schema definitions
 │   └── utils/                       # Session management, helpers

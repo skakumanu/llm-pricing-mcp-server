@@ -400,7 +400,6 @@ llm-pricing-mcp-server/
 │       └── …
 ├── mcp/
 │   ├── server.py                    # STDIO JSON-RPC 2.0 server
-│   ├── server_azure.py              # STDIO server proxying remote API
 │   └── tools/                       # 19 MCP tool implementations
 │       ├── tool_manager.py
 │       ├── get_all_pricing.py

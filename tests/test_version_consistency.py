@@ -48,13 +48,20 @@ class TestMcpVersionsSingleSourced:
 
 
 class TestNoHardcodedVersionsInSource:
-    """Catch a literal version string being reintroduced next to a version assignment."""
+    """Catch a literal version string being reintroduced next to a version assignment.
 
-    WATCHED_FILES = [
-        "mcp/__init__.py",
-        "mcp/server.py",
-        "src/main.py",
-    ]
+    This used to check a hand-maintained file list, which is exactly how
+    mcp/server_azure.py's hardcoded "1.1.0" survived the original fix undetected —
+    the list was written before that file was considered. Scanning every source
+    file under mcp/ and src/ closes that class of gap: a new file with the same
+    mistake fails automatically, with no list to remember to update.
+    """
+
+    SCAN_ROOTS = ("mcp", "src")
+
+    # The one file allowed to hold the literal — it's the canonical source every
+    # other assignment must derive from.
+    CANONICAL_SOURCE = "src/__init__.py"
 
     # e.g.  self.version = "1.1.0"   /   _MCP_SERVER_VERSION = "1.2.3"
     HARDCODED_RE = re.compile(
@@ -63,13 +70,15 @@ class TestNoHardcodedVersionsInSource:
 
     def test_no_literal_version_assignments(self):
         offenders = []
-        for rel in self.WATCHED_FILES:
-            path = project_root / rel
-            if not path.exists():
-                continue
-            for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-                if self.HARDCODED_RE.search(line):
-                    offenders.append(f"{rel}:{lineno}: {line.strip()}")
+        for root_name in self.SCAN_ROOTS:
+            root = project_root / root_name
+            for path in root.rglob("*.py"):
+                rel = path.relative_to(project_root)
+                if str(rel) == self.CANONICAL_SOURCE:
+                    continue
+                for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                    if self.HARDCODED_RE.search(line):
+                        offenders.append(f"{rel}:{lineno}: {line.strip()}")
         assert not offenders, (
             "Version literals must derive from src.__version__:\n" + "\n".join(offenders)
         )
