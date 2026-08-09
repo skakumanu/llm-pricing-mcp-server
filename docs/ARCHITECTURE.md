@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.55.2 | **Last updated**: 2026-07-28
+**Version**: v1.55.3 | **Last updated**: 2026-07-28
 
 ---
 
@@ -11,6 +11,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 26 
 - **Primary deployment**: Fly.io (`llm-pricing-api.fly.dev`) — shared-cpu-1x, 512 MB, ~$3.40/mo
 - **CI/CD**: GitHub Actions → test → lint → bandit → OSV scan → gitleaks → Fly.io deploy
 - **Weekly price audit**: scheduled workflow re-runs `check_price_drift` and refreshes the vendored registry snapshot, opening an issue/PR when either drifts
+- **Snapshot self-validation**: `scripts/validate_price_snapshot.py` gates the refresh PR. GitHub does not run CI on `GITHUB_TOKEN`-created PRs, so the generating job verifies the data itself
 
 ---
 
@@ -225,7 +226,7 @@ Enabled for: OpenAI, Anthropic, Groq, Mistral AI, Together AI, Fireworks AI, xAI
 ```
 User message
   → react_loop.py: think → select tool → execute → observe → repeat
-  → tools.py: wraps 15 of the 19 MCP tools as callable Python functions
+  → tools.py: wraps 17 of the 19 MCP tools as callable Python functions
       (excludes ask_agent to prevent recursion, and get_telemetry as server-ops only)
   → llm_backend.py: AnthropicBackend | OpenAIBackend (switch via AGENT_LLM_PROVIDER env)
   → conversation.py: persist turns to SQLite, enforce max_turns limit

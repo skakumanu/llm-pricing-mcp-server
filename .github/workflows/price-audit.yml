@@ -122,8 +122,14 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
       - name: Rebuild the vendored snapshot
         run: |
+          cp data/model_prices_snapshot.json /tmp/snapshot_before.json
           curl -sS --max-time 60 -o /tmp/registry.json \
             "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
           python - <<'PY'
@@ -136,12 +142,32 @@ jobs:
                   for k, v in raw.items()
                   if isinstance(v, dict) and v.get("mode") == "chat"
                   and "input_cost_per_token" in v}
-          # Refuse to write a suspiciously small snapshot over a good one.
-          assert len(trim) > 500, f"snapshot too small ({len(trim)} models) — refusing to write"
           with open('data/model_prices_snapshot.json', 'w') as fh:
               json.dump(trim, fh, separators=(',', ':'), sort_keys=True)
           print(f"snapshot rebuilt: {len(trim)} models")
           PY
+
+      # This PR is opened with GITHUB_TOKEN, and GitHub does not trigger workflow
+      # runs for events created with that token — so it arrives with no CI at all.
+      # Rather than depend on a long-lived PAT, the job that produces the data
+      # proves the data is good, and refuses to open the PR otherwise.
+      - name: Validate the rebuilt snapshot
+        id: validate
+        run: |
+          if ! python scripts/validate_price_snapshot.py \
+                 data/model_prices_snapshot.json \
+                 --baseline /tmp/snapshot_before.json > /tmp/validation.md; then
+            echo "::error::Rebuilt snapshot failed validation — not opening a PR."
+            cat /tmp/validation.md
+            git checkout -- data/model_prices_snapshot.json
+            exit 1
+          fi
+          cat /tmp/validation.md
+
+      - name: Prove the app still works against the new snapshot
+        run: |
+          # Exercise the code that actually consumes the file, not just its shape.
+          python -m pytest tests/test_price_oracle.py tests/test_price_provenance.py -q
 
       - name: Open a PR when the snapshot changed
         env:
@@ -161,9 +187,23 @@ jobs:
           git commit -m "chore(pricing): refresh vendored price registry snapshot"
           git push origin "$BRANCH"
 
+          # GitHub will not run CI on a PR opened with GITHUB_TOKEN, so state
+          # plainly what was verified before it was opened — otherwise a reviewer
+          # sees an empty check list and has no idea whether anything was checked.
+          {
+            printf 'Automated refresh of the offline price-registry fallback. Only `data/model_prices_snapshot.json` changes; no curated price is touched.\n\n'
+            printf '## Verified before this PR was opened\n\n'
+            printf 'GitHub does not trigger workflow runs for PRs created with `GITHUB_TOKEN`, so this PR shows no checks. These ran in the job that produced it:\n\n'
+            printf -- '- `scripts/validate_price_snapshot.py` — schema, price sanity, and movement limits against the previous snapshot\n'
+            printf -- '- `tests/test_price_oracle.py` and `tests/test_price_provenance.py` — the code that actually consumes this file\n\n'
+            printf 'The PR is only opened when both pass.\n\n'
+            printf '## What changed\n\n'
+            cat /tmp/validation.md
+          } > /tmp/pr_body.md
+
           gh pr create \
             --title "chore(pricing): refresh vendored price registry snapshot" \
-            --body "Automated refresh of the offline price-registry fallback. Only \`data/model_prices_snapshot.json\` changes; no curated price is touched." \
+            --body-file /tmp/pr_body.md \
             --base develop \
             --head "$BRANCH" \
             || echo "gh pr create blocked — branch '$BRANCH' was pushed; open the PR manually."
