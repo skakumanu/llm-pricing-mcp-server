@@ -28,7 +28,7 @@ A production-ready **Model Context Protocol (MCP)** server for LLM pricing data.
 
 ### Agent + RAG Pipeline
 - **Configurable LLM backend**: OpenAI GPT-4o-mini (default) or Anthropic Claude via env vars
-- **ReAct loop agent** with access to 15 of the 19 MCP tools (excludes `ask_agent` and `get_telemetry`)
+- **ReAct loop agent** with access to 17 of the 19 MCP tools (excludes `ask_agent` and `get_telemetry`)
 - **TF-IDF RAG** over pricing docs with top-k retrieval
 - **Conversation memory**: per-session SQLite persistence, configurable turn limit
 - **Chat UI** at `/chat` — streams ReAct progress in real time
@@ -71,7 +71,7 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 - Protected endpoints (`/billing/me`, `/router/recommend`, `/router/feedback`, `/billing/portal`) require a billing API key or the global `MCP_API_KEY`
 - Rate limiting per client IP + tier bucket
 - Request size limit (1MB default)
-- 849 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 864 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo

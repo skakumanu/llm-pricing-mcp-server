@@ -129,6 +129,32 @@ class TestDocsStayInSync:
                         problems.append(f"{rel}:{lineno} says '{match.group(0)}' (registry has {total})")
         assert not problems, "Stale tool counts in docs:\n" + "\n".join(problems)
 
+    # Docs also phrase the agent's coverage as "N of M MCP tools". The count
+    # regex above only sees the M, so the N drifted unnoticed from 15 to 17 —
+    # three bulk doc updates rewrote M and silently left N behind.
+    N_OF_M_RE = re.compile(r"\b(\d{1,3})\s+of\s+the\s+(\d{1,3})\s+MCP\s+tools\b", re.IGNORECASE)
+
+    def test_docs_report_correct_agent_bound_count(self, registry):
+        from agent.tools import build_agent_tools
+        bound = {t.name for t in build_agent_tools(registry, rag_pipeline=None)}
+        expected_n = len(bound & set(registry.tools))
+        expected_m = len(registry.tools)
+
+        problems = []
+        for rel in self.DOC_FILES:
+            path = project_root / rel
+            if not path.exists():
+                continue
+            for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                for match in self.N_OF_M_RE.finditer(line):
+                    n, m = int(match.group(1)), int(match.group(2))
+                    if (n, m) != (expected_n, expected_m):
+                        problems.append(
+                            f"{rel}:{lineno} says '{match.group(0)}' "
+                            f"(agent binds {expected_n} of {expected_m})"
+                        )
+        assert not problems, "Stale agent tool counts in docs:\n" + "\n".join(problems)
+
     def test_readme_lists_every_tool_by_name(self, registry):
         readme = (project_root / "README.md").read_text(encoding="utf-8")
         missing = [name for name in registry.tools if f"`{name}`" not in readme]
