@@ -255,8 +255,17 @@ class TestDriftDetection:
         oracle.find_drift([m])
         assert m.cost_per_input_token == 2e-06  # untouched
 
-    async def test_skips_unconfirmed_models(self, oracle):
+    async def test_still_reports_unconfirmed_models_with_a_real_price(self, oracle):
+        """A model demote_drifted() just withheld is unconfirmed but still holds
+        its original curated price, and must keep showing up here — otherwise the
+        audit would go silent on exactly the models it most needs to flag."""
         m = _pm("cheap-model", inp=9e-06, out=9e-06, confirmed=False)
+        found = oracle.find_drift([m])
+        assert len(found) == 1
+
+    async def test_skips_models_with_no_real_price(self, oracle):
+        """Zero cost means never-priced, not disputed — nothing to compare."""
+        m = _pm("cheap-model", confirmed=False)  # inp=0.0, out=0.0 by default
         assert oracle.find_drift([m]) == []
 
     async def test_skips_registry_sourced_models(self, oracle):
@@ -277,6 +286,49 @@ class TestDriftDetection:
         m = _pm("cheap-model", inp=1.1e-06, out=2e-06, confirmed=True)  # 10%
         assert oracle.find_drift([m], threshold_pct=20) == []
         assert len(oracle.find_drift([m], threshold_pct=5)) == 1
+
+
+# ---------------------------------------------------------------------------
+# Drift withholding
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+class TestDemoteDrifted:
+    """A drifted price must stop being served the moment it's detected, not
+    whenever a human next reads a drift report."""
+
+    async def test_withholds_a_drifted_model(self, oracle):
+        m = _pm("cheap-model", inp=2e-06, out=2e-06, confirmed=True)  # 2x registry
+        oracle.demote_drifted([m])
+        assert m.price_confirmed is False
+
+    async def test_leaves_the_price_value_untouched(self, oracle):
+        """Withheld, not silently replaced with the registry's number."""
+        m = _pm("cheap-model", inp=2e-06, out=2e-06, confirmed=True)
+        oracle.demote_drifted([m])
+        assert m.cost_per_input_token == 2e-06
+
+    async def test_does_not_touch_models_within_threshold(self, oracle):
+        m = _pm("cheap-model", inp=1.02e-06, out=2e-06, confirmed=True)  # 2% off
+        oracle.demote_drifted([m])
+        assert m.price_confirmed is True
+
+    async def test_returns_the_same_findings_as_find_drift(self, oracle):
+        m = _pm("cheap-model", inp=2e-06, out=2e-06, confirmed=True)
+        findings = oracle.demote_drifted([m])
+        assert len(findings) == 1
+        assert findings[0].model_name == "cheap-model"
+
+    async def test_does_not_touch_unrelated_models(self, oracle):
+        drifted = _pm("cheap-model", inp=2e-06, out=2e-06, confirmed=True)
+        unrelated = _pm("namespaced-model", inp=3e-06, out=1.5e-05, confirmed=True)
+        oracle.demote_drifted([drifted, unrelated])
+        assert drifted.price_confirmed is False
+        assert unrelated.price_confirmed is True
+
+    async def test_no_findings_returns_empty_list(self, oracle):
+        m = _pm("cheap-model", inp=1e-06, out=2e-06, confirmed=True)  # matches registry
+        assert oracle.demote_drifted([m]) == []
 
 
 # ---------------------------------------------------------------------------
@@ -311,6 +363,7 @@ class TestSnapshotFallback:
         assert o.lookup("anything") is None
         assert o.fill_missing_prices([_pm("x")]) == 0
         assert o.find_drift([_pm("x", confirmed=True)]) == []
+        assert o.demote_drifted([_pm("x", confirmed=True)]) == []
 
     @pytest.mark.asyncio
     async def test_ttl_prevents_refetch(self):
