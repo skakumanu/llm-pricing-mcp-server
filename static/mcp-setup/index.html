@@ -91,6 +91,14 @@
     .install-btn:hover { filter: brightness(1.1); }
     .install-hint { color: var(--muted); font-size: .78rem; margin-top: .4rem; }
 
+    /* Nested sub-tabs (e.g. Copilot vs Cline within the VS Code tab) */
+    .subtab-bar { display: flex; gap: .4rem; margin: 1rem 0 1.25rem; }
+    .subtab-btn { background: var(--surface); border: 1px solid var(--border); color: var(--muted); font-size: .8rem; font-weight: 600; padding: .4rem .9rem; border-radius: 999px; cursor: pointer; transition: all .15s; }
+    .subtab-btn:hover { color: var(--text); }
+    .subtab-btn.active { background: rgba(124,106,247,.12); border-color: var(--accent); color: var(--accent); }
+    .subtab-panel { display: none; }
+    .subtab-panel.active { display: block; }
+
     /* Callout */
     .callout { background: rgba(78,205,196,.07); border: 1px solid rgba(78,205,196,.25); border-radius: var(--radius); padding: .75rem 1rem; font-size: .85rem; color: var(--accent2); margin-bottom: 1rem; }
     .callout strong { color: var(--accent2); }
@@ -203,7 +211,7 @@
     }
   }
 }</div>
-            <div class="copy-row"><button class="copy-btn" onclick="copyCode('remote')">Copy JSON</button></div>
+            <div class="copy-row"><button class="copy-btn" onclick="copyCode('remote', this)">Copy JSON</button></div>
           </div>
         </div>
         <div class="step">
@@ -257,7 +265,7 @@ pip install -r requirements.txt</div>
     }
   }
 }</div>
-            <div class="copy-row"><button class="copy-btn" onclick="copyCode('claude')">Copy JSON</button></div>
+            <div class="copy-row"><button class="copy-btn" onclick="copyCode('claude', this)">Copy JSON</button></div>
           </div>
         </div>
         <div class="step">
@@ -272,42 +280,87 @@ pip install -r requirements.txt</div>
 
     <!-- VS Code -->
     <div class="tab-panel" id="tab-vscode">
-      <div class="callout"><strong>Works with:</strong> Cline, Continue, GitHub Copilot (agent mode), and any VS Code extension that supports MCP servers.</div>
-      <div class="steps">
-        <div class="step">
-          <div class="step-num">1</div>
-          <div class="step-body">
-            <h4>One-click install</h4>
-            <a class="install-btn" id="install-vscode" href="#">Add to VS Code</a>
-            <div class="install-hint">Opens VS Code directly. If nothing happens, your setup doesn't support MCP deep links yet — use the JSON below instead.</div>
+      <div class="callout">VS Code has two separate MCP setups depending on your extension — pick the one you use. <strong>Copilot</strong> reads its own <code>servers</code> config; <strong>Cline / Continue</strong> use a <code>mcpServers</code> config in their own settings UI.</div>
+
+      <div class="subtab-bar">
+        <button class="subtab-btn active" onclick="showSubtab('copilot')">GitHub Copilot</button>
+        <button class="subtab-btn" onclick="showSubtab('cline')">Cline &amp; Continue</button>
+      </div>
+
+      <!-- Copilot -->
+      <div class="subtab-panel active" id="subtab-copilot">
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <h4>One-click install</h4>
+              <a class="install-btn" id="install-vscode" href="#">Add to VS Code</a>
+              <div class="install-hint">Opens VS Code directly. If nothing happens, your VS Code version doesn't support MCP deep links yet — use the JSON below instead.</div>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <h4>Open your MCP config</h4>
+              <p>Command Palette (<kbd>Ctrl+Shift+P</kbd>) → <em>MCP: Open User Configuration</em> for all workspaces, or create <code>.vscode/mcp.json</code> in this workspace for a project-only server.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <h4>Add the server</h4>
+              <p>Copilot's native MCP config uses a <code>servers</code> key with an explicit <code>type</code>, not the <code>mcpServers</code> shape other clients use:</p>
+              <div class="code-block solo" id="code-vscode-copilot">{
+  <span class="key">"servers"</span>: {
+    <span class="key">"llm-pricing"</span>: {
+      <span class="key">"type"</span>: <span class="str">"http"</span>,
+      <span class="key">"url"</span>: <span class="str">"https://llm-pricing-api.fly.dev/mcp"</span>
+    }
+  }
+}</div>
+              <div class="copy-row"><button class="copy-btn" onclick="copyCode('vscode-copilot', this)">Copy JSON</button></div>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <h4>Enable the tools in Agent mode</h4>
+              <p>Open the Copilot Chat panel, switch to <em>Agent</em> mode, then click the tools icon and enable <strong>llm-pricing</strong>. All 19 tools become available to the agent.</p>
+            </div>
           </div>
         </div>
-        <div class="step">
-          <div class="step-num">2</div>
-          <div class="step-body">
-            <h4>Open your MCP config</h4>
-            <p>In Cline: Settings (⚙) → MCP Servers → Edit JSON. For <code>.vscode/mcp.json</code> in your workspace, create the file if it doesn't exist.</p>
+      </div>
+
+      <!-- Cline & Continue -->
+      <div class="subtab-panel" id="subtab-cline">
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <h4>Open your MCP config</h4>
+              <p>In Cline: Settings (⚙) → MCP Servers → Edit JSON. In Continue: open your MCP server config (<code>mcpServers</code> section of Continue's settings).</p>
+            </div>
           </div>
-        </div>
-        <div class="step">
-          <div class="step-num">3</div>
-          <div class="step-body">
-            <h4>Add the server</h4>
-            <div class="code-block solo" id="code-vscode">{
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <h4>Add the server</h4>
+              <div class="code-block solo" id="code-vscode-cline">{
   <span class="key">"mcpServers"</span>: {
     <span class="key">"llm-pricing"</span>: {
       <span class="key">"url"</span>: <span class="str">"https://llm-pricing-api.fly.dev/mcp"</span>
     }
   }
 }</div>
-            <div class="copy-row"><button class="copy-btn" onclick="copyCode('vscode')">Copy JSON</button></div>
+              <div class="copy-row"><button class="copy-btn" onclick="copyCode('vscode-cline', this)">Copy JSON</button></div>
+            </div>
           </div>
-        </div>
-        <div class="step">
-          <div class="step-num">4</div>
-          <div class="step-body">
-            <h4>Reload the extension</h4>
-            <p>Open the command palette (<kbd>Ctrl+Shift+P</kbd>) → <em>Cline: Reload MCP Servers</em>. Tools will appear in the agent panel.</p>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <h4>Reload the extension</h4>
+              <p>Open the command palette (<kbd>Ctrl+Shift+P</kbd>) → <em>Cline: Reload MCP Servers</em> (or restart VS Code for Continue). Tools will appear in the agent panel.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -345,7 +398,7 @@ pip install -r requirements.txt</div>
     }
   }
 }</div>
-            <div class="copy-row"><button class="copy-btn" onclick="copyCode('cursor')">Copy JSON</button></div>
+            <div class="copy-row"><button class="copy-btn" onclick="copyCode('cursor', this)">Copy JSON</button></div>
           </div>
         </div>
         <div class="step">
@@ -377,7 +430,7 @@ pip install -r requirements.txt</div>
     }
   }
 }</div>
-            <div class="copy-row"><button class="copy-btn" onclick="copyCode('perplexity')">Copy JSON</button></div>
+            <div class="copy-row"><button class="copy-btn" onclick="copyCode('perplexity', this)">Copy JSON</button></div>
           </div>
         </div>
         <div class="step">
@@ -565,20 +618,24 @@ function showTab(name) {
 var _configs = {
   remote: '{\n  "mcpServers": {\n    "llm-pricing": {\n      "url": "https://llm-pricing-api.fly.dev/mcp"\n    }\n  }\n}',
   claude: '{\n  "mcpServers": {\n    "llm-pricing": {\n      "command": "python",\n      "args": ["-u", "/absolute/path/to/llm-pricing-mcp-server/mcp/server.py"],\n      "cwd": "/absolute/path/to/llm-pricing-mcp-server",\n      "env": { "PYTHONUNBUFFERED": "1" }\n    }\n  }\n}',
-  vscode: '{\n  "mcpServers": {\n    "llm-pricing": {\n      "url": "https://llm-pricing-api.fly.dev/mcp"\n    }\n  }\n}',
+  'vscode-copilot': '{\n  "servers": {\n    "llm-pricing": {\n      "type": "http",\n      "url": "https://llm-pricing-api.fly.dev/mcp"\n    }\n  }\n}',
+  'vscode-cline': '{\n  "mcpServers": {\n    "llm-pricing": {\n      "url": "https://llm-pricing-api.fly.dev/mcp"\n    }\n  }\n}',
   cursor: '{\n  "mcpServers": {\n    "llm-pricing": {\n      "url": "https://llm-pricing-api.fly.dev/mcp"\n    }\n  }\n}',
   perplexity: '{\n  "mcpServers": {\n    "llm-pricing": {\n      "url": "https://llm-pricing-api.fly.dev/mcp"\n    }\n  }\n}'
 };
 
-function copyCode(name) {
-  var btn = document.querySelector('#tab-'+name+' .copy-btn') || document.querySelector('#code-'+name+' ~ .copy-row .copy-btn');
-  // find the copy-btn in the active tab
-  var tabs = document.querySelectorAll('.tab-panel');
-  var targetBtn = null;
-  tabs.forEach(function(tp){ if(tp.id==='tab-'+name) targetBtn = tp.querySelector('.copy-btn'); });
+function copyCode(name, btn) {
   navigator.clipboard.writeText(_configs[name] || '').then(function(){
-    if(targetBtn){ targetBtn.textContent='Copied!'; targetBtn.classList.add('copied'); setTimeout(function(){ targetBtn.textContent='Copy JSON'; targetBtn.classList.remove('copied'); }, 2000); }
+    if(btn){ btn.textContent='Copied!'; btn.classList.add('copied'); setTimeout(function(){ btn.textContent='Copy JSON'; btn.classList.remove('copied'); }, 2000); }
   });
+}
+
+function showSubtab(name) {
+  var panel = event.currentTarget.closest('.tab-panel');
+  panel.querySelectorAll('.subtab-btn').forEach(function(b){b.classList.remove('active');});
+  panel.querySelectorAll('.subtab-panel').forEach(function(p){p.classList.remove('active');});
+  event.currentTarget.classList.add('active');
+  panel.querySelector('#subtab-'+name).classList.add('active');
 }
 
 function copyText(text, el) {
