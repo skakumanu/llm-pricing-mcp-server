@@ -110,6 +110,38 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 ```
 Types: `feat`, `fix`, `style`, `refactor`, `test`, `docs`, `chore`, `ci`
 
+### 7. Data accuracy check — MANDATORY for pricing-related changes
+
+If the change touches `src/services/*_pricing.py`, `price_oracle.py`, `pricing_aggregator.py`,
+`STATIC_PRICING` data, or `mcp/tools/get_data_quality.py` / `check_price_drift.py`, run this
+before committing — do this proactively as part of the checklist, not only when asked:
+
+```bash
+python -c "
+import asyncio
+from mcp.tools.get_data_quality import GetDataQualityTool
+print(asyncio.run(GetDataQualityTool().execute({})))
+"
+pytest tests/test_price_oracle.py tests/test_price_provenance.py tests/test_data_quality.py tests/test_check_price_drift.py -q
+```
+
+Compare `confirmed_pct`, `withheld_for_drift`, `never_priced`, and `stale_models` against the
+values before your change. A pricing change must never silently lower `confirmed_pct` or raise
+`withheld_for_drift`/`never_priced` — that is a regression to investigate, not a number to shrug
+off. See `/data-quality` and `get_data_quality` for what customers see; `check_price_drift` for
+per-model detail.
+
+### 8. Version accuracy check — MANDATORY before every commit
+
+```bash
+pytest tests/test_version_consistency.py -q
+```
+
+This must pass on every commit, not just ones that touch `src/__init__.py`. It catches a version
+bumped in one place (MCP `serverInfo`, a doc header, `settings.app_version`) but not another —
+exactly the class of bug that shipped for months before this guard existed. Do not skip it because
+"it's just a docs change" or "the version didn't move" — the guard is what proves that.
+
 ---
 
 ## Local Pre-commit Hooks (optional but recommended)
@@ -128,7 +160,7 @@ Config is in `.pre-commit-config.yaml` (gitleaks + branch guard + large-file che
 ## CI/CD Gates
 
 Every PR and `master` push runs **all five gates** before deploy:
-1. `test` — pytest (667+ tests)
+1. `test` — pytest (see README.md's "passing tests" line for the current count — do not hardcode a number here, it will just go stale again)
 2. `lint` — flake8
 3. `osv_scan` — dependency vulnerability scan
 4. `security` — bandit static analysis
