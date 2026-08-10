@@ -8,9 +8,12 @@ from src.services.pricing_aggregator import PricingAggregatorService
 class CheckPriceDriftTool:
     """Compare hand-maintained prices against the external registry.
 
-    Reports only — nothing is overwritten. A wrong price is worse than a missing
-    one because it looks authoritative, so this surfaces disagreements for a human
-    to adjudicate.
+    A drifted price is automatically withheld from serving as soon as
+    pricing_aggregator detects it (price_confirmed is set to False) — it never
+    waits on this tool to run. This reports which prices are currently withheld
+    and why. The price value itself is never overwritten by the registry; only
+    whether it gets served is affected. Correcting STATIC_PRICING to resolve the
+    drift is a human decision.
     """
 
     def __init__(self):
@@ -36,11 +39,16 @@ class CheckPriceDriftTool:
                     ),
                 }
 
-            models, _ = await self.service.get_all_pricing_async()
+            # include_unconfirmed=True so models the aggregator already withheld
+            # for drift stay visible here — they're exactly what this tool needs
+            # to report. They still hold their original curated price, so
+            # find_drift() can (and must) keep comparing them.
+            models, _ = await self.service.get_all_pricing_async(include_unconfirmed=True)
             if provider:
                 models = [m for m in models if provider.lower() in m.provider.lower()]
+            priced_models = [m for m in models if m.cost_per_input_token > 0]
 
-            findings = oracle.find_drift(models, threshold_pct=threshold)
+            findings = oracle.find_drift(priced_models, threshold_pct=threshold)
             shown = findings[:limit]
 
             overstated = [f for f in findings if f.direction == "overstated"]
@@ -49,7 +57,7 @@ class CheckPriceDriftTool:
             result: Dict[str, Any] = {
                 "success": True,
                 "threshold_pct": threshold,
-                "models_checked": len(models),
+                "models_checked": len(priced_models),
                 "registry_models": oracle.model_count,
                 "registry_source": oracle.source,
                 "registry_fetched": oracle.fetched_at,
@@ -71,12 +79,12 @@ class CheckPriceDriftTool:
             else:
                 worst = findings[0]
                 result["summary"] = (
-                    f"{len(findings)} of {len(models)} curated prices differ from the registry "
-                    f"by more than {threshold:.0f}% ({len(overstated)} overstated, "
-                    f"{len(understated)} understated). Largest: {worst.model_name} at "
-                    f"${worst.ours_per_1m:.2f}/1M versus ${worst.registry_per_1m:.2f}/1M "
-                    f"({worst.pct_difference:.0f}% {worst.direction}). "
-                    f"Nothing was changed — update STATIC_PRICING to correct these."
+                    f"{len(findings)} of {len(priced_models)} curated prices differ from the "
+                    f"registry by more than {threshold:.0f}% ({len(overstated)} overstated, "
+                    f"{len(understated)} understated) and have been withheld from serving. "
+                    f"Largest: {worst.model_name} at ${worst.ours_per_1m:.2f}/1M versus "
+                    f"${worst.registry_per_1m:.2f}/1M ({worst.pct_difference:.0f}% "
+                    f"{worst.direction}). Update STATIC_PRICING to correct and restore them."
                 )
 
             return result

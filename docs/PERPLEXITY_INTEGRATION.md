@@ -160,7 +160,7 @@ These tools are available inside Perplexity once connected. You can invoke them 
 | `compare_costs` | `model_names[]`, `input_tokens`, `output_tokens` | — | Side-by-side cost comparison |
 | `predict_cost` | `prompt` | `task_type`, `cache_hit_ratio`, `top_n`, `require_function_calling`, `require_vision`, `min_context_tokens` | Rank every model cheapest-first from raw prompt text — no token counts needed |
 | `optimize_workload` | `workloads[]` | `monthly_budget_usd`, `min_quality_score` | Assign the cheapest qualifying model per task across a workload mix; reports saving vs. one-model-for-everything |
-| `check_price_drift` | — | `threshold_pct`, `provider`, `limit` | Audit this server's own prices against an external registry; reports drift without changing anything |
+| `check_price_drift` | — | `threshold_pct`, `provider`, `limit` | Audit this server's own prices against an external registry; drifted prices are auto-withheld from serving, this reports which and why |
 | `get_ide_pricing` | — | `provider`, `max_monthly`, `inline_only` | Subscription pricing for AI coding IDE tools |
 | `get_performance_metrics` | — | `provider`, `include_cost` | Throughput, latency, context window, quality scores |
 | `get_use_cases` | — | `provider` | Model recommendations by use case |

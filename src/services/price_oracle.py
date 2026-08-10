@@ -14,9 +14,11 @@ This service reads a community-maintained, machine-readable price registry and:
 
 - **Fills gaps.** A model with no confirmed price gets one, marked with its source
   and fetch date. Strictly better than the 0.0 placeholder it replaces.
-- **Flags drift.** Where the registry disagrees with a curated price it reports the
-  difference but never overwrites. Curation stays authoritative; corrections are a
-  human decision.
+- **Flags drift and withholds it.** Where the registry disagrees with a curated
+  price by more than the threshold, that price stops being served the moment it's
+  detected — it no longer waits on a human to read a weekly report. The number
+  itself is never overwritten with the registry's; only whether it gets served is
+  affected. Correcting ``STATIC_PRICING`` stays a human decision.
 
 Availability
 ------------
@@ -315,13 +317,21 @@ class PriceOracle:
     def find_drift(
         self, models: List[Any], threshold_pct: float = DRIFT_THRESHOLD_PCT
     ) -> List[DriftFinding]:
-        """Report curated prices that disagree with the registry. Never mutates."""
+        """Report curated prices that disagree with the registry. Never mutates.
+
+        Skips models with no real price to compare (a 0.0 placeholder means
+        never-priced, not disputed) rather than skipping on ``price_confirmed``.
+        That distinction matters: a model ``demote_drifted()`` just withheld is
+        unconfirmed but still holds its original curated price, and must keep
+        showing up here — otherwise the audit would go silent on exactly the
+        models it most needs to flag.
+        """
         if not self.loaded:
             return []
 
         findings: List[DriftFinding] = []
         for m in models:
-            if not getattr(m, "price_confirmed", True):
+            if getattr(m, "cost_per_input_token", 0) <= 0:
                 continue
             # Skip anything already sourced from the registry — comparing it to
             # itself would report every filled model as drift-free noise.
@@ -354,6 +364,37 @@ class PriceOracle:
             ))
 
         findings.sort(key=lambda f: f.pct_difference, reverse=True)
+        return findings
+
+    # -- drift withholding ---------------------------------------------------
+
+    def demote_drifted(
+        self, models: List[Any], threshold_pct: float = DRIFT_THRESHOLD_PCT
+    ) -> List[DriftFinding]:
+        """Withhold curated prices that disagree with the registry from serving.
+
+        Sets ``price_confirmed = False`` on every drifted model so it stops
+        winning cost comparisons the instant drift is detected, rather than
+        waiting on a human to notice a weekly report. The disputed price value
+        itself is left untouched — this withholds a number we no longer trust,
+        it does not silently replace it with the registry's. Returns the same
+        findings ``find_drift()`` would, so callers can report what was
+        withheld and why.
+        """
+        findings = self.find_drift(models, threshold_pct=threshold_pct)
+        if not findings:
+            return findings
+
+        demoted = {(f.model_name, f.provider) for f in findings}
+        for m in models:
+            if (m.model_name, m.provider) in demoted:
+                m.price_confirmed = False
+
+        logger.warning(
+            "Price oracle withheld %d model(s) from serving due to drift >%.0f%%: %s",
+            len(demoted), threshold_pct,
+            ", ".join(f"{n}/{p}" for n, p in sorted(demoted)),
+        )
         return findings
 
 
