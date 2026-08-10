@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.56.2 | **Last updated**: 2026-08-10
+**Version**: v1.57.0 | **Last updated**: 2026-08-10
 
 ---
 
@@ -10,7 +10,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 26 
 
 - **Primary deployment**: Fly.io (`llm-pricing-api.fly.dev`) — shared-cpu-1x, 512 MB, ~$3.40/mo
 - **CI/CD**: GitHub Actions → test → lint → bandit → OSV scan → gitleaks → Fly.io deploy
-- **Weekly price audit**: scheduled workflow re-runs `check_price_drift` and refreshes the vendored registry snapshot, opening an issue/PR when either drifts
+- **Weekly price audit**: a drifted price is withheld from serving the moment it's detected (on every request, not just weekly); the scheduled workflow re-runs `check_price_drift` to report what's currently withheld and refreshes the vendored registry snapshot, opening an issue/PR when either drifts
 - **Snapshot self-validation**: `scripts/validate_price_snapshot.py` gates the refresh PR. GitHub does not run CI on `GITHUB_TOKEN`-created PRs, so the generating job verifies the data itself
 - **Clean cross-branch promotion**: `scripts/promote_branch_content.sh` mirrors one branch's tree onto another (additions, updates, AND deletions) to work around develop/master squash-merge divergence, verifying the result matches exactly before returning
 
@@ -90,7 +90,7 @@ llm-pricing-mcp-server/
 │       ├── router.py                # LLM routing recommendation engine
 │       ├── task_profiles.py         # 12 task I/O-ratio profiles + keyword task inference
 │       ├── portfolio_optimizer.py   # Per-task model allocation + savings vs single-model baseline
-│       ├── price_oracle.py          # External price registry: fills gaps, flags drift (24h TTL + snapshot)
+│       ├── price_oracle.py          # External price registry: fills gaps, withholds drifted prices (24h TTL + snapshot)
 │       ├── token_counter.py         # tiktoken token counting + prompt-cache savings math
 │       ├── ide_pricing.py           # Subscription pricing for AI coding IDE tools
 │       ├── savings_tracker.py       # Per-org router savings + acceptance_rate

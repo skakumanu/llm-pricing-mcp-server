@@ -2,9 +2,11 @@ name: Weekly price audit
 
 # Curated prices in STATIC_PRICING are hand-maintained and drift silently. A
 # one-off audit found 12 wrong prices, several off by 3-16x, which had been
-# serving live for months. This job re-runs that audit on a schedule and opens
-# an issue when drift reappears, so the next round is caught in a week rather
-# than whenever someone happens to look.
+# serving live for months. Drift is now withheld from serving the moment it's
+# detected on every request (see price_oracle.demote_drifted), not just when
+# this job happens to run — this job's remaining purpose is to surface what's
+# currently withheld so a human fixes STATIC_PRICING, rather than letting a
+# withheld model quietly stay unpriced indefinitely.
 #
 # It also refreshes the vendored registry snapshot, which is the offline
 # fallback and goes stale the same way.
@@ -86,7 +88,7 @@ jobs:
           EXISTING=$(gh issue list --state open --label price-drift \
             --json number --jq '.[0].number' || true)
 
-          BODY=$(printf 'The weekly audit found curated prices that disagree with the reference registry.\n\nA wrong price is worse than a missing one — these feed `estimate_cost`, `compare_costs`, `predict_cost`, `optimize_workload`, and the router.\n\n%s\n\n---\nRun `check_price_drift` locally to reproduce. Nothing was changed automatically.' "$(tail -n +2 audit.txt)")
+          BODY=$(printf 'The weekly audit found curated prices that disagree with the reference registry.\n\nThese are already withheld from serving automatically (price_confirmed set to False the moment drift was detected) — they will not reach `estimate_cost`, `compare_costs`, `predict_cost`, `optimize_workload`, or the router until fixed.\n\n%s\n\n---\nRun `check_price_drift` locally to see current findings. Fix STATIC_PRICING to correct and restore these models.' "$(tail -n +2 audit.txt)")
 
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --body "$BODY"

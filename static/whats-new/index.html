@@ -142,8 +142,26 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.56.1 -->
+  <!-- v1.57.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.57.0</span>
+      <span class="release-date">Aug 10, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Drifted prices are now withheld from serving automatically</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li>A curated price that disagrees with the reference registry by more than 5% is now excluded from cost comparisons the moment it's detected — on every request, not just when the weekly audit happens to run. The price value itself is never overwritten by the registry; it's withheld, not silently replaced, until <code>STATIC_PRICING</code> is corrected.</li>
+        <li><code>check_price_drift</code> now reports what's currently withheld and why, instead of reporting drift that's still quietly being served</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.56.1 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.56.1</span>
