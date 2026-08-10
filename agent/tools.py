@@ -74,7 +74,17 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
             (
                 "Audit this server's own pricing data against an external reference "
                 "registry and report models whose price has drifted. Use when the user "
-                "asks whether the pricing data is accurate, current, or trustworthy."
+                "asks whether a specific model's or provider's price is accurate, current, "
+                "or trustworthy."
+            ),
+        ),
+        (
+            "get_data_quality",
+            (
+                "Get an aggregate accuracy summary for the whole pricing catalogue: percent "
+                "confirmed and fresh, how many models are withheld for price drift, how many "
+                "are newly discovered and unpriced, how many are stale. Use when the user asks "
+                "how accurate or trustworthy the data is overall, rather than about one model."
             ),
         ),
         (

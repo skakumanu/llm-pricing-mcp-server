@@ -142,8 +142,30 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.57.0 -->
+  <!-- v1.58.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.58.0</span>
+      <span class="release-date">Aug 10, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">New: <code>get_data_quality</code> — one call for the whole catalogue's trust status</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li>New <code>GET /data-quality</code> endpoint and matching MCP tool report an aggregate accuracy summary: what percentage of models have a confirmed, fresh price, how many are currently withheld due to price drift, how many are newly discovered and not yet priced, and how many confirmed prices are over 90 days old</li>
+        <li>Distinct from <code>check_price_drift</code>, which lists individual disputes — this is a single trust signal a customer can check without inspecting every model's provenance fields themselves</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">MCP tools <strong>19 → 20</strong></div>
+        <div class="stat-chip">Tests <strong>902</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.57.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.57.0</span>

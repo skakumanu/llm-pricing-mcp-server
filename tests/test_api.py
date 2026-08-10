@@ -42,6 +42,29 @@ def test_pricing_endpoint_with_provider_filter():
     assert all(model["provider"] == "Anthropic" for model in data["models"])
 
 
+def test_data_quality_endpoint():
+    """Test the data-quality endpoint returns an aggregate accuracy summary."""
+    response = client.get("/data-quality")
+    assert response.status_code == 200
+    data = response.json()
+
+    for field in (
+        "total_models", "confirmed_models", "confirmed_pct",
+        "withheld_for_drift", "never_priced", "stale_models", "stale_pct",
+        "registry_source", "registry_models", "registry_fetched", "summary",
+    ):
+        assert field in data, f"missing field: {field}"
+    assert data["total_models"] > 0
+    assert 0 <= data["confirmed_pct"] <= 100
+    assert isinstance(data["summary"], str) and data["summary"]
+
+
+def test_data_quality_endpoint_is_public():
+    """No auth header required — it's a public trust signal, like /pricing."""
+    response = client.get("/data-quality")
+    assert response.status_code == 200
+
+
 def test_pricing_model_structure():
     """Test that pricing models have the required fields."""
     response = client.get("/pricing")
