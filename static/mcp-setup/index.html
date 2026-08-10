@@ -484,7 +484,7 @@ pip install -r requirements.txt</div>
       </div>
       <div class="tool-card">
         <div class="tool-name">check_price_drift</div>
-        <div class="tool-desc">Audit our own pricing against an external reference registry and report models whose price has drifted. Reports only — nothing is overwritten.</div>
+        <div class="tool-desc">Audit our own pricing against an external reference registry. A drifted price is automatically withheld from serving the moment it's detected — this reports which models and why. The price value itself is never overwritten.</div>
         <div class="tool-args"><span>threshold_pct</span><span>provider</span><span>limit</span></div>
       </div>
       <div class="tool-card">

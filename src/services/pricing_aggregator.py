@@ -153,12 +153,15 @@ class PricingAggregatorService:
 
         # Give unpriced models a real rate from the reference registry before
         # gating. A model that gets filled here becomes usable for costing instead
-        # of being dropped. Curated prices are never overwritten — drift against
-        # them is reported separately via check_price_drift.
+        # of being dropped. Curated prices are never overwritten, but one that
+        # drifts from the registry beyond the threshold is withheld (price_confirmed
+        # set to False) until a human corrects STATIC_PRICING — see check_price_drift
+        # for what's currently withheld and why.
         try:
             oracle = get_price_oracle()
             await oracle.load()
             oracle.fill_missing_prices(all_pricing)
+            oracle.demote_drifted(all_pricing)
         except Exception as e:  # never let the oracle break pricing
             logger.warning("Price oracle unavailable, serving curated prices only: %s", e)
 

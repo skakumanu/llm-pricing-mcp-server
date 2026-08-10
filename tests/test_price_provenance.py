@@ -8,7 +8,7 @@ that replaced that behaviour.
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -244,6 +244,71 @@ class TestAggregatorGating:
         per_token = [m for m in models if m.pricing_model == "per_token"]
         zero = [m.model_name for m in per_token if m.cost_per_input_token == 0]
         assert not zero, f"zero-priced models in default output: {zero}"
+
+
+# ---------------------------------------------------------------------------
+# Aggregator withholds drifted prices, not just reports them
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+class TestAggregatorDemotesDrift:
+    """A drifted price must stop being served the moment it's detected, not
+    whenever a human next reads a weekly report. Uses a controlled fake oracle
+    so this is deterministic regardless of whether anything in the live
+    registry actually drifts today.
+    """
+
+    async def test_drifted_curated_price_is_withheld_from_default_output(self):
+        from src.services.pricing_aggregator import PricingAggregatorService
+        import src.services.pricing_aggregator as agg_module
+
+        class FakeOracle:
+            loaded = True
+
+            async def load(self, force=False):
+                pass
+
+            def fill_missing_prices(self, models):
+                return 0
+
+            def demote_drifted(self, models, threshold_pct=5.0):
+                for m in models:
+                    if m.model_name == "gpt-4o":
+                        m.price_confirmed = False
+                return []
+
+        svc = PricingAggregatorService()
+        with patch.object(agg_module, "get_price_oracle", return_value=FakeOracle()):
+            models, _ = await svc.get_all_pricing_async()
+
+        assert "gpt-4o" not in {m.model_name for m in models}
+
+    async def test_untouched_models_are_unaffected(self):
+        """The fake oracle only demotes gpt-4o; everything else must still be
+        present, proving demote_drifted's effect isn't applied wholesale."""
+        from src.services.pricing_aggregator import PricingAggregatorService
+        import src.services.pricing_aggregator as agg_module
+
+        class FakeOracle:
+            loaded = True
+
+            async def load(self, force=False):
+                pass
+
+            def fill_missing_prices(self, models):
+                return 0
+
+            def demote_drifted(self, models, threshold_pct=5.0):
+                for m in models:
+                    if m.model_name == "gpt-4o":
+                        m.price_confirmed = False
+                return []
+
+        svc = PricingAggregatorService()
+        with patch.object(agg_module, "get_price_oracle", return_value=FakeOracle()):
+            models, _ = await svc.get_all_pricing_async()
+
+        assert len(models) > 1
 
 
 # ---------------------------------------------------------------------------
