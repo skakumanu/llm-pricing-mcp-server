@@ -86,6 +86,11 @@
     .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
     .copy-btn.copied { border-color: var(--success); color: var(--success); }
 
+    /* One-click install */
+    .install-btn { display: inline-flex; align-items: center; gap: .45rem; background: var(--accent); border: 1px solid var(--accent); color: #fff; font-size: .85rem; font-weight: 700; padding: .55rem 1.1rem; border-radius: 8px; text-decoration: none; transition: filter .15s; }
+    .install-btn:hover { filter: brightness(1.1); }
+    .install-hint { color: var(--muted); font-size: .78rem; margin-top: .4rem; }
+
     /* Callout */
     .callout { background: rgba(78,205,196,.07); border: 1px solid rgba(78,205,196,.25); border-radius: var(--radius); padding: .75rem 1rem; font-size: .85rem; color: var(--accent2); margin-bottom: 1rem; }
     .callout strong { color: var(--accent2); }
@@ -272,12 +277,20 @@ pip install -r requirements.txt</div>
         <div class="step">
           <div class="step-num">1</div>
           <div class="step-body">
+            <h4>One-click install</h4>
+            <a class="install-btn" id="install-vscode" href="#">Add to VS Code</a>
+            <div class="install-hint">Opens VS Code directly. If nothing happens, your setup doesn't support MCP deep links yet — use the JSON below instead.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
             <h4>Open your MCP config</h4>
             <p>In Cline: Settings (⚙) → MCP Servers → Edit JSON. For <code>.vscode/mcp.json</code> in your workspace, create the file if it doesn't exist.</p>
           </div>
         </div>
         <div class="step">
-          <div class="step-num">2</div>
+          <div class="step-num">3</div>
           <div class="step-body">
             <h4>Add the server</h4>
             <div class="code-block solo" id="code-vscode">{
@@ -291,7 +304,7 @@ pip install -r requirements.txt</div>
           </div>
         </div>
         <div class="step">
-          <div class="step-num">3</div>
+          <div class="step-num">4</div>
           <div class="step-body">
             <h4>Reload the extension</h4>
             <p>Open the command palette (<kbd>Ctrl+Shift+P</kbd>) → <em>Cline: Reload MCP Servers</em>. Tools will appear in the agent panel.</p>
@@ -306,6 +319,14 @@ pip install -r requirements.txt</div>
         <div class="step">
           <div class="step-num">1</div>
           <div class="step-body">
+            <h4>One-click install</h4>
+            <a class="install-btn" id="install-cursor" href="#">Add to Cursor</a>
+            <div class="install-hint">Opens Cursor directly. If nothing happens, your Cursor version may not support MCP deep links yet — use the JSON below instead.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
             <h4>Open Cursor MCP config</h4>
             <div class="config-path">
               <span><strong>Windows:</strong> %USERPROFILE%\.cursor\mcp.json</span>
@@ -314,7 +335,7 @@ pip install -r requirements.txt</div>
           </div>
         </div>
         <div class="step">
-          <div class="step-num">2</div>
+          <div class="step-num">3</div>
           <div class="step-body">
             <h4>Add the server</h4>
             <div class="code-block solo" id="code-cursor">{
@@ -328,7 +349,7 @@ pip install -r requirements.txt</div>
           </div>
         </div>
         <div class="step">
-          <div class="step-num">3</div>
+          <div class="step-num">4</div>
           <div class="step-body">
             <h4>Restart Cursor</h4>
             <p>Go to <em>Settings → Features → MCP</em> to confirm the server shows as connected.</p>
@@ -585,6 +606,25 @@ function testConnection() {
     pill.textContent = '⬤ Cannot reach server';
   });
 }
+
+// One-click install deep links. Best-effort: these URI schemes are set by
+// Cursor/VS Code, not us, and may change or not be supported by every
+// version — that's why every install button sits next to the plain JSON
+// config as a guaranteed-to-work fallback.
+(function(){
+  var MCP_URL = 'https://llm-pricing-api.fly.dev/mcp';
+
+  var cursorConfig = JSON.stringify({ url: MCP_URL });
+  var cursorLink = 'cursor://anysphere.cursor-deeplink/mcp/install?name=llm-pricing&config='
+    + encodeURIComponent(btoa(cursorConfig));
+  var cursorBtn = document.getElementById('install-cursor');
+  if (cursorBtn) cursorBtn.href = cursorLink;
+
+  var vscodeConfig = JSON.stringify({ name: 'llm-pricing', type: 'http', url: MCP_URL });
+  var vscodeLink = 'vscode:mcp/install?' + encodeURIComponent(vscodeConfig);
+  var vscodeBtn = document.getElementById('install-vscode');
+  if (vscodeBtn) vscodeBtn.href = vscodeLink;
+})();
 
 // Auto-test on load
 testConnection();

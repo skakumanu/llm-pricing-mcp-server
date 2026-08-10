@@ -155,6 +155,10 @@ pytest tests/test_mcp_http.py -v  # 12 tests covering all methods and error case
 
 ---
 
+## One-Click Install
+
+The [`/mcp-setup`](../static/mcp-setup/index.html) page has "Add to Cursor" / "Add to VS Code" buttons that open the client directly via its MCP deep-link scheme (`cursor://anysphere.cursor-deeplink/mcp/install`, `vscode:mcp/install`), pre-filled with the remote HTTP config below. These are best-effort — deep-link support varies by client version — so every button sits next to the plain JSON as a fallback that always works. Claude Desktop has no public deep-link scheme, so it uses the JSON config below.
+
 ## Claude Desktop Config
 
 ### Remote (no install)
