@@ -19,6 +19,7 @@ from mcp.tools.get_ide_pricing import GetIDEPricingTool
 from mcp.tools.predict_cost import PredictCostTool
 from mcp.tools.optimize_workload import OptimizeWorkloadTool
 from mcp.tools.check_price_drift import CheckPriceDriftTool
+from mcp.tools.get_data_quality import GetDataQualityTool
 
 
 class ToolManager:
@@ -573,11 +574,13 @@ class ToolManager:
                 "name": "check_price_drift",
                 "description": (
                     "Audit this server's own pricing data against an external reference "
-                    "registry and report models whose price has drifted. Prices here are "
-                    "hand-maintained and go stale silently; this surfaces the disagreements "
-                    "so they can be corrected. Reports only — no price is changed. Use when "
-                    "the user asks whether the pricing data is accurate or up to date, or "
-                    "wants to audit a specific provider's rates."
+                    "registry. Prices here are hand-maintained and go stale silently; a price "
+                    "that disagrees with the registry by more than the threshold is "
+                    "automatically withheld from serving the moment it's detected, not just "
+                    "when this tool runs. This reports what's currently withheld and why. The "
+                    "price value itself is never overwritten by the registry. Use when the "
+                    "user asks whether the pricing data is accurate or up to date, or wants to "
+                    "audit a specific provider's rates."
                 ),
                 "input_schema": {
                     "type": "object",
@@ -600,6 +603,24 @@ class ToolManager:
                             "maximum": 200,
                         },
                     },
+                    "required": [],
+                },
+            },
+            "get_data_quality": {
+                "instance": GetDataQualityTool(),
+                "name": "get_data_quality",
+                "description": (
+                    "Report an aggregate accuracy summary for the pricing catalogue: what "
+                    "percentage of models have a confirmed, fresh price, how many are "
+                    "currently withheld due to price drift, how many are newly discovered "
+                    "and not yet priced, and how many confirmed prices are over 90 days old. "
+                    "A single trust signal, distinct from check_price_drift which lists "
+                    "individual disputes. Use when the user asks how accurate or trustworthy "
+                    "the pricing data is, overall."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
                     "required": [],
                 },
             },

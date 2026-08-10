@@ -55,6 +55,8 @@ from src.models.deployment import (  # noqa: E402
 )
 from pydantic import BaseModel, Field  # noqa: E402
 from src.services.pricing_aggregator import PricingAggregatorService  # noqa: E402
+from src.services.price_oracle import get_price_oracle  # noqa: E402
+from src.services.data_quality import compute_data_quality_report  # noqa: E402
 from src.services.telemetry import get_telemetry_service  # noqa: E402
 from src.services.deployment import get_deployment_manager  # noqa: E402
 from src.services.geolocation import GeolocationService  # noqa: E402
@@ -318,6 +320,7 @@ _unauthenticated_paths = {
     "/pricing/history",
     "/pricing/trends",
     "/pricing/public",
+    "/data-quality",
     "/models",
     "/providers",
     "/agent/conversations",
@@ -1051,6 +1054,30 @@ async def get_pricing(
         total_models=len(models),
         provider_status=provider_status
     )
+
+
+@app.get("/data-quality", tags=["Pricing"])
+async def get_data_quality():
+    """
+    Get an aggregate accuracy summary for the pricing catalogue.
+
+    Reports what percentage of models have a confirmed, fresh price, how many
+    are currently withheld from serving due to price drift against the
+    reference registry, how many are newly discovered and not yet priced, and
+    how many confirmed prices are over 90 days old. A single trust signal for
+    the whole catalogue — see `/pricing`'s `price_confirmed`/`price_as_of`
+    fields or the `check_price_drift` MCP tool for per-model detail.
+
+    Returns:
+        dict: Aggregate data-quality report
+    """
+    aggregator = await get_pricing_aggregator()
+    oracle = get_price_oracle()
+    await oracle.load()
+
+    models, _ = await aggregator.get_all_pricing_async(include_unconfirmed=True)
+    report = compute_data_quality_report(models, oracle)
+    return report.as_dict()
 
 
 @app.get("/health", tags=["Health"])
