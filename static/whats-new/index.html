@@ -142,8 +142,26 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.56.0 -->
+  <!-- v1.56.1 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.56.1</span>
+      <span class="release-date">Aug 10, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Correct GitHub Copilot's MCP config on the setup page</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li>The VS Code tab's instructions were written for Cline's settings UI, but the page claimed to also cover GitHub Copilot — Copilot uses a different, native config (a <code>servers</code> key with an explicit <code>type</code>, not <code>mcpServers</code>). The tab now has separate steps for each.</li>
+        <li>Added the missing steps specific to Copilot: opening <code>.vscode/mcp.json</code> or the user MCP config via the Command Palette, and enabling the tools in Copilot Chat's Agent mode.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.56.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.56.0</span>
