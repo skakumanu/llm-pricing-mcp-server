@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.55.3 | **Last updated**: 2026-07-28
+**Version**: v1.55.5 | **Last updated**: 2026-07-28
 
 ---
 
@@ -12,6 +12,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 26 
 - **CI/CD**: GitHub Actions → test → lint → bandit → OSV scan → gitleaks → Fly.io deploy
 - **Weekly price audit**: scheduled workflow re-runs `check_price_drift` and refreshes the vendored registry snapshot, opening an issue/PR when either drifts
 - **Snapshot self-validation**: `scripts/validate_price_snapshot.py` gates the refresh PR. GitHub does not run CI on `GITHUB_TOKEN`-created PRs, so the generating job verifies the data itself
+- **Clean cross-branch promotion**: `scripts/promote_branch_content.sh` mirrors one branch's tree onto another (additions, updates, AND deletions) to work around develop/master squash-merge divergence, verifying the result matches exactly before returning
 
 ---
 
@@ -137,7 +138,6 @@ llm-pricing-mcp-server/
 │
 ├── mcp/
 │   ├── server.py                    # MCP STDIO transport (Claude Desktop)
-│   ├── server_azure.py              # MCP HTTP transport variant
 │   ├── tools/                       # Per-tool MCP handler modules
 │   ├── schemas/                     # MCP JSON-RPC schema definitions
 │   └── utils/                       # Session management, helpers
