@@ -1,8 +1,8 @@
 # VS Code Integration Guide
 
-> **Version**: 1.0  
+> **Version**: 1.1  
 > **Target**: Developers & MCP Client Users  
-> **Updated**: February 20, 2026
+> **Updated**: August 10, 2026
 
 ## Overview
 
@@ -63,8 +63,8 @@ Press `Ctrl+Shift+P` → **"Tasks: Run Task"** → Choose:
 #### Method 2: Using Terminal
 
 ```bash
-# STDIO mode (for MCP clients like Claude Desktop)
-python src/main.py
+# STDIO mode (for MCP clients like Claude Desktop, Cline, Continue)
+python mcp/server.py
 
 # REST API mode
 python -m uvicorn src.main:app --reload --port 8000
@@ -96,7 +96,7 @@ VS Code provides 8 debug configurations accessible via **Run and Debug** panel (
 
 Press `Ctrl+Shift+P` → **"Tasks: Run Task"**:
 
-- **Run All Tests** - Execute full test suite (159 tests)
+- **Run All Tests** - Execute the full test suite
 - **Run Tests with Coverage** - Generate coverage report
 - **Quick Validate MCP Server** - Fast pre-deployment validation
 - **Validate MCP Client** - Comprehensive 16-scenario validation
@@ -166,92 +166,113 @@ The workspace includes optimized settings in `.vscode/settings.json`:
 
 ## MCP Client Usage in VS Code
 
-### Option 1: Using Claude Desktop (Recommended)
+### Option 1: Remote HTTP (Recommended, No Install)
 
-Claude Desktop is the primary MCP client. Configure it to use your local MCP server:
+Every MCP-capable client — Copilot, Cline, Continue, Claude Desktop — can point directly at the hosted server instead of running a local process:
 
-1. **Configure Claude Desktop**
-   
-   Edit Claude config file:
-   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+```json
+{
+  "mcpServers": {
+    "llm-pricing": {
+      "url": "https://llm-pricing-api.fly.dev/mcp"
+    }
+  }
+}
+```
 
-2. **Add MCP Server Configuration**
+Where this JSON goes depends on your client — see Options 2 and 3 below. This is the config used across the [`/mcp-setup`](../static/mcp-setup/index.html) page and the project README; local STDIO (Options 4–5) is only needed for offline use or when developing the server itself.
+
+### Option 2: GitHub Copilot (Agent Mode)
+
+Copilot's built-in MCP support uses its own config shape — a `servers` key with an explicit `type`, not `mcpServers`:
+
+1. Command Palette (`Ctrl+Shift+P`) → **MCP: Open User Configuration** (all workspaces), or create `.vscode/mcp.json` in this workspace for a project-only server.
+2. Add:
    ```json
    {
-     "mcpServers": {
+     "servers": {
        "llm-pricing": {
-         "command": "C:\\Users\\YourUsername\\...\\llm-pricing-mcp-server\\.venv\\Scripts\\python.exe",
-         "args": ["C:\\Users\\YourUsername\\...\\llm-pricing-mcp-server\\src\\main.py"],
-         "env": {
-           "PYTHONPATH": "C:\\Users\\YourUsername\\...\\llm-pricing-mcp-server"
-         }
+         "type": "http",
+         "url": "https://llm-pricing-api.fly.dev/mcp"
        }
      }
    }
    ```
-   
-   Replace `YourUsername` and paths with your actual paths.
+3. Open the Copilot Chat panel, switch to **Agent** mode, click the tools icon, and enable **llm-pricing**.
 
-3. **Restart Claude Desktop**
+### Option 3: Cline & Continue
 
-4. **Test in Claude**
-   - Start a conversation
-   - Ask: "What are the pricing details for GPT-4?"
-   - Claude will use the MCP tools to fetch live pricing data
+1. In Cline: Settings (⚙) → MCP Servers → Edit JSON. In Continue: open the `mcpServers` section of its settings.
+2. Add the `mcpServers`-shaped config from Option 1 above.
+3. Command Palette → **Cline: Reload MCP Servers** (or restart VS Code for Continue).
 
-**See also**: [MCP_CLAUDE_INTEGRATION.md](MCP_CLAUDE_INTEGRATION.md) for detailed Claude setup.
+### Option 4: Claude Desktop
 
-### Option 2: VS Code Terminal (Development/Testing)
+Claude Desktop reads a separate config file, not a VS Code setting:
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
-Run the MCP server directly in VS Code terminal for testing:
+Use the Option 1 JSON for the hosted server (no install), or for local STDIO:
+```json
+{
+  "mcpServers": {
+    "llm-pricing": {
+      "command": "C:\\Users\\YourUsername\\...\\llm-pricing-mcp-server\\.venv\\Scripts\\python.exe",
+      "args": ["C:\\Users\\YourUsername\\...\\llm-pricing-mcp-server\\mcp\\server.py"],
+      "env": { "PYTHONUNBUFFERED": "1" }
+    }
+  }
+}
+```
+Replace `YourUsername` and paths with your actual paths, then restart Claude Desktop.
+
+**See also**: [MCP_QUICK_START.md](MCP_QUICK_START.md) for the full client-setup reference.
+
+### Option 5: VS Code Terminal (Manual JSON-RPC, Development/Testing)
+
+Run the MCP server directly in the VS Code terminal to send raw JSON-RPC requests:
 
 ```bash
-# Start server
-python src/main.py
-
+python mcp/server.py
 # Server listens on STDIN/STDOUT for JSON-RPC 2.0 messages
-# You can manually send requests (advanced users only)
 ```
 
-Example JSON-RPC request:
+Example request:
 ```json
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}
 ```
 
-### Option 3: REST API Testing
+### Option 6: REST API Testing
 
-VS Code includes REST client extensions for testing the FastAPI endpoints:
+The REST API is separate from the MCP tools — same underlying pricing data, plain HTTP instead of JSON-RPC. VS Code's REST client extensions (Thunder Client, REST Client) work well here:
 
-1. **Install Thunder Client or REST Client extension** (already recommended)
-
-2. **Create test file** (e.g., `api-tests.http`):
+1. **Create a test file** (e.g., `api-tests.http`):
    ```http
    ### Get all pricing data
-   GET http://localhost:8000/api/pricing
-   
-   ### Estimate cost
-   POST http://localhost:8000/api/estimate-cost
+   GET http://localhost:8000/pricing
+
+   ### Estimate cost for one model
+   POST http://localhost:8000/cost-estimate
    Content-Type: application/json
-   
+
    {
-     "model": "gpt-4",
+     "model_name": "gpt-4o",
      "input_tokens": 1000,
      "output_tokens": 500
    }
-   
-   ### Compare costs
-   POST http://localhost:8000/api/compare-costs
+
+   ### Compare costs across models
+   POST http://localhost:8000/cost-estimate/batch
    Content-Type: application/json
-   
+
    {
-     "models": ["gpt-4", "claude-3-opus", "gemini-pro"],
+     "model_names": ["gpt-4o", "claude-sonnet-4-6", "gemini-2.5-pro"],
      "input_tokens": 1000,
      "output_tokens": 500
    }
    ```
 
-3. **Run requests** by clicking **"Send Request"** above each section
+2. **Run requests** by clicking **"Send Request"** above each section
 
 ## Common Tasks
 
@@ -499,4 +520,5 @@ This guide complements other MCP documentation:
 ---
 
 **Version History**
+- v1.1 (2026-08-10): Fixed the MCP stdio entrypoint (was `src/main.py`, actually `mcp/server.py`); added GitHub Copilot and Cline/Continue MCP setup, previously missing despite the guide's title; corrected REST API example paths and request bodies to match the live endpoints
 - v1.0 (2026-02-20): Initial VS Code integration guide
