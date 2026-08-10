@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.55.6 | **Last updated**: 2026-08-10
+**Version**: v1.56.0 | **Last updated**: 2026-08-10
 
 ---
 
