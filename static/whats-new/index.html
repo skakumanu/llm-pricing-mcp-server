@@ -142,8 +142,210 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.48.0 -->
+  <!-- v1.55.2 - v1.55.5 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.55.2 – v1.55.5</span>
+      <span class="release-date">Aug 9, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Weekly audit pipeline hardened; deletion-safe promotion tooling</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li><strong>Price-drift audit</strong> — the weekly job now provisions its own <code>price-drift</code> label instead of failing outright when it's missing</li>
+        <li><strong>Snapshot refresh</strong> — validates schema, price sanity, and movement limits (&gt;10% removed or &gt;25% repriced rejected as a bad fetch) before opening a PR; bot-created PRs get zero CI from GitHub, so this is the only check they get</li>
+        <li><strong>Dead code removed</strong> — <code>mcp/server_azure.py</code> (non-functional since v1.21.0; it imported a module that was never committed) is gone, and the version-literal guard now scans every file under <code>mcp/</code> and <code>src/</code> instead of a hand-maintained list</li>
+        <li><strong>Promotion tooling</strong> — a <code>git read-tree</code>–based script replaces the manual promotion recipe that could silently resurrect a deleted file, covered by 12 tests against isolated repos</li>
+        <li>Doc guard now also catches "N of the M MCP tools" phrasing drifting independently of the plain tool count</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">Tests <strong>876</strong></div>
+        <div class="stat-chip">Providers <strong>26</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.55.0 - v1.55.1 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.55.0 – v1.55.1</span>
+      <span class="release-date">Jul 28, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Model catalogue completed — GPT-5, Gemini 3.x, Grok 4, DeepSeek V3</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong>14 current-generation models</strong> — GPT-5 family, Gemini 3.x, Grok 4, Mistral Medium 3, DeepSeek V3. None shipped with a hand-typed price: each lands unpriced and is filled in automatically by the price oracle, matched to its own provider</li>
+        <li><strong>Weekly price-drift audit</strong> — a scheduled workflow re-runs drift detection and refreshes the vendored price snapshot every Monday, opening an issue or PR when either moves</li>
+      </ul>
+      <div class="section-label" style="margin-top:16px;">Fixed</div>
+      <ul class="change-list">
+        <li>20 provider files on the async path (and 4 more on the sync path) were silently dropping <code>price_confirmed</code>, returning $0.00 marked as confirmed rather than unpriced</li>
+        <li><strong>Provider layer consolidated</strong> — 51 hand-written <code>PricingMetrics</code> construction sites reduced to 18 behind one shared builder, 611 fewer lines; verified byte-identical output against a 228-record snapshot taken before the refactor</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">Models <strong>150+ → 164+</strong></div>
+        <div class="stat-chip">Tests <strong>876</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.54.1 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.54.1</span>
+      <span class="release-date">Jul 28, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">12 drifted prices corrected across 9 providers</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li><strong>mistral-small-latest</strong> $1.00 → $0.06 per 1M tokens, <strong>o3</strong> $10.00 → $2.00, <strong>claude-opus-4-6</strong> $15.00 → $5.00 — the three largest of 12 total corrections</li>
+        <li><strong>Provider-aware matching</strong> — 9 of the original 20 flagged drifts had matched a different vendor's registry entry entirely; applying them would have replaced correct prices with wrong ones. Matching is now scoped to the model's actual provider</li>
+        <li><code>check_price_drift</code> now reports zero against the corrected catalogue</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">Drift findings <strong>20 → 0</strong></div>
+        <div class="stat-chip">Prices corrected <strong>12</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.54.0 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.54.0</span>
+      <span class="release-date">Jul 28, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">External price oracle — LiteLLM registry as fallback and drift check</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li>Unpriced models are automatically filled from LiteLLM's public pricing registry (~2,984 models, MIT licensed), matched by provider so the same model hosted by a different vendor never gets the wrong price</li>
+        <li>A vendored snapshot (<code>data/model_prices_snapshot.json</code>) keeps this working offline or if the upstream registry is unreachable</li>
+        <li>New <code>check_price_drift</code> MCP tool flags curated prices that have drifted more than 5% from the registry — for human review, never auto-applied</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.53.0 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.53.0</span>
+      <span class="release-date">Jul 28, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Price provenance — every price now knows its own age</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><code>price_as_of</code> and <code>price_confirmed</code> on every model; a computed <code>price_is_stale</code> flag trips at 90 days old or if a price was never dated</li>
+        <li><strong>Additive model discovery</strong> — newly-seen models are added as unpriced placeholders instead of being silently skipped until someone hand-types a price</li>
+        <li>An unconfirmed price can never win a cost comparison — it's gated out of recommendations until priced and confirmed</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.52.0 - v1.52.1 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.52.0 – v1.52.1</span>
+      <span class="release-date">Jul 28, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">optimize_workload — portfolio-level cost allocation; version desync fixed</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li>New <code>optimize_workload</code> MCP tool — allocates each task in a workload mix to its cheapest qualifying model, then spends any remaining budget upgrading the highest quality-per-dollar allocations first</li>
+        <li>Savings are measured against a realistic baseline — the cheapest single model capable of serving <em>every</em> workload alone — not against the most expensive option</li>
+      </ul>
+      <div class="section-label" style="margin-top:16px;">Fixed</div>
+      <ul class="change-list">
+        <li>The version reported by MCP clients, the HTTP API, and every doc page now derives from a single source (<code>src/__init__.py</code>). Clients were previously being told <code>1.1.0</code> in <code>serverInfo</code> while the app itself was several minor versions ahead</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.51.0 - v1.51.1 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.51.0 – v1.51.1</span>
+      <span class="release-date">Jul 27, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">predict_cost — cost prediction straight from a raw prompt</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li>New <code>predict_cost</code> MCP tool — counts tokens with <code>tiktoken</code>, infers the task type, estimates output length from empirical input/output ratios, and ranks every model cheapest-first with cache savings and a best-value pick</li>
+        <li>12 built-in task profiles (chat, summarization, code generation, and more) with keyword-based auto-inference when the task type isn't given</li>
+      </ul>
+      <div class="section-label" style="margin-top:16px;">Fixed</div>
+      <ul class="change-list">
+        <li><code>predict_cost</code> and <code>get_ide_pricing</code> were registered as MCP tools but unreachable from <code>/chat</code> and <code>ask_agent</code> — both are now wired into the ReAct agent (15 → 17 agent-bound tools)</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">Tests <strong>667 → 716</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.50.0 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.50.0</span>
+      <span class="release-date">Jun 20, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Salesforce AI lineup refreshed to current models</div>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li>Replaced stale Einstein LLM placeholders with Agentforce, Einstein Copilot, and xLAM-2-70b/8b</li>
+        <li>Updated open-source research model entries and added clear per-conversation vs. per-token billing-model notes</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.49.0 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.49.0</span>
+      <span class="release-date">Jun 20, 2026</span>
+      <span class="release-tag tag-perf">Perf</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Scalability: WAL mode, more workers, response caching</div>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li>SQLite WAL mode + busy-timeout on both databases — fewer "database is locked" errors under concurrent access</li>
+        <li>2 uvicorn workers in production (Fly.io, 512MB) for roughly double the request concurrency</li>
+        <li><code>Cache-Control: public, max-age=300</code> on <code>GET /pricing</code> so repeated reads don't all hit the database</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">Workers <strong>1 → 2</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.48.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.48.0</span>
