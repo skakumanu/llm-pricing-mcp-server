@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.57.0 | **Last updated**: 2026-08-10
+**Version**: v1.58.0 | **Last updated**: 2026-08-10
 
 ---
 
@@ -27,7 +27,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 26 
 ┌─────────────────────────────────▼───────────────────────────────────────────┐
 │  Presentation Layer (src/main.py + mcp/)                                    │
 │                                                                             │
-│  REST API              MCP (19 tools)          Browser UIs (13 pages)       │
+│  REST API              MCP (20 tools)          Browser UIs (13 pages)       │
 │  /pricing              STDIO transport          /  /chat  /calculator        │
 │  /router/recommend     HTTP POST /mcp           /compare  /history           │
 │  /billing/*            JSON-RPC 2.0             /trends   /widget            │
@@ -91,6 +91,7 @@ llm-pricing-mcp-server/
 │       ├── task_profiles.py         # 12 task I/O-ratio profiles + keyword task inference
 │       ├── portfolio_optimizer.py   # Per-task model allocation + savings vs single-model baseline
 │       ├── price_oracle.py          # External price registry: fills gaps, withholds drifted prices (24h TTL + snapshot)
+│       ├── data_quality.py          # Aggregate accuracy summary shared by /data-quality and get_data_quality
 │       ├── token_counter.py         # tiktoken token counting + prompt-cache savings math
 │       ├── ide_pricing.py           # Subscription pricing for AI coding IDE tools
 │       ├── savings_tracker.py       # Per-org router savings + acceptance_rate
@@ -134,7 +135,7 @@ llm-pricing-mcp-server/
 │   ├── react_loop.py                # ReAct (Reason + Act) loop implementation
 │   ├── llm_backend.py               # AnthropicBackend + OpenAIBackend (switch via env)
 │   ├── conversation.py              # SQLite conversation memory, turn limit
-│   └── tools.py                     # 17 MCP tool bindings for agent use (+ RAG search)
+│   └── tools.py                     # 18 MCP tool bindings for agent use (+ RAG search)
 │
 ├── mcp/
 │   ├── server.py                    # MCP STDIO transport (Claude Desktop)
@@ -153,7 +154,7 @@ llm-pricing-mcp-server/
 │   ├── trends/index.html            # /trends — price-change leaderboard
 │   ├── widget/index.html            # /widget — embeddable pricing table
 │   ├── conversations/index.html     # /conversations — conversation history viewer
-│   ├── mcp-setup/index.html         # /mcp-setup — MCP integration hub (5 client tabs, live test, all 19 tools)
+│   ├── mcp-setup/index.html         # /mcp-setup — MCP integration hub (5 client tabs, live test, all 20 tools)
 │   ├── api-docs/index.html          # /api-docs — API reference (Swagger/ReDoc iframe + endpoint table)
 │   └── whats-new/index.html         # /whats-new — release notes timeline (v1.35.0 → current)
 │
@@ -220,13 +221,13 @@ Enabled for: OpenAI, Anthropic, Groq, Mistral AI, Together AI, Fireworks AI, xAI
 ### 4. MCP Dual Transport
 - **STDIO** (`mcp/server.py`): JSON-RPC 2.0 over stdin/stdout for Claude Desktop local integration
 - **HTTP** (`POST /mcp`): Same JSON-RPC 2.0 payload over HTTP for remote MCP clients — no local install needed
-- Protocol version: `2024-11-05`; 19 tools exposed
+- Protocol version: `2024-11-05`; 20 tools exposed
 
 ### 5. Agent Architecture (ReAct Loop)
 ```
 User message
   → react_loop.py: think → select tool → execute → observe → repeat
-  → tools.py: wraps 17 of the 19 MCP tools as callable Python functions
+  → tools.py: wraps 18 of the 20 MCP tools as callable Python functions
       (excludes ask_agent to prevent recursion, and get_telemetry as server-ops only)
   → llm_backend.py: AnthropicBackend | OpenAIBackend (switch via AGENT_LLM_PROVIDER env)
   → conversation.py: persist turns to SQLite, enforce max_turns limit
@@ -281,6 +282,7 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 |--------|------|------|---------|
 | GET | `/health`, `/health/live`, `/health/ready`, `/health/detailed` | None | Health probes |
 | GET | `/pricing` | None | All model pricing; supports `provider`, `supports_vision`, `supports_function_calling`, `supports_json_mode`, `batch_available`, `is_reasoning_model` query filters |
+| GET | `/data-quality` | None | Aggregate accuracy summary: % confirmed/fresh, models withheld for drift, unpriced, stale |
 | GET | `/models` | None | Model list |
 | GET | `/pricing/public` | None | Embed-safe public pricing |
 | GET | `/pricing/history` | None | Historical price snapshots |

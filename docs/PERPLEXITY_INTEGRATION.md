@@ -64,7 +64,7 @@ No cloning or Python required. Add the following to your config file:
 }
 ```
 
-Restart Perplexity. All 19 pricing tools are immediately available.
+Restart Perplexity. All 20 pricing tools are immediately available.
 
 ### Option B — Local STDIO
 
@@ -133,13 +133,13 @@ After restarting Perplexity, confirm tools loaded by asking it:
 What LLM pricing tools do you have available?
 ```
 
-Perplexity should list all 19 tools. You can also verify directly via curl:
+Perplexity should list all 20 tools. You can also verify directly via curl:
 
 ```bash
 # Check server is up
 curl https://llm-pricing-api.fly.dev/health
 
-# List all 19 tools via MCP protocol
+# List all 20 tools via MCP protocol
 curl -X POST https://llm-pricing-api.fly.dev/mcp \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
@@ -147,7 +147,7 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 
 ---
 
-## All 19 MCP Tools
+## All 20 MCP Tools
 
 These tools are available inside Perplexity once connected. You can invoke them naturally in conversation or call them programmatically via the HTTP MCP endpoint.
 
@@ -161,6 +161,7 @@ These tools are available inside Perplexity once connected. You can invoke them 
 | `predict_cost` | `prompt` | `task_type`, `cache_hit_ratio`, `top_n`, `require_function_calling`, `require_vision`, `min_context_tokens` | Rank every model cheapest-first from raw prompt text — no token counts needed |
 | `optimize_workload` | `workloads[]` | `monthly_budget_usd`, `min_quality_score` | Assign the cheapest qualifying model per task across a workload mix; reports saving vs. one-model-for-everything |
 | `check_price_drift` | — | `threshold_pct`, `provider`, `limit` | Audit this server's own prices against an external registry; drifted prices are auto-withheld from serving, this reports which and why |
+| `get_data_quality` | — | — | Aggregate accuracy summary: % confirmed and fresh, how many withheld for drift, how many unpriced or stale |
 | `get_ide_pricing` | — | `provider`, `max_monthly`, `inline_only` | Subscription pricing for AI coding IDE tools |
 | `get_performance_metrics` | — | `provider`, `include_cost` | Throughput, latency, context window, quality scores |
 | `get_use_cases` | — | `provider` | Model recommendations by use case |
