@@ -98,6 +98,11 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 
 ## Quick Start (Claude Desktop)
 
+[![Add to Cursor](https://img.shields.io/badge/Cursor-Add_MCP_Server-000000?style=flat-square)](cursor://anysphere.cursor-deeplink/mcp/install?name=llm-pricing&config=eyJ1cmwiOiJodHRwczovL2xsbS1wcmljaW5nLWFwaS5mbHkuZGV2L21jcCJ9)
+[![Add to VS Code](https://img.shields.io/badge/VS_Code-Add_MCP_Server-0098FF?style=flat-square)](vscode:mcp/install?%7B%22name%22%3A%22llm-pricing%22%2C%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fllm-pricing-api.fly.dev%2Fmcp%22%7D)
+
+One-click links above open Cursor/VS Code directly (best-effort — deep-link support varies by client version). Every other client uses the copy-paste config below, which always works.
+
 ### Option A — Remote (no install needed)
 
 Add to your `claude_desktop_config.json`:
