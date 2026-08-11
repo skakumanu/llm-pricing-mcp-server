@@ -1,7 +1,7 @@
 {
   "name": "llm-pricing-mcp-server",
-  "version": "1.9.0",
-  "description": "LLM Pricing MCP Server for Azure App Service - Supporting 12 major LLM providers with geolocation and blue-green deployment",
+  "version": "1.58.2",
+  "description": "LLM Pricing MCP Server for Fly.io - Real-time pricing, cost estimation, and portfolio optimization across 26 major LLM providers",
   "main": "src/main.py",
   "scripts": {
     "start": "python -m uvicorn src.main:app --host 0.0.0.0 --port 8000"
