@@ -72,18 +72,15 @@ python -m uvicorn src.main:app --reload --port 8000
 
 ### Debugging
 
-VS Code provides 8 debug configurations accessible via **Run and Debug** panel (`Ctrl+Shift+D`):
+VS Code provides 3 debug configurations (`.vscode/launch.json`) accessible via **Run and Debug** panel (`Ctrl+Shift+D`):
 
 | Configuration | Purpose | When to Use |
 |--------------|---------|-------------|
-| **Debug MCP Server (STDIO)** | Debug MCP protocol communication | Testing MCP client integration |
-| **Debug REST API Server** | Debug FastAPI endpoints | REST API development |
-| **Debug Quick Validate** | Debug validation script | Troubleshooting pre-deployment tests |
-| **Debug Current Test File** | Debug active test file | Writing/fixing unit tests |
-| **Debug All Tests** | Debug entire test suite | Comprehensive testing |
-| **Debug MCP Blue-Green Deploy** | Debug deployment process | Deployment troubleshooting |
-| **Debug Schema Generator** | Debug JSON schema generation | Schema development |
-| **Python: Remote Attach** | Attach to running process | Production debugging |
+| **MCP Server (STDIO)** | Run the MCP stdio server with breakpoints | Testing MCP client integration |
+| **MCP Server (Debug)** | Same, with `justMyCode` off and `DEBUG=1` | Stepping into library code, verbose logging |
+| **FastAPI Server** | Run the REST API (`src/main.py`) with breakpoints | REST API development |
+
+To debug an individual test file or the whole suite instead, use the **Testing** panel (beaker icon) — its per-test and per-file debug buttons don't require a `launch.json` entry.
 
 **To debug:**
 1. Set breakpoints by clicking left of line numbers
@@ -282,22 +279,30 @@ The REST API is separate from the MCP tools — same underlying pricing data, pl
 # Run quick validation (6 tests, ~15 seconds)
 python scripts/quick_validate.py
 
-# If all pass, ready for deployment
-python scripts/mcp_blue_green_deploy.py deploy --version 1.6.1
+# Run the full suite
+pytest tests/ -q
 ```
 
 Or via VS Code:
 - Press `Ctrl+Shift+P` → **"Tasks: Run Task"** → **"Quick Validate MCP Server"**
 
+If both pass, follow the git-flow promotion in [CONTRIBUTING.md](CONTRIBUTING.md) — there is no local deploy step; production deploys happen automatically when a promotion PR merges to `master` (see below).
+
 ### Task: Test a Single Tool
 
 1. Start MCP server in debug mode:
-   - Press `F5` → Select **"Debug MCP Server (STDIO)"**
+   - Press `F5` → Select **"MCP Server (STDIO)"**
    - Set breakpoint in tool file (e.g., `mcp/tools/estimate_cost.py`)
 
-2. Send tool request via test script:
+2. Call it directly to trigger the breakpoint:
    ```bash
-   python scripts/test_mcp_server.py
+   python -c "
+   import asyncio
+   from mcp.tools.estimate_cost import EstimateCostTool
+   print(asyncio.run(EstimateCostTool().execute({
+       'model_name': 'gpt-4o', 'input_tokens': 1000, 'output_tokens': 500
+   })))
+   "
    ```
 
 3. Debugger will pause at breakpoint
@@ -314,17 +319,22 @@ python mcp/schema_generator.py
 Ctrl+Shift+P → "Tasks: Run Task" → "Generate MCP Schemas"
 ```
 
-### Task: Deploy New Version Locally
+### Task: Deploy a New Version
 
-```bash
-# Test blue-green deployment locally
-python scripts/mcp_blue_green_deploy.py deploy --version 1.6.1
+There is no local deploy tooling — production runs on Fly.io, and deploys are entirely
+CI/CD-driven:
 
-# Rollback if needed
-python scripts/mcp_blue_green_deploy.py rollback
-```
+1. Ship the change through the normal git flow: `feature/*` → PR to `develop` → clean
+   promotion (`scripts/promote_branch_content.sh`) → PR to `master`.
+2. Merging to `master` triggers the `CI/CD Pipeline` workflow, which runs the full test
+   suite and, if it passes, deploys via `flyctl deploy` followed by a health check.
+3. Watch the run under **Actions** in GitHub, or `curl https://llm-pricing-api.fly.dev/health`
+   once it completes.
 
-Or via VS Code Task: **"Blue-Green Deploy (Local Test)"**
+The workflow definition (`.github/workflows/ci-cd.yml`) and this repo's `CLAUDE.md` (git-flow
+rules, release checklist) are the authoritative source for this — `DEPLOYMENT.md` and
+`DEPLOYMENT_IMPLEMENTATION.md` predate the move to Fly.io and describe the retired Azure App
+Service target instead; do not follow them for deployment.
 
 ## Troubleshooting
 
@@ -475,9 +485,8 @@ Press `Ctrl+K Z` to enter Zen Mode (distraction-free coding).
 This guide complements other MCP documentation:
 
 - **[MCP_QUICK_START.md](MCP_QUICK_START.md)** - Initial MCP setup (5-minute guide)
-- **[MCP_CLAUDE_INTEGRATION.md](MCP_CLAUDE_INTEGRATION.md)** - Claude Desktop configuration (10-minute guide)
+- **[CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md)** - Claude Desktop configuration
 - **[MCP_TESTING.md](MCP_TESTING.md)** - Complete testing guide (3 test suites)
-- **[MCP_BLUE_GREEN_DEPLOYMENT.md](MCP_BLUE_GREEN_DEPLOYMENT.md)** - Zero-downtime deployments
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture overview
 
 ## Next Steps
@@ -491,16 +500,15 @@ This guide complements other MCP documentation:
 6. ✅ Read [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines
 
 ### For MCP Client Users
-1. ✅ Set up Claude Desktop: Follow [MCP_CLAUDE_INTEGRATION.md](MCP_CLAUDE_INTEGRATION.md)
+1. ✅ Set up Claude Desktop: Follow [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md)
 2. ✅ Configure MCP server in Claude config
 3. ✅ Test with simple query: "What's the pricing for GPT-4?"
-4. ✅ Explore 6 MCP tools via Claude
+4. ✅ Explore the MCP tools via Claude — see [MCP_QUICK_START.md](MCP_QUICK_START.md) for the current count and full list
 
 ### For DevOps/Deployers
-1. ✅ Understand deployment: Read [MCP_BLUE_GREEN_DEPLOYMENT.md](MCP_BLUE_GREEN_DEPLOYMENT.md)
-2. ✅ Test locally: `python scripts/mcp_blue_green_deploy.py deploy --version test`
-3. ✅ Validate: `python scripts/quick_validate.py`
-4. ✅ Deploy to production: Follow deployment guide
+1. ✅ Validate locally: `python scripts/quick_validate.py` and `pytest tests/ -q`
+2. ✅ Follow the git-flow promotion in [CONTRIBUTING.md](CONTRIBUTING.md) — `feature/*` → `develop` (PR) → `master` (PR)
+3. ✅ Deploy to production happens automatically on merge to `master` via `.github/workflows/ci-cd.yml` (Fly.io + health check) — there is no separate local deploy step
 
 ## Additional Resources
 
