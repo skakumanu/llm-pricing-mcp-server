@@ -28,7 +28,7 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-Restart Claude Desktop. All 20 tools are available immediately.
+Restart Claude Desktop. All 22 tools are available immediately.
 
 **Config file locations:**
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
@@ -137,13 +137,13 @@ Test the server directly:
 cd /path/to/llm-pricing-mcp-server
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 ```
-Should print a JSON response with 20 tools.
+Should print a JSON response with 22 tools.
 
 ### Verify tool count
 
 ```bash
 python -c "from mcp.tools.tool_manager import ToolManager; print(len(ToolManager().list_tools()), 'tools')"
-# → 20 tools
+# → 22 tools
 ```
 
 ### HTTP endpoint not responding

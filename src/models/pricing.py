@@ -670,3 +670,78 @@ class TelemetryResponse(BaseModel):
         description="Top browsers used by clients"
     )
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Response timestamp")
+
+
+class UsageEventRequest(BaseModel):
+    """Request model for reporting a single actual LLM usage event."""
+
+    model_name: str = Field(..., description="Name of the LLM model that was called")
+    input_tokens: int = Field(..., ge=0, description="Number of input tokens actually used")
+    output_tokens: int = Field(..., ge=0, description="Number of output tokens actually used")
+    occurred_at: Optional[float] = Field(
+        None, description="Unix timestamp when the call happened; defaults to ingestion time"
+    )
+    request_id: Optional[str] = Field(
+        None, description="Idempotency key — resubmitting the same request_id for the same org is a no-op"
+    )
+
+
+class UsageEventResponse(BaseModel):
+    """Response for POST /usage."""
+
+    recorded: bool = Field(..., description="Whether a new row was recorded")
+    duplicate: bool = Field(..., description="True if this request_id was already recorded for this org")
+    model_name: str = Field(..., description="Resolved model name")
+    provider: str = Field(..., description="Resolved provider")
+    input_tokens: int = Field(..., description="Input tokens as submitted")
+    output_tokens: int = Field(..., description="Output tokens as submitted")
+    cost_usd: float = Field(..., description="Cost computed server-side from current pricing, in USD")
+    org_id: Optional[str] = Field(None, description="Organisation this event was attributed to")
+
+
+class UsageBatchRequest(BaseModel):
+    """Request model for reporting multiple usage events at once."""
+
+    events: List[UsageEventRequest] = Field(..., min_length=1, max_length=500, description="Usage events to record")
+
+
+class UsageBatchResponse(BaseModel):
+    """Response for POST /usage/batch."""
+
+    recorded: int = Field(..., description="Number of new events recorded")
+    duplicates: int = Field(..., description="Number of events skipped as duplicates")
+    failed: int = Field(..., description="Number of events that failed (e.g. unknown model)")
+    errors: List[str] = Field(default_factory=list, description="Error messages for failed events")
+    total_cost_usd: float = Field(..., description="Sum of cost_usd across newly recorded events")
+
+
+class UsageModelBreakdown(BaseModel):
+    """Spend breakdown for a single model within a usage summary."""
+
+    model_name: str = Field(..., description="Model name")
+    provider: str = Field(..., description="Provider")
+    request_count: int = Field(..., description="Number of usage events recorded for this model")
+    total_cost_usd: float = Field(..., description="Total cost in USD for this model")
+
+
+class UsageProviderBreakdown(BaseModel):
+    """Spend breakdown for a single provider within a usage summary."""
+
+    provider: str = Field(..., description="Provider")
+    request_count: int = Field(..., description="Number of usage events recorded for this provider")
+    total_cost_usd: float = Field(..., description="Total cost in USD for this provider")
+
+
+class UsageSummaryResponse(BaseModel):
+    """Response for GET /usage/summary."""
+
+    org_id: Optional[str] = Field(None, description="Organisation filter applied")
+    days: int = Field(..., description="Look-back window in days")
+    total_requests: int = Field(..., description="Total usage events in the window")
+    total_cost_usd: float = Field(..., description="Total actual spend in USD across all recorded events")
+    total_input_tokens: int = Field(..., description="Total input tokens across all recorded events")
+    total_output_tokens: int = Field(..., description="Total output tokens across all recorded events")
+    by_model: List[UsageModelBreakdown] = Field(default_factory=list, description="Spend broken down by model")
+    by_provider: List[UsageProviderBreakdown] = Field(
+        default_factory=list, description="Spend broken down by provider"
+    )

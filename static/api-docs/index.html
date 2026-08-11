@@ -249,6 +249,13 @@
       </div>
 
       <div class="endpoint-group">
+        <h3>Usage</h3>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/usage</span><span class="ep-desc">Record one actual usage event (cost computed server-side)</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/usage/batch</span><span class="ep-desc">Record multiple usage events at once</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/usage/summary</span><span class="ep-desc">Actual spend summary by model/provider, per org</span><span class="ep-auth">API key</span></div>
+      </div>
+
+      <div class="endpoint-group">
         <h3>Agent</h3>
         <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/agent/chat</span><span class="ep-desc">Blocking chat with the ReAct pricing agent</span></div>
         <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/agent/chat/stream</span><span class="ep-desc">Streaming agent chat (SSE)</span></div>
@@ -259,7 +266,7 @@
       <div class="endpoint-group">
         <h3>MCP (Model Context Protocol)</h3>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/mcp</span><span class="ep-desc">MCP server info and config snippet</span></div>
-        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/mcp</span><span class="ep-desc">MCP JSON-RPC 2.0 endpoint — all 20 tools</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/mcp</span><span class="ep-desc">MCP JSON-RPC 2.0 endpoint — all 22 tools</span></div>
       </div>
 
       <div class="endpoint-group">
