@@ -1,8 +1,10 @@
 """MCP Tool: Record an actual LLM usage event."""
 from typing import Any, Dict
 
+from src.config.settings import settings
 from src.services.pricing_aggregator import PricingAggregatorService
 from src.services.usage_tracker import get_usage_tracker
+from src.services.budget_alerts import get_budget_alert_service
 
 
 class RecordUsageTool:
@@ -55,6 +57,12 @@ class RecordUsageTool:
             )
         except Exception as exc:
             return {"success": False, "error": str(exc), "error_type": type(exc).__name__}
+
+        try:
+            budget_alerts = get_budget_alert_service()
+            await budget_alerts.check_and_fire(tracker, secret=settings.webhook_secret)
+        except Exception:
+            pass  # nosec B110 — best-effort; usage was already recorded successfully
 
         return {
             "success": True,

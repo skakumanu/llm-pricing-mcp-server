@@ -170,6 +170,21 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
                 "spent, as opposed to a hypothetical cost estimate."
             ),
         ),
+        (
+            "register_budget_alert",
+            (
+                "Register a webhook URL to be notified when actual recorded spend crosses a USD "
+                "threshold. Use when the user asks to set up a spend or budget alert."
+            ),
+        ),
+        (
+            "list_budget_alerts",
+            "List all registered budget-spend webhook alerts with their IDs and settings.",
+        ),
+        (
+            "delete_budget_alert",
+            "Delete a registered budget-spend alert by its ID.",
+        ),
     ]
 
     for tool_name, description in _mcp_tool_specs:

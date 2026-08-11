@@ -497,6 +497,38 @@ class PricingAlertListResponse(BaseModel):
     total: int = Field(..., description="Number of registered alerts")
 
 
+class BudgetAlertRequest(BaseModel):
+    """Request body for POST /usage/alerts."""
+
+    url: str = Field(..., description="Webhook URL to POST when spend crosses threshold_usd")
+    threshold_usd: float = Field(..., gt=0, description="Spend level in USD that triggers the alert")
+    org_id: Optional[str] = Field(
+        None, description="Organisation to monitor (None = total spend across all orgs)"
+    )
+    period_days: int = Field(
+        30, ge=1, le=365, description="Rolling look-back window for the spend check, in days"
+    )
+
+
+class BudgetAlertRecord(BaseModel):
+    """A stored budget alert."""
+
+    id: int = Field(..., description="Unique alert ID")
+    url: str = Field(..., description="Webhook URL")
+    org_id: Optional[str] = Field(None, description="Organisation filter (None = all orgs)")
+    threshold_usd: float = Field(..., description="Spend threshold in USD")
+    period_days: int = Field(..., description="Rolling look-back window in days")
+    created_at: float = Field(..., description="Unix timestamp when the alert was registered")
+    last_fired_at: Optional[float] = Field(None, description="Unix timestamp this alert last fired, if ever")
+
+
+class BudgetAlertListResponse(BaseModel):
+    """Response for GET /usage/alerts."""
+
+    alerts: List[BudgetAlertRecord] = Field(..., description="All registered budget alerts")
+    total: int = Field(..., description="Number of registered budget alerts")
+
+
 class RouterRequest(BaseModel):
     """Request body for POST /router/recommend."""
 
