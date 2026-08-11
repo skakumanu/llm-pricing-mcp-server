@@ -920,334 +920,54 @@ footer
   - Remove unused dependencies
   - Verify licenses are compatible
 
-## Blue-Green Deployment Housekeeping
+## Deployment Housekeeping
 
-Blue-green deployment is the **mandatory deployment strategy** for this project. Two identical production environments (blue and green) ensure zero-downtime deployments with instant rollback capability.
+Production deployment is **CI/CD-driven onto Fly.io** — a single production app, no
+blue-green slots, no Azure resource group, no manual traffic swap. See `DEPLOYMENT.md`
+for the full mechanics and `CLAUDE.md`'s Release Checklist for what must be true before
+every commit (version bump, docs updates, secret scan, data-accuracy check, tests).
 
-### ✅ Pre-Deployment Checklist
+### ✅ Pre-Deployment
 
-Before ANY deployment to production:
-
-1. **Code Readiness**
-   - [ ] All 109 tests passing on merge commit
-   - [ ] Test coverage ≥ 90% for new code
-   - [ ] CI /test status check passed on GitHub Actions
-   - [ ] No security vulnerabilities in dependencies
-   - [ ] No hardcoded secrets or sensitive data
-   - [ ] Code review approved (if required)
-
-2. **Version Management**
-   - [ ] Version bumped in `src/__init__.py`
-   - [ ] CHANGELOG.md updated with release notes
-   - [ ] Breaking changes clearly documented
-   - [ ] Migration guide prepared (if needed)
-   - [ ] Version tag created in Git (v1.X.X format)
-
-3. **Deployment Artifacts**
-   - [ ] Docker image built and tagged: `myregistry/llm-pricing:v1.X.X`
-   - [ ] Image pushed to container registry
-   - [ ] Image scanned for vulnerabilities
-   - [ ] Deployment manifest reviewed and valid
-   - [ ] Environment variables confirmed (no hardcoded values)
-
-4. **Health Check Configuration**
-   - [ ] Health endpoint `/health` verified working
-   - [ ] Health check timeout set appropriately (≥ 5 seconds)
-   - [ ] Health check interval configured (≥ 30 seconds)
-   - [ ] Liveness and readiness probes configured
-   - [ ] Expected HTTP 200 response verified
-
-5. **Database/Migrations (if applicable)**
-   - [ ] All database migrations completed on current environment
-   - [ ] Rollback plan documented
-   - [ ] No breaking schema changes in patch versions
-   - [ ] Backwards compatibility verified
-
-6. **Documentation & Communication**
-   - [ ] Deployment runbook reviewed
-   - [ ] Rollback plan documented
-   - [ ] Status page updated (if customer-facing)
-   - [ ] Team notified of deployment window
-   - [ ] Stakeholders briefed on changes
+Nothing beyond CLAUDE.md's Release Checklist and a green PR is required:
+- [ ] Full test suite passing (see `README.md` for the current count)
+- [ ] CI's five gates green on the PR: `test`, `lint`, `osv_scan`, `security`, `secret_scan`
+- [ ] Version bumped in `src/__init__.py` (and `docs/ARCHITECTURE.md`/`package.json` in
+      lockstep — enforced by `tests/test_version_consistency.py`)
+- [ ] No hardcoded secrets or sensitive data staged
 
 ### ✅ Deployment Process
 
-**Azure App Service Blue-Green Deployment:**
+Deployment happens automatically on merge to `master` — there are no manual steps:
 
-1. **Identify Current Active Slot**
-   ```bash
-   # Check which slot is production (CURRENT)
-   az webapp deployment slot list \
-     --resource-group llm-pricing-rg-westus2 \
-     --name llm-pricing-mcp \
-     --query "[].{Name:name, Status:deploymentStatus}"
-   ```
-   - [ ] Note which slot is active (blue or green)
-   - [ ] Idle slot will be deployment target
-
-2. **Deploy to Idle Slot**
-   - [ ] Idle slot identified
-   - [ ] New Docker image pushed to idle slot
-   - [ ] Deployment started via GitHub Actions or Azure CLI
-   - [ ] Deployment progress monitored in logs
-   - [ ] No interruption to active slot traffic
-
-3. **Run Health Checks on Idle Slot**
-   ```bash
-   # Access idle slot endpoint (e.g., green slot)
-   curl -X GET \
-     https://llm-pricing-mcp-green.azurewebsites.net/health \
-     -H "Content-Type: application/json"
-   
-   # Expected response:
-   # {
-   #   "status": "healthy",
-   #   "service": "LLM Pricing MCP Server",
-   #   "version": "1.X.X"
-   # }
-   ```
-   - [ ] Health endpoint returns 200 OK
-   - [ ] Version matches deployed version
-   - [ ] All dependent services healthy
-   - [ ] No errors in application logs
-   - [ ] Performance metrics acceptable
-
-4. **Smoke Tests on Idle Slot**
-   - [ ] API endpoints responding correctly
-   - [ ] Invalid requests rejected properly
-   - [ ] Authentication/authorization working
-   - [ ] Rate limiting functional
-   - [ ] Error handling correct
-   - [ ] Database connectivity (if applicable)
-   - [ ] External service integrations working
-
-5. **Monitor Staging Slot (30+ minutes)**
-   - [ ] Error rates normal (0 errors expected)
-   - [ ] Response times acceptable (< 200ms p95)
-   - [ ] Memory usage stable
-   - [ ] CPU usage normal
-   - [ ] No memory leaks detected
-   - [ ] Connection pools stable
-
-6. **Perform Slot Swap**
-   ```bash
-   # Swap slots using Azure CLI
-   az webapp deployment slot swap \
-     --resource-group llm-pricing-rg-westus2 \
-     --name llm-pricing-mcp \
-     --slot green
-   
-   # Expected: Instant traffic shift from blue → green
-   # Old active slot (blue) becomes new idle slot
-   # New active slot (green) receives production traffic
-   ```
-   - [ ] Swap command executed
-   - [ ] Swap completed successfully
-   - [ ] No errors during swap
-   - [ ] Time noted for reference
-
-7. **Verify Swap Success (Immediate)**
-   - [ ] New active slot responding to requests
-   - [ ] Health endpoint returns 200
-   - [ ] Version correct in responses
-   - [ ] No 503 Service Unavailable errors
-   - [ ] No connection timeouts
+1. Merging to `master` triggers `.github/workflows/ci-cd.yml`'s `CI/CD Pipeline`.
+2. The `deploy_fly` job runs only after `test`, `lint`, `osv_scan`, `security`, and
+   `secret_scan` all pass.
+3. It runs `flyctl deploy --remote-only`, then polls
+   `https://llm-pricing-api.fly.dev/health` for up to 3 minutes, checking for both a
+   `200` response and a version match against `src/__init__.py`. A timeout here warns
+   but does not fail the build.
 
 ### ✅ Post-Deployment Verification
 
-**Immediate (First 5 minutes):**
-- [ ] Production traffic flowing to new slot
-- [ ] Error rates at 0%
-- [ ] Response times normal
-- [ ] No unusual logs
-- [ ] Monitoring alerts not triggered
+- [ ] `curl https://llm-pricing-api.fly.dev/health` returns 200 with the expected version
+- [ ] `flyctl logs` shows a clean startup, no repeated errors
+- [ ] Spot-check a couple of real endpoints (`/models`, `/data-quality`)
 
-```bash
-# Verify current active slot
-az webapp deployment slot list \
-  --resource-group llm-pricing-rg-westus2 \
-  --name llm-pricing-mcp \
-  --query "[?deploymentStatus=='Current'].{Name:name, Version:siteConfig.appSettings}"
-```
+### ✅ Rollback
 
-**Short-term (First hour):**
-- [ ] Monitor error logs continuously
-- [ ] Track key metrics (latency, throughput, errors)
-- [ ] Review telemetry data
-- [ ] Check for exception patterns
-- [ ] Verify auth/security measures
-- [ ] Monitor for performance degradation
+There is no idle slot to swap back to. To roll back:
+- [ ] Revert the offending commit(s) on `master` (or fix forward) through the normal git
+      flow and let CI/CD redeploy, or
+- [ ] Run `flyctl deploy --remote-only` locally against a known-good commit as a
+      break-glass path if CI/CD itself is unavailable — see `DEPLOYMENT.md`'s
+      Troubleshooting section
 
-**Ongoing (24 hours):**
-- [ ] Error rates remain at baseline
-- [ ] Response times stable
-- [ ] Resource usage normal
-- [ ] No memory leaks
-- [ ] Scheduled tasks running correctly
-- [ ] Cron jobs executing properly
-- [ ] Database queries performing normally
+### ✅ Monitoring
 
-### ✅ Idle Slot Management
-
-**What to do with the now-idle slot (previous production):**
-
-1. **Keep Ready for Instant Rollback**
-   - [ ] Do NOT delete or deprovision idle slot
-   - [ ] Keep idle slot in "warm" state (running)
-   - [ ] Maintain for minimum 24 hours
-   - [ ] Update status page if necessary
-
-2. **Rollback Window**
-   - [ ] Rollback available for 24 hours
-   - [ ] Slot swap takes < 1 minute
-   - [ ] No code changes needed for rollback
-   - [ ] Team aware of rollback procedure
-
-3. **After Observation Period (24 hours)**
-   - [ ] Confirm no issues detected
-   - [ ] All metrics within expected range
-   - [ ] No post-deployment bug reports
-   - [ ] Only then, can idle slot be cleaned up
-   - [ ] Run cleanup: `az webapp config appsettings update ...`
-
-### ✅ Rollback Procedures
-
-**Immediate Rollback (if issues detected):**
-
-```bash
-# Slot swap back to previous version
-az webapp deployment slot swap \
-  --resource-group llm-pricing-rg-westus2 \
-  --name llm-pricing-mcp \
-  --slot blue  # or green, whichever is idle
-```
-
-**When to Trigger Rollback:**
-- [ ] Error rate exceeds 1%
-- [ ] Response time exceeds SLA (p95 > 1 second)
-- [ ] Critical functionality broken
-- [ ] Data corruption detected
-- [ ] Security vulnerability discovered
-- [ ] Dependency service unavailable
-- [ ] Database connection errors
-- [ ] Auth/authorization failures
-
-**Rollback Verification:**
-- [ ] Bring back previous active slot (< 1 minute)
-- [ ] Verify health endpoint immediately
-- [ ] Confirm version reverted
-- [ ] Monitor for stability
-- [ ] Document reason for rollback
-- [ ] Create incident report
-- [ ] Schedule post-mortem
-
-### ✅ Deployment CI/CD Integration
-
-**GitHub Actions Workflow Enforcement:**
-
-In `.github/workflows/ci-cd.yml`:
-- [ ] CI /test required before deployment
-- [ ] All 109 tests must pass
-- [ ] Coverage check passed
-- [ ] Security scan passed
-- [ ] Docker image built successfully
-- [ ] Image pushed to registry
-- [ ] Deployment to idle slot automated
-- [ ] Health checks run automatically
-- [ ] Alerts triggered on failure
-- [ ] Slack notification sent post-deployment
-
-**Azure Deployment Slots Configuration:**
-- [ ] Production slot (blue or green) set as default
-- [ ] Staging slot for pre-swap testing
-- [ ] Auto-swap disabled (manual control)
-- [ ] Swap warnings documented
-- [ ] Slot connection strings verified
-- [ ] Slot app settings verified
-
-### ✅ Deployment Documentation
-
-**Keep Updated in Repository:**
-- [ ] `BLUE_GREEN_DEPLOYMENT.md` - Strategy & architecture
-- [ ] `DEPLOYMENT_IMPLEMENTATION.md` - Historical implementation record (not a runbook)
-- [ ] `DEPLOYMENT.md` - How production deployment actually works (Fly.io)
-- [ ] `.github/workflows/ci-cd.yml` - Workflow definition, incl. the `deploy_fly` job
-
-**Runbooks for Each Scenario:**
-- [ ] Standard deployment (feature/fix)
-- [ ] Hotfix deployment (urgent production fix)
-- [ ] Zero-migration deployment (schema change)
-- [ ] Rollback procedure
-- [ ] Emergency recovery
-
-### ✅ Monitoring & Alerts
-
-**Deployment Notifications:**
-- [ ] Slack channel: `#deployments`
-- [ ] Email notification to team
-- [ ] Discord webhook configured
-- [ ] Status page updated
-- [ ] Deployment logged to central system
-
-**Critical Alerts (trigger automatic investigation):**
-- [ ] Error rate > 1%
-- [ ] Response time spike detected
-- [ ] Health check failures
-- [ ] Slot swap failures
-- [ ] Database connection issues
-- [ ] Memory leak detected
-- [ ] CPU utilization spike
-
-**Metrics to Track:**
-```
-- Requests per second
-- Error rate (%)
-- Response time (p50, p95, p99)
-- Memory usage (%)
-- CPU usage (%)
-- Active connections
-- Request queue depth
-- Failed health checks
-```
-
-### ✅ Version Control for Deployments
-
-**Git Tags for Releases:**
-```bash
-# Tag the released commit
-git tag -a v1.X.X -m "Release version 1.X.X"
-git push origin v1.X.X
-
-# Format: v{MAJOR}.{MINOR}.{PATCH}
-# Example: v1.5.1, v1.6.0, v2.0.0
-```
-- [ ] Tag created after successful deployment
-- [ ] Tag pushed to repository
-- [ ] Release notes attached to tag
-- [ ] Deployment commit referenced
-
-### ✅ Post-Deployment Checklist (24-48 Hours)
-
-1. **System Stability**
-   - [ ] No errors in logs (24-hour period)
-   - [ ] Performance metrics stable
-   - [ ] All scheduled jobs executed
-   - [ ] No data corruption issues
-   - [ ] User feedback positive (if customer-facing)
-
-2. **Compliance & Security**
-   - [ ] No security alerts triggered
-   - [ ] No unauthorized access attempts
-   - [ ] Audit logs clean
-   - [ ] Compliance requirements met
-   - [ ] Data privacy verified
-
-3. **Cleanup & Documentation**
-   - [ ] Idle slot can be cleaned if needed
-   - [ ] Deployment documentation updated
-   - [ ] Lessons learned documented
-   - [ ] Performance baseline updated
-   - [ ] Next deployment planned
+- [ ] `flyctl status` / `flyctl logs` for the running app
+- [ ] `flyctl volumes list` if data (`pricing_history.db`/`billing.db`) looks wrong after
+      a deploy — confirms the `llm_pricing_data` volume is still attached
 
 ## Current Project State (as of Feb 19, 2026)
 
