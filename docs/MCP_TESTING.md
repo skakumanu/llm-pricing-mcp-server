@@ -783,9 +783,6 @@ All should work without issues.
 
 ## Related Documentation
 
-- **[MCP_BLUE_GREEN_DEPLOYMENT.md](MCP_BLUE_GREEN_DEPLOYMENT.md)** - Deployment guide with automated testing
-- **[MCP_PRODUCTION_CHECKLIST.md](MCP_PRODUCTION_CHECKLIST.md)** - Pre-deployment checklist
-- **[MCP_MONITORING_GUIDE.md](MCP_MONITORING_GUIDE.md)** - Production monitoring
 - **[MCP_QUICK_START.md](MCP_QUICK_START.md)** - Quick start guide
 - **[CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md)** - Claude Desktop testing
 
