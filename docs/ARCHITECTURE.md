@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.58.2 | **Last updated**: 2026-08-10
+**Version**: v1.58.3 | **Last updated**: 2026-08-11
 
 ---
 
@@ -139,9 +139,9 @@ llm-pricing-mcp-server/
 │
 ├── mcp/
 │   ├── server.py                    # MCP STDIO transport (Claude Desktop)
+│   ├── schema_generator.py          # Generates mcp/schemas/ from the Pydantic models
 │   ├── tools/                       # Per-tool MCP handler modules
-│   ├── schemas/                     # MCP JSON-RPC schema definitions
-│   └── utils/                       # Session management, helpers
+│   └── schemas/                     # Generated MCP JSON-RPC schema definitions
 │
 ├── static/
 │   ├── index.html                   # / — marketing landing page

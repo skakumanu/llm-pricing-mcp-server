@@ -95,8 +95,13 @@ class TestAgentBindings:
 class TestDocsStayInSync:
     """Docs quote the tool count in prose; keep those numbers honest.
 
-    static/whats-new/ is deliberately excluded — it is a historical changelog and
-    its past entries must keep their original counts.
+    static/whats-new/, docs/MCP_INTEGRATION.md, and docs/MCP_VALIDATION_REPORT.md are
+    deliberately excluded — they are historical records (a changelog, an original PR
+    plan dated 2024, and a point-in-time implementation report) whose old counts are
+    correct for what they documented and must not be silently rewritten to match today.
+    docs/CLAUDE_INTEGRATION.md was missing from this list despite citing
+    ``src/__init__.py`` as its own version source — it had drifted to "14 tools"
+    unnoticed.
     """
 
     DOC_FILES = [
@@ -104,6 +109,7 @@ class TestDocsStayInSync:
         "docs/ARCHITECTURE.md",
         "docs/PERPLEXITY_INTEGRATION.md",
         "docs/MCP_QUICK_START.md",
+        "docs/CLAUDE_INTEGRATION.md",
         "static/mcp-setup/index.html",
         "static/api-docs/index.html",
         "static/landing/index.html",
