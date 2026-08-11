@@ -1,5 +1,14 @@
 # Blue-Green Deployment & Backwards Compatibility - Implementation Summary
 
+> **Historical implementation record, not a deployment runbook.** This document
+> captures the PR that added `src/services/deployment.py`, `src/models/deployment.py`,
+> and the `/health/*`, `/deployment/*`, and `/api/versions` endpoints — that code is
+> real and still live today. But the "Production Deployment Workflow" and Kubernetes
+> examples below are illustrative, not what actually happens in this project: there is
+> no manual blue-green switchover, load balancer, or Kubernetes cluster in production.
+> Actual deployment is CI/CD-driven onto Fly.io — see `docs/DEPLOYMENT.md` and
+> `CLAUDE.md`'s Git Flow section for the real, current process.
+
 ## ✅ Completed Implementation
 
 Successfully implemented comprehensive blue-green deployment and backwards compatibility support for the LLM Pricing MCP Server. The application is now production-ready for zero-downtime deployments.
