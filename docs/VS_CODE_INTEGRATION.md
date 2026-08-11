@@ -331,10 +331,10 @@ CI/CD-driven:
 3. Watch the run under **Actions** in GitHub, or `curl https://llm-pricing-api.fly.dev/health`
    once it completes.
 
-The workflow definition (`.github/workflows/ci-cd.yml`) and this repo's `CLAUDE.md` (git-flow
-rules, release checklist) are the authoritative source for this — `DEPLOYMENT.md` and
-`DEPLOYMENT_IMPLEMENTATION.md` predate the move to Fly.io and describe the retired Azure App
-Service target instead; do not follow them for deployment.
+The workflow definition (`.github/workflows/ci-cd.yml`), this repo's `CLAUDE.md` (git-flow
+rules, release checklist), and `DEPLOYMENT.md` are the authoritative source for this.
+`DEPLOYMENT_IMPLEMENTATION.md` is a historical implementation record for the health-check/
+graceful-shutdown feature, not a deployment runbook — do not follow it for deployment.
 
 ## Troubleshooting
 

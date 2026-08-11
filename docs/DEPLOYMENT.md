@@ -1,234 +1,138 @@
-# Azure App Service Deployment Guide
+# Deployment Guide
 
-This guide covers deploying the LLM Pricing MCP Server to Azure App Service.
+**Version**: see `src/__init__.py` (single source of truth)
 
-## Prerequisites
+This guide covers deploying the LLM Pricing MCP Server to production on Fly.io.
 
-1. An Azure account with an active subscription
-2. Azure CLI installed locally
-3. Python 3.11 installed
-4. Git installed
+> This replaces an earlier version of this guide that covered Azure App Service.
+> Azure was the original deployment target; the project moved to Fly.io in v1.49.0
+> for lower cost and simpler operations, and the Azure CI job was removed at the
+> same time. If you're looking for the old Azure instructions, they're in git
+> history (`git log -- docs/DEPLOYMENT.md`), but they no longer match anything
+> this repo does.
 
-## Deployment Steps
+## How deployment actually works
 
-### 1. Create Azure Resources
+Deployment is entirely CI/CD-driven — there is no manual deploy step for normal
+releases:
 
-```bash
-# Login to Azure
-az login
+1. Changes ship through the standard git flow: `feature/*` branch → PR to `develop`
+   → clean promotion (`scripts/promote_branch_content.sh`) → PR to `master`. See
+   `CLAUDE.md`'s Git Flow section for the full process.
+2. Merging to `master` triggers `.github/workflows/ci-cd.yml`'s `CI/CD Pipeline`.
+3. The `deploy_fly` job runs only after `test`, `lint`, `osv_scan`, `security`, and
+   `secret_scan` all pass. It runs `flyctl deploy --remote-only`, then polls
+   `https://llm-pricing-api.fly.dev/health` for up to 3 minutes, confirming both a
+   `200` response and that the reported version matches `src/__init__.py`.
 
-# Set variables for your deployment
-RESOURCE_GROUP="llm-pricing-rg-westus2"
-LOCATION="westus2"
-APP_SERVICE_PLAN="llm-pricing-plan"
-WEB_APP_NAME="llm-pricing-mcp"
+That's the whole loop. There's no staging slot, no manual promotion step, no `az`
+CLI — a green `master` build deploys itself.
 
-# Create a resource group
-az group create --name $RESOURCE_GROUP --location $LOCATION
+## Prerequisites (for infrastructure changes only)
 
-# Create an App Service plan (Linux) 
-az appservice plan create --name $APP_SERVICE_PLAN --resource-group $RESOURCE_GROUP --sku B1 --is-linux
+You only need these if you're changing the Fly.io app configuration itself, not
+for a normal code deploy:
 
-# Create a web app
-az webapp create --resource-group $RESOURCE_GROUP --plan $APP_SERVICE_PLAN --name $WEB_APP_NAME --runtime "PYTHON:3.11"
-```
+1. A Fly.io account with the app already provisioned (`llm-pricing-api`)
+2. [`flyctl`](https://fly.io/docs/flyctl/install/) installed locally
+3. Fly.io API token — the deploy job reads it from the `FLY_API_TOKEN` GitHub
+   Actions secret; for local `flyctl` commands, run `flyctl auth login` instead
 
-### 2. Create Azure Key Vault and Managed Identity
+## App Configuration
 
-```bash
-KEY_VAULT_NAME="llm-pricing-vault"
+The app's Fly.io configuration lives in `fly.toml` at the repo root:
 
-# Create Key Vault
-az keyvault create --resource-group $RESOURCE_GROUP --name $KEY_VAULT_NAME --location $LOCATION
+- **App**: `llm-pricing-api`, region `iad`
+- **VM**: shared-cpu-1x, 512MB
+- **HTTP service**: port 8000, `force_https`, health check on `GET /health` every 30s
+- **Persistent volume**: `llm_pricing_data` mounted at `/app/data` — this is where
+  `pricing_history.db` and `billing.db` live, so data survives redeploys
+- **Build**: uses the repo's `Dockerfile` unchanged
 
-# Enable system-assigned managed identity on App Service
-az webapp identity assign --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME --identities [system]
+## Environment Variables & Secrets
 
-# Get the principal ID
-PRINCIPAL_ID=$(az webapp identity show --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME --query principalId -o tsv)
+Configuration is pydantic-settings (`src/config/settings.py`) — every setting reads
+from an environment variable of the same name, uppercased (e.g. `mcp_api_key` ←
+`MCP_API_KEY`). All provider API keys are optional; the server works with whichever
+subset is configured.
 
-# Assign "Key Vault Secrets User" role to the managed identity
-# NOTE: If az role assignment create fails with "MissingSubscription", use az rest instead:
-SUBSCRIPTION=$(az account show --query id -o tsv)
-SCOPE="subscriptions/${SUBSCRIPTION}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.KeyVault/vaults/${KEY_VAULT_NAME}"
-ROLE_DEF_ID="4633458b-17de-408a-b874-0445c86b69e6"  # Key Vault Secrets User
-GUID=$(python3 -c "import uuid; print(uuid.uuid4())")
-az rest --method PUT \
-  --uri "https://management.azure.com/${SCOPE}/providers/Microsoft.Authorization/roleAssignments/${GUID}?api-version=2022-04-01" \
-  --body "{\"properties\":{\"roleDefinitionId\":\"/subscriptions/${SUBSCRIPTION}/providers/Microsoft.Authorization/roleDefinitions/${ROLE_DEF_ID}\",\"principalId\":\"${PRINCIPAL_ID}\",\"principalType\":\"ServicePrincipal\"}}"
-```
-
-### 3. Store Secrets in Key Vault
+Set secrets on the running app with `flyctl secrets set` (this triggers a redeploy):
 
 ```bash
-# Create API key secret
-az keyvault secret set --vault-name $KEY_VAULT_NAME --name mcp-api-key --value "your-strong-random-key"
-
-# Store other sensitive secrets if needed
-az keyvault secret set --vault-name $KEY_VAULT_NAME --name openai-api-key --value "your_openai_api_key"
-az keyvault secret set --vault-name $KEY_VAULT_NAME --name anthropic-api-key --value "your_anthropic_api_key"
+flyctl secrets set MCP_API_KEY="your-strong-random-key"
+flyctl secrets set OPENAI_API_KEY="sk-..." ANTHROPIC_API_KEY="sk-ant-..."
+# ...and so on for any other provider key you want live-synced pricing for
 ```
 
-### 4. Configure Environment Variables with Key Vault References
+List what's currently set (values are never shown) with `flyctl secrets list`.
+
+Non-secret settings (`SERVER_PORT`, `RATE_LIMIT_PER_MINUTE`, `AGENT_LLM_PROVIDER`,
+etc.) can be set the same way, or via the `[env]` block in `fly.toml` for values
+that aren't sensitive.
+
+## Manual Deploy (rare — normally CI/CD does this)
+
+Only needed for local testing of a Fly.io-specific change, or as a break-glass path
+if CI/CD is down:
 
 ```bash
-# Get Key Vault URI values
-VAULT_URI=$(az keyvault show --resource-group $RESOURCE_GROUP --name $KEY_VAULT_NAME --query properties.vaultUri -o tsv)
-
-# Set environment variables (MCP_API_KEY references Key Vault)
-az webapp config appsettings set --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME --settings \
-  "MCP_API_KEY=@Microsoft.KeyVault(SecretUri=${VAULT_URI}secrets/mcp-api-key/)" \
-  "OPENAI_API_KEY=@Microsoft.KeyVault(SecretUri=${VAULT_URI}secrets/openai-api-key/)" \
-  "ANTHROPIC_API_KEY=@Microsoft.KeyVault(SecretUri=${VAULT_URI}secrets/anthropic-api-key/)" \
-  MCP_API_KEY_HEADER="x-api-key" \
-  MAX_BODY_BYTES="1000000" \
-  RATE_LIMIT_PER_MINUTE="60" \
-  SERVER_HOST="0.0.0.0" \
-  SERVER_PORT="8000" \
-  DEBUG="false" \
-  AGENT_LLM_PROVIDER="openai" \
-  AGENT_MODEL="gpt-4o-mini"
-
-# To switch to Anthropic Claude instead:
-# AGENT_LLM_PROVIDER="anthropic"
-# AGENT_MODEL="claude-sonnet-4-6"
+flyctl deploy --remote-only
 ```
 
-### 5. Deploy via Zip Deployment (Recommended)
-
-The application uses a startup script (`run.sh`) to install dependencies and start the server:
-
-```bash
-# Create deployment package
-python -c "
-import zipfile
-from pathlib import Path
-
-zip_path = Path('deploy_linux.zip')
-if zip_path.exists():
-    zip_path.unlink()
-
-files = ['src', 'requirements.txt', 'Procfile', 'runtime.txt', 'run.sh']
-
-def should_skip(p):
-    return '__pycache__' in p.parts or p.suffix == '.pyc'
-
-with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-    for item in files:
-        p = Path(item)
-        if p.is_dir():
-            for f in p.rglob('*'):
-                if f.is_file() and not should_skip(f):
-                    zf.write(f, f.as_posix())
-        elif p.is_file():
-            zf.write(p, p.as_posix())
-
-print(f'Created {zip_path.name}')
-"
-
-# Deploy the zip file
-az webapp deployment source config-zip --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME --src deploy_linux.zip
-```
-
-**Important**: The `run.sh` script must have Unix (LF) line endings. Use `.gitattributes` with `*.sh text eol=lf` to ensure correct line endings in git.
-
-### 6. Manual Deployment via Git (Alternative)
-
-```bash
-# Configure git deployment
-az webapp deployment user set --user-name <username> --password <password>
-
-az webapp deployment source config-local-git --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME
-
-# Add Azure remote and push
-git remote add azure <git-url-from-previous-output>
-git push azure master
-```
-
-## Post-Deployment
-
-### Verify Deployment
-
-Wait 1-2 minutes for the app to start, then visit your app:
-```
-https://$WEB_APP_NAME.azurewebsites.net
-```
-
-For the llm-pricing-mcp app:
-```
-https://llm-pricing-mcp.azurewebsites.net
-```
-
-### Test Endpoints
+## Post-Deployment Verification
 
 ```bash
 # Health check
-curl https://llm-pricing-mcp.azurewebsites.net/health
+curl https://llm-pricing-api.fly.dev/health
 
-# Get available models
-curl https://llm-pricing-mcp.azurewebsites.net/models
+# Confirm the deployed version matches what you expect
+curl https://llm-pricing-api.fly.dev/health | jq .version
 
-# Get pricing data
-curl https://llm-pricing-mcp.azurewebsites.net/pricing
-
-# Get performance metrics
-curl https://llm-pricing-mcp.azurewebsites.net/performance
+# Spot-check a couple of real endpoints
+curl https://llm-pricing-api.fly.dev/models
+curl https://llm-pricing-api.fly.dev/data-quality
 ```
 
-### View Logs
+## Logs & Monitoring
 
 ```bash
 # Stream logs in real-time
-az webapp log tail --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME
+flyctl logs
 
-# Download logs for later analysis
-az webapp log download --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME --log-file logs.zip
+# Check machine status
+flyctl status
+
+# Check resource usage
+flyctl vm status
 ```
 
 ## Troubleshooting
 
-### Common Issues
-
-1. **Application not starting (timeout error)**
-   - Check logs: `az webapp log tail --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME`
-   - Verify `run.sh` has Unix (LF) line endings, not Windows (CRLF)
-   - Ensure all dependencies in `requirements.txt` are compatible with Python 3.11
-
-2. **Dependencies not installed**
-   - The `run.sh` script automatically installs dependencies from `requirements.txt`
-   - Verify `requirements.txt` exists in the root directory of the deployment package
-
-3. **Environment variables not set**
-   - Verify app settings in Azure Portal: App Service > Configuration > Application settings
-   - Restart the app after changing settings: `az webapp restart --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME`
-
-4. **File not found errors in logs**
-   - Ensure deployment zip includes all necessary files: `src/`, `requirements.txt`, `Procfile`, `runtime.txt`, `run.sh`
-   - Recreate the deployment zip and redeploy if files are missing
-
-### Health Check
-
-Use the `/health` endpoint to verify the application is running:
-```bash
-curl https://llm-pricing-mcp.azurewebsites.net/health
-
-# Should return:
-# {"status":"healthy","service":"LLM Pricing MCP Server","version":"1.33.0"}
-```
+1. **`deploy_fly` job didn't run** — it only fires on push to `master` (or manual
+   `workflow_dispatch`), and only after `test`/`lint`/`osv_scan`/`security`/
+   `secret_scan` all pass. Check the other jobs first.
+2. **Health check times out in CI** — the job polls for 3 minutes and warns
+   (doesn't fail the build) rather than blocking on a slow cold start. Check
+   `flyctl logs` and `flyctl status` directly if this happens repeatedly.
+3. **App won't start** — `flyctl logs` first; the most common cause is a missing
+   required environment variable or a Dockerfile build failure (`flyctl deploy` output
+   shows the build log).
+4. **Data missing after a deploy** — confirm the `llm_pricing_data` volume is still
+   attached (`flyctl volumes list`); the databases live there, not in the container
+   image, so they should survive normal deploys.
 
 ## Scaling
 
 ```bash
-# Scale up (change plan to higher tier)
-az appservice plan update --name $APP_SERVICE_PLAN --resource-group $RESOURCE_GROUP --sku P1V2
+# Scale VM size
+flyctl scale vm shared-cpu-2x --memory 1024
 
-# Scale out (add instances for load balancing)
-az appservice plan update --name $APP_SERVICE_PLAN --resource-group $RESOURCE_GROUP --number-of-workers 2
+# Scale out (more machines)
+flyctl scale count 2
 ```
 
-## Restart the Application
+## Restart
 
 ```bash
-# Restart the web app
-az webapp restart --resource-group $RESOURCE_GROUP --name $WEB_APP_NAME
+flyctl apps restart llm-pricing-api
 ```
