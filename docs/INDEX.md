@@ -16,11 +16,11 @@ Welcome to the LLM Pricing MCP Server documentation! This directory contains com
 - **[BACKWARDS_COMPATIBILITY.md](BACKWARDS_COMPATIBILITY.md)** - API versioning, backwards compatibility guarantees, and migration guides
 
 ### Deployment & Operations
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Standard deployment procedures and best practices (⚠️ predates the move to Fly.io — describes the retired Azure App Service target)
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - How production deployment actually works today: CI/CD-driven onto Fly.io
 - **[BLUE_GREEN_DEPLOYMENT.md](BLUE_GREEN_DEPLOYMENT.md)** - Zero-downtime blue-green deployment strategy and implementation
-- **[DEPLOYMENT_IMPLEMENTATION.md](DEPLOYMENT_IMPLEMENTATION.md)** - Detailed implementation guide for deployment automation (⚠️ also Azure-era, see above)
+- **[DEPLOYMENT_IMPLEMENTATION.md](DEPLOYMENT_IMPLEMENTATION.md)** - Historical implementation summary for the health-check/graceful-shutdown feature (⚠️ not a deployment runbook — see the note at the top of the file)
 
-Actual production deployment is CI/CD-driven via `.github/workflows/ci-cd.yml` (Fly.io + health check on merge to `master`) — see `CLAUDE.md`'s Git Flow section for the current process.
+Actual production deployment is CI/CD-driven via `.github/workflows/ci-cd.yml` (Fly.io + health check on merge to `master`) — see `CLAUDE.md`'s Git Flow section or `DEPLOYMENT.md` for the current process.
 
 ### MCP (Model Context Protocol) Integration
 - **[MCP_QUICK_START.md](MCP_QUICK_START.md)** - Quick start guide for running the MCP server
@@ -49,8 +49,8 @@ Actual production deployment is CI/CD-driven via `.github/workflows/ci-cd.yml` (
 7. Follow [HOUSEKEEPING.md](HOUSEKEEPING.md) for quality standards
 
 **For DevOps/SRE:**
-1. Deploys are CI/CD-driven via `.github/workflows/ci-cd.yml` (Fly.io + health check on merge to `master`) — see `CLAUDE.md`'s Git Flow section for the current process
-2. [DEPLOYMENT.md](DEPLOYMENT.md) and [DEPLOYMENT_IMPLEMENTATION.md](DEPLOYMENT_IMPLEMENTATION.md) predate the move to Fly.io and describe the retired Azure target — do not follow them for deployment
+1. Deploys are CI/CD-driven via `.github/workflows/ci-cd.yml` (Fly.io + health check on merge to `master`) — see `CLAUDE.md`'s Git Flow section or [DEPLOYMENT.md](DEPLOYMENT.md) for the current process
+2. [DEPLOYMENT_IMPLEMENTATION.md](DEPLOYMENT_IMPLEMENTATION.md) is a historical implementation record, not a runbook — do not follow it for deployment
 3. Use [HOUSEKEEPING.md](HOUSEKEEPING.md) for operational procedures
 
 **For MCP Client Integrators:**
@@ -70,9 +70,9 @@ Actual production deployment is CI/CD-driven via `.github/workflows/ci-cd.yml` (
 ### By Topic
 
 **Deployment & Infrastructure:**
-- [DEPLOYMENT.md](DEPLOYMENT.md) (⚠️ Azure-era, see note above)
+- [DEPLOYMENT.md](DEPLOYMENT.md)
 - [BLUE_GREEN_DEPLOYMENT.md](BLUE_GREEN_DEPLOYMENT.md)
-- [DEPLOYMENT_IMPLEMENTATION.md](DEPLOYMENT_IMPLEMENTATION.md) (⚠️ Azure-era, see note above)
+- [DEPLOYMENT_IMPLEMENTATION.md](DEPLOYMENT_IMPLEMENTATION.md) (⚠️ historical record, not a runbook — see note above)
 - [HOUSEKEEPING.md](HOUSEKEEPING.md) - Blue-Green Deployment section
 
 **MCP Protocol & Tools:**
