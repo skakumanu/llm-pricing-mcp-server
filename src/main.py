@@ -37,11 +37,14 @@ from src.models.pricing import (  # noqa: E402
     RouterRequest, RouterResponse, RouterFeedbackRequest, RouterFeedbackResponse,
     SavingsResponse, SavingsRecord,
     IDEBreakdownResponse, IDEBreakdownRecord,
+    UsageEventRequest, UsageEventResponse, UsageBatchRequest, UsageBatchResponse,
+    UsageSummaryResponse,
 )
 from src.services.pricing_history import init_pricing_history_service, get_pricing_history_service  # noqa: E402
 from src.services.pricing_alerts import init_pricing_alert_service, get_pricing_alert_service  # noqa: E402
 from src.services.router import init_router, get_router  # noqa: E402
 from src.services.savings_tracker import init_savings_tracker, get_savings_tracker  # noqa: E402
+from src.services.usage_tracker import init_usage_tracker, get_usage_tracker  # noqa: E402
 from src.services.billing_service import init_billing_service, get_billing_service  # noqa: E402
 from src.models.billing import (  # noqa: E402
     SignupRequest, SignupResponse, CheckoutRequest, CheckoutResponse,
@@ -104,6 +107,14 @@ _openapi_tags = [
     {
         "name": "Telemetry",
         "description": "API usage metrics, endpoint adoption stats, and per-org cost savings tracking.",
+    },
+    {
+        "name": "Usage",
+        "description": (
+            "Record and summarize actual LLM usage/spend — the real-cost counterpart to "
+            "/cost-estimate's hypothetical numbers. Cost is always computed server-side "
+            "from current pricing, never trusted from the caller."
+        ),
     },
     {
         "name": "Agent",
@@ -697,6 +708,8 @@ async def startup_pricing_history() -> None:
     logger.info("Pricing alert service initialized")
     await init_savings_tracker(settings.pricing_history_db_path)
     logger.info("Savings tracker initialized")
+    await init_usage_tracker(settings.pricing_history_db_path)
+    logger.info("Usage tracker initialized")
     set_cache_ttl(settings.benchmark_cache_ttl_hours)
     await init_conversation_store(settings.conversation_db_path, settings.agent_max_history_turns)
     logger.info(
@@ -1726,6 +1739,138 @@ async def ide_savings_breakdown(
         breakdown=[IDEBreakdownRecord(**r) for r in breakdown],
         days=days,
     )
+
+
+def _resolve_org_id(request: Request) -> Optional[str]:
+    """Attribute a request to an org: authenticated customer first, else the caller-supplied header.
+
+    Same trust model as /router/recommend's org attribution — the header is
+    self-reported, not access-controlled, matching how /telemetry/savings' org_id
+    filter already works for this codebase.
+    """
+    customer = getattr(request.state, "customer", None)
+    if customer is not None:
+        return customer.org_id
+    return request.headers.get("X-Organization-Id")
+
+
+@app.post("/usage", response_model=UsageEventResponse, tags=["Usage"])
+async def record_usage(req: UsageEventRequest, request: Request):
+    """
+    Record an actual LLM usage event and compute its cost from current pricing.
+
+    This is the "actual spend" counterpart to /cost-estimate's hypothetical numbers —
+    call this after an LLM request completes with the real token counts, and this
+    endpoint looks up current pricing itself rather than trusting a client-supplied cost.
+    Resubmitting the same `request_id` for the same org is a no-op (idempotent).
+    """
+    aggregator = await get_pricing_aggregator()
+    model_pricing = await aggregator.find_model_pricing(req.model_name)
+    if not model_pricing:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Model '{req.model_name}' not found. Please check the /pricing endpoint for available models."
+        )
+
+    cost_usd = (
+        req.input_tokens * model_pricing.cost_per_input_token
+        + req.output_tokens * model_pricing.cost_per_output_token
+    )
+    org_id = _resolve_org_id(request)
+    tracker = get_usage_tracker()
+    result = await tracker.record_event(
+        provider=model_pricing.provider,
+        model_name=model_pricing.model_name,
+        input_tokens=req.input_tokens,
+        output_tokens=req.output_tokens,
+        cost_usd=cost_usd,
+        org_id=org_id,
+        occurred_at=req.occurred_at,
+        request_id=req.request_id,
+    )
+    get_telemetry_service().track_feature_usage("usage_ingestion")
+
+    return UsageEventResponse(
+        recorded=True,
+        duplicate=result["duplicate"],
+        model_name=model_pricing.model_name,
+        provider=model_pricing.provider,
+        input_tokens=req.input_tokens,
+        output_tokens=req.output_tokens,
+        cost_usd=round(cost_usd, 6),
+        org_id=org_id,
+    )
+
+
+@app.post("/usage/batch", response_model=UsageBatchResponse, tags=["Usage"])
+async def record_usage_batch(req: UsageBatchRequest, request: Request):
+    """
+    Record multiple usage events in one call. Best-effort: an unknown model in one
+    event does not fail the rest of the batch.
+    """
+    aggregator = await get_pricing_aggregator()
+    org_id = _resolve_org_id(request)
+    tracker = get_usage_tracker()
+
+    recorded = 0
+    duplicates = 0
+    failed = 0
+    errors: List[str] = []
+    total_cost_usd = 0.0
+
+    for event in req.events:
+        model_pricing = await aggregator.find_model_pricing(event.model_name)
+        if not model_pricing:
+            failed += 1
+            errors.append(f"Model '{event.model_name}' not found")
+            continue
+
+        cost_usd = (
+            event.input_tokens * model_pricing.cost_per_input_token
+            + event.output_tokens * model_pricing.cost_per_output_token
+        )
+        result = await tracker.record_event(
+            provider=model_pricing.provider,
+            model_name=model_pricing.model_name,
+            input_tokens=event.input_tokens,
+            output_tokens=event.output_tokens,
+            cost_usd=cost_usd,
+            org_id=org_id,
+            occurred_at=event.occurred_at,
+            request_id=event.request_id,
+        )
+        if result["duplicate"]:
+            duplicates += 1
+        else:
+            recorded += 1
+            total_cost_usd += cost_usd
+
+    get_telemetry_service().track_feature_usage("usage_ingestion_batch")
+
+    return UsageBatchResponse(
+        recorded=recorded,
+        duplicates=duplicates,
+        failed=failed,
+        errors=errors,
+        total_cost_usd=round(total_cost_usd, 6),
+    )
+
+
+@app.get("/usage/summary", response_model=UsageSummaryResponse, tags=["Usage"])
+async def usage_summary(
+    org_id: Optional[str] = Query(None, description="Filter by organisation ID"),
+    days: int = Query(30, ge=1, le=365, description="Look-back window in days"),
+):
+    """
+    Return actual recorded spend for the last `days` days, optionally filtered by org.
+
+    Pass `X-Organization-Id` header (or `org_id` query param) when calling
+    POST /usage to enable per-org tracking, the same way /router/recommend and
+    /telemetry/savings already work.
+    """
+    tracker = get_usage_tracker()
+    result = await tracker.get_summary(org_id=org_id, days=days)
+    return UsageSummaryResponse(**result)
 
 
 @app.post("/router/feedback", response_model=RouterFeedbackResponse, tags=["Router"])

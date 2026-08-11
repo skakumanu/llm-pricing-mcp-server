@@ -20,6 +20,8 @@ from mcp.tools.predict_cost import PredictCostTool
 from mcp.tools.optimize_workload import OptimizeWorkloadTool
 from mcp.tools.check_price_drift import CheckPriceDriftTool
 from mcp.tools.get_data_quality import GetDataQualityTool
+from mcp.tools.record_usage import RecordUsageTool
+from mcp.tools.get_usage_summary import GetUsageSummaryTool
 
 
 class ToolManager:
@@ -621,6 +623,77 @@ class ToolManager:
                 "input_schema": {
                     "type": "object",
                     "properties": {},
+                    "required": [],
+                },
+            },
+            "record_usage": {
+                "instance": RecordUsageTool(),
+                "name": "record_usage",
+                "description": (
+                    "Record actual token usage for a completed LLM call. Cost is computed "
+                    "server-side from current pricing, never trusted from the caller — this is "
+                    "the 'actual spend' counterpart to estimate_cost's hypothetical numbers. "
+                    "Optionally scope to an org_id for per-org spend tracking. Resubmitting the "
+                    "same request_id for the same org is a no-op. Use when the user wants to log "
+                    "or track real LLM spend, not just estimate it."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "model_name": {
+                            "type": "string",
+                            "description": "Name of the LLM model that was called",
+                        },
+                        "input_tokens": {
+                            "type": "integer",
+                            "description": "Number of input tokens actually used",
+                            "minimum": 0,
+                        },
+                        "output_tokens": {
+                            "type": "integer",
+                            "description": "Number of output tokens actually used",
+                            "minimum": 0,
+                        },
+                        "org_id": {
+                            "type": "string",
+                            "description": "Optional organisation ID to attribute this usage to",
+                        },
+                        "occurred_at": {
+                            "type": "number",
+                            "description": "Unix timestamp when the call happened (default: now)",
+                        },
+                        "request_id": {
+                            "type": "string",
+                            "description": "Optional idempotency key — resubmitting the same value is a no-op",
+                        },
+                    },
+                    "required": ["model_name", "input_tokens", "output_tokens"],
+                },
+            },
+            "get_usage_summary": {
+                "instance": GetUsageSummaryTool(),
+                "name": "get_usage_summary",
+                "description": (
+                    "Get a summary of actual recorded LLM spend: total cost, request count, and "
+                    "breakdowns by model and provider, from usage events previously logged via "
+                    "record_usage. Use when the user asks what they've actually spent, as opposed "
+                    "to a hypothetical cost estimate."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "org_id": {
+                            "type": "string",
+                            "description": "Optional organisation ID filter",
+                        },
+                        "days": {
+                            "type": "integer",
+                            "description": "Look-back window in days (default: 30, max: 365)",
+                            "default": 30,
+                            "minimum": 1,
+                            "maximum": 365,
+                        },
+                    },
                     "required": [],
                 },
             },
