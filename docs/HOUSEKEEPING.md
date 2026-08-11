@@ -274,12 +274,13 @@ Maintaining well-organized files and directories is essential for code maintaina
 ```
 llm-pricing-mcp-server/
 ├── .github/              # GitHub workflows and CI/CD
-├── .azure/               # Azure configuration files
+├── fly.toml              # Fly.io app configuration
 ├── docs/                 # All project documentation
 ├── scripts/              # Deployment and utility scripts
 ├── src/                  # Source code (all Python)
+├── mcp/                  # MCP server, tools, transport
+├── agent/                # ReAct agent
 ├── tests/                # Test files
-├── redirect-app/         # Redirect/proxy application
 ├── .env.example          # Example environment variables
 ├── .gitignore            # Git ignore rules
 ├── .dockerignore         # Docker ignore rules
@@ -288,7 +289,7 @@ llm-pricing-mcp-server/
 ├── LICENSE               # License text
 ├── requirements.txt      # Python dependencies
 ├── pyproject.toml        # Project metadata and config
-├── Procfile              # Heroku/Cloud deployment
+├── Procfile              # Process type declaration (unused by Fly.io's Dockerfile build, kept for reference)
 └── [other config files]
 ```
 
@@ -452,7 +453,7 @@ scripts/
 - [ ] Example configs with `.example` suffix
 - [ ] Document config requirements in README
 - [ ] Use environment variables for secrets
-- [ ] Azure Key Vault for production secrets
+- [ ] Fly.io secrets (`flyctl secrets set`) for production — see `DEPLOYMENT.md`
 - [ ] Never commit `.env` files
 
 ### ✅ Git Repository Organization
@@ -518,7 +519,7 @@ scripts/
 - [ ] Naming conventions followed
 - [ ] Internal references updated
 - [ ] GitHub-specific files in `.github/`
-- [ ] Azure-specific files in `.azure/`
+- [ ] Fly.io config changes in `fly.toml`
 - [ ] No duplicate files
 - [ ] No orphaned files
 
@@ -723,7 +724,7 @@ footer
 
 2. **A02:2021 – Cryptographic Failures**
    - [ ] Use HTTPS only (enforced in production)
-   - [ ] Verify secrets stored in Azure Key Vault, not code
+   - [ ] Verify secrets stored as Fly.io secrets (`flyctl secrets set`), not code
    - [ ] Check API keys never logged or exposed
    - [ ] Validate sensitive data encrypted at rest and in transit
 
@@ -854,7 +855,7 @@ footer
 - **Secrets Management**: 
   - Never commit API keys, passwords, tokens
   - Never commit credentials in any form
-  - Use Azure Key Vault for secrets
+  - Use Fly.io secrets (`flyctl secrets set`) for production
   - Use environment variables for configuration
   - Verify .gitignore excludes sensitive files
   
