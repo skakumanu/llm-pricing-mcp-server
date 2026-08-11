@@ -450,10 +450,10 @@ docs/
 **Expected Structure:**
 ```
 scripts/
-├── blue_green_deployment.sh  # Bash deployment script
-├── blue_green_deployment.ps1 # PowerShell script
-├── [utility scripts]
-└── README.md                 # Scripts documentation
+├── promote_branch_content.sh # develop → master clean promotion
+├── quick_validate.py          # Local MCP STDIO smoke test
+├── validate_price_snapshot.py # Pricing snapshot validation
+└── [utility scripts]
 ```
 
 **Naming Conventions:**
@@ -1169,11 +1169,9 @@ In `.github/workflows/ci-cd.yml`:
 
 **Keep Updated in Repository:**
 - [ ] `BLUE_GREEN_DEPLOYMENT.md` - Strategy & architecture
-- [ ] `DEPLOYMENT_IMPLEMENTATION.md` - Implementation details
-- [ ] `DEPLOYMENT.md` - Standard procedures
-- [ ] `scripts/blue_green_deployment.sh` - Bash script
-- [ ] `scripts/blue_green_deployment.ps1` - PowerShell script
-- [ ] `.github/workflows/ci-cd.yml` - Workflow definition
+- [ ] `DEPLOYMENT_IMPLEMENTATION.md` - Historical implementation record (not a runbook)
+- [ ] `DEPLOYMENT.md` - How production deployment actually works (Fly.io)
+- [ ] `.github/workflows/ci-cd.yml` - Workflow definition, incl. the `deploy_fly` job
 
 **Runbooks for Each Scenario:**
 - [ ] Standard deployment (feature/fix)

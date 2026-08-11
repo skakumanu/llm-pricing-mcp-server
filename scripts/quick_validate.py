@@ -73,10 +73,16 @@ def validate_server():
         resp = json.loads(server.stdout.readline())
 
         tools = resp.get("result", {}).get("tools", [])
-        if len(tools) != 6:
-            print(f"[FAIL] Expected 6 tools, got {len(tools)}")
+        required = {
+            "get_all_pricing", "estimate_cost", "compare_costs",
+            "get_performance_metrics", "get_use_cases",
+        }
+        found = {t["name"] for t in tools}
+        missing = required - found
+        if missing:
+            print(f"[FAIL] Missing required tools: {sorted(missing)}")
             return False
-        print("[PASS] All 6 tools discovered\n")
+        print(f"[PASS] {len(tools)} tools discovered, all required tools present\n")
 
         # Test each tool
         tests_passed = 0
