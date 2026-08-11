@@ -8,7 +8,7 @@
 
 ## What's Available
 
-20 MCP tools across two transports:
+22 MCP tools across two transports:
 
 | Transport | Endpoint | Use case |
 |-----------|----------|----------|
@@ -42,7 +42,7 @@ Expected response:
 }
 ```
 
-### List all 20 tools
+### List all 22 tools
 
 ```bash
 curl -X POST https://llm-pricing-api.fly.dev/mcp \
@@ -89,7 +89,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 
 ---
 
-## All 20 Tools
+## All 22 Tools
 
 | Tool | Required args | Optional args |
 |------|--------------|---------------|

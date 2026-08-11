@@ -154,6 +154,22 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
                 "to find the ID. Use when the user asks to delete or clear a past conversation."
             ),
         ),
+        (
+            "record_usage",
+            (
+                "Record actual token usage for a completed LLM call — cost is computed "
+                "server-side from current pricing, never trusted from the caller. Use when the "
+                "user wants to log or track real LLM spend, not just estimate it."
+            ),
+        ),
+        (
+            "get_usage_summary",
+            (
+                "Get a summary of actual recorded LLM spend: total cost, request count, and "
+                "breakdowns by model and provider. Use when the user asks what they've actually "
+                "spent, as opposed to a hypothetical cost estimate."
+            ),
+        ),
     ]
 
     for tool_name, description in _mcp_tool_specs:
