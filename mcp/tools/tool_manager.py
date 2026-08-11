@@ -22,6 +22,9 @@ from mcp.tools.check_price_drift import CheckPriceDriftTool
 from mcp.tools.get_data_quality import GetDataQualityTool
 from mcp.tools.record_usage import RecordUsageTool
 from mcp.tools.get_usage_summary import GetUsageSummaryTool
+from mcp.tools.register_budget_alert import RegisterBudgetAlertTool
+from mcp.tools.list_budget_alerts import ListBudgetAlertsTool
+from mcp.tools.delete_budget_alert import DeleteBudgetAlertTool
 
 
 class ToolManager:
@@ -695,6 +698,65 @@ class ToolManager:
                         },
                     },
                     "required": [],
+                },
+            },
+            "register_budget_alert": {
+                "instance": RegisterBudgetAlertTool(),
+                "name": "register_budget_alert",
+                "description": (
+                    "Register a webhook URL to receive notifications when actual recorded spend "
+                    "(from record_usage) crosses a USD threshold within a rolling window. "
+                    "Optionally scope to a specific org_id (omit for total spend across all "
+                    "orgs). Fires at most once per period_days while spend stays over threshold. "
+                    "Returns the alert ID."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "Webhook URL to POST when the alert fires",
+                        },
+                        "threshold_usd": {
+                            "type": "number",
+                            "description": "Spend level in USD that triggers the alert",
+                        },
+                        "org_id": {
+                            "type": "string",
+                            "description": "Organisation to monitor. Omit for total spend across all orgs.",
+                        },
+                        "period_days": {
+                            "type": "integer",
+                            "description": "Rolling look-back window for the spend check, in days (default: 30)",
+                            "default": 30,
+                        },
+                    },
+                    "required": ["url", "threshold_usd"],
+                },
+            },
+            "list_budget_alerts": {
+                "instance": ListBudgetAlertsTool(),
+                "name": "list_budget_alerts",
+                "description": "List all registered budget-spend webhook alerts with their IDs and settings.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+            "delete_budget_alert": {
+                "instance": DeleteBudgetAlertTool(),
+                "name": "delete_budget_alert",
+                "description": "Delete a registered budget-spend alert by its ID.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "alert_id": {
+                            "type": "integer",
+                            "description": "The ID of the alert to delete (from list_budget_alerts or register_budget_alert)",
+                        },
+                    },
+                    "required": ["alert_id"],
                 },
             },
             "ask_agent": {

@@ -39,12 +39,14 @@ from src.models.pricing import (  # noqa: E402
     IDEBreakdownResponse, IDEBreakdownRecord,
     UsageEventRequest, UsageEventResponse, UsageBatchRequest, UsageBatchResponse,
     UsageSummaryResponse,
+    BudgetAlertRequest, BudgetAlertRecord, BudgetAlertListResponse,
 )
 from src.services.pricing_history import init_pricing_history_service, get_pricing_history_service  # noqa: E402
 from src.services.pricing_alerts import init_pricing_alert_service, get_pricing_alert_service  # noqa: E402
 from src.services.router import init_router, get_router  # noqa: E402
 from src.services.savings_tracker import init_savings_tracker, get_savings_tracker  # noqa: E402
 from src.services.usage_tracker import init_usage_tracker, get_usage_tracker  # noqa: E402
+from src.services.budget_alerts import init_budget_alert_service, get_budget_alert_service  # noqa: E402
 from src.services.billing_service import init_billing_service, get_billing_service  # noqa: E402
 from src.models.billing import (  # noqa: E402
     SignupRequest, SignupResponse, CheckoutRequest, CheckoutResponse,
@@ -710,6 +712,8 @@ async def startup_pricing_history() -> None:
     logger.info("Savings tracker initialized")
     await init_usage_tracker(settings.pricing_history_db_path)
     logger.info("Usage tracker initialized")
+    await init_budget_alert_service(settings.pricing_history_db_path)
+    logger.info("Budget alert service initialized")
     set_cache_ttl(settings.benchmark_cache_ttl_hours)
     await init_conversation_store(settings.conversation_db_path, settings.agent_max_history_turns)
     logger.info(
@@ -1790,6 +1794,12 @@ async def record_usage(req: UsageEventRequest, request: Request):
     )
     get_telemetry_service().track_feature_usage("usage_ingestion")
 
+    try:
+        budget_alerts = get_budget_alert_service()
+        await budget_alerts.check_and_fire(tracker, secret=settings.webhook_secret)
+    except Exception as exc:
+        logger.warning("Budget alert check failed: %s", exc)
+
     return UsageEventResponse(
         recorded=True,
         duplicate=result["duplicate"],
@@ -1847,6 +1857,13 @@ async def record_usage_batch(req: UsageBatchRequest, request: Request):
 
     get_telemetry_service().track_feature_usage("usage_ingestion_batch")
 
+    if recorded:
+        try:
+            budget_alerts = get_budget_alert_service()
+            await budget_alerts.check_and_fire(tracker, secret=settings.webhook_secret)
+        except Exception as exc:
+            logger.warning("Budget alert check failed: %s", exc)
+
     return UsageBatchResponse(
         recorded=recorded,
         duplicates=duplicates,
@@ -1871,6 +1888,45 @@ async def usage_summary(
     tracker = get_usage_tracker()
     result = await tracker.get_summary(org_id=org_id, days=days)
     return UsageSummaryResponse(**result)
+
+
+@app.post("/usage/alerts", response_model=BudgetAlertRecord, status_code=201, tags=["Usage"])
+async def create_budget_alert(request: BudgetAlertRequest):
+    """
+    Register a webhook alert for actual spend crossing a USD threshold.
+
+    The webhook URL will receive a `POST` request whenever recorded spend (from
+    POST /usage) for `org_id` (or across all orgs, if omitted) reaches
+    `threshold_usd` within the trailing `period_days`. Checked inline after every
+    usage event is recorded, and fires at most once per `period_days` while spend
+    stays over threshold. Uses the same HMAC-SHA256 signing as /pricing/alerts —
+    see GET /pricing/alerts/signing-info.
+    """
+    svc = get_budget_alert_service()
+    record = await svc.register(
+        url=request.url,
+        threshold_usd=request.threshold_usd,
+        org_id=request.org_id,
+        period_days=request.period_days,
+    )
+    return BudgetAlertRecord(**record)
+
+
+@app.get("/usage/alerts", response_model=BudgetAlertListResponse, tags=["Usage"])
+async def list_budget_alerts():
+    """Return all registered budget-spend alert webhooks."""
+    svc = get_budget_alert_service()
+    alerts = await svc.list_alerts()
+    return BudgetAlertListResponse(alerts=alerts, total=len(alerts))
+
+
+@app.delete("/usage/alerts/{alert_id}", status_code=204, tags=["Usage"])
+async def delete_budget_alert(alert_id: int):
+    """Delete a registered budget alert by ID."""
+    svc = get_budget_alert_service()
+    deleted = await svc.delete(alert_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Alert {alert_id} not found")
 
 
 @app.post("/router/feedback", response_model=RouterFeedbackResponse, tags=["Router"])
@@ -2707,10 +2763,12 @@ async def webhook_signing_info():
     """
     Return information about webhook payload signing.
 
-    When ``WEBHOOK_SECRET`` is configured, every price-change webhook POST will
+    When ``WEBHOOK_SECRET`` is configured, every price-change webhook (from
+    /pricing/alerts) and budget-spend webhook (from /usage/alerts) POST will
     carry an ``X-LLM-Pricing-Signature: sha256=<hex>`` header.  Use the
     ``verify_webhook_signature`` helper (from
-    ``src.services.pricing_alerts``) on the receiving end to verify it.
+    ``src.services.pricing_alerts``) on the receiving end to verify it —
+    both alert types use the same signing helper.
 
     Returns whether signing is active and the header name to look for.
     Intentionally never returns the secret itself.

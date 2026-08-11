@@ -41,6 +41,9 @@ EXPECTED_TOOLS = {
     "ask_agent",
     "record_usage",
     "get_usage_summary",
+    "register_budget_alert",
+    "list_budget_alerts",
+    "delete_budget_alert",
 }
 
 # Tools intentionally NOT exposed to the ReAct agent.
@@ -59,7 +62,7 @@ class TestToolRegistry:
         assert set(registry.tools.keys()) == EXPECTED_TOOLS
 
     def test_registry_count(self, registry):
-        assert len(registry.tools) == 22
+        assert len(registry.tools) == 25
 
     def test_every_tool_has_instance_and_schema(self, registry):
         for name, meta in registry.tools.items():
@@ -122,7 +125,7 @@ class TestDocsStayInSync:
     COUNT_RE = re.compile(r"\b(\d{1,3})\s+(?:MCP\s+|pricing\s+)?tools?\b", re.IGNORECASE)
 
     # Counts that legitimately are not the registry total.
-    ALLOWED_OTHER_COUNTS = {20}  # agent binds 20 of 22 (ask_agent + get_telemetry excluded)
+    ALLOWED_OTHER_COUNTS = {23}  # agent binds 23 of 25 (ask_agent + get_telemetry excluded)
 
     def test_docs_report_correct_tool_count(self, registry):
         total = len(registry.tools)
