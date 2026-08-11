@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.59.0 | **Last updated**: 2026-08-11
+**Version**: v1.60.0 | **Last updated**: 2026-08-11
 
 ---
 
@@ -27,7 +27,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 26 
 ┌─────────────────────────────────▼───────────────────────────────────────────┐
 │  Presentation Layer (src/main.py + mcp/)                                    │
 │                                                                             │
-│  REST API              MCP (22 tools)          Browser UIs (13 pages)       │
+│  REST API              MCP (25 tools)          Browser UIs (13 pages)       │
 │  /pricing              STDIO transport          /  /chat  /calculator        │
 │  /router/recommend     HTTP POST /mcp           /compare  /history           │
 │  /billing/*            JSON-RPC 2.0             /trends   /widget            │
@@ -49,6 +49,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 26 
 │  Router             │  │  (GPT-4o-mini  │  │  Tier sync (free/pro/ent)  │
 │  SavingsTracker     │  │   or Anthropic)│  │                            │
 │  UsageTracker       │  └───────┬────────┘  └────────────────────────────┘
+│  BudgetAlerts       │          │
 │  PricingAlerts      │          │
 └──────────┬──────────┘          │
            │                     │
@@ -97,6 +98,7 @@ llm-pricing-mcp-server/
 │       ├── ide_pricing.py           # Subscription pricing for AI coding IDE tools
 │       ├── savings_tracker.py       # Per-org router savings + acceptance_rate
 │       ├── usage_tracker.py         # Actual LLM usage events + per-org spend summary
+│       ├── budget_alerts.py         # Webhook alerts on actual spend crossing a USD threshold
 │       ├── billing_service.py       # BillingService: customers table, Stripe sync
 │       ├── pricing_alerts.py        # Webhook alert registration + delivery
 │       ├── telemetry.py             # Request telemetry aggregation
@@ -137,7 +139,7 @@ llm-pricing-mcp-server/
 │   ├── react_loop.py                # ReAct (Reason + Act) loop implementation
 │   ├── llm_backend.py               # AnthropicBackend + OpenAIBackend (switch via env)
 │   ├── conversation.py              # SQLite conversation memory, turn limit
-│   └── tools.py                     # 20 MCP tool bindings for agent use (+ RAG search)
+│   └── tools.py                     # 23 MCP tool bindings for agent use (+ RAG search)
 │
 ├── mcp/
 │   ├── server.py                    # MCP STDIO transport (Claude Desktop)
@@ -156,7 +158,7 @@ llm-pricing-mcp-server/
 │   ├── trends/index.html            # /trends — price-change leaderboard
 │   ├── widget/index.html            # /widget — embeddable pricing table
 │   ├── conversations/index.html     # /conversations — conversation history viewer
-│   ├── mcp-setup/index.html         # /mcp-setup — MCP integration hub (5 client tabs, live test, all 22 tools)
+│   ├── mcp-setup/index.html         # /mcp-setup — MCP integration hub (5 client tabs, live test, all 25 tools)
 │   ├── api-docs/index.html          # /api-docs — API reference (Swagger/ReDoc iframe + endpoint table)
 │   └── whats-new/index.html         # /whats-new — release notes timeline (v1.35.0 → current)
 │
@@ -193,7 +195,7 @@ def get_x_service() -> XService:
         raise RuntimeError("XService not initialized")
     return _service
 ```
-All `init_*` calls live in the `startup_pricing_history()` FastAPI lifespan handler. Services: `PricingAggregator`, `PricingHistory`, `BenchmarkService`, `SavingsTracker`, `UsageTracker`, `BillingService`.
+All `init_*` calls live in the `startup_pricing_history()` FastAPI lifespan handler. Services: `PricingAggregator`, `PricingHistory`, `BenchmarkService`, `SavingsTracker`, `UsageTracker`, `BudgetAlertService`, `BillingService`.
 
 ### 2. Authentication Middleware (`src/main.py`)
 Layered auth — billing DB first, global key fallback — so existing deployments without billing are unaffected:
@@ -223,13 +225,13 @@ Enabled for: OpenAI, Anthropic, Groq, Mistral AI, Together AI, Fireworks AI, xAI
 ### 4. MCP Dual Transport
 - **STDIO** (`mcp/server.py`): JSON-RPC 2.0 over stdin/stdout for Claude Desktop local integration
 - **HTTP** (`POST /mcp`): Same JSON-RPC 2.0 payload over HTTP for remote MCP clients — no local install needed
-- Protocol version: `2024-11-05`; 22 tools exposed
+- Protocol version: `2024-11-05`; 25 tools exposed
 
 ### 5. Agent Architecture (ReAct Loop)
 ```
 User message
   → react_loop.py: think → select tool → execute → observe → repeat
-  → tools.py: wraps 20 of the 22 MCP tools as callable Python functions
+  → tools.py: wraps 23 of the 25 MCP tools as callable Python functions
       (excludes ask_agent to prevent recursion, and get_telemetry as server-ops only)
   → llm_backend.py: AnthropicBackend | OpenAIBackend (switch via AGENT_LLM_PROVIDER env)
   → conversation.py: persist turns to SQLite, enforce max_turns limit
@@ -270,7 +272,7 @@ All use `'Segoe UI', system-ui, sans-serif`, `font-size: 14px`, sticky `.main-na
 
 | Database | File | Tables | Purpose |
 |----------|------|--------|---------|
-| Pricing history | `pricing_history.db` | `price_history`, `routing_feedback`, `usage_events` | Price snapshots, router feedback, actual usage/spend |
+| Pricing history | `pricing_history.db` | `price_history`, `routing_feedback`, `usage_events`, `budget_alerts` | Price snapshots, router feedback, actual usage/spend, spend-threshold webhooks |
 | Billing | `billing.db` | `customers` | API keys, tiers, Stripe IDs |
 | Conversations | per-session SQLite | `messages` | Agent conversation memory |
 
@@ -305,6 +307,9 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | POST | `/usage` | Required | Record one actual LLM usage event (cost computed server-side) |
 | POST | `/usage/batch` | Required | Record multiple usage events at once |
 | GET | `/usage/summary` | Required | Actual spend summary by model/provider, per-org |
+| POST | `/usage/alerts` | Required | Register a webhook for spend crossing a USD threshold |
+| GET | `/usage/alerts` | Required | List registered budget alerts |
+| DELETE | `/usage/alerts/{id}` | Required | Delete a budget alert |
 | POST | `/agent/chat` | None | Blocking agent response |
 | POST | `/agent/chat/stream` | None | SSE agent stream |
 | GET | `/agent/conversations` | None | List agent conversations |
