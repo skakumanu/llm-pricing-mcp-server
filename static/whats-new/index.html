@@ -142,8 +142,78 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.58.0 -->
+  <!-- v1.61.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.61.0</span>
+      <span class="release-date">Aug 12, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">New: repo cost auditor — find LLM call sites in your own codebase</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><code>scripts/audit_repo.py</code> statically scans a Python codebase for LLM SDK call sites (OpenAI, Anthropic, Google, LangChain) and estimates the cost of each one using the same token counting and pricing math as <code>predict_cost</code></li>
+        <li>Recommends cheaper models and prompt caching where a call site makes that detectable — no credentials or network access to your code required, everything runs locally</li>
+        <li>Run it with <code>python scripts/audit_repo.py /path/to/your/repo</code>; static estimates only, since call frequency can't be known from code alone — pair with <code>GET /usage/summary</code> once deployed for real numbers</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">Tests <strong>982</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.60.0 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.60.0</span>
+      <span class="release-date">Aug 11, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">New: budget-spend alerts on top of actual usage tracking</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><code>POST /usage/alerts</code> registers a webhook that fires when actual recorded spend (from <code>POST /usage</code>) crosses a USD threshold — per org, or across all orgs</li>
+        <li>Checked inline after every usage event, not on a schedule, and fires at most once per <code>period_days</code> while spend stays over threshold so it doesn't spam</li>
+        <li>Reuses the same HMAC-SHA256 webhook signing as price-change alerts — one signature format for both</li>
+        <li>New MCP tools: <code>register_budget_alert</code>, <code>list_budget_alerts</code>, <code>delete_budget_alert</code></li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">MCP tools <strong>22 → 25</strong></div>
+        <div class="stat-chip">Tests <strong>957</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.59.0 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.59.0</span>
+      <span class="release-date">Aug 11, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">New: actual usage/spend tracking — the real-cost counterpart to cost estimates</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><code>POST /usage</code> and <code>POST /usage/batch</code> record real token usage after an LLM call completes — cost is computed server-side from current pricing, never trusted from the caller</li>
+        <li><code>GET /usage/summary</code> reports total spend and breakdowns by model and provider, optionally filtered by org</li>
+        <li>Every other tool on this server estimates hypothetical cost from token counts you supply; this is the first one that tracks what you actually spent</li>
+        <li>New MCP tools: <code>record_usage</code>, <code>get_usage_summary</code></li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">MCP tools <strong>20 → 22</strong></div>
+        <div class="stat-chip">Tests <strong>923</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.58.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.58.0</span>
