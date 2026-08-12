@@ -27,6 +27,12 @@ A production-ready **Model Context Protocol (MCP)** server for LLM pricing data.
 - Webhook alerts for price changes and budget-spend thresholds (`POST /usage/alerts`, HMAC-SHA256 signed)
 - Interactive docs: `/docs` (Swagger) and `/redoc`
 
+### Repo Cost Auditor (`scripts/audit_repo.py`)
+- Statically scans a Python codebase for LLM SDK call sites (OpenAI, Anthropic, Google, LangChain), no credentials or network calls to your code required
+- Estimates per-call-site cost using the same pricing data and token math as `predict_cost`
+- Recommends cheaper models and prompt-caching where a call site makes that detectable — see `python scripts/audit_repo.py --help`
+- Static estimates only (assumes a configurable calls/month) — pair with `POST /usage`'s actual recorded spend once deployed for real numbers
+
 ### Agent + RAG Pipeline
 - **Configurable LLM backend**: OpenAI GPT-4o-mini (default) or Anthropic Claude via env vars
 - **ReAct loop agent** with access to 23 of the 25 MCP tools (excludes `ask_agent` and `get_telemetry`)

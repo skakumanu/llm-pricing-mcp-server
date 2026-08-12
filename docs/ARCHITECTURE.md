@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.60.0 | **Last updated**: 2026-08-11
+**Version**: v1.61.0 | **Last updated**: 2026-08-11
 
 ---
 
@@ -13,6 +13,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 26 
 - **Weekly price audit**: a drifted price is withheld from serving the moment it's detected (on every request, not just weekly); the scheduled workflow re-runs `check_price_drift` to report what's currently withheld and refreshes the vendored registry snapshot, opening an issue/PR when either drifts
 - **Snapshot self-validation**: `scripts/validate_price_snapshot.py` gates the refresh PR. GitHub does not run CI on `GITHUB_TOKEN`-created PRs, so the generating job verifies the data itself
 - **Clean cross-branch promotion**: `scripts/promote_branch_content.sh` mirrors one branch's tree onto another (additions, updates, AND deletions) to work around develop/master squash-merge divergence, verifying the result matches exactly before returning
+- **Repo cost auditor**: `scripts/audit_repo.py` statically scans an arbitrary codebase (customer-run, not deployed) for LLM SDK call sites and reuses `predict_cost`'s token/pricing math to recommend cheaper models and prompt caching — runs locally only, since the hosted `/mcp` HTTP transport has no access to a caller's filesystem
 
 ---
 
