@@ -142,6 +142,23 @@ bumped in one place (MCP `serverInfo`, a doc header, `settings.app_version`) but
 exactly the class of bug that shipped for months before this guard existed. Do not skip it because
 "it's just a docs change" or "the version didn't move" — the guard is what proves that.
 
+### 9. Update `static/whats-new/index.html` for user-facing releases
+
+Add a new release entry at the **top** of the list (mark it `class="release latest"` and remove
+that class from the previous top entry) whenever a commit ships something a customer would
+notice: a new endpoint, MCP tool, UI page, or behavior change. Follow the existing entry format
+(version badge, date, tag, title, change list, optional stats-strip) — copy an existing entry as
+a template rather than inventing new markup.
+
+**Skip this step** for internal-only changes a customer never sees: docs fixes, dead-code
+removal, CI/test changes, internal refactors. When in doubt, ask "would someone reading this page
+learn something new about the product?" — if no, skip it.
+
+Past entries are a historical record — never rewrite an old entry's content to match current
+reality (e.g. don't update an old entry's tool count when the total changes later). Only ever
+append new entries; this file is otherwise excluded from `tests/test_tool_registry.py`'s
+doc-sync checks for exactly this reason.
+
 ---
 
 ## Local Pre-commit Hooks (optional but recommended)
