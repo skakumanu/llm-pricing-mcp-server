@@ -7,9 +7,10 @@ Python codebase, estimates the token cost of each call using the same pricing
 data and cost math as the predict_cost MCP tool, and recommends cheaper models
 or prompt caching where the underlying call site makes that possible to detect.
 
-This is step 1 of the repo-audit feature: Python-only extraction, plus
-model-downgrade and prompt-caching recommendations. Batch-API suggestions,
-task-based right-sizing, and duplicate-prompt detection are a planned step 2.
+Recommendation types: model downgrade, prompt caching, Batch API (for calls in a
+loop or an offline-looking path), task-based right-sizing (flagship model on a
+simple task, even when the $ savings alone wouldn't clear the downgrade bar), and
+duplicate-prompt detection across the whole repo. Python-only extraction.
 
 Static analysis cannot know real call frequency — cost totals below are
 per-call estimates multiplied by an assumed --calls-per-month, not observed
@@ -60,9 +61,24 @@ DEFAULT_EXCLUDE_DIRS = {
     "build", "dist", ".mypy_cache", ".pytest_cache", ".tox",
 }
 
-# Task types with low, fairly fixed output — used only to enrich the
-# right-sizing hint text in step 1; full right-sizing detection is step 2.
+# Task types with low, fairly fixed output — a flagship model on one of these
+# is flagged as likely overkill regardless of the $ savings threshold.
 _SIMPLE_TASK_TYPES = {"classification", "extraction", "summarization", "translation", "rewrite"}
+
+# A confirmed-price model this good is almost certainly a flagship/reasoning
+# model — pricey by nature, not by mistake, but still worth a second look on a
+# task from _SIMPLE_TASK_TYPES.
+_HIGH_QUALITY_THRESHOLD = 85.0
+
+# Path components suggesting a call site runs offline/batch rather than
+# in a live request path — a reasonable place to suggest the Batch API.
+_OFFLINE_PATH_HINTS = ("batch", "job", "cron", "pipeline", "worker", "etl", "offline")
+
+
+def _looks_offline_path(file: str) -> bool:
+    lower = file.lower().replace("\\", "/")
+    parts = lower.replace(".py", "").split("/")
+    return any(hint in part for part in parts for hint in _OFFLINE_PATH_HINTS)
 
 
 @dataclass
@@ -74,6 +90,7 @@ class CallSite:
     prompt_text: Optional[str]
     prompt_dynamic: bool
     cache_kwarg_present: bool
+    in_loop: bool = False
 
 
 @dataclass
@@ -131,6 +148,19 @@ class _CallSiteVisitor(ast.NodeVisitor):
         self.filename = filename
         self.local_str_vars = local_str_vars
         self.sites: List[CallSite] = []
+        self._loop_depth = 0
+
+    def visit_For(self, node: ast.For) -> None:
+        self._loop_depth += 1
+        self.generic_visit(node)
+        self._loop_depth -= 1
+
+    visit_AsyncFor = visit_For
+
+    def visit_While(self, node: ast.While) -> None:
+        self._loop_depth += 1
+        self.generic_visit(node)
+        self._loop_depth -= 1
 
     def visit_Call(self, node: ast.Call) -> None:
         if isinstance(node.func, ast.Attribute):
@@ -200,6 +230,7 @@ class _CallSiteVisitor(ast.NodeVisitor):
             prompt_text=prompt_text,
             prompt_dynamic=prompt_dynamic,
             cache_kwarg_present=any(k in kwargs for k in CACHE_KWARGS),
+            in_loop=self._loop_depth > 0,
         ))
 
 
@@ -292,7 +323,8 @@ def analyze_call_site(
             or current_model.quality_score is None
             or cheapest_model.quality_score >= current_model.quality_score - 10
         )
-        if quality_ok and savings_per_call / current_cost >= 0.15:
+        downgrade_recommended = quality_ok and savings_per_call / current_cost >= 0.15
+        if downgrade_recommended:
             message = f"Switch from {current_model.model_name} to {cheapest_model.model_name}"
             if task_type in _SIMPLE_TASK_TYPES:
                 message += f" — this is a {task_type} call, unlikely to need a flagship model"
@@ -304,6 +336,42 @@ def analyze_call_site(
                 "estimated_savings_per_call_usd": round(savings_per_call, 8),
                 "estimated_savings_monthly_usd": round(savings_per_call * calls_per_month, 4),
             })
+    else:
+        downgrade_recommended = False
+
+    # Right-sizing: a flagship-quality model on a structurally simple task is worth a
+    # second look even when it already cleared the model_downgrade $ bar above (or
+    # there was no cheaper confirmed-price alternative at all) — this is about
+    # whether the task needs this much model, not just about today's cheapest price.
+    if (
+        not downgrade_recommended
+        and task_type in _SIMPLE_TASK_TYPES
+        and current_model.quality_score is not None
+        and current_model.quality_score >= _HIGH_QUALITY_THRESHOLD
+    ):
+        recommendations.append({
+            "type": "right_size_for_task",
+            "message": (
+                f"{current_model.model_name} is a high-quality (score {current_model.quality_score:.0f}) "
+                f"model for a {task_type} call — this task type has small, fairly fixed output and rarely "
+                f"needs flagship-level reasoning. Worth testing a smaller model even though this pick "
+                f"already looks cost-efficient by our savings threshold."
+            ),
+        })
+
+    if current_model.batch_available and (site.in_loop or _looks_offline_path(site.file)):
+        batch_savings = current_cost * 0.5  # typical Batch API discount across providers; not per-model data yet
+        recommendations.append({
+            "type": "batch_api",
+            "message": (
+                f"{current_model.model_name} has a Batch API and this call "
+                + ("runs inside a loop" if site.in_loop else "looks like an offline/batch job")
+                + " — if it isn't latency-sensitive, Batch APIs are typically ~50% cheaper"
+            ),
+            "estimated_savings_per_call_usd": round(batch_savings, 8),
+            "estimated_savings_monthly_usd": round(batch_savings * calls_per_month, 4),
+            "assumed_discount_pct": 50,
+        })
 
     if not site.cache_kwarg_present and current_model.provider in providers_with_caching():
         cache_savings = compute_cache_savings(
@@ -335,6 +403,38 @@ def analyze_call_site(
 # Report
 # ---------------------------------------------------------------------------
 
+def find_duplicate_prompts(findings: List[Finding]) -> List[Dict[str, Any]]:
+    """Group findings whose call sites share the exact same resolved prompt text.
+
+    Exact-match only for step 2 — near-duplicates (e.g. a template with one
+    interpolated word) aren't caught, since prompt_text here is already
+    post-resolution and doesn't preserve the original template structure.
+    """
+    by_prompt: Dict[str, List[Finding]] = {}
+    for f in findings:
+        text = f.call_site.prompt_text
+        if text:
+            by_prompt.setdefault(text, []).append(f)
+
+    groups = []
+    for text, group in by_prompt.items():
+        if len(group) < 2:
+            continue
+        snippet = text if len(text) <= 100 else text[:97] + "..."
+        groups.append({
+            "prompt_snippet": snippet,
+            "occurrences": len(group),
+            "sites": [{"file": f.call_site.file, "line": f.call_site.line} for f in group],
+            "message": (
+                f"The exact same prompt appears at {len(group)} call sites — consider extracting it to "
+                "a shared constant, and make sure prompt caching (if applicable) is enabled consistently "
+                "across all of them"
+            ),
+        })
+    groups.sort(key=lambda g: g["occurrences"], reverse=True)
+    return groups
+
+
 def build_report(
     repo_path: Path, sites: List[CallSite], findings: List[Finding], calls_per_month: int
 ) -> Dict[str, Any]:
@@ -344,8 +444,9 @@ def build_report(
     ]
     total_monthly = sum(f.cost_per_call_usd * calls_per_month for f in findings)
     total_savings = sum(
-        r["estimated_savings_monthly_usd"] for f in findings for r in f.recommendations
+        r.get("estimated_savings_monthly_usd", 0.0) for f in findings for r in f.recommendations
     )
+    duplicate_prompts = find_duplicate_prompts(findings)
     return {
         "repo_path": str(repo_path),
         "scanned_at": time.time(),
@@ -369,6 +470,7 @@ def build_report(
             for f in findings
         ],
         "skipped": skipped,
+        "duplicate_prompts": duplicate_prompts,
         "summary": {
             "total_estimated_monthly_cost_usd": round(total_monthly, 2),
             "total_potential_savings_monthly_usd": round(total_savings, 2),
@@ -407,7 +509,17 @@ def format_markdown(report: Dict[str, Any]) -> str:
         if not f["model_in_catalogue"]:
             lines.append("- ⚠️ Model not found in pricing catalogue — cost estimated against a median-cost model")
         for r in f["recommendations"]:
-            lines.append(f"- 💡 **{r['type']}**: {r['message']} (save ~${r['estimated_savings_monthly_usd']:,.2f}/mo)")
+            savings = r.get("estimated_savings_monthly_usd")
+            suffix = f" (save ~${savings:,.2f}/mo)" if savings is not None else ""
+            lines.append(f"- 💡 **{r['type']}**: {r['message']}{suffix}")
+        lines.append("")
+    if report["duplicate_prompts"]:
+        lines.append(f"## Duplicate Prompts ({len(report['duplicate_prompts'])})")
+        lines.append("")
+        for g in report["duplicate_prompts"]:
+            lines.append(f"- **\"{g['prompt_snippet']}\"** — {g['message']}")
+            for s in g["sites"]:
+                lines.append(f"  - `{s['file']}:{s['line']}`")
         lines.append("")
     if report["skipped"]:
         lines.append(f"## Skipped ({len(report['skipped'])})")
