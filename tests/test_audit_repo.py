@@ -13,7 +13,7 @@ import audit_repo  # noqa: E402
 from src.models.pricing import PricingMetrics  # noqa: E402
 
 
-def _model(name, provider, cost_in, cost_out, quality=None, price_confirmed=True):
+def _model(name, provider, cost_in, cost_out, quality=None, price_confirmed=True, batch_available=False):
     return PricingMetrics(
         model_name=name,
         provider=provider,
@@ -21,6 +21,7 @@ def _model(name, provider, cost_in, cost_out, quality=None, price_confirmed=True
         cost_per_output_token=cost_out,
         quality_score=quality,
         price_confirmed=price_confirmed,
+        batch_available=batch_available,
     )
 
 
@@ -148,6 +149,54 @@ def test_skips_files_with_syntax_errors(tmp_path):
     assert sites == []
 
 
+def test_call_inside_for_loop_marked_in_loop(tmp_path):
+    _write(tmp_path, "app.py", '''
+for ticket in tickets:
+    client.chat.completions.create(model="gpt-4o", messages=[{"role":"user","content":"hi"}])
+''')
+    sites = audit_repo.extract_call_sites(tmp_path)
+    assert sites[0].in_loop is True
+
+
+def test_call_inside_while_loop_marked_in_loop(tmp_path):
+    _write(tmp_path, "app.py", '''
+while True:
+    client.chat.completions.create(model="gpt-4o", messages=[{"role":"user","content":"hi"}])
+    break
+''')
+    sites = audit_repo.extract_call_sites(tmp_path)
+    assert sites[0].in_loop is True
+
+
+def test_call_outside_loop_not_marked_in_loop(tmp_path):
+    call = 'client.chat.completions.create(model="gpt-4o", messages=[{"role":"user","content":"hi"}])'
+    _write(tmp_path, "app.py", call)
+    sites = audit_repo.extract_call_sites(tmp_path)
+    assert sites[0].in_loop is False
+
+
+def test_call_after_loop_not_marked_in_loop(tmp_path):
+    _write(tmp_path, "app.py", '''
+for x in range(3):
+    pass
+client.chat.completions.create(model="gpt-4o", messages=[{"role":"user","content":"hi"}])
+''')
+    sites = audit_repo.extract_call_sites(tmp_path)
+    assert sites[0].in_loop is False
+
+
+@pytest.mark.parametrize("path,expected", [
+    ("batch_jobs/run.py", True),
+    ("scripts/nightly_cron.py", True),
+    ("app/pipeline/summarize.py", True),
+    ("worker/tasks.py", True),
+    ("app/handlers.py", False),
+    ("src/main.py", False),
+])
+def test_looks_offline_path(path, expected):
+    assert audit_repo._looks_offline_path(path) is expected
+
+
 # ---------------------------------------------------------------------------
 # analyze_call_site
 # ---------------------------------------------------------------------------
@@ -158,11 +207,14 @@ UNCONFIRMED = _model("brand-new-model", "OpenAI", cost_in=0.001, cost_out=0.001,
 ALL_PRICING = [FLAGSHIP, CHEAP, UNCONFIRMED]
 
 
-def _site(model="gpt-4o", prompt="Please summarize this long document for me in detail.", cache=False):
+def _site(
+    model="gpt-4o", prompt="Please summarize this long document for me in detail.",
+    cache=False, in_loop=False, file="app.py",
+):
     return audit_repo.CallSite(
-        file="app.py", line=1, sdk_hint="openai",
+        file=file, line=1, sdk_hint="openai",
         model_literal=model, prompt_text=prompt, prompt_dynamic=False,
-        cache_kwarg_present=cache,
+        cache_kwarg_present=cache, in_loop=in_loop,
     )
 
 
@@ -245,6 +297,137 @@ def test_classification_downgrade_message_mentions_task_type():
     assert "classification" in downgrade["message"]
 
 
+def test_batch_api_recommended_for_call_in_loop():
+    batch_model = _model("batch-model", "OpenAI", cost_in=0.001, cost_out=0.004, quality=80, batch_available=True)
+    finding = audit_repo.analyze_call_site(
+        _site(model="batch-model", in_loop=True), [batch_model], calls_per_month=1000,
+    )
+    batch_rec = next((r for r in finding.recommendations if r["type"] == "batch_api"), None)
+    assert batch_rec is not None
+    assert batch_rec["estimated_savings_per_call_usd"] > 0
+
+
+def test_batch_api_recommended_for_offline_looking_path():
+    batch_model = _model("batch-model", "OpenAI", cost_in=0.001, cost_out=0.004, quality=80, batch_available=True)
+    finding = audit_repo.analyze_call_site(
+        _site(model="batch-model", file="jobs/nightly.py"), [batch_model], calls_per_month=1000,
+    )
+    batch_rec = next((r for r in finding.recommendations if r["type"] == "batch_api"), None)
+    assert batch_rec is not None
+
+
+def test_no_batch_api_recommendation_without_loop_or_offline_path():
+    batch_model = _model("batch-model", "OpenAI", cost_in=0.001, cost_out=0.004, quality=80, batch_available=True)
+    finding = audit_repo.analyze_call_site(
+        _site(model="batch-model", in_loop=False, file="app.py"), [batch_model], calls_per_month=1000,
+    )
+    batch_rec = next((r for r in finding.recommendations if r["type"] == "batch_api"), None)
+    assert batch_rec is None
+
+
+def test_no_batch_api_recommendation_when_unavailable():
+    no_batch_model = _model("plain-model", "OpenAI", cost_in=0.001, cost_out=0.004, quality=80, batch_available=False)
+    finding = audit_repo.analyze_call_site(
+        _site(model="plain-model", in_loop=True), [no_batch_model], calls_per_month=1000,
+    )
+    batch_rec = next((r for r in finding.recommendations if r["type"] == "batch_api"), None)
+    assert batch_rec is None
+
+
+def test_right_size_recommended_for_simple_task_high_quality_solo_model():
+    solo_model = _model("only-model", "OpenAI", cost_in=0.005, cost_out=0.02, quality=90)
+    finding = audit_repo.analyze_call_site(
+        _site(model="only-model", prompt="Classify this support ticket as billing, technical, or account."),
+        [solo_model], calls_per_month=1000,
+    )
+    right_size = next((r for r in finding.recommendations if r["type"] == "right_size_for_task"), None)
+    assert right_size is not None
+    # Advisory-only: no dollar estimate, since it's a "maybe test a smaller model" nudge.
+    assert "estimated_savings_monthly_usd" not in right_size
+
+
+def test_no_right_size_when_task_is_not_simple():
+    solo_model = _model("only-model", "OpenAI", cost_in=0.005, cost_out=0.02, quality=90)
+    finding = audit_repo.analyze_call_site(
+        _site(model="only-model", prompt="Write a detailed blog post about sustainable gardening practices."),
+        [solo_model], calls_per_month=1000,
+    )
+    right_size = next((r for r in finding.recommendations if r["type"] == "right_size_for_task"), None)
+    assert right_size is None
+
+
+def test_no_right_size_when_quality_below_threshold():
+    solo_model = _model("only-model", "OpenAI", cost_in=0.005, cost_out=0.02, quality=70)
+    finding = audit_repo.analyze_call_site(
+        _site(model="only-model", prompt="Classify this support ticket as billing, technical, or account."),
+        [solo_model], calls_per_month=1000,
+    )
+    right_size = next((r for r in finding.recommendations if r["type"] == "right_size_for_task"), None)
+    assert right_size is None
+
+
+def test_no_right_size_when_downgrade_already_recommended():
+    """right_size_for_task and model_downgrade are mutually exclusive — no duplicate advice."""
+    finding = audit_repo.analyze_call_site(
+        _site(model="gpt-4o", prompt="Classify this support ticket as billing, technical, or account."),
+        ALL_PRICING, calls_per_month=1000,
+    )
+    types = [r["type"] for r in finding.recommendations]
+    assert "model_downgrade" in types
+    assert "right_size_for_task" not in types
+
+
+# ---------------------------------------------------------------------------
+# find_duplicate_prompts
+# ---------------------------------------------------------------------------
+
+def _finding_with_prompt(prompt_text, file="app.py", line=1):
+    site = audit_repo.CallSite(
+        file=file, line=line, sdk_hint="openai",
+        model_literal="gpt-4o", prompt_text=prompt_text, prompt_dynamic=False,
+        cache_kwarg_present=False,
+    )
+    return audit_repo.Finding(
+        call_site=site, prompt_tokens=10, task_type="chat",
+        model_in_catalogue=True, cost_per_call_usd=0.001,
+    )
+
+
+def test_no_duplicates_when_all_prompts_unique():
+    findings = [_finding_with_prompt("prompt one"), _finding_with_prompt("prompt two")]
+    assert audit_repo.find_duplicate_prompts(findings) == []
+
+
+def test_detects_duplicate_prompt_across_sites():
+    findings = [
+        _finding_with_prompt("Summarize this document.", file="a.py", line=5),
+        _finding_with_prompt("Summarize this document.", file="b.py", line=12),
+    ]
+    groups = audit_repo.find_duplicate_prompts(findings)
+    assert len(groups) == 1
+    assert groups[0]["occurrences"] == 2
+    sites = {(s["file"], s["line"]) for s in groups[0]["sites"]}
+    assert sites == {("a.py", 5), ("b.py", 12)}
+
+
+def test_duplicate_prompt_snippet_is_truncated():
+    long_prompt = "x" * 200
+    findings = [_finding_with_prompt(long_prompt), _finding_with_prompt(long_prompt, file="b.py")]
+    groups = audit_repo.find_duplicate_prompts(findings)
+    assert len(groups[0]["prompt_snippet"]) <= 100
+
+
+def test_duplicate_groups_sorted_by_occurrence_count():
+    findings = [
+        _finding_with_prompt("A", file="1.py"), _finding_with_prompt("A", file="2.py"),
+        _finding_with_prompt("B", file="3.py"), _finding_with_prompt("B", file="4.py"),
+        _finding_with_prompt("B", file="5.py"),
+    ]
+    groups = audit_repo.find_duplicate_prompts(findings)
+    assert groups[0]["occurrences"] == 3
+    assert groups[1]["occurrences"] == 2
+
+
 # ---------------------------------------------------------------------------
 # build_report / format_markdown
 # ---------------------------------------------------------------------------
@@ -277,6 +460,37 @@ def test_format_markdown_contains_key_sections():
     assert "# LLM Usage Audit" in md
     assert "app.py:1" in md
     assert "Findings" in md
+
+
+def test_build_report_includes_duplicate_prompts_section():
+    sites = [_site(model="gpt-4o", file="a.py"), _site(model="gpt-4o", file="b.py")]
+    findings = [audit_repo.analyze_call_site(s, ALL_PRICING, calls_per_month=1000) for s in sites]
+    report = audit_repo.build_report(Path("/repo"), sites, findings, calls_per_month=1000)
+    assert len(report["duplicate_prompts"]) == 1
+    assert report["duplicate_prompts"][0]["occurrences"] == 2
+
+
+def test_format_markdown_renders_duplicate_prompts_section():
+    sites = [_site(model="gpt-4o", file="a.py"), _site(model="gpt-4o", file="b.py")]
+    findings = [audit_repo.analyze_call_site(s, ALL_PRICING, calls_per_month=1000) for s in sites]
+    report = audit_repo.build_report(Path("/repo"), sites, findings, calls_per_month=1000)
+    md = audit_repo.format_markdown(report)
+    assert "Duplicate Prompts" in md
+    assert "a.py:1" in md
+    assert "b.py:1" in md
+
+
+def test_format_markdown_renders_advisory_recommendation_without_dollar_suffix():
+    """right_size_for_task has no estimated_savings_monthly_usd — must not crash or print '$None'."""
+    solo_model = _model("only-model", "OpenAI", cost_in=0.005, cost_out=0.02, quality=90)
+    sites = [_site(
+        model="only-model", prompt="Classify this support ticket as billing, technical, or account.",
+    )]
+    findings = [audit_repo.analyze_call_site(sites[0], [solo_model], calls_per_month=1000)]
+    report = audit_repo.build_report(Path("/repo"), sites, findings, calls_per_month=1000)
+    md = audit_repo.format_markdown(report)
+    assert "right_size_for_task" in md
+    assert "$None" not in md
 
 
 def test_format_markdown_empty_report_does_not_crash():
