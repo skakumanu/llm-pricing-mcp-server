@@ -142,8 +142,30 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.61.0 -->
+  <!-- v1.62.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.62.0</span>
+      <span class="release-date">Aug 12, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Repo cost auditor: Batch API, task right-sizing, and duplicate-prompt detection</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><code>scripts/audit_repo.py</code> now also recommends the Batch API for call sites inside a loop or an offline-looking path (job/cron/pipeline/worker), typically ~50% cheaper for non-latency-sensitive calls</li>
+        <li>New task-based right-sizing check: flags a flagship-quality model used for a structurally simple task (classification, extraction, summarization, translation, rewrite) even when it already clears the cost-savings bar for a model-downgrade recommendation</li>
+        <li>New repo-wide duplicate-prompt detection: flags the exact same prompt appearing at multiple call sites, with a suggestion to extract it to a shared constant and apply caching consistently</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">Tests <strong>1007</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.61.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.61.0</span>

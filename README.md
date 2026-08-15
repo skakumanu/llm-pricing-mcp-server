@@ -30,7 +30,7 @@ A production-ready **Model Context Protocol (MCP)** server for LLM pricing data.
 ### Repo Cost Auditor (`scripts/audit_repo.py`)
 - Statically scans a Python codebase for LLM SDK call sites (OpenAI, Anthropic, Google, LangChain), no credentials or network calls to your code required
 - Estimates per-call-site cost using the same pricing data and token math as `predict_cost`
-- Recommends cheaper models and prompt-caching where a call site makes that detectable — see `python scripts/audit_repo.py --help`
+- Recommends cheaper models, prompt caching, Batch API (for calls in a loop or an offline-looking path), and task-based right-sizing (flagship model on a simple task) — plus flags the same prompt duplicated across call sites — see `python scripts/audit_repo.py --help`
 - Static estimates only (assumes a configurable calls/month) — pair with `POST /usage`'s actual recorded spend once deployed for real numbers
 
 ### Agent + RAG Pipeline
@@ -78,7 +78,7 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 - Protected endpoints (`/billing/me`, `/router/recommend`, `/router/feedback`, `/billing/portal`) require a billing API key or the global `MCP_API_KEY`
 - Rate limiting per client IP + tier bucket
 - Request size limit (1MB default)
-- 957 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 1007 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
