@@ -44,7 +44,7 @@ jobs:
           STALE=$(gh pr list --base develop --state open --json number,headRefName \
             --jq '.[] | select(.headRefName | startswith("ci/sync-develop-")) | .number')
           for pr in $STALE; do
-            gh pr close "$pr" --comment "Superseded by a newer sync." || true
+            gh pr close "$pr" --delete-branch --comment "Superseded by a newer sync." || true
           done
 
           BRANCH="ci/sync-develop-$(date +%Y%m%d-%H%M%S)"
