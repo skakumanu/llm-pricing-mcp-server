@@ -2,6 +2,7 @@
 from typing import Any, Dict, Optional
 
 from src.services.pricing_aggregator import PricingAggregatorService
+from src.services.recommendation_cache import RecommendationCache
 from src.services.router import ModelRouter, RouterConstraints
 from src.services.task_profiles import get_task_description, infer_task_type, list_task_types
 
@@ -70,6 +71,11 @@ class RecommendModelTool:
     def __init__(self):
         self.service = PricingAggregatorService()
         self.router = ModelRouter(self.service)
+        # ~5 minute in-memory cache so repeated/equivalent requests (e.g. an
+        # IDE re-asking on every keystroke pause) skip full recomputation.
+        # Instance-scoped: a fresh RecommendModelTool() (as tests construct)
+        # gets its own cache, never sharing hits with /router/recommend's.
+        self._cache = RecommendationCache()
 
     async def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         try:
@@ -122,7 +128,9 @@ class RecommendModelTool:
                 avg_output_tokens=int(arguments.get("avg_output_tokens", 200)),
             )
 
-            result = await self.router.get_optimal_model(constraints)
+            result = await self._cache.get_or_compute(
+                constraints, lambda: self.router.get_optimal_model(constraints)
+            )
             if result is None:
                 return {
                     "success": False,
@@ -144,6 +152,7 @@ class RecommendModelTool:
                 "score": result.score,
                 "reason": result.reason,
                 "alternatives": [_model_summary(m) for m in result.alternatives],
+                "cached": result.cached,
             }
 
         except (TypeError, ValueError) as e:
