@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.63.1 | **Last updated**: 2026-09-07
+**Version**: v1.65.0 | **Last updated**: 2026-09-07
 
 ---
 
@@ -14,7 +14,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 26 
 - **Snapshot self-validation**: `scripts/validate_price_snapshot.py` gates the refresh PR. GitHub does not run CI on `GITHUB_TOKEN`-created PRs, so the generating job verifies the data itself
 - **Clean cross-branch promotion**: `scripts/promote_branch_content.sh` mirrors one branch's tree onto another (additions, updates, AND deletions) to work around develop/master squash-merge divergence, verifying the result matches exactly before returning
 - **Repo cost auditor**: `scripts/audit_repo.py` statically scans an arbitrary codebase (customer-run, not deployed) for LLM SDK call sites and reuses `predict_cost`'s token/pricing math to recommend cheaper models, prompt caching, Batch API, task-based right-sizing, and duplicate-prompt consolidation — runs locally only, since the hosted `/mcp` HTTP transport has no access to a caller's filesystem
-- **AI-native SDLC pipeline** (dev tooling, not deployed): `/release-feature` runs a feature through dedicated Plan, Code, Review (parallel correctness/security/simplification), and Test & Release phase agents (`.claude/agents/phase-*.md`) orchestrated by `.claude/workflows/release-feature.js`, ending at an open PR against `develop` — see `CLAUDE.md`'s "AI-Native SDLC Pipeline" section
+- **AI-native SDLC pipeline** (dev tooling, not deployed): `/release-feature` runs a feature through dedicated Spec, Design, Code, Review (parallel correctness/security/simplification), and Test & Release phase agents (`.claude/agents/phase-*.md`) orchestrated by `.claude/workflows/release-feature.js`, ending at an open PR against `develop` — Spec fixes *what*/acceptance criteria, Design fixes *how* (approach, version, branch name), so neither phase re-derives the other's decision; see `CLAUDE.md`'s "AI-Native SDLC Pipeline" section
 
 ---
 
