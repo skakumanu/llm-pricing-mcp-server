@@ -70,6 +70,16 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
             ),
         ),
         (
+            "recommend_model",
+            (
+                "Recommend the optimal LLM model from a free-text description of a use case — "
+                "classifies the description into a task type and runs the same routing engine "
+                "behind /router/recommend. Returns the best match plus up to 3 alternatives. "
+                "Use when the user describes what they want to do and asks which model to use, "
+                "without already knowing a specific task_type."
+            ),
+        ),
+        (
             "check_price_drift",
             (
                 "Audit this server's own pricing data against an external reference "

@@ -142,8 +142,30 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.62.0 -->
+  <!-- v1.66.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.66.0</span>
+      <span class="release-date">Sep 7, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">New: <code>recommend_model</code> — describe your use case in plain English, get a model recommendation</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li>New MCP tool <code>recommend_model</code> takes a free-text description (e.g. "summarize long customer support tickets") and classifies it into a task type using the same keyword-based inference as <code>predict_cost</code>, then runs it through the routing engine already live at <code>POST /router/recommend</code></li>
+        <li>Returns the best-matching model plus up to 3 alternatives, scored by quality-per-dollar, with the same cost/quality/context-window/provider/budget filters as the REST router endpoint</li>
+        <li>Read-only — no feedback submission. Use <code>predict_cost</code> first if you want per-model cost estimates for an actual prompt, or <code>optimize_workload</code> if you have several distinct task types to route at once</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">MCP tools <strong>25 → 26</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.62.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.62.0</span>

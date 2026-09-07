@@ -190,23 +190,31 @@ Deploy to Fly.io only proceeds when all five pass.
 ## AI-Native SDLC Pipeline (Phase Agents)
 
 For a feature (not a trivial one-line fix), this repo has a phase-agent pipeline instead of one
-agent doing plan+code+review+test end to end in a single undifferentiated pass:
+agent doing spec+design+code+review+test end to end in a single undifferentiated pass:
 
 ```
-Plan  →  branch created  →  Code  →  Review (correctness / security / simplification, parallel)  →  Test & Release
+Spec  →  Design  →  branch created  →  Code  →  Review (correctness / security / simplification, parallel)  →  Test & Release
 ```
 
-- **Agents**: `.claude/agents/phase-plan.md`, `phase-code.md`, `phase-review.md`, `phase-test.md` —
-  each scoped to one phase, with its own tool access and its own slice of the Release Checklist
-  above (Plan classifies the version bump and architecture/pricing/user-facing impact; Code
-  implements and bumps the version; Review reports findings, it does not fix them; Test triages
-  findings, runs the full checklist, and is the only phase that commits, pushes, and opens the PR).
-- **Orchestrator**: `.claude/workflows/release-feature.js`, a Workflow script that runs Code, then
-  fans the diff out to three parallel Review agents (one per dimension), then runs Test & Release
-  with the plan and findings as input.
+- **Spec vs. Design — the split that matters most.** Spec decides *what* the feature does and for
+  whom (problem, functional requirements, acceptance criteria, non-goals) — no file names, no
+  technical approach. Design decides *how*, given a fixed Spec (which existing services/modules
+  to reuse, interface/schema shape, version-bump type, architecture/pricing/user-facing impact,
+  branch name). If a Spec answer would change depending on which technical approach gets picked,
+  it's not actually a Spec question — it belongs in Design.
+- **Agents**: `.claude/agents/phase-spec.md`, `phase-design.md`, `phase-code.md`, `phase-review.md`,
+  `phase-test.md` — each scoped to one phase, with its own tool access and its own slice of the
+  Release Checklist above. Code implements the Design and bumps the version. Review reports
+  findings, it does not fix them. Test checks the Code phase's work against the Spec's acceptance
+  criteria, triages Review's findings, runs the full checklist, and is the only phase that commits,
+  pushes, and opens the PR.
+- **Orchestrator**: `.claude/workflows/release-feature.js`, a Workflow script that runs Code (given
+  the Spec + Design), then fans the diff out to three parallel Review agents (one per dimension),
+  then runs Test & Release with the Spec's acceptance criteria and Review's findings as input.
 - **Entry point**: `/release-feature <description>` (`.claude/skills/release-feature/SKILL.md`)
-  runs Plan itself first (before any branch exists), creates the `feature/*` branch per the Git
-  Flow rules above, then calls the Workflow.
+  runs Spec, then Design, itself first (before any branch exists — Design's version-bump decision
+  is needed to name the branch), creates the `feature/*` branch per the Git Flow rules above, then
+  calls the Workflow.
 
 This does not replace the rules above — it is those rules, split across phases so each one gets a
 dedicated agent instead of competing for one agent's attention alongside everything else. It still
