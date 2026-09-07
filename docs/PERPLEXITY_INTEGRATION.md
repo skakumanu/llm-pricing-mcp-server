@@ -64,7 +64,7 @@ No cloning or Python required. Add the following to your config file:
 }
 ```
 
-Restart Perplexity. All 25 pricing tools are immediately available.
+Restart Perplexity. All 26 pricing tools are immediately available.
 
 ### Option B — Local STDIO
 
@@ -133,13 +133,13 @@ After restarting Perplexity, confirm tools loaded by asking it:
 What LLM pricing tools do you have available?
 ```
 
-Perplexity should list all 25 tools. You can also verify directly via curl:
+Perplexity should list all 26 tools. You can also verify directly via curl:
 
 ```bash
 # Check server is up
 curl https://llm-pricing-api.fly.dev/health
 
-# List all 25 tools via MCP protocol
+# List all 26 tools via MCP protocol
 curl -X POST https://llm-pricing-api.fly.dev/mcp \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
@@ -147,7 +147,7 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 
 ---
 
-## All 25 MCP Tools
+## All 26 MCP Tools
 
 These tools are available inside Perplexity once connected. You can invoke them naturally in conversation or call them programmatically via the HTTP MCP endpoint.
 
@@ -160,6 +160,7 @@ These tools are available inside Perplexity once connected. You can invoke them 
 | `compare_costs` | `model_names[]`, `input_tokens`, `output_tokens` | — | Side-by-side cost comparison |
 | `predict_cost` | `prompt` | `task_type`, `cache_hit_ratio`, `top_n`, `require_function_calling`, `require_vision`, `min_context_tokens` | Rank every model cheapest-first from raw prompt text — no token counts needed |
 | `optimize_workload` | `workloads[]` | `monthly_budget_usd`, `min_quality_score` | Assign the cheapest qualifying model per task across a workload mix; reports saving vs. one-model-for-everything |
+| `recommend_model` | `description` | `task_type`, `max_cost_per_1m_tokens`, `min_quality_score`, `min_context_window`, `preferred_provider`, `monthly_budget_usd` | Recommend the optimal model from a free-text use-case description via the routing engine |
 | `check_price_drift` | — | `threshold_pct`, `provider`, `limit` | Audit this server's own prices against an external registry; drifted prices are auto-withheld from serving, this reports which and why |
 | `get_data_quality` | — | — | Aggregate accuracy summary: % confirmed and fresh, how many withheld for drift, how many unpriced or stale |
 | `get_ide_pricing` | — | `provider`, `max_monthly`, `inline_only` | Subscription pricing for AI coding IDE tools |
