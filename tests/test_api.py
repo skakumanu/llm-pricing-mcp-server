@@ -678,8 +678,34 @@ def test_models_endpoint_includes_new_providers():
     assert data["total_models"] >= 20  # At least 20 models across all providers
 
 
-def test_cost_estimate_with_new_provider_models():
+class _NoOpPriceOracle:
+    """Stand-in for PriceOracle that never fills gaps or withholds drift.
+
+    These tests exercise multi-provider cost estimation, not drift detection
+    (that's tests/test_price_oracle.py's job) — the real oracle compares
+    curated prices against a live-refreshed external registry, so any of
+    these hardcoded model names can legitimately start drifting and get
+    withheld at any time, making the test flaky for a reason that has
+    nothing to do with what it's checking. Neutralizing the oracle here
+    keeps the assertions deterministic without touching production behavior.
+    """
+
+    async def load(self, force: bool = False) -> None:
+        return None
+
+    def fill_missing_prices(self, models):
+        return 0
+
+    def demote_drifted(self, models, threshold_pct=None):
+        return []
+
+
+def test_cost_estimate_with_new_provider_models(monkeypatch):
     """Test cost estimation with models from new providers."""
+    monkeypatch.setattr(
+        "src.services.pricing_aggregator.get_price_oracle", lambda: _NoOpPriceOracle()
+    )
+
     # Test with Google model
     request_data = {
         "model_name": "gemini-1.5-flash",
@@ -710,8 +736,12 @@ def test_cost_estimate_with_new_provider_models():
     assert data["provider"] == "Mistral AI"
 
 
-def test_batch_cost_estimate_with_mixed_providers():
+def test_batch_cost_estimate_with_mixed_providers(monkeypatch):
     """Test batch cost estimation with models from different providers."""
+    monkeypatch.setattr(
+        "src.services.pricing_aggregator.get_price_oracle", lambda: _NoOpPriceOracle()
+    )
+
     request_data = {
         "model_names": [
             "gpt-4",  # OpenAI
