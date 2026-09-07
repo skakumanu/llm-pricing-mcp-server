@@ -1,18 +1,26 @@
 export const meta = {
   name: 'release-feature',
-  description: 'Code -> Review (parallel dimensions) -> Test & Release, for one already-planned, already-branched feature',
+  description: 'Code -> Review (parallel dimensions) -> Test & Release, for one already-specced, already-designed, already-branched feature',
   phases: [
-    { title: 'Code', detail: 'implement the plan on the current feature branch' },
+    { title: 'Code', detail: 'implement the design on the current feature branch' },
     { title: 'Review', detail: 'correctness, security, simplification reviewers run in parallel over the diff' },
-    { title: 'Test & Release', detail: 'apply must-fix findings, run the release checklist, push, open the PR' },
+    { title: 'Test & Release', detail: 'check acceptance criteria, apply must-fix findings, run the release checklist, push, open the PR' },
   ],
 }
 
-// Expected `args` shape (built by the release-feature skill, which runs the Plan phase
-// and creates the branch BEFORE calling this workflow):
+// Expected `args` shape (built by the release-feature skill, which runs the Spec and
+// Design phases and creates the branch BEFORE calling this workflow):
 // {
-//   plan: {
-//     scope: string,
+//   spec: {
+//     problem: string,
+//     targetUseCase: string,
+//     functionalRequirements: string[],
+//     acceptanceCriteria: string[],
+//     nonGoals: string[],
+//     existingCapabilityNotes: string,
+//   },
+//   design: {
+//     approach: string,
 //     affectedAreas: string[],
 //     versionBumpType: 'patch'|'minor'|'major',
 //     targetVersion: string,
@@ -20,7 +28,6 @@ export const meta = {
 //     touchesPricing: boolean,
 //     userFacing: boolean,
 //     branchName: string,
-//     openQuestions: string[],
 //   },
 //   branch: string,          // the feature branch, already checked out
 //   attribution: {
@@ -34,9 +41,10 @@ const CODE_SCHEMA = {
   properties: {
     summary: { type: 'string' },
     filesChanged: { type: 'array', items: { type: 'string' } },
+    acceptanceCriteriaSatisfied: { type: 'array', items: { type: 'string' } },
     versionBumped: { type: 'boolean' },
     architectureUpdated: { type: 'boolean' },
-    deviationsFromPlan: { type: 'array', items: { type: 'string' } },
+    deviationsFromDesign: { type: 'array', items: { type: 'string' } },
   },
   required: ['summary', 'filesChanged', 'versionBumped'],
 }
@@ -67,6 +75,7 @@ const TEST_SCHEMA = {
   properties: {
     testsPassed: { type: 'boolean' },
     testCount: { type: 'number' },
+    acceptanceCriteriaVerified: { type: 'array', items: { type: 'string' } },
     findingsFixed: { type: 'array', items: { type: 'string' } },
     findingsSkipped: { type: 'array', items: { type: 'string' } },
     prUrl: { type: 'string' },
@@ -81,14 +90,15 @@ function reviewPrompt(dimension) {
 }
 
 phase('Code')
-log(`Implementing plan: ${args.plan.scope}`)
+log(`Implementing design for: ${args.spec.problem}`)
 const codeResult = await agent(
-  `Implement this plan on the current branch (already checked out, do not create a new one):\n\n${JSON.stringify(args.plan, null, 2)}`,
+  `Spec (requirements, fixed — do not re-derive the approach, use this only to check your work against its acceptance criteria):\n${JSON.stringify(args.spec, null, 2)}\n\n` +
+    `Design (the technical approach to implement, on the current branch, already checked out, do not create a new one):\n${JSON.stringify(args.design, null, 2)}`,
   { agentType: 'phase-code', label: 'code', schema: CODE_SCHEMA }
 )
 
 if (!codeResult) {
-  return { plan: args.plan, code: null, reviewFindings: [], release: null, blocker: 'Code phase agent failed to return a result.' }
+  return { spec: args.spec, design: args.design, code: null, reviewFindings: [], release: null, blocker: 'Code phase agent failed to return a result.' }
 }
 
 phase('Review')
@@ -103,13 +113,14 @@ log(`Review found ${findings.length} finding(s) across ${DIMENSIONS.length} dime
 
 phase('Test & Release')
 const testResult = await agent(
-  `Code phase result:\n${JSON.stringify(codeResult, null, 2)}\n\n` +
+  `Spec's acceptance criteria to verify against the actual implementation:\n${JSON.stringify(args.spec.acceptanceCriteria, null, 2)}\n\n` +
+    `Code phase result:\n${JSON.stringify(codeResult, null, 2)}\n\n` +
     `Review findings to triage and fix where real:\n${JSON.stringify(findings, null, 2)}\n\n` +
-    `Plan (for architecture/pricing/user-facing flags):\n${JSON.stringify(args.plan, null, 2)}\n\n` +
+    `Design (for architecture/pricing/user-facing flags):\n${JSON.stringify(args.design, null, 2)}\n\n` +
     `Branch: ${args.branch}\n\n` +
     `Use this exact commit-message trailer:\n${args.attribution.commitTrailer}\n\n` +
     `Use this exact PR-description footer:\n${args.attribution.prFooter}`,
   { agentType: 'phase-test', label: 'test-and-release', schema: TEST_SCHEMA }
 )
 
-return { plan: args.plan, code: codeResult, reviewFindings: findings, release: testResult }
+return { spec: args.spec, design: args.design, code: codeResult, reviewFindings: findings, release: testResult }

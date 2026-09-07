@@ -18,6 +18,7 @@ from mcp.tools.ask_agent import AskAgentTool
 from mcp.tools.get_ide_pricing import GetIDEPricingTool
 from mcp.tools.predict_cost import PredictCostTool
 from mcp.tools.optimize_workload import OptimizeWorkloadTool
+from mcp.tools.recommend_model import RecommendModelTool
 from mcp.tools.check_price_drift import CheckPriceDriftTool
 from mcp.tools.get_data_quality import GetDataQualityTool
 from mcp.tools.record_usage import RecordUsageTool
@@ -572,6 +573,114 @@ class ToolManager:
                         },
                     },
                     "required": ["workloads"],
+                },
+            },
+            "recommend_model": {
+                "instance": RecommendModelTool(),
+                "name": "recommend_model",
+                "description": (
+                    "Recommend the optimal LLM model from a free-text description of your use "
+                    "case — no need to already know the routing engine's task_type vocabulary. "
+                    "Classifies the description into a task type, then runs it through the same "
+                    "routing engine behind /router/recommend (live pricing + benchmark quality, "
+                    "hard filters for cost/quality/context window, scored by quality-per-dollar). "
+                    "Returns the best match plus up to 3 alternatives. Read-only — use "
+                    "predict_cost first if you also want per-model cost estimates for an actual "
+                    "prompt, and optimize_workload if you have several distinct task types to "
+                    "route at once."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "description": {
+                            "type": "string",
+                            "description": (
+                                "Free-text description of the use case, e.g. 'summarize long "
+                                "customer support tickets' or 'generate Python unit tests'"
+                            ),
+                        },
+                        "task_type": {
+                            "type": "string",
+                            "description": (
+                                "Optional explicit task type, bypassing auto-classification of "
+                                "the description. Options: classification, extraction, "
+                                "summarization, qa, code_generation, translation, chat, "
+                                "content_generation, reasoning, function_calling, data_analysis, "
+                                "rewrite"
+                            ),
+                            "enum": [
+                                "classification", "extraction", "summarization", "qa",
+                                "code_generation", "translation", "chat", "content_generation",
+                                "reasoning", "function_calling", "data_analysis", "rewrite",
+                            ],
+                        },
+                        "max_cost_per_1m_tokens": {
+                            "type": "number",
+                            "description": "Maximum acceptable average cost per 1M tokens (USD)",
+                            "minimum": 0,
+                        },
+                        "min_quality_score": {
+                            "type": "number",
+                            "description": "Minimum required quality score (0-100)",
+                            "minimum": 0,
+                            "maximum": 100,
+                        },
+                        "min_context_window": {
+                            "type": "integer",
+                            "description": "Minimum required context window size (tokens)",
+                            "minimum": 0,
+                        },
+                        "preferred_provider": {
+                            "type": "string",
+                            "description": "Preferred provider name (10% score boost applied)",
+                        },
+                        "prefer_low_latency": {
+                            "type": "boolean",
+                            "description": "Prioritise lower-latency models (default: false)",
+                            "default": False,
+                        },
+                        "exclude_reasoning_models": {
+                            "type": "boolean",
+                            "description": "Exclude slow thinking/reasoning models (default: false)",
+                            "default": False,
+                        },
+                        "ide_context": {
+                            "type": "string",
+                            "description": (
+                                "IDE context hint — boosts IDE-native tools: "
+                                "'copilot' | 'cursor' | 'windsurf' | 'claude_code' | "
+                                "'jetbrains' | 'amazon_q'"
+                            ),
+                        },
+                        "monthly_budget_usd": {
+                            "type": "number",
+                            "description": (
+                                "Monthly spend ceiling in USD. Combined with "
+                                "estimated_monthly_requests, avg_input_tokens, and "
+                                "avg_output_tokens to hard-filter models that would exceed it."
+                            ),
+                            "exclusiveMinimum": 0,
+                        },
+                        "estimated_monthly_requests": {
+                            "type": "integer",
+                            "description": "Estimated requests per month (default: 1000)",
+                            "default": 1000,
+                            "minimum": 1,
+                        },
+                        "avg_input_tokens": {
+                            "type": "integer",
+                            "description": "Average input tokens per request (default: 500)",
+                            "default": 500,
+                            "minimum": 1,
+                        },
+                        "avg_output_tokens": {
+                            "type": "integer",
+                            "description": "Average output tokens per request (default: 200)",
+                            "default": 200,
+                            "minimum": 1,
+                        },
+                    },
+                    "required": ["description"],
                 },
             },
             "check_price_drift": {
