@@ -33,6 +33,12 @@ A production-ready **Model Context Protocol (MCP)** server for LLM pricing data.
 - Recommends cheaper models, prompt caching, Batch API (for calls in a loop or an offline-looking path), and task-based right-sizing (flagship model on a simple task) — plus flags the same prompt duplicated across call sites — see `python scripts/audit_repo.py --help`
 - Static estimates only (assumes a configurable calls/month) — pair with `POST /usage`'s actual recorded spend once deployed for real numbers
 
+### AI-Native SDLC Pipeline (`/release-feature`, for contributors using Claude Code)
+- Runs a feature request through dedicated phase agents instead of one agent doing everything at once: **Plan → Code → Review → Test & Release**
+- Review fans out to three parallel agents (correctness, security, simplification) over the diff; Test & Release triages their findings, runs this repo's full release checklist, and is the only phase that commits, pushes, and opens the PR
+- Defined in `.claude/agents/phase-*.md` (the four phase agents) and `.claude/workflows/release-feature.js` (the orchestrator) — see `CLAUDE.md`'s "AI-Native SDLC Pipeline" section
+- Ends at an open PR against `develop`; merging is still a human decision
+
 ### Agent + RAG Pipeline
 - **Configurable LLM backend**: OpenAI GPT-4o-mini (default) or Anthropic Claude via env vars
 - **ReAct loop agent** with access to 23 of the 25 MCP tools (excludes `ask_agent` and `get_telemetry`)
