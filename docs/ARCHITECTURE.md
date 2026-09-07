@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.66.0 | **Last updated**: 2026-09-07
+**Version**: v1.67.0 | **Last updated**: 2026-09-07
 
 ---
 
@@ -49,8 +49,9 @@ A production FastAPI service that aggregates real-time LLM pricing data from 26 
 │  PricingHistory     │  │  Conv. memory  │  │  Free signup → API key     │
 │  BenchmarkService   │  │  LLM backend   │  │  Stripe checkout/webhook   │
 │  Router             │  │  (GPT-4o-mini  │  │  Tier sync (free/pro/ent)  │
-│  SavingsTracker     │  │   or Anthropic)│  │                            │
-│  UsageTracker       │  └───────┬────────┘  └────────────────────────────┘
+│  RecommendationCache│  │   or Anthropic)│  │                            │
+│  SavingsTracker     │  └───────┬────────┘  └────────────────────────────┘
+│  UsageTracker       │          │
 │  BudgetAlerts       │          │
 │  PricingAlerts      │          │
 └──────────┬──────────┘          │
@@ -62,6 +63,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 26 
 │  price_history table    customers table     Aggregator (TTL)               │
 │  routing_feedback       (api_key, tier,     Savings per org_id             │
 │  usage_events table     org_id, stripe_id)  Alert callbacks                │
+│                                             Recommendation cache (5min TTL)│
 └──────────┬──────────────────────────────────────────────────────────────────┘
            │
 ┌──────────▼──────────────────────────────────────────────────────────────────┐
@@ -92,6 +94,7 @@ llm-pricing-mcp-server/
 │       ├── pricing_history.py       # SQLite price-history + routing_feedback tables
 │       ├── benchmark_service.py     # Quality scores: static table + HF API fallback (24h TTL)
 │       ├── router.py                # LLM routing recommendation engine
+│       ├── recommendation_cache.py  # ~5min TTL cache for recommend_model / POST /router/recommend decisions
 │       ├── task_profiles.py         # 12 task I/O-ratio profiles + keyword task inference
 │       ├── portfolio_optimizer.py   # Per-task model allocation + savings vs single-model baseline
 │       ├── price_oracle.py          # External price registry: fills gaps, withholds drifted prices (24h TTL + snapshot)
@@ -302,7 +305,7 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | GET | `/rate-limits/tiers` | None | Tier rate limits |
 | GET | `/api/versions` | None | API version negotiation |
 | GET | `/telemetry` | None | Request telemetry |
-| POST | `/router/recommend` | Required | LLM routing recommendation |
+| POST | `/router/recommend` | Required | LLM routing recommendation (~5min in-memory cache; response `cached` field) |
 | POST | `/router/recommend/stream` | Required | SSE streaming router |
 | POST | `/router/feedback` | Required | Accept/reject feedback |
 | GET | `/telemetry/savings` | Required | Per-org savings stats |

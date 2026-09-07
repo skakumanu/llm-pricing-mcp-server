@@ -44,6 +44,7 @@ from src.models.pricing import (  # noqa: E402
 from src.services.pricing_history import init_pricing_history_service, get_pricing_history_service  # noqa: E402
 from src.services.pricing_alerts import init_pricing_alert_service, get_pricing_alert_service  # noqa: E402
 from src.services.router import init_router, get_router  # noqa: E402
+from src.services.recommendation_cache import RecommendationCache  # noqa: E402
 from src.services.savings_tracker import init_savings_tracker, get_savings_tracker  # noqa: E402
 from src.services.usage_tracker import init_usage_tracker, get_usage_tracker  # noqa: E402
 from src.services.budget_alerts import init_budget_alert_service, get_budget_alert_service  # noqa: E402
@@ -1623,6 +1624,14 @@ async def get_use_cases(
     )
 
 
+# ~5 minute in-memory cache for POST /router/recommend decisions. Deliberately
+# a separate instance from recommend_model's cache (mcp/tools/recommend_model.py)
+# so a hit on one endpoint never leaks into the other. POST /router/recommend/stream
+# and /v1/chat/completions call ModelRouter.get_optimal_model() directly and are
+# unaffected by this cache.
+_router_recommend_cache = RecommendationCache()
+
+
 @app.post("/router/recommend", response_model=RouterResponse, tags=["Router"])
 async def router_recommend(req: RouterRequest, request: Request):
     """
@@ -1631,6 +1640,10 @@ async def router_recommend(req: RouterRequest, request: Request):
     Fetches live pricing, enriches with benchmark quality scores, applies hard
     filters (cost, quality, context window), and scores survivors by
     quality_value_score.  Returns the best match and up to 3 alternatives.
+
+    Identical (normalized-equivalent) requests made within ~5 minutes of each
+    other are served from an in-memory cache instead of being recomputed;
+    the response's `cached` field indicates which happened.
 
     Optionally pass `X-Organization-Id` and `X-Api-Key-Tier` headers to enable
     per-org savings tracking.
@@ -1651,7 +1664,9 @@ async def router_recommend(req: RouterRequest, request: Request):
         avg_output_tokens=req.avg_output_tokens,
     )
     router = get_router()
-    result = await router.get_optimal_model(constraints)
+    result = await _router_recommend_cache.get_or_compute(
+        constraints, lambda: router.get_optimal_model(constraints)
+    )
     if result is None:
         raise HTTPException(
             status_code=404,
@@ -1702,6 +1717,7 @@ async def router_recommend(req: RouterRequest, request: Request):
         reason=result.reason,
         alternatives=result.alternatives,
         routing_id=routing_id,
+        cached=result.cached,
     )
 
 

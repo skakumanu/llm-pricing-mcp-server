@@ -41,6 +41,10 @@ class RouterResult:
     score: float
     reason: str
     alternatives: List[object] = field(default_factory=list)
+    # Set to True by RecommendationCache.get_or_compute() when this result is
+    # served from cache rather than freshly computed. get_optimal_model()
+    # itself never sets this — it always returns cached=False.
+    cached: bool = False
 
 
 class ModelRouter:
