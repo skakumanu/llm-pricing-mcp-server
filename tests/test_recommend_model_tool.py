@@ -219,6 +219,100 @@ async def test_recommend_model_code_generation_filters_to_coding_use_case(task_f
     assert all(a["model_name"] != "story-model" for a in result["alternatives"])
 
 
+# ---------------------------------------------------------------------------
+# Recommendation caching
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_recommend_model_repeated_call_is_served_from_cache(tool):
+    """Identical requests within the freshness window return the same
+    recommendation and are flagged as served from cache."""
+    args = {"description": "chat with the user"}
+
+    first = await tool.execute(args)
+    second = await tool.execute(args)
+
+    assert first["success"] is True
+    assert second["success"] is True
+    assert first["cached"] is False
+    assert second["cached"] is True
+    assert second["recommended"] == first["recommended"]
+    assert second["score"] == first["score"]
+    assert second["reason"] == first["reason"]
+    assert second["alternatives"] == first["alternatives"]
+
+
+@pytest.mark.asyncio
+async def test_recommend_model_cache_expires_after_ttl(tool):
+    """After the ~5 minute freshness window, the request is recomputed."""
+    args = {"description": "chat with the user"}
+    first = await tool.execute(args)
+    assert first["cached"] is False
+
+    # Force every cache entry to look stale.
+    for entry in tool._cache._entries.values():
+        entry.created_at -= 301
+
+    second = await tool.execute(args)
+    assert second["cached"] is False
+
+
+@pytest.mark.asyncio
+async def test_recommend_model_different_inputs_cached_independently(tool):
+    """Genuinely different requests must not reuse each other's cached result."""
+    result_a = await tool.execute({"description": "chat with the user"})
+    result_b = await tool.execute({
+        "description": "chat with the user",
+        "min_context_window": 500000,
+    })
+
+    assert result_a["cached"] is False
+    assert result_b["cached"] is False
+    assert result_a["recommended"]["model_name"] != result_b["recommended"]["model_name"]
+    assert result_b["recommended"]["model_name"] == "gemini-flash"
+
+    # Repeating the first again should still hit its own cache entry.
+    result_a_again = await tool.execute({"description": "chat with the user"})
+    assert result_a_again["cached"] is True
+    assert result_a_again["recommended"] == result_a["recommended"]
+
+
+@pytest.mark.asyncio
+async def test_recommend_model_no_match_is_not_cached(tool):
+    """A `no model matched` response must never be served stale from cache."""
+    args = {"description": "chat with the user", "min_quality_score": 99.9}
+    first = await tool.execute(args)
+    second = await tool.execute(args)
+
+    assert first["success"] is False
+    assert second["success"] is False
+    assert "cached" not in first
+    assert "cached" not in second
+
+
+@pytest.mark.asyncio
+async def test_recommend_model_cache_is_per_tool_instance():
+    """Two separate RecommendModelTool() instances (e.g. per-request
+    construction) must not share cache state."""
+    mock_svc = MagicMock()
+    mock_svc.get_all_pricing_async = AsyncMock(return_value=(SAMPLE_MODELS, []))
+
+    tool_a = RecommendModelTool()
+    tool_a.service = mock_svc
+    tool_a.router._aggregator = mock_svc
+
+    tool_b = RecommendModelTool()
+    tool_b.service = mock_svc
+    tool_b.router._aggregator = mock_svc
+
+    args = {"description": "chat with the user"}
+    result_a = await tool_a.execute(args)
+    result_b = await tool_b.execute(args)
+
+    assert result_a["cached"] is False
+    assert result_b["cached"] is False  # fresh cache on tool_b, not a hit from tool_a
+
+
 @pytest.mark.asyncio
 async def test_task_type_translation_map_covers_every_task_profiles_type():
     """Every task_profiles task_type must map onto a router-recognised task_type
