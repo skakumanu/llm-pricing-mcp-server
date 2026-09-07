@@ -178,7 +178,7 @@
       </div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.75rem 1.1rem;font-size:.82rem;">
         <div style="color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">Tools</div>
-        <span style="color:var(--success);font-weight:600">25 tools · No auth required</span>
+        <span style="color:var(--success);font-weight:600">26 tools · No auth required</span>
       </div>
     </div>
   </div>
@@ -218,7 +218,7 @@
           <div class="step-num">2</div>
           <div class="step-body">
             <h4>Restart your client</h4>
-            <p>After saving the config, restart Claude Desktop / VS Code / Cursor. The 25 tools will appear automatically.</p>
+            <p>After saving the config, restart Claude Desktop / VS Code / Cursor. The 26 tools will appear automatically.</p>
           </div>
         </div>
         <div class="step">
@@ -325,7 +325,7 @@ pip install -r requirements.txt</div>
             <div class="step-num">4</div>
             <div class="step-body">
               <h4>Enable the tools in Agent mode</h4>
-              <p>Open the Copilot Chat panel, switch to <em>Agent</em> mode, then click the tools icon and enable <strong>llm-pricing</strong>. All 25 tools become available to the agent.</p>
+              <p>Open the Copilot Chat panel, switch to <em>Agent</em> mode, then click the tools icon and enable <strong>llm-pricing</strong>. All 26 tools become available to the agent.</p>
             </div>
           </div>
         </div>
@@ -437,14 +437,14 @@ pip install -r requirements.txt</div>
           <div class="step-num">2</div>
           <div class="step-body">
             <h4>Restart Perplexity</h4>
-            <p>After saving, restart the desktop app. All 25 pricing tools will be available in your conversations.</p>
+            <p>After saving, restart the desktop app. All 26 pricing tools will be available in your conversations.</p>
           </div>
         </div>
         <div class="step">
           <div class="step-num">3</div>
           <div class="step-body">
             <h4>Verify</h4>
-            <p>Ask: <em>"What LLM pricing tools do you have available?"</em> — Perplexity should list all 25 tools.</p>
+            <p>Ask: <em>"What LLM pricing tools do you have available?"</em> — Perplexity should list all 26 tools.</p>
           </div>
         </div>
       </div>
@@ -452,10 +452,10 @@ pip install -r requirements.txt</div>
 
   </div><!-- /section -->
 
-  <!-- All 25 tools -->
+  <!-- All 26 tools -->
   <div class="section">
     <div class="section-label">Available Tools</div>
-    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">All 25 tools are accessible via MCP. <span style="color:var(--accent)">Purple</span> = required arg · <span style="color:var(--muted)">Grey</span> = optional.</p>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">All 26 tools are accessible via MCP. <span style="color:var(--accent)">Purple</span> = required arg · <span style="color:var(--muted)">Grey</span> = optional.</p>
     <div class="tool-grid">
       <div class="tool-card">
         <div class="tool-name">get_all_pricing</div>
@@ -481,6 +481,11 @@ pip install -r requirements.txt</div>
         <div class="tool-name">optimize_workload</div>
         <div class="tool-desc">Route each task to its own cheapest qualifying model instead of one model for everything. Reports the saving versus a single-model deployment.</div>
         <div class="tool-args"><span class="req">workloads[]</span><span>monthly_budget_usd</span><span>min_quality_score</span></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">recommend_model</div>
+        <div class="tool-desc">Describe your use case in plain English — get the optimal model recommendation plus up to 3 alternatives. Classifies the description into a task type, then runs the same routing engine behind /router/recommend.</div>
+        <div class="tool-args"><span class="req">description</span><span>task_type</span><span>max_cost_per_1m_tokens</span><span>min_quality_score</span><span>min_context_window</span><span>preferred_provider</span><span>monthly_budget_usd</span></div>
       </div>
       <div class="tool-card">
         <div class="tool-name">check_price_drift</div>
