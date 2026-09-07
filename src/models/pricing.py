@@ -603,6 +603,13 @@ class RouterResponse(BaseModel):
     )
     routing_id: str = Field(..., description="Unique routing decision ID (UUID4) for feedback")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    cached: bool = Field(
+        False,
+        description=(
+            "True if this recommendation was served from the ~5 minute "
+            "in-memory recommendation cache rather than freshly computed"
+        ),
+    )
 
 
 class RouterFeedbackRequest(BaseModel):

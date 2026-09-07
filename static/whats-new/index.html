@@ -142,8 +142,27 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.66.0 -->
+  <!-- v1.67.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.67.0</span>
+      <span class="release-date">Sep 7, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Repeat model recommendations now come back instantly from a short-lived cache</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><code>recommend_model</code> (MCP tool) and <code>POST /router/recommend</code> now cache the routing decision for ~5 minutes, so an IDE re-asking on every keystroke pause — or an agent re-checking the best model for the same recurring task — gets the same answer back without recomputing the full routing pass each time</li>
+        <li>Both now return a <code>cached</code> field so a caller can tell whether a given recommendation was served from cache or freshly computed; cached and fresh responses have identical <code>recommended</code>/<code>score</code>/<code>reason</code>/<code>alternatives</code> for the same normalized inputs</li>
+        <li>In-memory only, per call site, ~5 minute freshness window with no caller-facing bypass — <code>POST /router/recommend/stream</code> and <code>/v1/chat/completions</code> are unaffected and always compute fresh</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.66.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.66.0</span>
