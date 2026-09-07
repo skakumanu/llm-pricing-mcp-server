@@ -34,9 +34,10 @@ A production-ready **Model Context Protocol (MCP)** server for LLM pricing data.
 - Static estimates only (assumes a configurable calls/month) — pair with `POST /usage`'s actual recorded spend once deployed for real numbers
 
 ### AI-Native SDLC Pipeline (`/release-feature`, for contributors using Claude Code)
-- Runs a feature request through dedicated phase agents instead of one agent doing everything at once: **Plan → Code → Review → Test & Release**
-- Review fans out to three parallel agents (correctness, security, simplification) over the diff; Test & Release triages their findings, runs this repo's full release checklist, and is the only phase that commits, pushes, and opens the PR
-- Defined in `.claude/agents/phase-*.md` (the four phase agents) and `.claude/workflows/release-feature.js` (the orchestrator) — see `CLAUDE.md`'s "AI-Native SDLC Pipeline" section
+- Runs a feature request through dedicated phase agents instead of one agent doing everything at once: **Spec → Design → Code → Review → Test & Release**
+- Spec fixes *what* the feature does (requirements, acceptance criteria, non-goals) with zero implementation detail; Design fixes *how* it's built (approach, version bump, branch name) given a fixed Spec — neither phase re-derives the other's decision
+- Review fans out to three parallel agents (correctness, security, simplification) over the diff; Test & Release checks the result against the Spec's acceptance criteria, triages Review's findings, runs this repo's full release checklist, and is the only phase that commits, pushes, and opens the PR
+- Defined in `.claude/agents/phase-*.md` (five phase agents) and `.claude/workflows/release-feature.js` (the Code→Review→Test orchestrator) — see `CLAUDE.md`'s "AI-Native SDLC Pipeline" section
 - Ends at an open PR against `develop`; merging is still a human decision
 
 ### Agent + RAG Pipeline
