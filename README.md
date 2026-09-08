@@ -3,7 +3,7 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A production-ready **Model Context Protocol (MCP)** server for LLM pricing data. Provides a RESTful API (FastAPI), **26 MCP tools** over STDIO and HTTP, a conversational Agent + RAG pipeline, browser-based UIs, and a self-serve billing dashboard — for pricing data from **26 major LLM providers**.
+A production-ready **Model Context Protocol (MCP)** server for LLM pricing data. Provides a RESTful API (FastAPI), **27 MCP tools** over STDIO and HTTP, a conversational Agent + RAG pipeline, browser-based UIs, and a self-serve billing dashboard — for pricing data from **26 major LLM providers**.
 
 **Live at**: https://llm-pricing-api.fly.dev
 
@@ -12,7 +12,7 @@ A production-ready **Model Context Protocol (MCP)** server for LLM pricing data.
 ## Features
 
 ### MCP Interface (STDIO + HTTP)
-- **26 MCP Tools**: `get_all_pricing`, `estimate_cost`, `compare_costs`, **`predict_cost`**, **`optimize_workload`**, **`recommend_model`**, **`check_price_drift`**, **`get_data_quality`**, `get_performance_metrics`, `get_use_cases`, `get_ide_pricing`, `get_telemetry`, `get_pricing_history`, `get_pricing_trends`, `register_price_alert`, `list_price_alerts`, `delete_price_alert`, `get_pricing_export_url`, `list_conversations`, `delete_conversation`, `ask_agent`, **`record_usage`**, **`get_usage_summary`**, **`register_budget_alert`**, **`list_budget_alerts`**, **`delete_budget_alert`**
+- **27 MCP Tools**: `get_all_pricing`, `estimate_cost`, `compare_costs`, **`predict_cost`**, **`optimize_workload`**, **`recommend_model`**, **`check_price_drift`**, **`get_data_quality`**, `get_performance_metrics`, `get_use_cases`, `get_ide_pricing`, `get_telemetry`, `get_pricing_history`, `get_pricing_trends`, `register_price_alert`, `list_price_alerts`, `delete_price_alert`, `get_pricing_export_url`, `list_conversations`, `delete_conversation`, `ask_agent`, **`record_usage`**, **`get_usage_summary`**, **`register_budget_alert`**, **`list_budget_alerts`**, **`delete_budget_alert`**, **`get_cache_stats`**
 - **STDIO transport** — JSON-RPC 2.0 over STDIO for local Claude Desktop integration
 - **HTTP transport** — `POST /mcp` (JSON-RPC 2.0 over HTTP) for remote MCP clients — no local install needed
 - MCP Protocol version: `2024-11-05`
@@ -21,7 +21,7 @@ A production-ready **Model Context Protocol (MCP)** server for LLM pricing data.
 - Real-time pricing from 26 providers (150+ models), async fetching with smart caching
 - Cost estimation: single model (`POST /cost-estimate`) and batch comparison (`POST /cost-estimate/batch`)
 - Performance metrics, use-case recommendations, pricing history, trends
-- Router recommendation (`POST /router/recommend`) with feedback loop
+- Router recommendation (`POST /router/recommend`) with feedback loop; `GET /cache-stats` reports process-lifetime hit/miss stats for its ~5-minute recommendation cache
 - Actual usage/spend tracking (`POST /usage`, `GET /usage/summary`) — the real-cost counterpart to `/cost-estimate`
 - OpenAI-compatible proxy (`POST /v1/chat/completions`) for drop-in SDK integration
 - Webhook alerts for price changes and budget-spend thresholds (`POST /usage/alerts`, HMAC-SHA256 signed)
@@ -42,7 +42,7 @@ A production-ready **Model Context Protocol (MCP)** server for LLM pricing data.
 
 ### Agent + RAG Pipeline
 - **Configurable LLM backend**: OpenAI GPT-4o-mini (default) or Anthropic Claude via env vars
-- **ReAct loop agent** with access to 24 of the 26 MCP tools (excludes `ask_agent` and `get_telemetry`)
+- **ReAct loop agent** with access to 24 of the 27 MCP tools (excludes `ask_agent`, `get_telemetry`, and `get_cache_stats`)
 - **TF-IDF RAG** over pricing docs with top-k retrieval
 - **Conversation memory**: per-session SQLite persistence, configurable turn limit
 - **Chat UI** at `/chat` — streams ReAct progress in real time
@@ -85,7 +85,7 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 - Protected endpoints (`/billing/me`, `/router/recommend`, `/router/feedback`, `/billing/portal`) require a billing API key or the global `MCP_API_KEY`
 - Rate limiting per client IP + tier bucket
 - Request size limit (1MB default)
-- 1044 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 1061 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
@@ -131,7 +131,7 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
-Restart Claude Desktop. All 26 pricing tools are immediately available.
+Restart Claude Desktop. All 27 pricing tools are immediately available.
 
 ### Option B — Local STDIO
 
@@ -234,7 +234,7 @@ The server exposes a JSON-RPC 2.0 endpoint at `POST /mcp` supporting the MCP pro
 |--------|-------------|
 | `initialize` | Handshake — returns server info and capabilities |
 | `initialized` | Notification — returns 204 |
-| `tools/list` | List all 26 tools with input schemas |
+| `tools/list` | List all 27 tools with input schemas |
 | `tools/call` | Execute a tool |
 
 ### Example
@@ -422,7 +422,7 @@ llm-pricing-mcp-server/
 │       └── …
 ├── mcp/
 │   ├── server.py                    # STDIO JSON-RPC 2.0 server
-│   └── tools/                       # 26 MCP tool implementations
+│   └── tools/                       # 27 MCP tool implementations
 │       ├── tool_manager.py
 │       ├── get_all_pricing.py
 │       ├── estimate_cost.py

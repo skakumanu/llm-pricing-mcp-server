@@ -75,7 +75,11 @@ class RecommendModelTool:
         # IDE re-asking on every keystroke pause) skip full recomputation.
         # Instance-scoped: a fresh RecommendModelTool() (as tests construct)
         # gets its own cache, never sharing hits with /router/recommend's.
-        self._cache = RecommendationCache()
+        # name="recommend_model" opts this instance into the process-lifetime
+        # hit/miss registry exposed by get_cache_stats (aggregated across
+        # every RecommendModelTool instance in-process, since this cache is
+        # not a true singleton).
+        self._cache = RecommendationCache(name="recommend_model")
 
     async def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         try:

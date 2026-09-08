@@ -16,6 +16,17 @@ and ``benchmark_service._hf_cache`` — but applies it to the routing
 own ``RecommendationCache`` instance, so a cache hit in one never leaks into
 the other.
 
+Process-lifetime hit/miss observability (see ``get_cache_stats()`` below) is
+aggregated in a module-level, name-keyed registry rather than on the instance
+itself. ``recommend_model``'s cache is not a true singleton — up to three
+``RecommendModelTool`` (and therefore ``RecommendationCache``) instances can
+exist in one process (STDIO server, HTTP `/mcp` handler, and the ReAct
+agent's tool binding) — so per-instance counters would silently undercount.
+Passing ``name="recommend_model"`` or ``name="router_recommend"`` opts an
+instance into this aggregation; the default ``name=None`` preserves the
+original no-op behavior for any caller (tests, future call sites) that
+doesn't opt in.
+
 In-memory only: not persisted across restarts, not shared across processes.
 There is no caller-facing way to bypass or invalidate the cache on demand
 (see Spec non-goals) — entries simply expire after ``ttl_seconds``. Each
@@ -43,6 +54,38 @@ DEFAULT_TTL_SECONDS = 300  # 5 minutes
 # expired entries were previously only ever purged lazily on a matching-key
 # lookup that might never come. See Review finding on unbounded cache growth.
 DEFAULT_MAX_ENTRIES = 1000
+
+# The two call sites this cache is wired into today (see module docstring).
+# Pre-seeded so a fresh process reports zero hits/zero misses for *both*
+# names immediately — never a missing key or a KeyError — regardless of
+# which call site (if either) has actually been exercised yet, and
+# regardless of lazy-init ordering between them.
+_CALL_SITE_NAMES = ("recommend_model", "router_recommend")
+_stats = {name: {"hits": 0, "misses": 0} for name in _CALL_SITE_NAMES}
+
+
+def get_cache_stats() -> dict:
+    """Return process-lifetime hit/miss counters for each cache call site.
+
+    Read-only: calling this never mutates the underlying counts. Reported
+    per call site only (see module docstring) — never combined into a single
+    global figure, matching the Spec's requirement that the two sites' stats
+    are never conflated.
+    """
+    result = {}
+    for name in _CALL_SITE_NAMES:
+        counts = _stats[name]
+        hits = counts["hits"]
+        misses = counts["misses"]
+        total = hits + misses
+        hit_rate = round(hits / total * 100, 1) if total else 0.0
+        result[name] = {
+            "hits": hits,
+            "misses": misses,
+            "total": total,
+            "hit_rate": hit_rate,
+        }
+    return result
 
 
 def _normalize_key(constraints: RouterConstraints) -> str:
@@ -95,10 +138,16 @@ class RecommendationCache:
         self,
         ttl_seconds: int = DEFAULT_TTL_SECONDS,
         max_entries: int = DEFAULT_MAX_ENTRIES,
+        name: Optional[str] = None,
     ) -> None:
         self._ttl_seconds = ttl_seconds
         self._max_entries = max_entries
         self._entries: "OrderedDict[str, _CachedRecommendation]" = OrderedDict()
+        # Opt-in name for the module-level hit/miss registry (see
+        # get_cache_stats()). None (the default) means this instance never
+        # records into the registry — used by tests and any caller that
+        # isn't one of the two named call sites.
+        self._name = name
 
     async def get_or_compute(
         self,
@@ -115,7 +164,12 @@ class RecommendationCache:
         entry = self._entries.get(key)
         if entry is not None and entry.is_valid():
             self._entries.move_to_end(key)
+            if self._name is not None:
+                _stats[self._name]["hits"] += 1
             return dataclasses.replace(entry.result, cached=True)
+
+        if self._name is not None:
+            _stats[self._name]["misses"] += 1
 
         result = await compute()
         if result is not None:
