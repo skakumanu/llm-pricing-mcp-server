@@ -44,7 +44,7 @@ from src.models.pricing import (  # noqa: E402
 from src.services.pricing_history import init_pricing_history_service, get_pricing_history_service  # noqa: E402
 from src.services.pricing_alerts import init_pricing_alert_service, get_pricing_alert_service  # noqa: E402
 from src.services.router import init_router, get_router  # noqa: E402
-from src.services.recommendation_cache import RecommendationCache  # noqa: E402
+from src.services.recommendation_cache import RecommendationCache, get_cache_stats  # noqa: E402
 from src.services.savings_tracker import init_savings_tracker, get_savings_tracker  # noqa: E402
 from src.services.usage_tracker import init_usage_tracker, get_usage_tracker  # noqa: E402
 from src.services.budget_alerts import init_budget_alert_service, get_budget_alert_service  # noqa: E402
@@ -344,6 +344,7 @@ _unauthenticated_paths = {
     "/admin/rate-limits",
     "/performance",
     "/use-cases",
+    "/cache-stats",
 }
 
 _sensitive_paths = {
@@ -1628,8 +1629,29 @@ async def get_use_cases(
 # a separate instance from recommend_model's cache (mcp/tools/recommend_model.py)
 # so a hit on one endpoint never leaks into the other. POST /router/recommend/stream
 # and /v1/chat/completions call ModelRouter.get_optimal_model() directly and are
-# unaffected by this cache.
-_router_recommend_cache = RecommendationCache()
+# unaffected by this cache. name="router_recommend" opts this into the
+# process-lifetime hit/miss registry exposed by GET /cache-stats / get_cache_stats.
+_router_recommend_cache = RecommendationCache(name="router_recommend")
+
+
+@app.get("/cache-stats", tags=["Router"])
+async def cache_stats():
+    """
+    Report process-lifetime hit/miss counters for the recommendation cache.
+
+    Covers the two call sites the ~5-minute recommendation cache
+    (introduced alongside `recommend_model` / `POST /router/recommend`) is
+    wired into: the `recommend_model` MCP tool and this `POST /router/recommend`
+    endpoint. Reported separately per call site, never combined — a hit via
+    one call site never affects the other's counts. Counts reset on process
+    restart; not persisted, not shared across replicas. Reading this endpoint
+    never itself changes the counts.
+
+    Returns:
+        dict: `{"recommend_model": {...}, "router_recommend": {...}}`, each
+        with `hits`, `misses`, `total`, and `hit_rate` (percentage).
+    """
+    return get_cache_stats()
 
 
 @app.post("/router/recommend", response_model=RouterResponse, tags=["Router"])

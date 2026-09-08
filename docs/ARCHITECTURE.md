@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.67.0 | **Last updated**: 2026-09-07
+**Version**: v1.68.0 | **Last updated**: 2026-09-08
 
 ---
 
@@ -29,13 +29,13 @@ A production FastAPI service that aggregates real-time LLM pricing data from 26 
 ┌─────────────────────────────────▼───────────────────────────────────────────┐
 │  Presentation Layer (src/main.py + mcp/)                                    │
 │                                                                             │
-│  REST API              MCP (26 tools)          Browser UIs (13 pages)       │
+│  REST API              MCP (27 tools)          Browser UIs (13 pages)       │
 │  /pricing              STDIO transport          /  /chat  /calculator        │
 │  /router/recommend     HTTP POST /mcp           /compare  /history           │
-│  /billing/*            JSON-RPC 2.0             /trends   /widget            │
-│  /agent/chat           MCP 2024-11-05           /billing  /admin             │
-│  /v1/chat/completions                           /mcp-setup  /api-docs        │
-│                                                 /whats-new                   │
+│  /cache-stats          JSON-RPC 2.0             /trends   /widget            │
+│  /billing/*            MCP 2024-11-05           /billing  /admin             │
+│  /agent/chat                                    /mcp-setup  /api-docs        │
+│  /v1/chat/completions                           /whats-new                   │
 │                                                                             │
 │  Security middleware: billing DB key → global MCP_API_KEY fallback          │
 │  Rate limiting: per {ip}:{tier} token-bucket (30/120/600 req/min)           │
@@ -94,7 +94,7 @@ llm-pricing-mcp-server/
 │       ├── pricing_history.py       # SQLite price-history + routing_feedback tables
 │       ├── benchmark_service.py     # Quality scores: static table + HF API fallback (24h TTL)
 │       ├── router.py                # LLM routing recommendation engine
-│       ├── recommendation_cache.py  # ~5min TTL cache for recommend_model / POST /router/recommend decisions
+│       ├── recommendation_cache.py  # ~5min TTL cache for recommend_model / POST /router/recommend decisions + process-lifetime hit/miss stats (get_cache_stats)
 │       ├── task_profiles.py         # 12 task I/O-ratio profiles + keyword task inference
 │       ├── portfolio_optimizer.py   # Per-task model allocation + savings vs single-model baseline
 │       ├── price_oracle.py          # External price registry: fills gaps, withholds drifted prices (24h TTL + snapshot)
@@ -144,7 +144,7 @@ llm-pricing-mcp-server/
 │   ├── react_loop.py                # ReAct (Reason + Act) loop implementation
 │   ├── llm_backend.py               # AnthropicBackend + OpenAIBackend (switch via env)
 │   ├── conversation.py              # SQLite conversation memory, turn limit
-│   └── tools.py                     # 24 MCP tool bindings for agent use (+ RAG search)
+│   └── tools.py                     # 24 of 27 MCP tool bindings for agent use (+ RAG search)
 │
 ├── mcp/
 │   ├── server.py                    # MCP STDIO transport (Claude Desktop)
@@ -163,7 +163,7 @@ llm-pricing-mcp-server/
 │   ├── trends/index.html            # /trends — price-change leaderboard
 │   ├── widget/index.html            # /widget — embeddable pricing table
 │   ├── conversations/index.html     # /conversations — conversation history viewer
-│   ├── mcp-setup/index.html         # /mcp-setup — MCP integration hub (5 client tabs, live test, all 26 tools)
+│   ├── mcp-setup/index.html         # /mcp-setup — MCP integration hub (5 client tabs, live test, all 27 tools)
 │   ├── api-docs/index.html          # /api-docs — API reference (Swagger/ReDoc iframe + endpoint table)
 │   └── whats-new/index.html         # /whats-new — release notes timeline (v1.35.0 → current)
 │
@@ -230,14 +230,14 @@ Enabled for: OpenAI, Anthropic, Groq, Mistral AI, Together AI, Fireworks AI, xAI
 ### 4. MCP Dual Transport
 - **STDIO** (`mcp/server.py`): JSON-RPC 2.0 over stdin/stdout for Claude Desktop local integration
 - **HTTP** (`POST /mcp`): Same JSON-RPC 2.0 payload over HTTP for remote MCP clients — no local install needed
-- Protocol version: `2024-11-05`; 26 tools exposed
+- Protocol version: `2024-11-05`; 27 tools exposed
 
 ### 5. Agent Architecture (ReAct Loop)
 ```
 User message
   → react_loop.py: think → select tool → execute → observe → repeat
-  → tools.py: wraps 24 of the 26 MCP tools as callable Python functions
-      (excludes ask_agent to prevent recursion, and get_telemetry as server-ops only)
+  → tools.py: wraps 24 of the 27 MCP tools as callable Python functions
+      (excludes ask_agent to prevent recursion, and get_telemetry/get_cache_stats as server-ops only)
   → llm_backend.py: AnthropicBackend | OpenAIBackend (switch via AGENT_LLM_PROVIDER env)
   → conversation.py: persist turns to SQLite, enforce max_turns limit
   → SSE stream: events [start, thinking, tool_call, tool_result, …, answer, done]
@@ -305,6 +305,7 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | GET | `/rate-limits/tiers` | None | Tier rate limits |
 | GET | `/api/versions` | None | API version negotiation |
 | GET | `/telemetry` | None | Request telemetry |
+| GET | `/cache-stats` | None | Process-lifetime hit/miss counts + hit rate for the recommendation cache, per call site (`recommend_model`, `router_recommend`) |
 | POST | `/router/recommend` | Required | LLM routing recommendation (~5min in-memory cache; response `cached` field) |
 | POST | `/router/recommend/stream` | Required | SSE streaming router |
 | POST | `/router/feedback` | Required | Accept/reject feedback |

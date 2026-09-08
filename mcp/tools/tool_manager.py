@@ -21,6 +21,7 @@ from mcp.tools.optimize_workload import OptimizeWorkloadTool
 from mcp.tools.recommend_model import RecommendModelTool
 from mcp.tools.check_price_drift import CheckPriceDriftTool
 from mcp.tools.get_data_quality import GetDataQualityTool
+from mcp.tools.get_cache_stats import GetCacheStatsTool
 from mcp.tools.record_usage import RecordUsageTool
 from mcp.tools.get_usage_summary import GetUsageSummaryTool
 from mcp.tools.register_budget_alert import RegisterBudgetAlertTool
@@ -731,6 +732,23 @@ class ToolManager:
                     "A single trust signal, distinct from check_price_drift which lists "
                     "individual disputes. Use when the user asks how accurate or trustworthy "
                     "the pricing data is, overall."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+            "get_cache_stats": {
+                "instance": GetCacheStatsTool(),
+                "name": "get_cache_stats",
+                "description": (
+                    "Report process-lifetime hit/miss counts, total lookups, and hit rate for "
+                    "the ~5-minute recommendation cache, separately for the recommend_model tool "
+                    "and POST /router/recommend (never combined). Server-operations introspection "
+                    "for confirming the cache is reducing recomputation in production, not a "
+                    "pricing question. Counts reset on process restart; reading them never "
+                    "changes them."
                 ),
                 "input_schema": {
                     "type": "object",
