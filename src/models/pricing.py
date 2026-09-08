@@ -723,6 +723,14 @@ class UsageEventRequest(BaseModel):
     request_id: Optional[str] = Field(
         None, description="Idempotency key — resubmitting the same request_id for the same org is a no-op"
     )
+    session_id: Optional[str] = Field(
+        None,
+        description=(
+            "Optional session ID to tag this event with, so it can later be grouped and "
+            "retrieved via GET /usage/session/{session_id} — e.g. a bounded burst of calls "
+            "like a coding-agent run or a chat session"
+        ),
+    )
 
 
 class UsageEventResponse(BaseModel):
@@ -736,6 +744,7 @@ class UsageEventResponse(BaseModel):
     output_tokens: int = Field(..., description="Output tokens as submitted")
     cost_usd: float = Field(..., description="Cost computed server-side from current pricing, in USD")
     org_id: Optional[str] = Field(None, description="Organisation this event was attributed to")
+    session_id: Optional[str] = Field(None, description="Session this event was tagged with, if any")
 
 
 class UsageBatchRequest(BaseModel):
@@ -783,4 +792,66 @@ class UsageSummaryResponse(BaseModel):
     by_model: List[UsageModelBreakdown] = Field(default_factory=list, description="Spend broken down by model")
     by_provider: List[UsageProviderBreakdown] = Field(
         default_factory=list, description="Spend broken down by provider"
+    )
+
+
+class SessionModelBreakdown(BaseModel):
+    """Actual usage breakdown for a single model within one session."""
+
+    model_name: str = Field(..., description="Model name")
+    provider: str = Field(..., description="Provider")
+    request_count: int = Field(..., description="Number of usage events recorded for this model in the session")
+    input_tokens: int = Field(..., description="Input tokens for this model in the session")
+    output_tokens: int = Field(..., description="Output tokens for this model in the session")
+    cost_usd: float = Field(..., description="Actual cost in USD for this model in the session")
+
+
+class SessionRecommendation(BaseModel):
+    """A model recommendation grounded in one session's actual observed usage."""
+
+    is_optimal: bool = Field(
+        ..., description="True if the session already used exactly the model the router would recommend"
+    )
+    recommended_model: str = Field(..., description="Recommended model name")
+    recommended_provider: str = Field(..., description="Recommended model's provider")
+    recommended_cost_per_1m_tokens: float = Field(
+        ..., description="Recommended model's blended $/1M tokens rate (equal input/output weight)"
+    )
+    session_actual_cost_per_1m_tokens: float = Field(
+        ..., description="This session's actual blended $/1M tokens, from its real token mix and cost"
+    )
+    estimated_cost_if_recommended_usd: float = Field(
+        ..., description="What this session's actual token volumes would have cost on the recommended model"
+    )
+    savings_usd: float = Field(
+        ...,
+        description=(
+            "total_cost_usd minus estimated_cost_if_recommended_usd. Positive means the "
+            "recommended model would have been cheaper; negative means more expensive; 0 "
+            "when is_optimal is true."
+        ),
+    )
+    rationale: str = Field(
+        ..., description="Plain-language reasoning grounded in this session's request count, tokens, and cost"
+    )
+
+
+class SessionUsageAnalysisResponse(BaseModel):
+    """Response for GET /usage/session/{session_id}."""
+
+    success: bool = Field(..., description="False if no usage was recorded for this session_id")
+    has_data: bool = Field(..., description="False when session_id has zero recorded usage events")
+    session_id: str = Field(..., description="The session_id analyzed")
+    error: Optional[str] = Field(None, description="Present when has_data is false")
+    total_requests: Optional[int] = Field(None, description="Total usage events recorded for this session")
+    total_input_tokens: Optional[int] = Field(None, description="Total input tokens for this session")
+    total_output_tokens: Optional[int] = Field(None, description="Total output tokens for this session")
+    total_cost_usd: Optional[float] = Field(None, description="Total actual cost in USD for this session")
+    by_model: List[SessionModelBreakdown] = Field(
+        default_factory=list, description="Per-model breakdown; more than one entry if the session mixed models"
+    )
+    first_occurred_at: Optional[float] = Field(None, description="Unix timestamp of the earliest event")
+    last_occurred_at: Optional[float] = Field(None, description="Unix timestamp of the latest event")
+    recommendation: Optional[SessionRecommendation] = Field(
+        None, description="Absent when has_data is false or no model could be matched"
     )

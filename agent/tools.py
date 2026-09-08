@@ -181,6 +181,18 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
             ),
         ),
         (
+            "analyze_session_usage",
+            (
+                "Analyze one specific session's actual recorded LLM usage (tagged via "
+                "record_usage's session_id): total tokens, total actual cost, a per-model "
+                "breakdown, and a grounded model recommendation with estimated savings versus "
+                "that session's real cost — or confirmation the current choice is already "
+                "optimal. Use when the user asks what they should be doing differently for a "
+                "specific session, coding-agent run, or chat session they've already logged "
+                "usage for."
+            ),
+        ),
+        (
             "register_budget_alert",
             (
                 "Register a webhook URL to be notified when actual recorded spend crosses a USD "

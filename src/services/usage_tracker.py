@@ -38,13 +38,19 @@ CREATE TABLE IF NOT EXISTS usage_events (
     input_tokens INTEGER NOT NULL,
     output_tokens INTEGER NOT NULL,
     cost_usd REAL NOT NULL,
-    request_id TEXT
+    request_id TEXT,
+    session_id TEXT
 )
 """
 
 _CREATE_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_usage_events_lookup
 ON usage_events (org_id, occurred_at)
+"""
+
+_CREATE_SESSION_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_usage_events_session
+ON usage_events (session_id, occurred_at)
 """
 
 # request_id is optional (NULL allowed), but when supplied it must be unique per org so
@@ -58,8 +64,9 @@ ON usage_events (org_id, request_id)
 
 _INSERT = """
 INSERT OR IGNORE INTO usage_events
-    (org_id, recorded_at, occurred_at, provider, model_name, input_tokens, output_tokens, cost_usd, request_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (org_id, recorded_at, occurred_at, provider, model_name, input_tokens, output_tokens,
+     cost_usd, request_id, session_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _SUMMARY_TOTALS_QUERY = """
@@ -98,6 +105,34 @@ GROUP BY provider
 ORDER BY total_cost_usd DESC
 """
 
+_SESSION_TOTALS_QUERY = """
+SELECT
+    COUNT(*) AS total_requests,
+    COALESCE(SUM(cost_usd), 0.0) AS total_cost_usd,
+    COALESCE(SUM(input_tokens), 0) AS total_input_tokens,
+    COALESCE(SUM(output_tokens), 0) AS total_output_tokens,
+    MIN(occurred_at) AS first_occurred_at,
+    MAX(occurred_at) AS last_occurred_at
+FROM usage_events
+WHERE session_id = ?
+{where_extra}
+"""
+
+_SESSION_BY_MODEL_QUERY = """
+SELECT
+    model_name,
+    provider,
+    COUNT(*) AS request_count,
+    COALESCE(SUM(input_tokens), 0) AS input_tokens,
+    COALESCE(SUM(output_tokens), 0) AS output_tokens,
+    COALESCE(SUM(cost_usd), 0.0) AS cost_usd
+FROM usage_events
+WHERE session_id = ?
+{where_extra}
+GROUP BY model_name, provider
+ORDER BY cost_usd DESC
+"""
+
 
 class UsageTrackerService:
     """Records caller-reported usage events to SQLite and reports per-org spend."""
@@ -112,6 +147,13 @@ class UsageTrackerService:
             await db.execute(_CREATE_TABLE)
             await db.execute(_CREATE_INDEX)
             await db.execute(_CREATE_DEDUPE_INDEX)
+            # Migrate: add session_id column to usage_events if missing (pre-existing DBs
+            # created before session-scoped analysis was added).
+            try:
+                await db.execute("ALTER TABLE usage_events ADD COLUMN session_id TEXT")
+            except aiosqlite.OperationalError:
+                pass  # nosec B110 — column already exists, this is intentional
+            await db.execute(_CREATE_SESSION_INDEX)
             await db.commit()
 
     async def record_event(
@@ -124,6 +166,7 @@ class UsageTrackerService:
         org_id: Optional[str] = None,
         occurred_at: Optional[float] = None,
         request_id: Optional[str] = None,
+        session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Persist a usage event. Returns whether it was recorded or ignored as a duplicate."""
         occurred = occurred_at if occurred_at is not None else time.time()
@@ -138,6 +181,7 @@ class UsageTrackerService:
                 output_tokens,
                 cost_usd,
                 request_id,
+                session_id,
             ))
             await db.commit()
             duplicate = cursor.rowcount == 0 and request_id is not None
@@ -180,6 +224,49 @@ class UsageTrackerService:
             "by_provider": [
                 {**row, "total_cost_usd": round(row["total_cost_usd"], 6)}
                 for row in by_provider
+            ],
+        }
+
+    async def get_session_usage(
+        self,
+        session_id: str,
+        org_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Return actual usage totals + per-model breakdown for one session_id.
+
+        `total_requests == 0` means no usage has ever been recorded for this
+        session_id — callers should treat that as "no data", not an empty result.
+
+        `org_id`, when supplied, additionally restricts results to rows recorded under
+        that org — the same optional per-org scoping get_summary() already supports.
+        session_id values are caller-generated and not guaranteed unguessable, so
+        callers that know their own org_id (e.g. an authenticated customer) should pass
+        it to avoid reading back another org's session by a guessed/leaked session_id.
+        """
+        where_extra = ""
+        params: List[Any] = [session_id]
+        if org_id:
+            where_extra = "AND org_id = ?"
+            params.append(org_id)
+
+        async with _open_db(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(_SESSION_TOTALS_QUERY.format(where_extra=where_extra), params) as cur:
+                totals = dict(await cur.fetchone())
+            async with db.execute(_SESSION_BY_MODEL_QUERY.format(where_extra=where_extra), params) as cur:
+                by_model = [dict(r) for r in await cur.fetchall()]
+
+        return {
+            "session_id": session_id,
+            "total_requests": totals["total_requests"],
+            "total_cost_usd": round(totals["total_cost_usd"], 6),
+            "total_input_tokens": totals["total_input_tokens"],
+            "total_output_tokens": totals["total_output_tokens"],
+            "first_occurred_at": totals["first_occurred_at"],
+            "last_occurred_at": totals["last_occurred_at"],
+            "by_model": [
+                {**row, "cost_usd": round(row["cost_usd"], 6)}
+                for row in by_model
             ],
         }
 
