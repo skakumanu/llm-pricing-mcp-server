@@ -38,7 +38,7 @@ from src.models.pricing import (  # noqa: E402
     SavingsResponse, SavingsRecord,
     IDEBreakdownResponse, IDEBreakdownRecord,
     UsageEventRequest, UsageEventResponse, UsageBatchRequest, UsageBatchResponse,
-    UsageSummaryResponse,
+    UsageSummaryResponse, SessionUsageAnalysisResponse,
     BudgetAlertRequest, BudgetAlertRecord, BudgetAlertListResponse,
 )
 from src.services.pricing_history import init_pricing_history_service, get_pricing_history_service  # noqa: E402
@@ -47,6 +47,7 @@ from src.services.router import init_router, get_router  # noqa: E402
 from src.services.recommendation_cache import RecommendationCache, get_cache_stats  # noqa: E402
 from src.services.savings_tracker import init_savings_tracker, get_savings_tracker  # noqa: E402
 from src.services.usage_tracker import init_usage_tracker, get_usage_tracker  # noqa: E402
+from src.services.session_recommendation import compute_session_recommendation  # noqa: E402
 from src.services.budget_alerts import init_budget_alert_service, get_budget_alert_service  # noqa: E402
 from src.services.billing_service import init_billing_service, get_billing_service  # noqa: E402
 from src.models.billing import (  # noqa: E402
@@ -1829,6 +1830,7 @@ async def record_usage(req: UsageEventRequest, request: Request):
         org_id=org_id,
         occurred_at=req.occurred_at,
         request_id=req.request_id,
+        session_id=req.session_id,
     )
     get_telemetry_service().track_feature_usage("usage_ingestion")
 
@@ -1847,6 +1849,7 @@ async def record_usage(req: UsageEventRequest, request: Request):
         output_tokens=req.output_tokens,
         cost_usd=round(cost_usd, 6),
         org_id=org_id,
+        session_id=req.session_id,
     )
 
 
@@ -1886,6 +1889,7 @@ async def record_usage_batch(req: UsageBatchRequest, request: Request):
             org_id=org_id,
             occurred_at=event.occurred_at,
             request_id=event.request_id,
+            session_id=event.session_id,
         )
         if result["duplicate"]:
             duplicates += 1
@@ -1926,6 +1930,69 @@ async def usage_summary(
     tracker = get_usage_tracker()
     result = await tracker.get_summary(org_id=org_id, days=days)
     return UsageSummaryResponse(**result)
+
+
+@app.get("/usage/session/{session_id}", response_model=SessionUsageAnalysisResponse, tags=["Usage"])
+async def usage_session_analysis(session_id: str, request: Request):
+    """
+    Analyze one specific session's actual recorded usage, on demand.
+
+    Reads back the rows previously recorded via POST /usage or POST /usage/batch with
+    this `session_id`, reports the session's real token/cost/model-mix totals, and runs
+    the session's own observed token pattern through the same routing engine behind
+    POST /router/recommend to produce a grounded recommendation (or confirm the current
+    choice is already optimal) with the estimated dollar savings/increase versus this
+    session's actual cost. Returns `has_data: false` with no `recommendation` if nothing
+    has been recorded yet for this session_id. Advisory only — never re-prices history
+    or switches anything.
+
+    session_id values are caller-generated and not guaranteed unguessable, so an
+    authenticated request is scoped to the caller's own org_id (resolved the same way as
+    POST /usage — see `_resolve_org_id`), the same as an authenticated caller can never
+    see another org's data. A caller without a per-customer API key (or a self-reported
+    `X-Organization-Id` header) is not scoped, matching /usage/summary's existing
+    trust model for unauthenticated/global-key access.
+    """
+    org_id = _resolve_org_id(request)
+    tracker = get_usage_tracker()
+    usage = await tracker.get_session_usage(session_id, org_id=org_id)
+
+    total_requests = usage["total_requests"]
+    if total_requests == 0:
+        return SessionUsageAnalysisResponse(
+            success=False,
+            has_data=False,
+            session_id=session_id,
+            error=f"No usage recorded for session_id '{session_id}'",
+        )
+
+    total_input_tokens = usage["total_input_tokens"]
+    total_output_tokens = usage["total_output_tokens"]
+    total_cost_usd = usage["total_cost_usd"]
+    by_model = usage["by_model"]
+
+    response_data = {
+        "success": True,
+        "has_data": True,
+        "session_id": session_id,
+        "total_requests": total_requests,
+        "total_input_tokens": total_input_tokens,
+        "total_output_tokens": total_output_tokens,
+        "total_cost_usd": total_cost_usd,
+        "by_model": by_model,
+        "first_occurred_at": usage["first_occurred_at"],
+        "last_occurred_at": usage["last_occurred_at"],
+    }
+
+    # Recommendation math/rationale lives in session_recommendation.py, shared with the
+    # analyze_session_usage MCP tool, so the two entry points can't drift apart.
+    router = get_router()
+    recommendation = await compute_session_recommendation(usage, router)
+    if recommendation is None:
+        return SessionUsageAnalysisResponse(**response_data)
+
+    response_data["recommendation"] = recommendation
+    return SessionUsageAnalysisResponse(**response_data)
 
 
 @app.post("/usage/alerts", response_model=BudgetAlertRecord, status_code=201, tags=["Usage"])
