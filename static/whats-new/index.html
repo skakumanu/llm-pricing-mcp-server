@@ -142,8 +142,30 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.67.0 -->
+  <!-- v1.68.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.68.0</span>
+      <span class="release-date">Sep 8, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">New: <code>get_cache_stats</code> / <code>GET /cache-stats</code> — see whether the recommendation cache is actually working</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li>New MCP tool <code>get_cache_stats</code> and REST endpoint <code>GET /cache-stats</code> report process-lifetime hit counts, miss counts, total lookups, and hit rate for the ~5-minute recommendation cache introduced in v1.67.0 — separately for <code>recommend_model</code> and <code>POST /router/recommend</code>, never combined into one figure</li>
+        <li>A fresh process reports zero hits and zero misses for both call sites immediately, not an error or a missing field; reading the stats never itself changes the counts</li>
+        <li>Current-process-lifetime only — no persistence across restarts or replicas, and no way to clear, bypass, or reconfigure the cache from this or any other surface; the existing per-response <code>cached</code> field is unchanged</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">MCP tools <strong>26 → 27</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.67.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.67.0</span>

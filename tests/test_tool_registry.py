@@ -45,12 +45,14 @@ EXPECTED_TOOLS = {
     "register_budget_alert",
     "list_budget_alerts",
     "delete_budget_alert",
+    "get_cache_stats",
 }
 
 # Tools intentionally NOT exposed to the ReAct agent.
-#   ask_agent    — would let the agent recurse into itself
-#   get_telemetry — server operations, not a pricing question
-AGENT_EXCLUDED = {"ask_agent", "get_telemetry"}
+#   ask_agent       — would let the agent recurse into itself
+#   get_telemetry   — server operations, not a pricing question
+#   get_cache_stats — server-ops cache introspection, not a pricing question
+AGENT_EXCLUDED = {"ask_agent", "get_telemetry", "get_cache_stats"}
 
 
 @pytest.fixture(scope="module")
@@ -63,7 +65,7 @@ class TestToolRegistry:
         assert set(registry.tools.keys()) == EXPECTED_TOOLS
 
     def test_registry_count(self, registry):
-        assert len(registry.tools) == 26
+        assert len(registry.tools) == 27
 
     def test_every_tool_has_instance_and_schema(self, registry):
         for name, meta in registry.tools.items():
@@ -126,7 +128,7 @@ class TestDocsStayInSync:
     COUNT_RE = re.compile(r"\b(\d{1,3})\s+(?:MCP\s+|pricing\s+)?tools?\b", re.IGNORECASE)
 
     # Counts that legitimately are not the registry total.
-    ALLOWED_OTHER_COUNTS = {24}  # agent binds 24 of 26 (ask_agent + get_telemetry excluded)
+    ALLOWED_OTHER_COUNTS = {24}  # agent binds 24 of 27 (ask_agent, get_telemetry, get_cache_stats excluded)
 
     def test_docs_report_correct_tool_count(self, registry):
         total = len(registry.tools)
