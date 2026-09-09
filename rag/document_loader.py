@@ -55,9 +55,9 @@ def pricing_metrics_to_document(metrics) -> Document:
         f"Model: {metrics.model_name}",
         f"Provider: {metrics.provider}",
         f"Cost per input token: ${metrics.cost_per_input_token:.8f} USD"
-        f" (per 1k tokens: ${metrics.cost_per_input_token:.6f})",
+        f" (per 1k tokens: ${metrics.cost_per_input_token * 1000:.6f})",
         f"Cost per output token: ${metrics.cost_per_output_token:.8f} USD"
-        f" (per 1k tokens: ${metrics.cost_per_output_token:.6f})",
+        f" (per 1k tokens: ${metrics.cost_per_output_token * 1000:.6f})",
         f"Currency: {metrics.currency}",
         f"Unit: {metrics.unit}",
     ]

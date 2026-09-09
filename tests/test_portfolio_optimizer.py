@@ -49,9 +49,9 @@ MODELS = [
 
 class TestCostPerRequest:
     def test_basic_math(self):
-        m = _model("x", "P", 1.0, 2.0)  # $1/1k in, $2/1k out
-        # 1000 in + 500 out = 1.0 + 1.0 = 2.0
-        assert cost_per_request(m, 1000, 500) == pytest.approx(2.0)
+        m = _model("x", "P", 1.0, 2.0)  # $1/token in, $2/token out
+        # 1000 in + 500 out = 1000.0 + 1000.0 = 2000.0
+        assert cost_per_request(m, 1000, 500) == pytest.approx(2000.0)
 
     def test_zero_tokens(self):
         m = _model("x", "P", 1.0, 2.0)
@@ -210,7 +210,7 @@ class TestBaselineAndSavings:
 
 class TestBudget:
     def test_within_budget_flag_true(self):
-        r = optimize(MODELS, [Workload("classification", 100)], monthly_budget_usd=1000.0)
+        r = optimize(MODELS, [Workload("classification", 100)], monthly_budget_usd=5000.0)
         assert r.within_budget is True
 
     def test_within_budget_flag_false_when_floor_exceeds(self):
@@ -222,18 +222,19 @@ class TestBudget:
         assert r.within_budget is False
 
     def test_budget_headroom_triggers_quality_upgrade(self):
-        # Cheapest is 'tiny' (q=40). With generous budget the optimizer should
-        # upgrade toward higher quality.
+        # Cheapest is 'tiny' (q=40, $26,500/mo). With generous budget the
+        # optimizer should upgrade toward higher quality (affordable up to
+        # 'small' at $109,000/mo; 'mid'/'large' exceed the budget).
         wl = Workload("classification", 1000)
-        r = optimize(MODELS, [wl], monthly_budget_usd=10000.0)
+        r = optimize(MODELS, [wl], monthly_budget_usd=150000.0)
         assert r.allocations[0].model.quality_score > 40
         assert r.allocations[0].upgraded is True
         assert len(r.upgrades_applied) >= 1
 
     def test_upgrades_respect_budget_ceiling(self):
         wl = Workload("classification", 1000)
-        r = optimize(MODELS, [wl], monthly_budget_usd=10000.0)
-        assert r.total_monthly_cost <= 10000.0
+        r = optimize(MODELS, [wl], monthly_budget_usd=150000.0)
+        assert r.total_monthly_cost <= 150000.0
 
     def test_no_upgrades_without_budget(self):
         r = optimize(MODELS, [Workload("classification", 1000)])

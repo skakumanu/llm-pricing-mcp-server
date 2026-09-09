@@ -142,8 +142,29 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.69.0 -->
+  <!-- v1.69.1 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.69.1</span>
+      <span class="release-date">Sep 9, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Cost estimates were 1000x too low — fixed across every cost-calculating tool</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li>An erroneous extra divide-by-1000 in the single-model cost estimate, the multi-model comparison, the prompt-based cost predictor, the full pricing listing's fixed-volume figures (10K/100K/1M tokens), and prompt-cache savings meant every dollar figure these tools returned — and the chat assistant's own price citations, which are sourced from the same pricing data — understated real cost by three orders of magnitude</li>
+        <li>The same divide-by-1000 bug also affected <code>optimize_workload</code>'s allocation/monthly-cost/budget checks and the repo cost auditor's (<code>scripts/audit_repo.py</code>) per-call-site cost and cheaper-model recommendations — both are now fixed to match every other cost-calculating tool</li>
+        <li><code>predict_cost</code>'s "best value" pick now enriches its ranked candidates with real quality-benchmark data before scoring, the same way <code>recommend_model</code> and <code>optimize_workload</code> already do, so it resolves to an actual model instead of always coming back empty</li>
+        <li>The chat assistant's pricing documents mislabeled the raw per-token dollar figure as a "per 1k tokens" figure; the parenthetical is now numerically correct for its label</li>
+        <li>No pricing data, provenance, or confirmation status changed — this only corrects the arithmetic applied to already-stored per-token rates</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.69.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.69.0</span>

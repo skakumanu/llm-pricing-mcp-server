@@ -1,6 +1,7 @@
 """MCP Tool: Predict real cost from a prompt before making any API call."""
 from typing import Any, Dict, Optional
 
+from src.services.benchmark_service import enrich_models
 from src.services.pricing_aggregator import PricingAggregatorService
 from src.services.task_profiles import (
     estimate_output_tokens,
@@ -70,11 +71,16 @@ class PredictCostTool:
                     "error": "No models match the specified capability constraints",
                 }
 
-            # Compute cost for each candidate
+            # Enrich with quality-benchmark data so best_value_pick has real
+            # quality_value_score data to rank on, same as router.py / optimize_workload.py.
+            candidates = await enrich_models(candidates)
+
+            # Compute cost for each candidate. cost_per_input_token / cost_per_output_token
+            # are dollars-per-single-token, so multiply directly by the token count.
             ranked = []
             for m in candidates:
-                input_cost = (m.cost_per_input_token / 1000) * input_tokens
-                output_cost = (m.cost_per_output_token / 1000) * output_tokens
+                input_cost = m.cost_per_input_token * input_tokens
+                output_cost = m.cost_per_output_token * output_tokens
                 total_cost = input_cost + output_cost
                 cache_savings = compute_cache_savings(
                     m.provider, input_tokens, m.cost_per_input_token, cache_hit_ratio
