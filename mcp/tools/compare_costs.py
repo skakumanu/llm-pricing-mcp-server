@@ -71,9 +71,10 @@ class CompareCostsTool:
                     })
                     continue
 
-                # Calculate costs
-                input_cost = (pricing.cost_per_input_token / 1000) * input_tokens
-                output_cost = (pricing.cost_per_output_token / 1000) * output_tokens
+                # Calculate costs. cost_per_input_token / cost_per_output_token are
+                # dollars-per-single-token, so multiply directly by the token count.
+                input_cost = pricing.cost_per_input_token * input_tokens
+                output_cost = pricing.cost_per_output_token * output_tokens
                 total_cost = input_cost + output_cost
                 costs.append((model_name, total_cost, input_cost, output_cost))
 

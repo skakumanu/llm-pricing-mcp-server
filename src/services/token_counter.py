@@ -39,8 +39,9 @@ def compute_cache_savings(
     multiplier = CACHE_READ_MULTIPLIERS.get(provider)
     if multiplier is None:
         return 0.0
-    # Savings = cached_fraction × tokens × (1 - multiplier) × rate
-    per_token_rate = cost_per_input_token / 1000
+    # Savings = cached_fraction × tokens × (1 - multiplier) × rate.
+    # cost_per_input_token is already dollars-per-single-token.
+    per_token_rate = cost_per_input_token
     savings = cache_hit_ratio * input_tokens * (1.0 - multiplier) * per_token_rate
     return round(savings, 8)
 
