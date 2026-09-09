@@ -172,6 +172,112 @@ async def test_empty_summary(svc):
 
 
 # ---------------------------------------------------------------------------
+# Session-scoped usage (session_id)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_record_event_with_session_id(svc):
+    await svc.record_event(
+        provider="openai", model_name="gpt-4o-mini", input_tokens=1000, output_tokens=500,
+        cost_usd=0.01, session_id="sess-1",
+    )
+    usage = await svc.get_session_usage("sess-1")
+    assert usage["total_requests"] == 1
+    assert usage["total_input_tokens"] == 1000
+    assert usage["total_output_tokens"] == 500
+    assert usage["total_cost_usd"] == pytest.approx(0.01)
+
+
+@pytest.mark.asyncio
+async def test_get_session_usage_no_data(svc):
+    usage = await svc.get_session_usage("nonexistent-session")
+    assert usage["total_requests"] == 0
+    assert usage["total_cost_usd"] == 0.0
+    assert usage["by_model"] == []
+    assert usage["first_occurred_at"] is None
+    assert usage["last_occurred_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_session_usage_single_model(svc):
+    await svc.record_event(
+        provider="openai", model_name="gpt-4o-mini", input_tokens=100, output_tokens=50,
+        cost_usd=0.005, session_id="sess-single",
+    )
+    await svc.record_event(
+        provider="openai", model_name="gpt-4o-mini", input_tokens=200, output_tokens=100,
+        cost_usd=0.01, session_id="sess-single",
+    )
+    usage = await svc.get_session_usage("sess-single")
+    assert usage["total_requests"] == 2
+    assert usage["total_input_tokens"] == 300
+    assert usage["total_output_tokens"] == 150
+    assert usage["total_cost_usd"] == pytest.approx(0.015)
+    assert len(usage["by_model"]) == 1
+    assert usage["by_model"][0]["model_name"] == "gpt-4o-mini"
+    assert usage["by_model"][0]["request_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_get_session_usage_multi_model(svc):
+    await svc.record_event(
+        provider="openai", model_name="gpt-4o-mini", input_tokens=100, output_tokens=50,
+        cost_usd=0.005, session_id="sess-multi",
+    )
+    await svc.record_event(
+        provider="anthropic", model_name="claude-haiku", input_tokens=300, output_tokens=150,
+        cost_usd=0.02, session_id="sess-multi",
+    )
+    usage = await svc.get_session_usage("sess-multi")
+    assert usage["total_requests"] == 2
+    assert usage["total_input_tokens"] == 400
+    assert usage["total_output_tokens"] == 200
+    assert usage["total_cost_usd"] == pytest.approx(0.025)
+    assert len(usage["by_model"]) == 2
+    by_model_names = {row["model_name"] for row in usage["by_model"]}
+    assert by_model_names == {"gpt-4o-mini", "claude-haiku"}
+
+
+@pytest.mark.asyncio
+async def test_session_usage_is_scoped_to_session_not_org_or_time(svc):
+    """Session analysis must not leak an unrelated time window or org-wide aggregate."""
+    await svc.record_event(
+        provider="openai", model_name="gpt-4o-mini", input_tokens=10, output_tokens=10,
+        cost_usd=1.0, org_id="acme", session_id="sess-a",
+    )
+    await svc.record_event(
+        provider="openai", model_name="gpt-4o-mini", input_tokens=999, output_tokens=999,
+        cost_usd=99.0, org_id="acme", session_id="sess-b",
+    )
+    usage_a = await svc.get_session_usage("sess-a")
+    assert usage_a["total_requests"] == 1
+    assert usage_a["total_cost_usd"] == pytest.approx(1.0)
+
+
+@pytest.mark.asyncio
+async def test_get_session_usage_org_id_scoping_prevents_cross_tenant_read(svc):
+    """A session_id recorded under one org must not be readable by supplying a
+    different org_id — closes the cross-tenant leak an attacker could otherwise
+    exploit by guessing/observing another org's session_id."""
+    await svc.record_event(
+        provider="openai", model_name="gpt-4o-mini", input_tokens=10, output_tokens=10,
+        cost_usd=1.0, org_id="org-victim", session_id="shared-session-id",
+    )
+
+    # The victim's own org can read it back.
+    own_org_view = await svc.get_session_usage("shared-session-id", org_id="org-victim")
+    assert own_org_view["total_requests"] == 1
+
+    # A different (attacking) org querying the *same* session_id gets nothing back.
+    other_org_view = await svc.get_session_usage("shared-session-id", org_id="org-attacker")
+    assert other_org_view["total_requests"] == 0
+
+    # Omitting org_id entirely preserves the old (unscoped) behavior.
+    unscoped_view = await svc.get_session_usage("shared-session-id")
+    assert unscoped_view["total_requests"] == 1
+
+
+# ---------------------------------------------------------------------------
 # /usage endpoint integration tests
 # ---------------------------------------------------------------------------
 
@@ -188,6 +294,16 @@ def mock_usage_tracker():
         "total_output_tokens": 50,
         "by_model": [],
         "by_provider": [],
+    })
+    mock.get_session_usage = AsyncMock(return_value={
+        "session_id": "sess-1",
+        "total_requests": 0,
+        "total_cost_usd": 0.0,
+        "total_input_tokens": 0,
+        "total_output_tokens": 0,
+        "first_occurred_at": None,
+        "last_occurred_at": None,
+        "by_model": [],
     })
     return mock
 
@@ -208,6 +324,23 @@ def test_record_usage_endpoint(mock_usage_tracker):
     assert data["model_name"]
     assert data["cost_usd"] >= 0
     mock_usage_tracker.record_event.assert_awaited_once()
+
+
+def test_record_usage_endpoint_with_session_id(mock_usage_tracker):
+    from src.main import app
+    client = TestClient(app)
+    with patch("src.main.get_usage_tracker", return_value=mock_usage_tracker):
+        resp = client.post("/usage", json={
+            "model_name": "gpt-4o-mini",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "session_id": "sess-abc",
+        })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["session_id"] == "sess-abc"
+    _, kwargs = mock_usage_tracker.record_event.await_args
+    assert kwargs["session_id"] == "sess-abc"
 
 
 def test_record_usage_unknown_model(mock_usage_tracker):
@@ -262,6 +395,213 @@ def test_usage_summary_org_filter(mock_usage_tracker):
 
 
 # ---------------------------------------------------------------------------
+# GET /usage/session/{session_id} endpoint integration tests
+# ---------------------------------------------------------------------------
+
+def _pricing_metrics(model_name, provider, cost_in, cost_out):
+    from src.models.pricing import PricingMetrics
+    return PricingMetrics(
+        model_name=model_name, provider=provider,
+        cost_per_input_token=cost_in, cost_per_output_token=cost_out,
+    )
+
+
+def test_usage_session_endpoint_no_data():
+    from src.main import app
+    client = TestClient(app)
+    mock_tracker = MagicMock()
+    mock_tracker.get_session_usage = AsyncMock(return_value={
+        "session_id": "empty-session",
+        "total_requests": 0,
+        "total_cost_usd": 0.0,
+        "total_input_tokens": 0,
+        "total_output_tokens": 0,
+        "first_occurred_at": None,
+        "last_occurred_at": None,
+        "by_model": [],
+    })
+    with patch("src.main.get_usage_tracker", return_value=mock_tracker):
+        resp = client.get("/usage/session/empty-session")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is False
+    assert data["has_data"] is False
+    assert data.get("recommendation") is None
+
+
+def test_usage_session_endpoint_single_model_recommends():
+    from src.main import app
+    from src.services.router import RouterResult
+
+    client = TestClient(app)
+    mock_tracker = MagicMock()
+    mock_tracker.get_session_usage = AsyncMock(return_value={
+        "session_id": "sess-1",
+        "total_requests": 10,
+        "total_cost_usd": 1.0,
+        "total_input_tokens": 100_000,
+        "total_output_tokens": 50_000,
+        "first_occurred_at": 1000.0,
+        "last_occurred_at": 2000.0,
+        "by_model": [
+            {
+                "model_name": "gpt-4o", "provider": "openai", "request_count": 10,
+                "input_tokens": 100_000, "output_tokens": 50_000, "cost_usd": 1.0,
+            }
+        ],
+    })
+    cheaper = _pricing_metrics("gpt-4o-mini", "openai", 0.00000015, 0.0000006)
+    mock_result = RouterResult(recommended=cheaper, score=100.0, reason="test", alternatives=[])
+    mock_router = MagicMock()
+    mock_router.get_optimal_model = AsyncMock(return_value=mock_result)
+
+    with (
+        patch("src.main.get_usage_tracker", return_value=mock_tracker),
+        patch("src.main.get_router", return_value=mock_router),
+    ):
+        resp = client.get("/usage/session/sess-1")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert data["has_data"] is True
+    assert data["total_requests"] == 10
+    assert data["total_input_tokens"] == 100_000
+    assert data["total_output_tokens"] == 50_000
+    assert len(data["by_model"]) == 1
+    rec = data["recommendation"]
+    assert rec["recommended_model"] == "gpt-4o-mini"
+    assert rec["is_optimal"] is False
+    assert "sess-1" in rec["rationale"]
+    assert "10 request" in rec["rationale"]
+
+
+def test_usage_session_endpoint_is_optimal_when_already_using_recommended():
+    from src.main import app
+    from src.services.router import RouterResult
+
+    client = TestClient(app)
+    mock_tracker = MagicMock()
+    mock_tracker.get_session_usage = AsyncMock(return_value={
+        "session_id": "sess-optimal",
+        "total_requests": 5,
+        "total_cost_usd": 0.5,
+        "total_input_tokens": 50_000,
+        "total_output_tokens": 25_000,
+        "first_occurred_at": 1000.0,
+        "last_occurred_at": 1500.0,
+        "by_model": [
+            {
+                "model_name": "gpt-4o-mini", "provider": "openai", "request_count": 5,
+                "input_tokens": 50_000, "output_tokens": 25_000, "cost_usd": 0.5,
+            }
+        ],
+    })
+    same_model = _pricing_metrics("gpt-4o-mini", "openai", 0.00000015, 0.0000006)
+    mock_result = RouterResult(recommended=same_model, score=100.0, reason="test", alternatives=[])
+    mock_router = MagicMock()
+    mock_router.get_optimal_model = AsyncMock(return_value=mock_result)
+
+    with (
+        patch("src.main.get_usage_tracker", return_value=mock_tracker),
+        patch("src.main.get_router", return_value=mock_router),
+    ):
+        resp = client.get("/usage/session/sess-optimal")
+    assert resp.status_code == 200
+    data = resp.json()
+    rec = data["recommendation"]
+    assert rec["is_optimal"] is True
+    assert rec["savings_usd"] == 0.0
+
+
+def test_usage_session_endpoint_multi_model_breakdown():
+    from src.main import app
+    from src.services.router import RouterResult
+
+    client = TestClient(app)
+    mock_tracker = MagicMock()
+    mock_tracker.get_session_usage = AsyncMock(return_value={
+        "session_id": "sess-multi",
+        "total_requests": 4,
+        "total_cost_usd": 2.0,
+        "total_input_tokens": 200_000,
+        "total_output_tokens": 100_000,
+        "first_occurred_at": 1000.0,
+        "last_occurred_at": 3000.0,
+        "by_model": [
+            {
+                "model_name": "gpt-4o", "provider": "openai", "request_count": 2,
+                "input_tokens": 100_000, "output_tokens": 50_000, "cost_usd": 1.5,
+            },
+            {
+                "model_name": "claude-haiku", "provider": "anthropic", "request_count": 2,
+                "input_tokens": 100_000, "output_tokens": 50_000, "cost_usd": 0.5,
+            },
+        ],
+    })
+    recommended = _pricing_metrics("gpt-4o-mini", "openai", 0.00000015, 0.0000006)
+    mock_result = RouterResult(recommended=recommended, score=100.0, reason="test", alternatives=[])
+    mock_router = MagicMock()
+    mock_router.get_optimal_model = AsyncMock(return_value=mock_result)
+
+    with (
+        patch("src.main.get_usage_tracker", return_value=mock_tracker),
+        patch("src.main.get_router", return_value=mock_router),
+    ):
+        resp = client.get("/usage/session/sess-multi")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["by_model"]) == 2
+    names = {row["model_name"] for row in data["by_model"]}
+    assert names == {"gpt-4o", "claude-haiku"}
+    # Multi-model session can never be "is_optimal" (no single model to match against)
+    assert data["recommendation"]["is_optimal"] is False
+
+
+def test_usage_session_endpoint_scopes_to_authenticated_customers_org():
+    """An authenticated caller's own org_id (from their billing API key) must be used to
+    scope the session lookup — a customer cannot see another org's session data just by
+    supplying/guessing that org's session_id."""
+    from src.main import app
+    from src.services.billing_service import CustomerRecord
+    import time as _time
+
+    customer = CustomerRecord(
+        id="cust-1", email="a@example.com", stripe_customer_id=None,
+        stripe_subscription_id=None, api_key="cust-1-key", tier="free",
+        org_id="org-a", created_at=_time.time(), updated_at=_time.time(),
+    )
+    mock_billing = MagicMock()
+    mock_billing.get_customer_by_api_key = AsyncMock(return_value=customer)
+
+    mock_tracker = MagicMock()
+    mock_tracker.get_session_usage = AsyncMock(return_value={
+        "session_id": "sess-1",
+        "total_requests": 0,
+        "total_cost_usd": 0.0,
+        "total_input_tokens": 0,
+        "total_output_tokens": 0,
+        "first_occurred_at": None,
+        "last_occurred_at": None,
+        "by_model": [],
+    })
+
+    client = TestClient(app)
+    with (
+        patch("src.main.get_billing_service", return_value=mock_billing),
+        patch("src.main.get_usage_tracker", return_value=mock_tracker),
+    ):
+        resp = client.get(
+            "/usage/session/sess-1",
+            headers={"x-api-key": "cust-1-key", "X-Organization-Id": "org-attacker-supplied"},
+        )
+    assert resp.status_code == 200
+    mock_tracker.get_session_usage.assert_awaited_once()
+    _, kwargs = mock_tracker.get_session_usage.await_args
+    # The authenticated customer's real org_id wins, regardless of any self-reported header.
+    assert kwargs["org_id"] == "org-a"
+
+
+# ---------------------------------------------------------------------------
 # RecordUsageTool / GetUsageSummaryTool (MCP) unit tests
 # ---------------------------------------------------------------------------
 
@@ -310,6 +650,24 @@ async def test_record_usage_tool_success():
     assert result["recorded"] is True
     assert result["org_id"] == "acme"
     mock_tracker.record_event.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_record_usage_tool_with_session_id():
+    tool = RecordUsageTool()
+    mock_tracker = MagicMock()
+    mock_tracker.record_event = AsyncMock(return_value={"duplicate": False})
+    with patch("mcp.tools.record_usage.get_usage_tracker", return_value=mock_tracker):
+        result = await tool.execute({
+            "model_name": "gpt-4o-mini",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "session_id": "sess-xyz",
+        })
+    assert result["success"] is True
+    assert result["session_id"] == "sess-xyz"
+    _, kwargs = mock_tracker.record_event.await_args
+    assert kwargs["session_id"] == "sess-xyz"
 
 
 @pytest.mark.asyncio

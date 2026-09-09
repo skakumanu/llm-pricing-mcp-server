@@ -142,8 +142,31 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.68.0 -->
+  <!-- v1.69.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.69.0</span>
+      <span class="release-date">Sep 8, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">New: <code>analyze_session_usage</code> / <code>GET /usage/session/{session_id}</code> — turn one session's actual usage into a recommendation</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><code>record_usage</code> (and <code>POST /usage</code> / <code>POST /usage/batch</code>) now accept an optional <code>session_id</code> to tag a usage event, so a bounded burst of calls — a coding-agent run, a chat session, or any tagged workload — can be grouped and retrieved later</li>
+        <li>New MCP tool <code>analyze_session_usage</code> and REST endpoint <code>GET /usage/session/{session_id}</code> read back one session's real recorded usage on demand: total input/output tokens, total actual cost, and a per-model breakdown if more than one model was used</li>
+        <li>Runs the session's own observed token pattern through the same routing engine behind <code>recommend_model</code> / <code>POST /router/recommend</code> to produce a grounded recommendation — or confirm the current choice is already optimal — with the estimated dollar savings or increase versus that session's actual cost; the rationale cites the session's own request count, token volume, and blended cost profile, not generic boilerplate</li>
+        <li>A session_id with no recorded usage returns <code>has_data: false</code> and no recommendation rather than fabricating one. Advisory only — never re-prices history or switches anything</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">MCP tools <strong>27 → 28</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.68.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.68.0</span>

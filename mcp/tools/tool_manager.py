@@ -24,6 +24,7 @@ from mcp.tools.get_data_quality import GetDataQualityTool
 from mcp.tools.get_cache_stats import GetCacheStatsTool
 from mcp.tools.record_usage import RecordUsageTool
 from mcp.tools.get_usage_summary import GetUsageSummaryTool
+from mcp.tools.analyze_session_usage import AnalyzeSessionUsageTool
 from mcp.tools.register_budget_alert import RegisterBudgetAlertTool
 from mcp.tools.list_budget_alerts import ListBudgetAlertsTool
 from mcp.tools.delete_budget_alert import DeleteBudgetAlertTool
@@ -796,6 +797,14 @@ class ToolManager:
                             "type": "string",
                             "description": "Optional idempotency key — resubmitting the same value is a no-op",
                         },
+                        "session_id": {
+                            "type": "string",
+                            "description": (
+                                "Optional session ID to tag this event with, so it can later be "
+                                "grouped and retrieved via analyze_session_usage — e.g. a bounded "
+                                "burst of calls like a coding-agent run or a chat session"
+                            ),
+                        },
                     },
                     "required": ["model_name", "input_tokens", "output_tokens"],
                 },
@@ -825,6 +834,39 @@ class ToolManager:
                         },
                     },
                     "required": [],
+                },
+            },
+            "analyze_session_usage": {
+                "instance": AnalyzeSessionUsageTool(),
+                "name": "analyze_session_usage",
+                "description": (
+                    "Analyze one specific session's actual recorded LLM usage (tagged via "
+                    "record_usage's session_id) on demand: total input/output tokens, total "
+                    "actual cost, and a per-model breakdown if more than one model was used. "
+                    "Also runs the session's own observed token pattern through the same "
+                    "routing engine behind recommend_model / POST /router/recommend to produce "
+                    "a grounded recommendation — or confirm the current choice is already "
+                    "optimal — with the estimated dollar savings or increase versus this "
+                    "session's actual cost. Returns has_data: false with no recommendation if "
+                    "the session_id has no recorded usage. Advisory only — never switches or "
+                    "reroutes anything."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {
+                            "type": "string",
+                            "description": "The session_id previously used when calling record_usage",
+                        },
+                        "org_id": {
+                            "type": "string",
+                            "description": (
+                                "Optional organisation ID filter — scopes the lookup to usage events "
+                                "recorded under that org_id, same as get_usage_summary's org_id"
+                            ),
+                        },
+                    },
+                    "required": ["session_id"],
                 },
             },
             "register_budget_alert": {

@@ -44,6 +44,7 @@ class RecordUsageTool:
             return {"success": False, "error": str(exc)}
 
         org_id = arguments.get("org_id")
+        session_id = arguments.get("session_id")
         try:
             result = await tracker.record_event(
                 provider=pricing.provider,
@@ -54,6 +55,7 @@ class RecordUsageTool:
                 org_id=org_id,
                 occurred_at=arguments.get("occurred_at"),
                 request_id=arguments.get("request_id"),
+                session_id=session_id,
             )
         except Exception as exc:
             return {"success": False, "error": str(exc), "error_type": type(exc).__name__}
@@ -74,4 +76,5 @@ class RecordUsageTool:
             "output_tokens": output_tokens,
             "cost_usd": round(cost_usd, 6),
             "org_id": org_id,
+            "session_id": session_id,
         }

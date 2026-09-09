@@ -64,7 +64,7 @@ No cloning or Python required. Add the following to your config file:
 }
 ```
 
-Restart Perplexity. All 27 pricing tools are immediately available.
+Restart Perplexity. All 28 pricing tools are immediately available.
 
 ### Option B — Local STDIO
 
@@ -133,13 +133,13 @@ After restarting Perplexity, confirm tools loaded by asking it:
 What LLM pricing tools do you have available?
 ```
 
-Perplexity should list all 27 tools. You can also verify directly via curl:
+Perplexity should list all 28 tools. You can also verify directly via curl:
 
 ```bash
 # Check server is up
 curl https://llm-pricing-api.fly.dev/health
 
-# List all 27 tools via MCP protocol
+# List all 28 tools via MCP protocol
 curl -X POST https://llm-pricing-api.fly.dev/mcp \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
@@ -147,7 +147,7 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 
 ---
 
-## All 27 MCP Tools
+## All 28 MCP Tools
 
 These tools are available inside Perplexity once connected. You can invoke them naturally in conversation or call them programmatically via the HTTP MCP endpoint.
 
