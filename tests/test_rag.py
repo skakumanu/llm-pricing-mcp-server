@@ -299,6 +299,15 @@ class TestPricingMetricsToDocument:
         doc = pricing_metrics_to_document(m)
         assert doc.source == "pricing:gemini-flash"
 
+    def test_per_1k_parenthetical_is_1000x_the_per_token_value(self):
+        """The '(per 1k tokens: ...)' figure must be numerically true to its
+        label — 1000x the raw per-token dollar value — not a restatement of
+        the identical per-token figure under a false label."""
+        m = _make_metrics(cost_per_input_token=0.000003, cost_per_output_token=0.000015)
+        doc = pricing_metrics_to_document(m)
+        assert "Cost per input token: $0.00000300 USD (per 1k tokens: $0.003000)" in doc.content
+        assert "Cost per output token: $0.00001500 USD (per 1k tokens: $0.015000)" in doc.content
+
 
 # ---------------------------------------------------------------------------
 # RAGPipeline

@@ -116,8 +116,8 @@ class PricingMetrics(BaseModel):
     @property
     def cost_at_10k_tokens(self) -> TokenVolumePrice:
         """Calculate cost for 10,000 tokens (small volume)."""
-        input_cost = (self.cost_per_input_token / 1000) * 10000
-        output_cost = (self.cost_per_output_token / 1000) * 10000
+        input_cost = self.cost_per_input_token * 10000
+        output_cost = self.cost_per_output_token * 10000
         total_cost = (input_cost + output_cost) / 2  # 50/50 split
         return TokenVolumePrice(
             input_cost=round(input_cost, 4),
@@ -129,8 +129,8 @@ class PricingMetrics(BaseModel):
     @property
     def cost_at_100k_tokens(self) -> TokenVolumePrice:
         """Calculate cost for 100,000 tokens (medium volume)."""
-        input_cost = (self.cost_per_input_token / 1000) * 100000
-        output_cost = (self.cost_per_output_token / 1000) * 100000
+        input_cost = self.cost_per_input_token * 100000
+        output_cost = self.cost_per_output_token * 100000
         total_cost = (input_cost + output_cost) / 2  # 50/50 split
         return TokenVolumePrice(
             input_cost=round(input_cost, 4),
@@ -142,8 +142,8 @@ class PricingMetrics(BaseModel):
     @property
     def cost_at_1m_tokens(self) -> TokenVolumePrice:
         """Calculate cost for 1,000,000 tokens (large volume)."""
-        input_cost = (self.cost_per_input_token / 1000) * 1000000
-        output_cost = (self.cost_per_output_token / 1000) * 1000000
+        input_cost = self.cost_per_input_token * 1000000
+        output_cost = self.cost_per_output_token * 1000000
         total_cost = (input_cost + output_cost) / 2  # 50/50 split
         return TokenVolumePrice(
             input_cost=round(input_cost, 2),

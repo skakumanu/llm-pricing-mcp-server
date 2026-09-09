@@ -79,11 +79,13 @@ class OptimizationResult:
 def cost_per_request(model, input_tokens: int, output_tokens: int) -> float:
     """Cost in USD for a single request against this model.
 
-    Provider prices are stored per 1k tokens.
+    cost_per_input_token / cost_per_output_token are already dollars per
+    single token (see src/services/base_provider.py), so no further
+    division is needed.
     """
     return (
-        (model.cost_per_input_token / 1000) * input_tokens
-        + (model.cost_per_output_token / 1000) * output_tokens
+        model.cost_per_input_token * input_tokens
+        + model.cost_per_output_token * output_tokens
     )
 
 

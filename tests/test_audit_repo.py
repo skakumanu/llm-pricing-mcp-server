@@ -218,6 +218,17 @@ def _site(
     )
 
 
+def test_rank_by_cost_absolute_dollar_value():
+    # cost_per_input_token / cost_per_output_token are dollars per single
+    # token, so cost = rate * token_count directly (no extra /1000).
+    model = _model("solo", "P", cost_in=0.000002, cost_out=0.000006, quality=50)
+    ranked = audit_repo._rank_by_cost([model], input_tokens=1000, output_tokens=500)
+    assert len(ranked) == 1
+    _, cost = ranked[0]
+    assert cost == pytest.approx(0.000002 * 1000 + 0.000006 * 500)
+    assert cost == pytest.approx(0.005)
+
+
 def test_analyze_dynamic_site_returns_none():
     site = audit_repo.CallSite(
         file="app.py", line=1, sdk_hint="openai",

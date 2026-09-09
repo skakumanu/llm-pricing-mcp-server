@@ -122,17 +122,25 @@ class TestComputeCacheSavings:
         assert compute_cache_savings("Anthropic", 1000, 3.0, 0.0) == 0.0
 
     def test_anthropic_full_hit(self):
-        # rate = 3.0/1000 = 0.003; savings = 1.0 * 1000 * 0.9 * 0.003 = 2.7
+        # cost_per_input_token is dollars-per-single-token: rate = 3.0;
+        # savings = 1.0 * 1000 * 0.9 * 3.0 = 2700.0
         savings = compute_cache_savings("Anthropic", 1000, 3.0, 1.0)
-        assert abs(savings - 2.7) < 1e-6
+        assert abs(savings - 2700.0) < 1e-6
 
     def test_openai_half_hit(self):
-        # rate = 2.0/1000 = 0.002 per token; savings = 0.5 * 500 * (1-0.5) * 0.002 = 0.25
+        # rate = 2.0 per token; savings = 0.5 * 500 * (1-0.5) * 2.0 = 250.0
         savings = compute_cache_savings("OpenAI", 500, 2.0, 0.5)
-        assert abs(savings - 0.25) < 1e-6
+        assert abs(savings - 250.0) < 1e-6
 
     def test_unknown_provider(self):
         assert compute_cache_savings("SomeRandomProvider", 1000, 1.0, 0.8) == 0.0
+
+    def test_realistic_per_token_rate(self):
+        # Realistic dollars-per-single-token rate (e.g. $0.000003/token, a
+        # $3/1M-token model). At 100% hit rate on Anthropic (10% multiplier):
+        # savings = 1.0 * 100000 * 0.9 * 0.000003 = 0.27
+        savings = compute_cache_savings("Anthropic", 100000, 0.000003, 1.0)
+        assert abs(savings - 0.27) < 1e-9
 
 
 class TestProvidersWithCaching:
@@ -176,7 +184,12 @@ def tool():
     mock_svc = MagicMock()
     mock_svc.get_all_pricing_async = AsyncMock(return_value=(SAMPLE_MODELS, []))
     t.service = mock_svc
-    return t
+    # enrich_models would otherwise hit the network/HF leaderboard; models in
+    # SAMPLE_MODELS that already carry a quality_score are left untouched by
+    # the real enrich_models anyway (it only fills in None scores), so a
+    # passthrough here exercises the same enrichment call site safely.
+    with patch("mcp.tools.predict_cost.enrich_models", AsyncMock(side_effect=lambda x: x)):
+        yield t
 
 
 @pytest.mark.asyncio
@@ -224,6 +237,59 @@ async def test_predict_cost_best_value_pick(tool):
 
 
 @pytest.mark.asyncio
+async def test_predict_cost_calls_enrich_models(tool):
+    """predict_cost must enrich candidates with quality data before ranking,
+    the same way router.py and optimize_workload.py already do."""
+    with patch(
+        "mcp.tools.predict_cost.enrich_models", AsyncMock(side_effect=lambda x: x)
+    ) as mock_enrich:
+        result = await tool.execute({"prompt": "hello", "task_type": "chat"})
+    assert result["success"] is True
+    mock_enrich.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_predict_cost_best_value_pick_uses_enrichment_data(tool):
+    """best_value_pick must be non-null and backed by a real quality score once
+    enrichment supplies quality data — even for models with no quality_score set
+    on the raw pricing record, mirroring router.py's enrichment behavior."""
+    async def fake_enrich(models):
+        for m in models:
+            if m.quality_score is None:
+                m.quality_score = 70.0
+        return models
+
+    with patch("mcp.tools.predict_cost.enrich_models", AsyncMock(side_effect=fake_enrich)):
+        result = await tool.execute({"prompt": "describe this image", "require_vision": True})
+
+    assert result["success"] is True
+    bv = result["best_value_pick"]
+    assert bv is not None
+    assert bv["quality_value_score"] is not None
+
+
+@pytest.mark.asyncio
+async def test_predict_cost_absolute_dollar_values(tool):
+    """Guards against a future regression that scales all models equally:
+    asserts real dollar amounts, not merely relative ordering."""
+    result = await tool.execute({"prompt": "Hello world", "task_type": "classification"})
+    assert result["success"] is True
+
+    input_tokens = result["input_tokens"]
+    output_tokens = result["estimated_output_tokens"]
+
+    cheap = next(m for m in result["ranked_models"] if m["model_name"] == "cheap-model")
+    # cheap-model: cost_per_input_token=0.1, cost_per_output_token=0.2 (USD/token)
+    expected_input_cost = 0.1 * input_tokens
+    expected_output_cost = 0.2 * output_tokens
+    assert abs(cheap["estimated_input_cost_usd"] - expected_input_cost) < 1e-6
+    assert abs(cheap["estimated_output_cost_usd"] - expected_output_cost) < 1e-6
+    assert abs(
+        cheap["estimated_total_cost_usd"] - (expected_input_cost + expected_output_cost)
+    ) < 1e-6
+
+
+@pytest.mark.asyncio
 async def test_predict_cost_require_function_calling(tool):
     result = await tool.execute({"prompt": "use a tool", "require_function_calling": True})
     assert result["success"] is True
@@ -251,8 +317,19 @@ async def test_predict_cost_cache_savings(tool):
         (m for m in result["ranked_models"] if m["provider"] == "Anthropic"), None
     )
     if anthropic_entry:
+        input_tokens = result["input_tokens"]
+        # mid-model: cost_per_input_token=1.0 USD/token, Anthropic cache
+        # multiplier=0.10 -> savings = 0.8 * input_tokens * 0.9 * 1.0
+        expected_savings = 0.8 * input_tokens * 0.9 * 1.0
         assert anthropic_entry["cache_savings_usd"] > 0
+        assert abs(anthropic_entry["cache_savings_usd"] - expected_savings) < 1e-6
         assert anthropic_entry["effective_cost_usd"] < anthropic_entry["estimated_total_cost_usd"]
+        # cache_savings_usd and effective_cost_usd must share the same per-token
+        # unit as estimated_total_cost_usd — no residual 1000x mismatch.
+        assert abs(
+            anthropic_entry["effective_cost_usd"]
+            - (anthropic_entry["estimated_total_cost_usd"] - anthropic_entry["cache_savings_usd"])
+        ) < 1e-6
 
 
 @pytest.mark.asyncio
