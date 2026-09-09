@@ -142,8 +142,28 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.69.1 -->
+  <!-- v1.70.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.70.0</span>
+      <span class="release-date">Sep 9, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title"><code>compare_costs</code> now suggests real model names when yours doesn't match exactly</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li>When a name in <code>compare_costs</code>' <code>model_names</code> doesn't exactly match a catalogued model (e.g. <code>"claude"</code> or <code>"claude sonnet"</code>), that entry's response now includes a <code>candidates</code> list of real catalogued model names it likely refers to, capped to 8, instead of a bare "not found"</li>
+        <li>A name unrelated to any real model (e.g. a typo or made-up name) still clearly reports not-found with an empty <code>candidates</code> list — never a fabricated guess</li>
+        <li>Candidates are surfaced for the caller to retry with, never auto-selected: <code>compare_costs</code> still never returns a computed cost for anything but an exact, case-insensitive match, and mixing an exact match with an unresolved name in one call resolves each independently</li>
+        <li>Exact-match behavior is unchanged; this only affects the not-found path</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.69.1 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.69.1</span>

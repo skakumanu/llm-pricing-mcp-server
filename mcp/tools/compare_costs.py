@@ -1,7 +1,37 @@
 """MCP Tool: Compare Costs for Multiple Models"""
-from typing import Any, Dict
+import re
+from typing import Any, Dict, List
 
 from src.services.pricing_aggregator import PricingAggregatorService
+
+MAX_CANDIDATES = 8
+
+
+def _normalize(name: str) -> str:
+    """Lowercase and strip non-alphanumeric characters for loose matching."""
+    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def _find_candidates(model_name: str, all_pricing) -> List[str]:
+    """Find real catalogued model names related to an unresolved query.
+
+    Uses deterministic normalized-substring matching (not fuzzy/edit-distance):
+    a catalogued model is a candidate if its normalized name contains the
+    normalized query as a substring. Guards against very short queries (< 2
+    normalized chars) matching too broadly. Results are sorted by name length
+    then alphabetically, and capped to MAX_CANDIDATES.
+    """
+    normalized_query = _normalize(model_name)
+    if len(normalized_query) < 2:
+        return []
+
+    matches = [
+        pricing.model_name
+        for pricing in all_pricing
+        if normalized_query in _normalize(pricing.model_name)
+    ]
+    matches.sort(key=lambda name: (len(name), name.lower()))
+    return matches[:MAX_CANDIDATES]
 
 
 class CompareCostsTool:
@@ -68,6 +98,7 @@ class CompareCostsTool:
                         "model_name": model_name,
                         "is_available": False,
                         "error": f"Model '{model_name}' not found",
+                        "candidates": _find_candidates(model_name, all_pricing),
                     })
                     continue
 
