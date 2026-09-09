@@ -278,7 +278,10 @@ def _rank_by_cost(
     candidates = [m for m in all_pricing if m.pricing_model == "per_token" and m.price_confirmed]
     ranked = []
     for m in candidates:
-        cost = (m.cost_per_input_token / 1000) * input_tokens + (m.cost_per_output_token / 1000) * output_tokens
+        # cost_per_input_token / cost_per_output_token are already dollars
+        # per single token (see src/services/base_provider.py) — no further
+        # division needed.
+        cost = m.cost_per_input_token * input_tokens + m.cost_per_output_token * output_tokens
         ranked.append((m, cost))
     ranked.sort(key=lambda pair: pair[1])
     return ranked
