@@ -142,8 +142,28 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.70.0 -->
+  <!-- v1.71.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.71.0</span>
+      <span class="release-date">Sep 10, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title"><code>recommend_model</code> now flags classification uncertainty and quality-per-dollar tradeoffs</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li>When a description's task type is auto-inferred (not passed explicitly) and lands on the "chat" fallback, but the text also contains reasoning- or code-generation-style language, the response now includes a <code>caveats</code> entry naming both the inferred category and the plausible higher-stakes alternative — a nudge to double-check with an explicit <code>task_type</code> rather than a silent misclassification</li>
+        <li>When the top recommendation's <code>quality_score</code> falls below ~75, the response now includes a separate <code>caveats</code> entry noting that ranking by quality-per-dollar can understate risk for tasks where a wrong answer is costly to discover and fix downstream</li>
+        <li>Both caveats are purely additive: the recommendation, alternatives, score, and reasoning are unchanged, and <code>caveats</code> is omitted entirely when neither condition applies</li>
+        <li>Scoped to <code>recommend_model</code> only — <code>analyze_session_usage</code>, <code>POST /router/recommend</code>, and every other caller of the routing engine are unaffected</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.70.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.70.0</span>

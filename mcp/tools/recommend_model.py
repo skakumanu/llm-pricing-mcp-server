@@ -4,7 +4,19 @@ from typing import Any, Dict, Optional
 from src.services.pricing_aggregator import PricingAggregatorService
 from src.services.recommendation_cache import RecommendationCache
 from src.services.router import ModelRouter, RouterConstraints
-from src.services.task_profiles import get_task_description, infer_task_type, list_task_types
+from src.services.task_profiles import (
+    detect_secondary_task_signal,
+    get_task_description,
+    infer_task_type,
+    list_task_types,
+)
+
+
+# Below this quality_score, ranking purely by quality-per-dollar can pick a
+# model that merely clears a quality bar rather than one well-suited to tasks
+# where a wrong answer is expensive to discover and fix downstream. See
+# Caveat 2 in execute() below.
+_QUALITY_TRADEOFF_THRESHOLD = 75.0
 
 
 # task_profiles.infer_task_type() uses a richer, human-facing vocabulary
@@ -146,7 +158,59 @@ class RecommendModelTool:
                     "task_type_inferred": inferred,
                 }
 
-            return {
+            caveats = []
+
+            # Caveat 1: classification uncertainty. Only meaningful when we
+            # did the classifying ourselves (task_type was inferred, not
+            # caller-supplied) and it landed on the "chat" fallback, which is
+            # infer_task_type's catch-all for anything that didn't match a
+            # more specific rule. If the description also carries softer
+            # signals of a higher-stakes category, tell the caller both the
+            # inferred category and the plausible alternative.
+            if inferred and task_type == "chat":
+                secondary_signal = detect_secondary_task_signal(description)
+                if secondary_signal is not None:
+                    caveats.append(
+                        {
+                            "type": "classification_uncertainty",
+                            "message": (
+                                f"This description was auto-classified as '{task_type}', but it also "
+                                f"contains language suggestive of '{secondary_signal}', a higher-stakes "
+                                "task category. If that's a better fit, pass task_type explicitly to "
+                                "re-run this recommendation against the right category."
+                            ),
+                            "inferred_task_type": task_type,
+                            "plausible_alternative_task_type": secondary_signal,
+                        }
+                    )
+
+            # Caveat 2: quality-per-dollar tradeoff. The router ranks by
+            # quality-per-dollar, which can surface the cheapest model that
+            # merely clears a quality bar. That's a fine tradeoff for tasks
+            # where a mediocre answer is a minor inconvenience, but a poor
+            # fit for tasks where a wrong answer is costly to discover and
+            # fix downstream.
+            recommended_quality_score = result.recommended.quality_score
+            if (
+                recommended_quality_score is not None
+                and recommended_quality_score < _QUALITY_TRADEOFF_THRESHOLD
+            ):
+                caveats.append(
+                    {
+                        "type": "quality_tradeoff",
+                        "message": (
+                            f"The top recommendation has a quality_score of {recommended_quality_score} "
+                            f"(below {_QUALITY_TRADEOFF_THRESHOLD:g}). Ranking by quality-per-dollar can "
+                            "understate risk for tasks where a wrong answer is costly to discover and fix "
+                            "downstream, as distinct from tasks where a mediocre answer is only a minor "
+                            "inconvenience. Consider min_quality_score if this task is the former."
+                        ),
+                        "quality_score": recommended_quality_score,
+                        "quality_threshold": _QUALITY_TRADEOFF_THRESHOLD,
+                    }
+                )
+
+            response = {
                 "success": True,
                 "description": description,
                 "task_type": task_type,
@@ -158,6 +222,9 @@ class RecommendModelTool:
                 "alternatives": [_model_summary(m) for m in result.alternatives],
                 "cached": result.cached,
             }
+            if caveats:
+                response["caveats"] = caveats
+            return response
 
         except (TypeError, ValueError) as e:
             return {"success": False, "error": f"Invalid argument: {e}", "error_type": type(e).__name__}
