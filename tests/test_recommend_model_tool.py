@@ -313,6 +313,141 @@ async def test_recommend_model_cache_is_per_tool_instance():
     assert result_b["cached"] is False  # fresh cache on tool_b, not a hit from tool_a
 
 
+# ---------------------------------------------------------------------------
+# Caveats: classification uncertainty + quality-per-dollar tradeoff
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_recommend_model_classification_uncertainty_caveat_fires_for_chat_with_reasoning_language(tool):
+    """Description falls through to the 'chat' fallback but also carries softer
+    reasoning-style language -> caveat must name both 'chat' and the plausible
+    higher-stakes alternative."""
+    result = await tool.execute({
+        "description": "just chatting, but could you help me think through the logic of this?",
+    })
+    assert result["success"] is True
+    assert result["task_type"] == "chat"
+    assert result["task_type_inferred"] is True
+
+    classification_caveats = [c for c in result.get("caveats", []) if c["type"] == "classification_uncertainty"]
+    assert len(classification_caveats) == 1
+    caveat = classification_caveats[0]
+    assert caveat["inferred_task_type"] == "chat"
+    assert caveat["plausible_alternative_task_type"] == "reasoning"
+    assert "chat" in caveat["message"]
+    assert "reasoning" in caveat["message"]
+
+
+@pytest.mark.asyncio
+async def test_recommend_model_classification_uncertainty_caveat_names_code_generation(tool):
+    result = await tool.execute({
+        "description": "chatting about our codebase and the algorithm we should use",
+    })
+    assert result["success"] is True
+    assert result["task_type"] == "chat"
+
+    classification_caveats = [c for c in result.get("caveats", []) if c["type"] == "classification_uncertainty"]
+    assert len(classification_caveats) == 1
+    assert classification_caveats[0]["plausible_alternative_task_type"] == "code_generation"
+
+
+@pytest.mark.asyncio
+async def test_recommend_model_classification_uncertainty_caveat_absent_when_task_type_explicit(tool):
+    """Same ambiguous language, but the caller supplied task_type explicitly ->
+    no classification-uncertainty caveat."""
+    result = await tool.execute({
+        "description": "just chatting, but could you help me think through the logic of this?",
+        "task_type": "chat",
+    })
+    assert result["success"] is True
+    assert result["task_type_inferred"] is False
+    caveats = result.get("caveats", [])
+    assert not any(c["type"] == "classification_uncertainty" for c in caveats)
+
+
+@pytest.mark.asyncio
+async def test_recommend_model_classification_uncertainty_caveat_absent_without_secondary_signal(tool):
+    """Falls through to 'chat' but has no reasoning/code-generation-style
+    language -> no classification-uncertainty caveat."""
+    result = await tool.execute({"description": "chat with the user"})
+    assert result["success"] is True
+    assert result["task_type"] == "chat"
+    assert result["task_type_inferred"] is True
+    caveats = result.get("caveats", [])
+    assert not any(c["type"] == "classification_uncertainty" for c in caveats)
+
+
+@pytest.mark.asyncio
+async def test_recommend_model_classification_uncertainty_caveat_absent_for_non_chat_inference(tool):
+    """Inferred task type is not 'chat' (e.g. code_generation) -> no
+    classification-uncertainty caveat, even if secondary-signal words appear."""
+    result = await tool.execute({
+        "description": "write code for a binary search function in Python, think about the algorithm",
+    })
+    assert result["success"] is True
+    assert result["task_type"] == "code_generation"
+    caveats = result.get("caveats", [])
+    assert not any(c["type"] == "classification_uncertainty" for c in caveats)
+
+
+@pytest.mark.asyncio
+async def test_recommend_model_quality_tradeoff_caveat_fires_below_threshold(tool):
+    """Default constraints on SAMPLE_MODELS pick gpt-4o-mini (quality=72),
+    which is below the ~75 threshold -> quality_tradeoff caveat must fire."""
+    result = await tool.execute({"description": "chat with the user"})
+    assert result["success"] is True
+    assert result["recommended"]["model_name"] == "gpt-4o-mini"
+    assert result["recommended"]["quality_score"] < 75
+
+    quality_caveats = [c for c in result.get("caveats", []) if c["type"] == "quality_tradeoff"]
+    assert len(quality_caveats) == 1
+    assert quality_caveats[0]["quality_score"] == 72
+    assert "quality-per-dollar" in quality_caveats[0]["message"]
+
+
+@pytest.mark.asyncio
+async def test_recommend_model_quality_tradeoff_caveat_absent_at_or_above_threshold(tool):
+    """min_quality_score=80 forces the recommendation to a model whose
+    quality_score is well above the ~75 threshold -> no quality caveat."""
+    result = await tool.execute({
+        "description": "chat with the user",
+        "min_quality_score": 80,
+    })
+    assert result["success"] is True
+    assert result["recommended"]["quality_score"] >= 75
+
+    caveats = result.get("caveats", [])
+    assert not any(c["type"] == "quality_tradeoff" for c in caveats)
+
+
+@pytest.mark.asyncio
+async def test_recommend_model_no_caveats_key_when_neither_condition_fires(tool):
+    """When neither caveat condition is met, `caveats` must be entirely
+    absent (not an empty list) so the response is byte-identical to
+    pre-feature behaviour."""
+    result = await tool.execute({
+        "description": "chat with the user",
+        "min_quality_score": 80,
+    })
+    assert result["success"] is True
+    assert "caveats" not in result
+
+
+@pytest.mark.asyncio
+async def test_recommend_model_existing_fields_unchanged_shape_with_caveats_present(tool):
+    """Caveats must be purely additive: every field the tool returned before
+    this feature is still present and correctly shaped even when a caveat
+    fires."""
+    result = await tool.execute({"description": "chat with the user"})
+    assert result["success"] is True
+    for field_name in (
+        "recommended", "alternatives", "score", "reason", "task_type",
+        "task_type_inferred", "task_description", "description", "cached",
+    ):
+        assert field_name in result
+    assert isinstance(result["caveats"], list) and result["caveats"]
+
+
 @pytest.mark.asyncio
 async def test_task_type_translation_map_covers_every_task_profiles_type():
     """Every task_profiles task_type must map onto a router-recognised task_type
@@ -324,4 +459,45 @@ async def test_task_type_translation_map_covers_every_task_profiles_type():
         router_task_type = _TASK_TYPE_TO_ROUTER_TASK_TYPE.get(task_type)
         assert router_task_type in ModelRouter._TASK_USE_CASES, (
             f"{task_type!r} does not map to a recognised router task_type"
+        )
+
+
+# ---------------------------------------------------------------------------
+# detect_secondary_task_signal (task_profiles.py)
+# ---------------------------------------------------------------------------
+
+def test_detect_secondary_task_signal_matches_reasoning_and_code_generation():
+    from src.services.task_profiles import detect_secondary_task_signal
+
+    assert detect_secondary_task_signal("can you help me figure out the logic here?") == "reasoning"
+    assert detect_secondary_task_signal("let's talk about the codebase and pseudocode") == "code_generation"
+    assert detect_secondary_task_signal("just a normal chat, nothing special") is None
+
+
+def test_detect_secondary_task_signal_prefers_reasoning_when_both_present():
+    from src.services.task_profiles import detect_secondary_task_signal
+
+    assert detect_secondary_task_signal("figure out the logic, then refactor the algorithm") == "reasoning"
+
+
+def test_secondary_task_signal_keywords_disjoint_from_primary_inference_rules():
+    """The secondary keyword set must never overlap with _INFERENCE_RULES'
+    reasoning/code_generation entries, or a description containing those
+    keywords would already have been classified away from 'chat' and this
+    caveat could never fire in the first place."""
+    from src.services.task_profiles import _INFERENCE_RULES, _SECONDARY_TASK_SIGNAL_KEYWORDS
+
+    primary_reasoning = set()
+    primary_code_generation = set()
+    for keywords, task_type in _INFERENCE_RULES:
+        if task_type == "reasoning":
+            primary_reasoning.update(keywords)
+        elif task_type == "code_generation":
+            primary_code_generation.update(keywords)
+
+    for task_type, keywords in _SECONDARY_TASK_SIGNAL_KEYWORDS:
+        primary_set = primary_reasoning if task_type == "reasoning" else primary_code_generation
+        assert primary_set.isdisjoint(keywords), (
+            f"secondary keyword(s) for {task_type!r} overlap with _INFERENCE_RULES: "
+            f"{primary_set.intersection(keywords)}"
         )

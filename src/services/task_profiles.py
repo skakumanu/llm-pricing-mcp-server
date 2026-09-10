@@ -1,5 +1,5 @@
 """Task profiles mapping named task types to expected I/O token ratios."""
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 # Each profile: output_fixed is an absolute token count; output_ratio multiplies input_tokens.
 # Exactly one of the two is set per profile.
@@ -88,6 +88,41 @@ def infer_task_type(prompt: str) -> str:
         if any(kw in lower for kw in keywords):
             return task_type
     return "chat"
+
+
+# Softer/adjacent keyword signals suggesting a description may actually be a
+# higher-stakes "reasoning" or "code_generation" task even though it fell
+# through to the "chat" fallback in infer_task_type(). These are DELIBERATELY
+# DISJOINT from _INFERENCE_RULES' "reasoning" and "code_generation" keyword
+# lists above: if a description contained any of those exact keywords it
+# would already have been classified as reasoning/code_generation by the
+# first-match-wins scan and never reached the chat fallback in the first
+# place. This list exists only to catch adjacent language that the primary
+# classifier doesn't key on, as a secondary uncertainty signal — do not merge
+# entries from _INFERENCE_RULES into this list or the check above becomes
+# tautological.
+_SECONDARY_TASK_SIGNAL_KEYWORDS: list[Tuple[str, list[str]]] = [
+    ("reasoning", ["logic", "logical", "think through", "figure out", "multi-step", "complex problem", "deduce"]),
+    ("code_generation", [
+        "algorithm", "codebase", "pseudocode", "programming language", "system architecture",
+        "code review", "refactor",
+    ]),
+]
+
+
+def detect_secondary_task_signal(description: str) -> Optional[str]:
+    """Return a plausible higher-stakes task category hinted at by soft keyword
+    signals in `description`, or None if none are present.
+
+    Checked in order: "reasoning" before "code_generation" when both match.
+    Intended for use only when the primary classifier (infer_task_type) has
+    already fallen back to "chat" for this same description.
+    """
+    lower = description.lower()
+    for task_type, keywords in _SECONDARY_TASK_SIGNAL_KEYWORDS:
+        if any(kw in lower for kw in keywords):
+            return task_type
+    return None
 
 
 def estimate_output_tokens(task_type: str, input_tokens: int) -> int:
