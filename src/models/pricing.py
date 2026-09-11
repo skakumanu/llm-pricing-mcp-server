@@ -806,6 +806,15 @@ class SessionModelBreakdown(BaseModel):
     cost_usd: float = Field(..., description="Actual cost in USD for this model in the session")
 
 
+class SessionRecommendationCaveat(BaseModel):
+    """A caveat attached to a SessionRecommendation, e.g. a quality/cost tradeoff warning."""
+
+    type: str = Field(..., description="Caveat type, e.g. 'quality_tradeoff'")
+    message: str = Field(..., description="Plain-language description of the tradeoff")
+    quality_score: float = Field(..., description="The recommended model's quality_score")
+    quality_threshold: float = Field(..., description="The quality_score threshold that triggered this caveat")
+
+
 class SessionRecommendation(BaseModel):
     """A model recommendation grounded in one session's actual observed usage."""
 
@@ -833,6 +842,14 @@ class SessionRecommendation(BaseModel):
     )
     rationale: str = Field(
         ..., description="Plain-language reasoning grounded in this session's request count, tokens, and cost"
+    )
+    caveats: Optional[List[SessionRecommendationCaveat]] = Field(
+        None,
+        description=(
+            "Present only when a caveat applies, e.g. a quality_tradeoff warning when the "
+            "recommended model's quality_score is below the shared quality-tradeoff threshold. "
+            "Never present when is_optimal is true."
+        ),
     )
 
 
