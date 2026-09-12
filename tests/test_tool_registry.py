@@ -47,6 +47,7 @@ EXPECTED_TOOLS = {
     "delete_budget_alert",
     "get_cache_stats",
     "analyze_session_usage",
+    "import_session_usage",
 }
 
 # Tools intentionally NOT exposed to the ReAct agent.
@@ -66,7 +67,7 @@ class TestToolRegistry:
         assert set(registry.tools.keys()) == EXPECTED_TOOLS
 
     def test_registry_count(self, registry):
-        assert len(registry.tools) == 28
+        assert len(registry.tools) == 29
 
     def test_every_tool_has_instance_and_schema(self, registry):
         for name, meta in registry.tools.items():
