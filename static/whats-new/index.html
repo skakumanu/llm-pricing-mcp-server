@@ -142,8 +142,49 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.71.0 -->
+  <!-- v1.72.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.72.0</span>
+      <span class="release-date">Sep 12, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">New <code>import_session_usage</code> tool backfills a session's usage after the fact — plus org-wide estimated-usage visibility</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li>New MCP tool <code>import_session_usage</code> accepts a batch of usage entries under one shared <code>session_id</code> in a single call — the retroactive counterpart to <code>record_usage</code>, for a session (e.g. a VS Code Copilot Chat session) that wasn't instrumented live. Each entry resolves its input/output tokens from an exact count when known, or estimates them from raw turn text using this server's existing token counter</li>
+        <li>Cost for every entry is computed server-side from current pricing, exactly like <code>record_usage</code> — never trusted from the caller</li>
+        <li>A malformed entry (no usable tokens/text, or a model name that doesn't resolve) is reported as its own per-entry failure without discarding the rest of the batch; the response includes a per-entry outcome plus an aggregate summary (recorded exact / recorded estimated / duplicates / failed)</li>
+        <li>Idempotent like <code>record_usage</code>: when a caller omits <code>request_id</code>, a deterministic one is derived so resubmitting an identical batch is safely a no-op</li>
+        <li>Usage recorded this way is immediately readable through the existing <code>analyze_session_usage</code> tool and <code>GET /usage/session/{session_id}</code> — no change to how either is invoked</li>
+        <li><code>analyze_session_usage</code> / <code>GET /usage/session/{session_id}</code> and <code>get_usage_summary</code> / <code>GET /usage/summary</code> now also report <code>has_estimated_usage</code> and <code>estimated_request_count</code>, so both session-level and org-wide views surface how much of the reported usage is estimated vs. exact</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.71.1 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.71.1</span>
+      <span class="release-date">Sep 11, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Session-usage recommendations now warn about quality/cost tradeoffs too</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li><code>analyze_session_usage</code> and <code>GET /usage/session/{session_id}</code> could recommend switching to a materially lower-quality model purely because it's cheaper, showing a dollar savings figure with no indication that quality was being traded away — the equivalent <code>recommend_model</code> caveat never made it to this shared code path</li>
+        <li>Both now include a <code>quality_tradeoff</code> caveat in the <code>recommendation</code> object whenever the recommended model's <code>quality_score</code> falls below ~75, using the identical threshold and message wording as <code>recommend_model</code>'s existing caveat, so the two entry points can't drift</li>
+        <li>No caveat is added when the session is already using the optimal model, or when the recommended model's <code>quality_score</code> is at or above the threshold — every other recommendation field is unchanged</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.71.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.71.0</span>

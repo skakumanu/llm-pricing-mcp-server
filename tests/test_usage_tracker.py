@@ -169,6 +169,64 @@ async def test_empty_summary(svc):
     assert summary["total_cost_usd"] == 0.0
     assert summary["by_model"] == []
     assert summary["by_provider"] == []
+    assert summary["estimated_request_count"] == 0
+    assert summary["has_estimated_usage"] is False
+
+
+# ---------------------------------------------------------------------------
+# is_estimated (exact-vs-estimated) aggregation
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_record_event_defaults_to_exact(svc):
+    """Existing callers that never pass is_estimated keep recording exact events."""
+    await svc.record_event(
+        provider="openai", model_name="gpt-4o-mini", input_tokens=10, output_tokens=10,
+        cost_usd=1.0,
+    )
+    summary = await svc.get_summary(days=1)
+    assert summary["estimated_request_count"] == 0
+    assert summary["has_estimated_usage"] is False
+
+
+@pytest.mark.asyncio
+async def test_summary_reports_estimated_vs_exact_breakdown(svc):
+    await svc.record_event(
+        provider="openai", model_name="gpt-4o-mini", input_tokens=10, output_tokens=10,
+        cost_usd=1.0, is_estimated=False,
+    )
+    await svc.record_event(
+        provider="openai", model_name="gpt-4o-mini", input_tokens=20, output_tokens=20,
+        cost_usd=2.0, is_estimated=True,
+    )
+    summary = await svc.get_summary(days=1)
+    assert summary["total_requests"] == 2
+    assert summary["estimated_request_count"] == 1
+    assert summary["has_estimated_usage"] is True
+
+
+@pytest.mark.asyncio
+async def test_session_usage_reports_estimated_vs_exact_breakdown(svc):
+    await svc.record_event(
+        provider="openai", model_name="gpt-4o-mini", input_tokens=10, output_tokens=10,
+        cost_usd=1.0, session_id="sess-est", is_estimated=False,
+    )
+    await svc.record_event(
+        provider="openai", model_name="gpt-4o-mini", input_tokens=20, output_tokens=20,
+        cost_usd=2.0, session_id="sess-est", is_estimated=True,
+    )
+    usage = await svc.get_session_usage("sess-est")
+    assert usage["total_requests"] == 2
+    assert usage["estimated_request_count"] == 1
+    assert usage["has_estimated_usage"] is True
+    assert usage["by_model"][0]["estimated_request_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_session_usage_no_data_has_no_estimated_usage(svc):
+    usage = await svc.get_session_usage("nonexistent-session-2")
+    assert usage["estimated_request_count"] == 0
+    assert usage["has_estimated_usage"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -383,6 +441,43 @@ def test_usage_summary_endpoint(mock_usage_tracker):
     assert "by_model" in data
 
 
+def test_usage_summary_endpoint_reports_estimated_breakdown():
+    """GET /usage/summary surfaces the org-wide exact-vs-estimated breakdown (AC9)."""
+    from src.main import app
+    client = TestClient(app)
+    mock_tracker = MagicMock()
+    mock_tracker.get_summary = AsyncMock(return_value={
+        "org_id": None,
+        "days": 30,
+        "total_requests": 3,
+        "total_cost_usd": 0.03,
+        "total_input_tokens": 300,
+        "total_output_tokens": 150,
+        "by_model": [],
+        "by_provider": [],
+        "estimated_request_count": 1,
+        "has_estimated_usage": True,
+    })
+    with patch("src.main.get_usage_tracker", return_value=mock_tracker):
+        resp = client.get("/usage/summary?days=30")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["estimated_request_count"] == 1
+    assert data["has_estimated_usage"] is True
+
+
+def test_usage_summary_endpoint_defaults_when_no_estimated_usage(mock_usage_tracker):
+    """Orgs/periods with no estimated usage see 0/false, not a missing field (AC9)."""
+    from src.main import app
+    client = TestClient(app)
+    with patch("src.main.get_usage_tracker", return_value=mock_usage_tracker):
+        resp = client.get("/usage/summary?days=7")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["estimated_request_count"] == 0
+    assert data["has_estimated_usage"] is False
+
+
 def test_usage_summary_org_filter(mock_usage_tracker):
     from src.main import app
     client = TestClient(app)
@@ -555,6 +650,137 @@ def test_usage_session_endpoint_multi_model_breakdown():
     assert names == {"gpt-4o", "claude-haiku"}
     # Multi-model session can never be "is_optimal" (no single model to match against)
     assert data["recommendation"]["is_optimal"] is False
+
+
+def test_usage_session_endpoint_reports_estimated_breakdown():
+    """GET /usage/session/{session_id} surfaces the session's exact-vs-estimated breakdown (AC9)."""
+    from src.main import app
+    from src.services.router import RouterResult
+
+    client = TestClient(app)
+    mock_tracker = MagicMock()
+    mock_tracker.get_session_usage = AsyncMock(return_value={
+        "session_id": "sess-est",
+        "total_requests": 2,
+        "total_cost_usd": 0.02,
+        "total_input_tokens": 200,
+        "total_output_tokens": 100,
+        "first_occurred_at": 1000.0,
+        "last_occurred_at": 2000.0,
+        "estimated_request_count": 1,
+        "has_estimated_usage": True,
+        "by_model": [
+            {
+                "model_name": "gpt-4o-mini", "provider": "openai", "request_count": 2,
+                "input_tokens": 200, "output_tokens": 100, "cost_usd": 0.02,
+                "estimated_request_count": 1,
+            }
+        ],
+    })
+    same_model = _pricing_metrics("gpt-4o-mini", "openai", 0.00000015, 0.0000006)
+    mock_result = RouterResult(recommended=same_model, score=100.0, reason="test", alternatives=[])
+    mock_router = MagicMock()
+    mock_router.get_optimal_model = AsyncMock(return_value=mock_result)
+
+    with (
+        patch("src.main.get_usage_tracker", return_value=mock_tracker),
+        patch("src.main.get_router", return_value=mock_router),
+    ):
+        resp = client.get("/usage/session/sess-est")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["has_estimated_usage"] is True
+    assert data["estimated_request_count"] == 1
+    assert data["by_model"][0]["estimated_request_count"] == 1
+
+
+def test_usage_session_endpoint_quality_tradeoff_caveat_regression_case():
+    """Live-verified regression, same scenario as the MCP tool's equivalent test: a
+    session that used gpt-4o-mini with 100k input / 50k output tokens, recommended to
+    @cf/mistral/mistral-7b-instruct-v0.1 with a ~$0.045 savings figure, must surface an
+    identical quality_tradeoff caveat via GET /usage/session/{session_id}."""
+    from src.main import app
+    from src.services.router import RouterResult
+
+    client = TestClient(app)
+    mock_tracker = MagicMock()
+    mock_tracker.get_session_usage = AsyncMock(return_value={
+        "session_id": "sess-regression",
+        "total_requests": 1,
+        "total_cost_usd": 0.045,
+        "total_input_tokens": 100_000,
+        "total_output_tokens": 50_000,
+        "first_occurred_at": 1000.0,
+        "last_occurred_at": 1000.0,
+        "by_model": [
+            {
+                "model_name": "gpt-4o-mini", "provider": "openai", "request_count": 1,
+                "input_tokens": 100_000, "output_tokens": 50_000, "cost_usd": 0.045,
+            }
+        ],
+    })
+    cheaper_lower_quality = _pricing_metrics(
+        "@cf/mistral/mistral-7b-instruct-v0.1", "cloudflare", 0.0000000022, 0.0000000022,
+    )
+    cheaper_lower_quality.quality_score = 58.0
+    mock_result = RouterResult(recommended=cheaper_lower_quality, score=100.0, reason="test", alternatives=[])
+    mock_router = MagicMock()
+    mock_router.get_optimal_model = AsyncMock(return_value=mock_result)
+
+    with (
+        patch("src.main.get_usage_tracker", return_value=mock_tracker),
+        patch("src.main.get_router", return_value=mock_router),
+    ):
+        resp = client.get("/usage/session/sess-regression")
+    assert resp.status_code == 200
+    data = resp.json()
+    rec = data["recommendation"]
+    assert rec["recommended_model"] == "@cf/mistral/mistral-7b-instruct-v0.1"
+    assert rec["is_optimal"] is False
+    quality_caveats = [c for c in rec.get("caveats", []) if c["type"] == "quality_tradeoff"]
+    assert len(quality_caveats) == 1
+    assert quality_caveats[0]["quality_score"] == 58.0
+    assert quality_caveats[0]["quality_threshold"] == 75.0
+    assert "quality_score of 58.0" in quality_caveats[0]["message"]
+
+
+def test_usage_session_endpoint_no_caveat_when_quality_at_or_above_threshold():
+    """No caveats key at all (per SessionRecommendation's Optional field convention) when
+    the recommended model's quality_score is at/above the threshold."""
+    from src.main import app
+    from src.services.router import RouterResult
+
+    client = TestClient(app)
+    mock_tracker = MagicMock()
+    mock_tracker.get_session_usage = AsyncMock(return_value={
+        "session_id": "sess-1",
+        "total_requests": 10,
+        "total_cost_usd": 1.0,
+        "total_input_tokens": 100_000,
+        "total_output_tokens": 50_000,
+        "first_occurred_at": 1000.0,
+        "last_occurred_at": 2000.0,
+        "by_model": [
+            {
+                "model_name": "gpt-4o", "provider": "openai", "request_count": 10,
+                "input_tokens": 100_000, "output_tokens": 50_000, "cost_usd": 1.0,
+            }
+        ],
+    })
+    high_quality = _pricing_metrics("gpt-4o-mini", "openai", 0.00000015, 0.0000006)
+    high_quality.quality_score = 90.0
+    mock_result = RouterResult(recommended=high_quality, score=100.0, reason="test", alternatives=[])
+    mock_router = MagicMock()
+    mock_router.get_optimal_model = AsyncMock(return_value=mock_result)
+
+    with (
+        patch("src.main.get_usage_tracker", return_value=mock_tracker),
+        patch("src.main.get_router", return_value=mock_router),
+    ):
+        resp = client.get("/usage/session/sess-1")
+    assert resp.status_code == 200
+    rec = resp.json()["recommendation"]
+    assert rec.get("caveats") is None
 
 
 def test_usage_session_endpoint_scopes_to_authenticated_customers_org():
