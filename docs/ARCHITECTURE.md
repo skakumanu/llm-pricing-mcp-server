@@ -104,6 +104,7 @@ llm-pricing-mcp-server/
 │       ├── savings_tracker.py       # Per-org router savings + acceptance_rate
 │       ├── usage_tracker.py         # Actual LLM usage events (exact or text-estimated, `is_estimated` flag) + per-org spend summary + per-session lookup
 │       ├── session_recommendation.py # Shared session-usage -> ModelRouter recommendation logic (GET /usage/session + analyze_session_usage)
+│       ├── quality_tradeoff_caveat.py # Shared quality_tradeoff caveat (threshold + builder) used by recommend_model.py and session_recommendation.py
 │       ├── budget_alerts.py         # Webhook alerts on actual spend crossing a USD threshold
 │       ├── billing_service.py       # BillingService: customers table, Stripe sync
 │       ├── pricing_alerts.py        # Webhook alert registration + delivery

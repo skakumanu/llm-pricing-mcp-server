@@ -164,6 +164,25 @@
     </div>
   </div>
 
+  <!-- v1.71.1 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.71.1</span>
+      <span class="release-date">Sep 11, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Session-usage recommendations now warn about quality/cost tradeoffs too</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li><code>analyze_session_usage</code> and <code>GET /usage/session/{session_id}</code> could recommend switching to a materially lower-quality model purely because it's cheaper, showing a dollar savings figure with no indication that quality was being traded away — the equivalent <code>recommend_model</code> caveat never made it to this shared code path</li>
+        <li>Both now include a <code>quality_tradeoff</code> caveat in the <code>recommendation</code> object whenever the recommended model's <code>quality_score</code> falls below ~75, using the identical threshold and message wording as <code>recommend_model</code>'s existing caveat, so the two entry points can't drift</li>
+        <li>No caveat is added when the session is already using the optimal model, or when the recommended model's <code>quality_score</code> is at or above the threshold — every other recommendation field is unchanged</li>
+      </ul>
+    </div>
+  </div>
+
   <!-- v1.71.0 -->
   <div class="release">
     <div class="release-dot"></div>
