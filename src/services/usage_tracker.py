@@ -65,8 +65,8 @@ ON usage_events (org_id, request_id)
 _INSERT = """
 INSERT OR IGNORE INTO usage_events
     (org_id, recorded_at, occurred_at, provider, model_name, input_tokens, output_tokens,
-     cost_usd, request_id, session_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     cost_usd, request_id, session_id, is_estimated)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 _SUMMARY_TOTALS_QUERY = """
@@ -74,7 +74,8 @@ SELECT
     COUNT(*) AS total_requests,
     COALESCE(SUM(cost_usd), 0.0) AS total_cost_usd,
     COALESCE(SUM(input_tokens), 0) AS total_input_tokens,
-    COALESCE(SUM(output_tokens), 0) AS total_output_tokens
+    COALESCE(SUM(output_tokens), 0) AS total_output_tokens,
+    COALESCE(SUM(CASE WHEN is_estimated = 1 THEN 1 ELSE 0 END), 0) AS estimated_request_count
 FROM usage_events
 WHERE occurred_at >= ?
 {where_extra}
@@ -111,6 +112,7 @@ SELECT
     COALESCE(SUM(cost_usd), 0.0) AS total_cost_usd,
     COALESCE(SUM(input_tokens), 0) AS total_input_tokens,
     COALESCE(SUM(output_tokens), 0) AS total_output_tokens,
+    COALESCE(SUM(CASE WHEN is_estimated = 1 THEN 1 ELSE 0 END), 0) AS estimated_request_count,
     MIN(occurred_at) AS first_occurred_at,
     MAX(occurred_at) AS last_occurred_at
 FROM usage_events
@@ -125,7 +127,8 @@ SELECT
     COUNT(*) AS request_count,
     COALESCE(SUM(input_tokens), 0) AS input_tokens,
     COALESCE(SUM(output_tokens), 0) AS output_tokens,
-    COALESCE(SUM(cost_usd), 0.0) AS cost_usd
+    COALESCE(SUM(cost_usd), 0.0) AS cost_usd,
+    COALESCE(SUM(CASE WHEN is_estimated = 1 THEN 1 ELSE 0 END), 0) AS estimated_request_count
 FROM usage_events
 WHERE session_id = ?
 {where_extra}
@@ -154,6 +157,15 @@ class UsageTrackerService:
             except aiosqlite.OperationalError:
                 pass  # nosec B110 — column already exists, this is intentional
             await db.execute(_CREATE_SESSION_INDEX)
+            # Migrate: add is_estimated column to usage_events if missing (pre-existing DBs
+            # created before bulk/estimated-usage import was added). Existing/live rows
+            # default to 0 (exact) — they were always real token counts.
+            try:
+                await db.execute(
+                    "ALTER TABLE usage_events ADD COLUMN is_estimated INTEGER NOT NULL DEFAULT 0"
+                )
+            except aiosqlite.OperationalError:
+                pass  # nosec B110 — column already exists, this is intentional
             await db.commit()
 
     async def record_event(
@@ -167,8 +179,15 @@ class UsageTrackerService:
         occurred_at: Optional[float] = None,
         request_id: Optional[str] = None,
         session_id: Optional[str] = None,
+        is_estimated: bool = False,
     ) -> Dict[str, Any]:
-        """Persist a usage event. Returns whether it was recorded or ignored as a duplicate."""
+        """Persist a usage event. Returns whether it was recorded or ignored as a duplicate.
+
+        `is_estimated` defaults to False so every existing caller (record_usage, POST
+        /usage, POST /usage/batch) keeps recording exact events exactly as before —
+        only import_session_usage passes True, and only for entries it derived from
+        raw text rather than a real token count.
+        """
         occurred = occurred_at if occurred_at is not None else time.time()
         async with _open_db(self._db_path) as db:
             cursor = await db.execute(_INSERT, (
@@ -182,6 +201,7 @@ class UsageTrackerService:
                 cost_usd,
                 request_id,
                 session_id,
+                1 if is_estimated else 0,
             ))
             await db.commit()
             duplicate = cursor.rowcount == 0 and request_id is not None
@@ -210,6 +230,7 @@ class UsageTrackerService:
             async with db.execute(_SUMMARY_BY_PROVIDER_QUERY.format(where_extra=where_extra), params) as cur:
                 by_provider = [dict(r) for r in await cur.fetchall()]
 
+        estimated_request_count = totals["estimated_request_count"]
         return {
             "org_id": org_id,
             "days": days,
@@ -217,6 +238,8 @@ class UsageTrackerService:
             "total_cost_usd": round(totals["total_cost_usd"], 6),
             "total_input_tokens": totals["total_input_tokens"],
             "total_output_tokens": totals["total_output_tokens"],
+            "estimated_request_count": estimated_request_count,
+            "has_estimated_usage": estimated_request_count > 0,
             "by_model": [
                 {**row, "total_cost_usd": round(row["total_cost_usd"], 6)}
                 for row in by_model
@@ -256,12 +279,15 @@ class UsageTrackerService:
             async with db.execute(_SESSION_BY_MODEL_QUERY.format(where_extra=where_extra), params) as cur:
                 by_model = [dict(r) for r in await cur.fetchall()]
 
+        estimated_request_count = totals["estimated_request_count"]
         return {
             "session_id": session_id,
             "total_requests": totals["total_requests"],
             "total_cost_usd": round(totals["total_cost_usd"], 6),
             "total_input_tokens": totals["total_input_tokens"],
             "total_output_tokens": totals["total_output_tokens"],
+            "estimated_request_count": estimated_request_count,
+            "has_estimated_usage": estimated_request_count > 0,
             "first_occurred_at": totals["first_occurred_at"],
             "last_occurred_at": totals["last_occurred_at"],
             "by_model": [

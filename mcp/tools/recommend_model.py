@@ -2,6 +2,7 @@
 from typing import Any, Dict, Optional
 
 from src.services.pricing_aggregator import PricingAggregatorService
+from src.services.quality_tradeoff_caveat import build_quality_tradeoff_caveat
 from src.services.recommendation_cache import RecommendationCache
 from src.services.router import ModelRouter, RouterConstraints
 from src.services.task_profiles import (
@@ -10,13 +11,6 @@ from src.services.task_profiles import (
     infer_task_type,
     list_task_types,
 )
-
-
-# Below this quality_score, ranking purely by quality-per-dollar can pick a
-# model that merely clears a quality bar rather than one well-suited to tasks
-# where a wrong answer is expensive to discover and fix downstream. See
-# Caveat 2 in execute() below.
-_QUALITY_TRADEOFF_THRESHOLD = 75.0
 
 
 # task_profiles.infer_task_type() uses a richer, human-facing vocabulary
@@ -189,26 +183,11 @@ class RecommendModelTool:
             # merely clears a quality bar. That's a fine tradeoff for tasks
             # where a mediocre answer is a minor inconvenience, but a poor
             # fit for tasks where a wrong answer is costly to discover and
-            # fix downstream.
-            recommended_quality_score = result.recommended.quality_score
-            if (
-                recommended_quality_score is not None
-                and recommended_quality_score < _QUALITY_TRADEOFF_THRESHOLD
-            ):
-                caveats.append(
-                    {
-                        "type": "quality_tradeoff",
-                        "message": (
-                            f"The top recommendation has a quality_score of {recommended_quality_score} "
-                            f"(below {_QUALITY_TRADEOFF_THRESHOLD:g}). Ranking by quality-per-dollar can "
-                            "understate risk for tasks where a wrong answer is costly to discover and fix "
-                            "downstream, as distinct from tasks where a mediocre answer is only a minor "
-                            "inconvenience. Consider min_quality_score if this task is the former."
-                        ),
-                        "quality_score": recommended_quality_score,
-                        "quality_threshold": _QUALITY_TRADEOFF_THRESHOLD,
-                    }
-                )
+            # fix downstream. Shared with session_recommendation.py so the
+            # two entry points can't drift on this safety behavior.
+            quality_tradeoff_caveat = build_quality_tradeoff_caveat(result.recommended.quality_score)
+            if quality_tradeoff_caveat is not None:
+                caveats.append(quality_tradeoff_caveat)
 
             response = {
                 "success": True,

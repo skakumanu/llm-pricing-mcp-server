@@ -9,6 +9,7 @@ between the two entry points (they used to be duplicated verbatim in both places
 """
 from typing import Any, Dict, Optional
 
+from src.services.quality_tradeoff_caveat import build_quality_tradeoff_caveat
 from src.services.router import RouterConstraints
 
 
@@ -64,7 +65,7 @@ def _build_recommendation_payload(usage: Dict[str, Any], result) -> Dict[str, An
             f"${abs(savings_usd):.6f}."
         )
 
-    return {
+    payload = {
         "is_optimal": is_optimal,
         "recommended_model": recommended.model_name,
         "recommended_provider": recommended.provider,
@@ -74,6 +75,17 @@ def _build_recommendation_payload(usage: Dict[str, Any], result) -> Dict[str, An
         "savings_usd": savings_usd,
         "rationale": rationale,
     }
+
+    # A change is being recommended purely because it's cheaper; warn the caller when
+    # that cheaper model is materially lower-quality, mirroring recommend_model.py's
+    # quality_tradeoff caveat so the two entry points can't drift on this safety
+    # behavior. Never fires for the is_optimal (no-change-recommended) case.
+    if not is_optimal:
+        caveat = build_quality_tradeoff_caveat(recommended.quality_score)
+        if caveat is not None:
+            payload["caveats"] = [caveat]
+
+    return payload
 
 
 async def compute_session_recommendation(usage: Dict[str, Any], router) -> Optional[Dict[str, Any]]:

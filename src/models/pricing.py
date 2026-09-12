@@ -793,6 +793,12 @@ class UsageSummaryResponse(BaseModel):
     by_provider: List[UsageProviderBreakdown] = Field(
         default_factory=list, description="Spend broken down by provider"
     )
+    estimated_request_count: int = Field(
+        0, description="Number of usage events in this window whose tokens were text-derived estimates"
+    )
+    has_estimated_usage: bool = Field(
+        False, description="True if any usage event in this window was recorded from an estimate, not exact counts"
+    )
 
 
 class SessionModelBreakdown(BaseModel):
@@ -804,6 +810,18 @@ class SessionModelBreakdown(BaseModel):
     input_tokens: int = Field(..., description="Input tokens for this model in the session")
     output_tokens: int = Field(..., description="Output tokens for this model in the session")
     cost_usd: float = Field(..., description="Actual cost in USD for this model in the session")
+    estimated_request_count: int = Field(
+        0, description="Of this model's request_count, how many were recorded from text-derived estimates"
+    )
+
+
+class SessionRecommendationCaveat(BaseModel):
+    """A caveat attached to a SessionRecommendation, e.g. a quality/cost tradeoff warning."""
+
+    type: str = Field(..., description="Caveat type, e.g. 'quality_tradeoff'")
+    message: str = Field(..., description="Plain-language description of the tradeoff")
+    quality_score: float = Field(..., description="The recommended model's quality_score")
+    quality_threshold: float = Field(..., description="The quality_score threshold that triggered this caveat")
 
 
 class SessionRecommendation(BaseModel):
@@ -834,6 +852,14 @@ class SessionRecommendation(BaseModel):
     rationale: str = Field(
         ..., description="Plain-language reasoning grounded in this session's request count, tokens, and cost"
     )
+    caveats: Optional[List[SessionRecommendationCaveat]] = Field(
+        None,
+        description=(
+            "Present only when a caveat applies, e.g. a quality_tradeoff warning when the "
+            "recommended model's quality_score is below the shared quality-tradeoff threshold. "
+            "Never present when is_optimal is true."
+        ),
+    )
 
 
 class SessionUsageAnalysisResponse(BaseModel):
@@ -852,6 +878,12 @@ class SessionUsageAnalysisResponse(BaseModel):
     )
     first_occurred_at: Optional[float] = Field(None, description="Unix timestamp of the earliest event")
     last_occurred_at: Optional[float] = Field(None, description="Unix timestamp of the latest event")
+    estimated_request_count: Optional[int] = Field(
+        None, description="Of total_requests, how many were recorded from text-derived estimates (e.g. via import_session_usage)"
+    )
+    has_estimated_usage: Optional[bool] = Field(
+        None, description="True if any of this session's usage was recorded from an estimate, not exact counts"
+    )
     recommendation: Optional[SessionRecommendation] = Field(
         None, description="Absent when has_data is false or no model could be matched"
     )

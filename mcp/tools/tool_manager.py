@@ -25,6 +25,7 @@ from mcp.tools.get_cache_stats import GetCacheStatsTool
 from mcp.tools.record_usage import RecordUsageTool
 from mcp.tools.get_usage_summary import GetUsageSummaryTool
 from mcp.tools.analyze_session_usage import AnalyzeSessionUsageTool
+from mcp.tools.import_session_usage import ImportSessionUsageTool
 from mcp.tools.register_budget_alert import RegisterBudgetAlertTool
 from mcp.tools.list_budget_alerts import ListBudgetAlertsTool
 from mcp.tools.delete_budget_alert import DeleteBudgetAlertTool
@@ -867,6 +868,93 @@ class ToolManager:
                         },
                     },
                     "required": ["session_id"],
+                },
+            },
+            "import_session_usage": {
+                "instance": ImportSessionUsageTool(),
+                "name": "import_session_usage",
+                "description": (
+                    "Bulk-import a completed session's usage in a single call — the retroactive "
+                    "counterpart to record_usage, for when a session wasn't instrumented live. "
+                    "Use when a calling agent (e.g. VS Code Copilot Chat) already has a session's "
+                    "turn-by-turn history in its own local store and wants this server to report "
+                    "on it exactly as if it had been tracked live. Accepts a list of entries under "
+                    "one shared session_id; each entry resolves its input and output tokens "
+                    "independently, either from exact counts when known or by estimating from raw "
+                    "turn text using this server's existing token counter. Cost is always computed "
+                    "server-side from current pricing, never trusted from the caller. A malformed "
+                    "entry (no usable tokens/text on one side, or an unresolvable model_name) is "
+                    "reported as its own per-entry failure and does not fail the rest of the batch. "
+                    "Idempotent like record_usage — resubmitting the same entries (same request_id, "
+                    "or the same session_id/model/occurred_at/token-or-text when request_id is "
+                    "omitted) is a no-op. Recorded usage is then readable via analyze_session_usage "
+                    "and GET /usage/session/{session_id}."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "session_id": {
+                            "type": "string",
+                            "description": "Shared session ID to tag every entry in this batch with",
+                        },
+                        "org_id": {
+                            "type": "string",
+                            "description": "Optional organisation ID to attribute this usage to",
+                        },
+                        "entries": {
+                            "type": "array",
+                            "description": "Usage entries to import, one per turn/call in the session",
+                            "minItems": 1,
+                            "maxItems": 500,
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "model_name": {
+                                        "type": "string",
+                                        "description": "Name of the LLM model used for this entry",
+                                    },
+                                    "occurred_at": {
+                                        "type": "number",
+                                        "description": "Unix timestamp when this call happened (default: now)",
+                                    },
+                                    "input_tokens": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "description": "Exact input token count, if known",
+                                    },
+                                    "output_tokens": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "description": "Exact output token count, if known",
+                                    },
+                                    "input_text": {
+                                        "type": "string",
+                                        "description": (
+                                            "Raw input/prompt text — used to estimate input_tokens "
+                                            "via this server's token counter when input_tokens isn't known"
+                                        ),
+                                    },
+                                    "output_text": {
+                                        "type": "string",
+                                        "description": (
+                                            "Raw output/response text — used to estimate output_tokens "
+                                            "via this server's token counter when output_tokens isn't known"
+                                        ),
+                                    },
+                                    "request_id": {
+                                        "type": "string",
+                                        "description": (
+                                            "Optional idempotency key. When omitted, a deterministic one "
+                                            "is derived from session_id/model_name/occurred_at/token-or-text "
+                                            "source so resubmitting the same entry is safely a no-op"
+                                        ),
+                                    },
+                                },
+                                "required": ["model_name"],
+                            },
+                        },
+                    },
+                    "required": ["session_id", "entries"],
                 },
             },
             "register_budget_alert": {
