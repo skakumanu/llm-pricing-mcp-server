@@ -193,6 +193,16 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
             ),
         ),
         (
+            "import_session_usage",
+            (
+                "Bulk-import a completed session's usage in a single call — the retroactive "
+                "counterpart to record_usage, for a session that wasn't instrumented live. "
+                "Accepts a list of entries under one session_id, each resolving tokens from "
+                "exact counts or estimating from raw turn text. Use when the user wants to "
+                "backfill or reconstruct a past session's usage all at once."
+            ),
+        ),
+        (
             "register_budget_alert",
             (
                 "Register a webhook URL to be notified when actual recorded spend crosses a USD "

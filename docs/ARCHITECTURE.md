@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.71.1 | **Last updated**: 2026-09-11
+**Version**: v1.72.0 | **Last updated**: 2026-09-12
 
 ---
 
@@ -29,7 +29,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 26 
 ┌─────────────────────────────────▼───────────────────────────────────────────┐
 │  Presentation Layer (src/main.py + mcp/)                                    │
 │                                                                             │
-│  REST API              MCP (28 tools)          Browser UIs (13 pages)       │
+│  REST API              MCP (29 tools)          Browser UIs (13 pages)       │
 │  /pricing              STDIO transport          /  /chat  /calculator        │
 │  /router/recommend     HTTP POST /mcp           /compare  /history           │
 │  /cache-stats          JSON-RPC 2.0             /trends   /widget            │
@@ -102,7 +102,7 @@ llm-pricing-mcp-server/
 │       ├── token_counter.py         # tiktoken token counting + prompt-cache savings math
 │       ├── ide_pricing.py           # Subscription pricing for AI coding IDE tools
 │       ├── savings_tracker.py       # Per-org router savings + acceptance_rate
-│       ├── usage_tracker.py         # Actual LLM usage events + per-org spend summary + per-session lookup
+│       ├── usage_tracker.py         # Actual LLM usage events (exact or text-estimated, `is_estimated` flag) + per-org spend summary + per-session lookup
 │       ├── session_recommendation.py # Shared session-usage -> ModelRouter recommendation logic (GET /usage/session + analyze_session_usage)
 │       ├── quality_tradeoff_caveat.py # Shared quality_tradeoff caveat (threshold + builder) used by recommend_model.py and session_recommendation.py
 │       ├── budget_alerts.py         # Webhook alerts on actual spend crossing a USD threshold
@@ -146,7 +146,7 @@ llm-pricing-mcp-server/
 │   ├── react_loop.py                # ReAct (Reason + Act) loop implementation
 │   ├── llm_backend.py               # AnthropicBackend + OpenAIBackend (switch via env)
 │   ├── conversation.py              # SQLite conversation memory, turn limit
-│   └── tools.py                     # 25 of 28 MCP tool bindings for agent use (+ RAG search)
+│   └── tools.py                     # 26 of 29 MCP tool bindings for agent use (+ RAG search)
 │
 ├── mcp/
 │   ├── server.py                    # MCP STDIO transport (Claude Desktop)
@@ -165,7 +165,7 @@ llm-pricing-mcp-server/
 │   ├── trends/index.html            # /trends — price-change leaderboard
 │   ├── widget/index.html            # /widget — embeddable pricing table
 │   ├── conversations/index.html     # /conversations — conversation history viewer
-│   ├── mcp-setup/index.html         # /mcp-setup — MCP integration hub (5 client tabs, live test, all 28 tools)
+│   ├── mcp-setup/index.html         # /mcp-setup — MCP integration hub (5 client tabs, live test, all 29 tools)
 │   ├── api-docs/index.html          # /api-docs — API reference (Swagger/ReDoc iframe + endpoint table)
 │   └── whats-new/index.html         # /whats-new — release notes timeline (v1.35.0 → current)
 │
@@ -232,13 +232,13 @@ Enabled for: OpenAI, Anthropic, Groq, Mistral AI, Together AI, Fireworks AI, xAI
 ### 4. MCP Dual Transport
 - **STDIO** (`mcp/server.py`): JSON-RPC 2.0 over stdin/stdout for Claude Desktop local integration
 - **HTTP** (`POST /mcp`): Same JSON-RPC 2.0 payload over HTTP for remote MCP clients — no local install needed
-- Protocol version: `2024-11-05`; 28 tools exposed
+- Protocol version: `2024-11-05`; 29 tools exposed
 
 ### 5. Agent Architecture (ReAct Loop)
 ```
 User message
   → react_loop.py: think → select tool → execute → observe → repeat
-  → tools.py: wraps 25 of the 28 MCP tools as callable Python functions
+  → tools.py: wraps 26 of the 29 MCP tools as callable Python functions
       (excludes ask_agent to prevent recursion, and get_telemetry/get_cache_stats as server-ops only)
   → llm_backend.py: AnthropicBackend | OpenAIBackend (switch via AGENT_LLM_PROVIDER env)
   → conversation.py: persist turns to SQLite, enforce max_turns limit
@@ -279,7 +279,7 @@ All use `'Segoe UI', system-ui, sans-serif`, `font-size: 14px`, sticky `.main-na
 
 | Database | File | Tables | Purpose |
 |----------|------|--------|---------|
-| Pricing history | `pricing_history.db` | `price_history`, `routing_feedback`, `usage_events` (nullable `session_id`), `budget_alerts` | Price snapshots, router feedback, actual usage/spend (optionally session-scoped), spend-threshold webhooks |
+| Pricing history | `pricing_history.db` | `price_history`, `routing_feedback`, `usage_events` (nullable `session_id`, `is_estimated` flag), `budget_alerts` | Price snapshots, router feedback, actual usage/spend (optionally session-scoped, exact or text-estimated), spend-threshold webhooks |
 | Billing | `billing.db` | `customers` | API keys, tiers, Stripe IDs |
 | Conversations | per-session SQLite | `messages` | Agent conversation memory |
 
@@ -314,8 +314,8 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | GET | `/telemetry/savings` | Required | Per-org savings stats |
 | POST | `/usage` | Required | Record one actual LLM usage event (cost computed server-side) |
 | POST | `/usage/batch` | Required | Record multiple usage events at once |
-| GET | `/usage/summary` | Required | Actual spend summary by model/provider, per-org |
-| GET | `/usage/session/{session_id}` | Required | On-demand analysis of one session's actual usage: totals, per-model breakdown, and a grounded model recommendation with estimated savings |
+| GET | `/usage/summary` | Required | Actual spend summary by model/provider, per-org, plus an org-wide exact-vs-estimated breakdown (`estimated_request_count`, `has_estimated_usage`) |
+| GET | `/usage/session/{session_id}` | Required | On-demand analysis of one session's actual usage: totals (with an exact-vs-estimated breakdown), per-model breakdown, and a grounded model recommendation with estimated savings |
 | POST | `/usage/alerts` | Required | Register a webhook for spend crossing a USD threshold |
 | GET | `/usage/alerts` | Required | List registered budget alerts |
 | DELETE | `/usage/alerts/{id}` | Required | Delete a budget alert |

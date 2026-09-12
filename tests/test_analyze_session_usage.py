@@ -224,6 +224,77 @@ async def test_multi_model_session_full_breakdown_and_session_level_recommendati
 
 
 @pytest.mark.asyncio
+async def test_reports_estimated_usage_breakdown_when_present():
+    """Session usage that includes text-derived (estimated) entries surfaces the breakdown."""
+    tool = AnalyzeSessionUsageTool()
+    usage = {
+        "session_id": "sess-est",
+        "total_requests": 2,
+        "total_cost_usd": 0.02,
+        "total_input_tokens": 200,
+        "total_output_tokens": 100,
+        "first_occurred_at": 1000.0,
+        "last_occurred_at": 2000.0,
+        "estimated_request_count": 1,
+        "has_estimated_usage": True,
+        "by_model": [
+            {
+                "model_name": "gpt-4o-mini", "provider": "openai", "request_count": 2,
+                "input_tokens": 200, "output_tokens": 100, "cost_usd": 0.02,
+                "estimated_request_count": 1,
+            }
+        ],
+    }
+    mock_tracker = MagicMock()
+    mock_tracker.get_session_usage = AsyncMock(return_value=usage)
+    same_model = _pricing_metrics("gpt-4o-mini", "openai", 0.00000015, 0.0000006)
+    mock_result = RouterResult(recommended=same_model, score=100.0, reason="test", alternatives=[])
+    mock_router = AsyncMock()
+    mock_router.get_optimal_model = AsyncMock(return_value=mock_result)
+
+    with patch("mcp.tools.analyze_session_usage.get_usage_tracker", return_value=mock_tracker):
+        tool.router = mock_router
+        result = await tool.execute({"session_id": "sess-est"})
+
+    assert result["has_estimated_usage"] is True
+    assert result["estimated_request_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_defaults_to_no_estimated_usage_when_tracker_omits_field():
+    """Backward compat: a tracker response without the new keys still works (defaults false/0)."""
+    tool = AnalyzeSessionUsageTool()
+    usage = {
+        "session_id": "sess-1",
+        "total_requests": 1,
+        "total_cost_usd": 0.01,
+        "total_input_tokens": 100,
+        "total_output_tokens": 50,
+        "first_occurred_at": 1000.0,
+        "last_occurred_at": 1000.0,
+        "by_model": [
+            {
+                "model_name": "gpt-4o-mini", "provider": "openai", "request_count": 1,
+                "input_tokens": 100, "output_tokens": 50, "cost_usd": 0.01,
+            }
+        ],
+    }
+    mock_tracker = MagicMock()
+    mock_tracker.get_session_usage = AsyncMock(return_value=usage)
+    same_model = _pricing_metrics("gpt-4o-mini", "openai", 0.00000015, 0.0000006)
+    mock_result = RouterResult(recommended=same_model, score=100.0, reason="test", alternatives=[])
+    mock_router = AsyncMock()
+    mock_router.get_optimal_model = AsyncMock(return_value=mock_result)
+
+    with patch("mcp.tools.analyze_session_usage.get_usage_tracker", return_value=mock_tracker):
+        tool.router = mock_router
+        result = await tool.execute({"session_id": "sess-1"})
+
+    assert result["has_estimated_usage"] is False
+    assert result["estimated_request_count"] == 0
+
+
+@pytest.mark.asyncio
 async def test_no_router_match_returns_data_without_recommendation():
     tool = AnalyzeSessionUsageTool()
     usage = {

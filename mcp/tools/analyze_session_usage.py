@@ -69,6 +69,8 @@ class AnalyzeSessionUsageTool:
             "by_model": by_model,
             "first_occurred_at": usage["first_occurred_at"],
             "last_occurred_at": usage["last_occurred_at"],
+            "estimated_request_count": usage.get("estimated_request_count", 0),
+            "has_estimated_usage": usage.get("has_estimated_usage", False),
         }
 
         # Build constraints from this session's own observed averages. No task_type —
