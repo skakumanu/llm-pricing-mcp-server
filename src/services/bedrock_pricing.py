@@ -22,6 +22,7 @@ class BedrockPricingService(BasePricingProvider):
         "anthropic.claude-3-5-sonnet-20241022-v2:0": {
             "input": 0.003,
             "output": 0.015,
+            "price_as_of": "2026-09-13",
             "context_window": 200000,
             "use_cases": ["Advanced coding", "Agentic workflows", "Complex analysis", "Enterprise AI"],
             "strengths": ["Best Sonnet on Bedrock", "Computer use", "AWS integration", "Enterprise support"],
@@ -33,6 +34,7 @@ class BedrockPricingService(BasePricingProvider):
         "anthropic.claude-3-5-sonnet-20240620-v1:0": {
             "input": 0.003,
             "output": 0.015,
+            "price_as_of": "2026-09-13",
             "context_window": 200000,
             "use_cases": ["Complex tasks", "Vision + text", "Coding", "Research"],
             "strengths": ["Strong reasoning", "Multimodal", "AWS native", "Reliable"],
@@ -44,6 +46,7 @@ class BedrockPricingService(BasePricingProvider):
         "anthropic.claude-3-opus-20240229-v1:0": {
             "input": 0.015,
             "output": 0.075,
+            "price_as_of": "2026-09-13",
             "context_window": 200000,
             "use_cases": ["Strategic analysis", "Research", "Complex reasoning", "High-stakes decisions"],
             "strengths": ["Highest intelligence", "Deep analysis", "Enterprise-grade", "AWS secure"],
@@ -55,6 +58,7 @@ class BedrockPricingService(BasePricingProvider):
         "anthropic.claude-3-sonnet-20240229-v1:0": {
             "input": 0.003,
             "output": 0.015,
+            "price_as_of": "2026-09-13",
             "context_window": 200000,
             "use_cases": ["Content creation", "Analysis", "Code review", "Customer support"],
             "strengths": ["Balanced", "AWS integration", "Cost-effective", "Reliable"],
@@ -66,6 +70,7 @@ class BedrockPricingService(BasePricingProvider):
         "anthropic.claude-3-haiku-20240307-v1:0": {
             "input": 0.00025,
             "output": 0.00125,
+            "price_as_of": "2026-09-13",
             "context_window": 200000,
             "use_cases": ["Real-time chat", "High-volume processing", "Quick analysis", "Moderation"],
             "strengths": ["Ultra-fast", "Lowest cost Claude", "Large context", "AWS native"],
@@ -77,6 +82,7 @@ class BedrockPricingService(BasePricingProvider):
         "meta.llama3-1-405b-instruct-v1:0": {
             "input": 0.00532,
             "output": 0.016,
+            "price_as_of": "2026-09-13",
             "context_window": 128000,
             "use_cases": ["Complex reasoning", "Long documents", "Research", "Enterprise chat"],
             "strengths": ["Largest Llama", "Open source", "AWS managed", "Long context"],
@@ -87,6 +93,7 @@ class BedrockPricingService(BasePricingProvider):
         "meta.llama3-1-70b-instruct-v1:0": {
             "input": 0.00099,
             "output": 0.00099,
+            "price_as_of": "2026-09-13",
             "context_window": 128000,
             "use_cases": ["General purpose", "Code generation", "Analysis", "Creative work"],
             "strengths": ["Well-balanced", "Cost-effective", "AWS managed", "Long context"],
@@ -97,6 +104,7 @@ class BedrockPricingService(BasePricingProvider):
         "meta.llama3-1-8b-instruct-v1:0": {
             "input": 0.00022,
             "output": 0.00022,
+            "price_as_of": "2026-09-13",
             "context_window": 128000,
             "use_cases": ["High-volume", "Simple tasks", "Real-time processing", "Edge deployment"],
             "strengths": ["Very affordable", "Fast", "AWS managed", "Scalable"],
@@ -107,6 +115,7 @@ class BedrockPricingService(BasePricingProvider):
         "mistral.mistral-large-2407-v1:0": {
             "input": 0.003,
             "output": 0.009,
+            "price_as_of": "2026-09-13",
             "context_window": 128000,
             "use_cases": ["Enterprise tasks", "Code generation", "Reasoning", "Multilingual"],
             "strengths": ["Mistral flagship", "128K context", "AWS integration", "Strong reasoning"],
@@ -117,6 +126,7 @@ class BedrockPricingService(BasePricingProvider):
         "mistral.mistral-small-2402-v1:0": {
             "input": 0.001,
             "output": 0.003,
+            "price_as_of": "2026-09-13",
             "context_window": 32000,
             "use_cases": ["Cost-effective tasks", "Customer support", "Classification", "Simple reasoning"],
             "strengths": ["Affordable", "Fast", "AWS managed", "Good quality"],
@@ -125,6 +135,7 @@ class BedrockPricingService(BasePricingProvider):
         "cohere.command-r-plus-v1:0": {
             "input": 0.003,
             "output": 0.015,
+            "price_as_of": "2026-09-13",
             "context_window": 128000,
             "use_cases": ["Enterprise RAG", "Search", "Document analysis", "Long context"],
             "strengths": ["RAG-optimized", "AWS native", "Tool use", "Citations"],
@@ -134,6 +145,7 @@ class BedrockPricingService(BasePricingProvider):
         "cohere.command-r-v1:0": {
             "input": 0.0005,
             "output": 0.0015,
+            "price_as_of": "2026-09-13",
             "context_window": 128000,
             "use_cases": ["Cost-effective RAG", "FAQ systems", "Document Q&A", "Search"],
             "strengths": ["Affordable RAG", "Good retrieval", "AWS managed", "Long context"],
@@ -143,6 +155,7 @@ class BedrockPricingService(BasePricingProvider):
         "amazon.titan-text-premier-v1:0": {
             "input": 0.0005,
             "output": 0.0015,
+            "price_as_of": "2026-09-13",
             "context_window": 32000,
             "use_cases": ["Enterprise content", "Summarization", "AWS-native tasks", "RAG"],
             "strengths": ["AWS native", "Enterprise support", "RAG-optimized", "Secure"],

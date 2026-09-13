@@ -80,6 +80,7 @@ class AnthropicPricingService(BasePricingProvider):
         "claude-sonnet-4-6": {
             "input": 0.003,
             "output": 0.015,
+            "price_as_of": "2026-09-13",
             "context_window": 200000,
             "use_cases": ["Advanced coding", "Complex analysis", "Agentic tasks", "Content creation"],
             "strengths": ["High intelligence", "Cost-effective", "Vision + text", "Reliable"],
@@ -92,6 +93,7 @@ class AnthropicPricingService(BasePricingProvider):
         "claude-3-7-sonnet-20250219": {
             "input": 0.003,
             "output": 0.015,
+            "price_as_of": "2026-09-13",
             "context_window": 200000,
             "use_cases": ["Extended reasoning", "Complex math", "Advanced research", "Multi-step tasks"],
             "strengths": ["Hybrid reasoning", "Vision capable", "Function calling", "Batch available"],
@@ -159,6 +161,7 @@ class AnthropicPricingService(BasePricingProvider):
         "claude-3-opus-20240229": {
             "input": 0.015,
             "output": 0.075,
+            "price_as_of": "2026-09-13",
             "context_window": 200000,
             "use_cases": ["Research analysis", "Complex problem solving", "Advanced coding", "Strategic planning"],
             "strengths": ["Superior intelligence", "Nuanced understanding", "Excellent at analysis"],
@@ -182,6 +185,7 @@ class AnthropicPricingService(BasePricingProvider):
         "claude-3-haiku-20240307": {
             "input": 0.00025,
             "output": 0.00125,
+            "price_as_of": "2026-09-13",
             "context_window": 200000,
             "use_cases": ["Real-time chat", "Document processing", "Quick analysis", "Moderation"],
             "strengths": ["Fast responses", "Ultra-low cost", "Huge context"],
