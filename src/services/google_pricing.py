@@ -82,6 +82,7 @@ class GooglePricingService(BasePricingProvider):
         "gemini-2.5-pro": {
             "input": 0.00125,
             "output": 0.010,
+            "price_as_of": "2026-09-13",
             "context_window": 1048576,
             "use_cases": [
                 "Complex reasoning", "Advanced coding", "Scientific analysis",
@@ -113,6 +114,7 @@ class GooglePricingService(BasePricingProvider):
         "gemini-2.0-flash": {
             "input": 0.0001,
             "output": 0.0004,
+            "price_as_of": "2026-09-13",
             "context_window": 1048576,
             "use_cases": [
                 "Next-gen multimodal",

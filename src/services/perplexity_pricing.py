@@ -22,6 +22,7 @@ class PerplexityPricingService(BasePricingProvider):
         "sonar-reasoning": {
             "input": 0.001,
             "output": 0.005,
+            "price_as_of": "2026-09-13",
             "context_window": 127072,
             "use_cases": ["Research with reasoning", "Complex analysis", "Search-augmented tasks", "Deep research"],
             "strengths": ["Search integration", "Strong reasoning", "Up-to-date info", "Citations"],
@@ -40,6 +41,7 @@ class PerplexityPricingService(BasePricingProvider):
         "sonar-pro": {
             "input": 0.003,
             "output": 0.015,
+            "price_as_of": "2026-09-13",
             "context_window": 127072,
             "use_cases": ["Advanced research", "Professional analysis", "Deep research", "Expert queries"],
             "strengths": ["Highest quality", "Deep search", "Best citations", "Professional"],
