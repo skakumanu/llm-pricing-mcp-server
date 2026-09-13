@@ -98,6 +98,7 @@ class OpenAIPricingService(BasePricingProvider):
         "gpt-4o": {
             "input": 0.0025,
             "output": 0.010,
+            "price_as_of": "2026-09-13",
             "context_window": 128000,
             "use_cases": ["Multimodal analysis", "Vision + text", "Complex reasoning", "real-time applications"],
             "strengths": ["Multimodal", "Fast", "Cost-effective", "High intelligence"],
@@ -110,6 +111,7 @@ class OpenAIPricingService(BasePricingProvider):
         "gpt-4o-mini": {
             "input": 0.00015,
             "output": 0.0006,
+            "price_as_of": "2026-09-13",
             "context_window": 128000,
             "use_cases": ["Fast chat", "Simple vision tasks", "High-volume multimodal", "Cost-sensitive apps"],
             "strengths": ["Very affordable", "Fast", "Multimodal", "Good intelligence"],
@@ -122,6 +124,7 @@ class OpenAIPricingService(BasePricingProvider):
         "gpt-4.1": {
             "input": 0.002,
             "output": 0.008,
+            "price_as_of": "2026-09-13",
             "context_window": 1047576,
             "use_cases": ["Long document analysis", "Advanced coding", "Agentic workflows", "Complex reasoning"],
             "strengths": ["1M token context", "Superior coding", "Multimodal", "Batch available"],
@@ -134,6 +137,7 @@ class OpenAIPricingService(BasePricingProvider):
         "gpt-4.1-mini": {
             "input": 0.0004,
             "output": 0.0016,
+            "price_as_of": "2026-09-13",
             "context_window": 1047576,
             "use_cases": ["Cost-effective coding", "Fast multimodal", "High-volume tasks", "Agentic systems"],
             "strengths": ["Very affordable", "1M context", "Strong reasoning", "Vision support"],
@@ -146,6 +150,7 @@ class OpenAIPricingService(BasePricingProvider):
         "gpt-4.1-nano": {
             "input": 0.0001,
             "output": 0.0004,
+            "price_as_of": "2026-09-13",
             "context_window": 1047576,
             "use_cases": ["Ultra-high-volume tasks", "Simple classification", "Fast inference", "Edge applications"],
             "strengths": ["Lowest cost", "Fastest GPT-4 class", "1M context", "Efficient"],
@@ -158,6 +163,7 @@ class OpenAIPricingService(BasePricingProvider):
         "o4-mini": {
             "input": 0.0011,
             "output": 0.0044,
+            "price_as_of": "2026-09-13",
             "context_window": 200000,
             "use_cases": ["STEM reasoning", "Math problems", "Science", "Advanced coding", "Logic puzzles"],
             "strengths": ["Fast reasoning", "Affordable", "200K context", "Vision capable"],
@@ -184,6 +190,7 @@ class OpenAIPricingService(BasePricingProvider):
         "o3-mini": {
             "input": 0.0011,
             "output": 0.0044,
+            "price_as_of": "2026-09-13",
             "context_window": 200000,
             "use_cases": ["STEM reasoning", "Code debugging", "Scientific tasks", "Math problems"],
             "strengths": ["Reasoning-focused", "Affordable", "STEM-optimized", "Fast"],
@@ -196,6 +203,7 @@ class OpenAIPricingService(BasePricingProvider):
         "o1": {
             "input": 0.015,
             "output": 0.060,
+            "price_as_of": "2026-09-13",
             "context_window": 200000,
             "use_cases": ["Complex reasoning", "Scientific research", "Multi-step math", "Strategic planning"],
             "strengths": ["Deep reasoning", "200K context", "High accuracy", "Science & math"],
@@ -218,6 +226,7 @@ class OpenAIPricingService(BasePricingProvider):
         "gpt-4-turbo": {
             "input": 0.01,
             "output": 0.03,
+            "price_as_of": "2026-09-13",
             "context_window": 128000,
             "use_cases": ["Long document analysis", "Multi-turn conversations", "Large codebase understanding"],
             "strengths": ["Massive context window", "Vision capable", "Fast performance"],
@@ -230,6 +239,7 @@ class OpenAIPricingService(BasePricingProvider):
         "gpt-4-turbo-2024-04-09": {
             "input": 0.01,
             "output": 0.03,
+            "price_as_of": "2026-09-13",
             "context_window": 128000,
             "use_cases": ["Latest GPT-4 Turbo", "Vision tasks", "Function calling"],
             "strengths": ["Latest version", "Vision + JSON mode", "Reliable"],
@@ -242,6 +252,7 @@ class OpenAIPricingService(BasePricingProvider):
         "gpt-4": {
             "input": 0.03,
             "output": 0.06,
+            "price_as_of": "2026-09-13",
             "context_window": 8192,
             "use_cases": ["Complex reasoning", "Code generation", "Creative writing", "Data analysis"],
             "strengths": ["High accuracy", "Strong reasoning", "Reliable outputs"],
@@ -252,6 +263,7 @@ class OpenAIPricingService(BasePricingProvider):
         "gpt-3.5-turbo": {
             "input": 0.0005,
             "output": 0.0015,
+            "price_as_of": "2026-09-13",
             "context_window": 16385,
             "use_cases": ["Chatbots", "Simple Q&A", "Content generation", "Data extraction"],
             "strengths": ["Very low cost", "Fast responses", "Good for simple tasks"],
@@ -263,6 +275,7 @@ class OpenAIPricingService(BasePricingProvider):
         "gpt-3.5-turbo-0125": {
             "input": 0.0005,
             "output": 0.0015,
+            "price_as_of": "2026-09-13",
             "context_window": 16385,
             "use_cases": ["Customer support", "Basic automation", "Simple text processing"],
             "strengths": ["Latest 3.5 version", "Cost-effective", "Reliable"],

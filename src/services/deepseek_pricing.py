@@ -35,6 +35,7 @@ class DeepSeekPricingService(BasePricingProvider):
         "deepseek-chat": {
             "input": 0.00027,
             "output": 0.0011,
+            "price_as_of": "2026-09-13",
             "context_window": 64000,
             "use_cases": [
                 "General conversation", "Code assistance", "Data analysis",
@@ -62,6 +63,7 @@ class DeepSeekPricingService(BasePricingProvider):
         "deepseek-r1": {
             "input": 0.00055,
             "output": 0.00219,
+            "price_as_of": "2026-09-13",
             "context_window": 64000,
             "use_cases": [
                 "Advanced reasoning", "Complex math", "Scientific tasks",
