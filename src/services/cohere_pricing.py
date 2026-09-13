@@ -22,6 +22,7 @@ class CoherePricingService(BasePricingProvider):
         "command-r-plus-08-2024": {
             "input": 0.0025,
             "output": 0.010,
+            "price_as_of": "2026-09-13",
             "context_window": 128000,
             "use_cases": ["Enterprise search", "Advanced RAG", "Long document analysis", "Complex reasoning"],
             "strengths": ["Latest Command R+", "Enhanced retrieval", "Improved reasoning", "Tool use"],
@@ -43,6 +44,7 @@ class CoherePricingService(BasePricingProvider):
         "command-r-08-2024": {
             "input": 0.00015,
             "output": 0.0006,
+            "price_as_of": "2026-09-13",
             "context_window": 128000,
             "use_cases": ["Customer support", "FAQ automation", "Cost-effective RAG", "Document Q&A"],
             "strengths": ["Latest Command R", "Best price/performance", "Strong retrieval", "Tool use"],
@@ -72,6 +74,7 @@ class CoherePricingService(BasePricingProvider):
         "command-light": {
             "input": 0.0003,
             "output": 0.0006,
+            "price_as_of": "2026-09-13",
             "context_window": 4096,
             "use_cases": ["Lightweight chatbots", "Quick classification", "Simple generation"],
             "strengths": ["Minimal cost", "Fast responses", "Good for simple tasks"],

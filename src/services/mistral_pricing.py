@@ -108,6 +108,7 @@ class MistralPricingService(BasePricingProvider):
         "open-mistral-nemo": {
             "input": 0.0003,
             "output": 0.0003,
+            "price_as_of": "2026-09-13",
             "context_window": 128000,
             "use_cases": ["Edge deployment", "Self-hosted RAG", "Privacy-focused apps", "Cost optimization"],
             "strengths": ["Open source", "128K context", "Ultra-affordable", "Apache 2.0"],
@@ -118,6 +119,7 @@ class MistralPricingService(BasePricingProvider):
         "open-mixtral-8x7b": {
             "input": 0.0007,
             "output": 0.0007,
+            "price_as_of": "2026-09-13",
             "context_window": 32000,
             "use_cases": ["Advanced open-source use", "Custom deployment", "High-performance inference"],
             "strengths": ["Mixture of experts", "Self-hostable", "Good performance"],
