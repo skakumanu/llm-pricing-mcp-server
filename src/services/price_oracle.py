@@ -250,13 +250,39 @@ class PriceOracle:
             return None
 
         if aliases:
-            for rec in candidates:
-                if rec.provider and rec.provider.lower() in aliases:
-                    return rec
+            provider_matches = [
+                rec for rec in candidates if rec.provider and rec.provider.lower() in aliases
+            ]
+            if provider_matches:
+                return self._resolve_agreeing_candidate(provider_matches)
 
         if require_provider_match:
             return None
         return candidates[0]
+
+    @staticmethod
+    def _resolve_agreeing_candidate(records: List["PriceRecord"]) -> "PriceRecord":
+        """Pick one record when several same-provider registry entries exist.
+
+        The registry sometimes carries multiple entries for the same first
+        party (per-region Bedrock/Azure variants, a bare key alongside a dated
+        one) that quote different prices for what is really one model. Taking
+        whichever happened to come first in iteration order can land on a lone
+        outlier — see ``o1-mini``/Azure, where two of three entries agree and
+        the arbitrary first pick was the dissenting one. Trust the price the
+        majority of same-provider entries report instead; ties keep the
+        first-seen value so the result stays deterministic.
+        """
+        if len(records) == 1:
+            return records[0]
+        counts: Dict[tuple, int] = {}
+        first_seen: Dict[tuple, PriceRecord] = {}
+        for rec in records:
+            key = (rec.input_per_1k, rec.output_per_1k)
+            counts[key] = counts.get(key, 0) + 1
+            first_seen.setdefault(key, rec)
+        best_key = max(counts, key=lambda k: counts[k])
+        return first_seen[best_key]
 
     @property
     def loaded(self) -> bool:

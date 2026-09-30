@@ -331,7 +331,10 @@ class TestCurrentGenerationModelsArePriced:
         "gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5.4", "gpt-5.5",
         "gemini-3-pro-preview", "gemini-3-flash-preview",
         "gemini-3.5-flash", "gemini-3.6-flash",
-        "grok-4", "grok-4-fast-reasoning",
+        # "grok-4"/"grok-4-fast-reasoning" dropped: xAI's registry lineup moved
+        # to grok-4.20/4.3/4.5/4.6/4.7 naming, so neither name resolves via the
+        # oracle anymore. STATIC_PRICING's own grok-4/grok-4-fast-reasoning
+        # entries are left as-is (unconfirmed) rather than guessed at here.
         "mistral-medium-latest", "magistral-medium-latest",
         "deepseek-v3",
     ]
