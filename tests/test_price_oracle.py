@@ -50,6 +50,21 @@ RAW = {
         "output_cost_per_token": 0.0,
     },
     "no-price": {"mode": "chat", "litellm_provider": "acme"},
+    # Same first party, three regional/dated entries for what is really one
+    # model. Two agree at $1.21/1M input; a lone bare entry disagrees at
+    # $1.10/1M — the real shape found in the registry for Azure's o1-mini.
+    "bedrock/disputed-model": {
+        "mode": "chat", "litellm_provider": "bedrock",
+        "input_cost_per_token": 1.1e-06, "output_cost_per_token": 4.4e-06,
+    },
+    "bedrock/eu/disputed-model": {
+        "mode": "chat", "litellm_provider": "bedrock",
+        "input_cost_per_token": 1.21e-06, "output_cost_per_token": 4.84e-06,
+    },
+    "bedrock/us/disputed-model": {
+        "mode": "chat", "litellm_provider": "bedrock",
+        "input_cost_per_token": 1.21e-06, "output_cost_per_token": 4.84e-06,
+    },
 }
 
 
@@ -159,6 +174,35 @@ class TestProviderAwareLookup:
 
     async def test_unknown_provider_name_is_not_a_match(self, oracle):
         assert oracle.lookup("shared-name", "Nonexistent Co", require_provider_match=True) is None
+
+
+@pytest.mark.asyncio
+class TestSameProviderDisagreement:
+    """Multiple registry entries for one first party can disagree with each
+    other (per-region Bedrock/Azure variants, a bare key next to a dated one).
+    Picking whichever came first in iteration order can land on a lone
+    outlier — this is the exact shape that made o1-mini/Azure OpenAI report
+    false drift against a price two of three registry entries actually agree
+    with. lookup() must trust the majority, not iteration order.
+    """
+
+    async def test_majority_value_wins_over_lone_outlier(self, oracle):
+        rec = oracle.lookup("disputed-model", "Amazon Bedrock", require_provider_match=True)
+        assert rec.input_per_1k == pytest.approx(0.00121)
+        assert rec.output_per_1k == pytest.approx(0.00484)
+
+    async def test_result_is_deterministic_regardless_of_dict_order(self):
+        """Same disagreement, entries authored in a different order — same winner."""
+        reordered_raw = {
+            "bedrock/eu/disputed-model": RAW["bedrock/eu/disputed-model"],
+            "bedrock/us/disputed-model": RAW["bedrock/us/disputed-model"],
+            "bedrock/disputed-model": RAW["bedrock/disputed-model"],
+        }
+        o = PriceOracle()
+        with patch.object(PriceOracle, "_fetch_remote", new=AsyncMock(return_value=reordered_raw)):
+            await o.load()
+        rec = o.lookup("disputed-model", "Amazon Bedrock", require_provider_match=True)
+        assert rec.input_per_1k == pytest.approx(0.00121)
 
 
 @pytest.mark.asyncio
