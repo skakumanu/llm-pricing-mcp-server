@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from mcp.tools.tool_manager import ToolManager  # noqa: E402
 from src import __version__  # noqa: E402
+from src.services.pricing_aggregator import PricingAggregatorService, get_pricing_aggregator  # noqa: E402
 from src.services.telemetry import get_telemetry_service  # noqa: E402
 
 # Configure logging - disabled for MCP stdio mode to avoid interference
@@ -26,11 +27,20 @@ logger = logging.getLogger(__name__)
 class MCPServer:
     """Model Context Protocol Server with JSON-RPC 2.0 over STDIO."""
 
-    def __init__(self):
-        """Initialize the MCP server."""
+    def __init__(self, aggregator: Optional[PricingAggregatorService] = None):
+        """Initialize the MCP server.
+
+        Args:
+            aggregator: Shared PricingAggregatorService instance forwarded to
+                every tool via ToolManager, so all MCP tools in this STDIO
+                process share one pricing cache/TTL with each other instead
+                of each constructing its own. Defaults to None (each tool
+                builds its own instance), preserving prior behavior for
+                direct no-arg construction (e.g. in tests).
+        """
         self.version = __version__
         self.name = "LLM Pricing MCP Server"
-        self.tool_manager = ToolManager()
+        self.tool_manager = ToolManager(aggregator=aggregator)
         self.telemetry = get_telemetry_service()
         self.request_id_counter = 0
         logger.info(f"Initializing {self.name} v{self.version}")
@@ -248,7 +258,11 @@ async def main():
         max_turns=50,
     )
 
-    server = MCPServer()
+    # Resolve the process-wide pricing aggregator singleton once so every MCP
+    # tool call in this STDIO process shares one warm pricing cache instead of
+    # each tool constructing (and re-fetching with) its own.
+    aggregator = await get_pricing_aggregator()
+    server = MCPServer(aggregator=aggregator)
 
     # Wire PricingAgent into ask_agent tool (requires API key)
     try:
