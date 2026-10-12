@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.72.3 | **Last updated**: 2026-09-30
+**Version**: v1.72.4 | **Last updated**: 2026-10-12
 
 ---
 
@@ -90,7 +90,8 @@ llm-pricing-mcp-server/
 │   │   └── billing.py               # SignupRequest/Response, CheckoutRequest, CustomerDashboard
 │   └── services/
 │       ├── base_provider.py         # BasePricingProvider: build_metrics() shared builder, live sync, provenance
-│       ├── pricing_aggregator.py    # Orchestrates + caches all provider data (async)
+│       ├── pricing_aggregator.py    # Orchestrates + caches all provider data (async); also hosts the get_pricing_aggregator() process-wide singleton shared by REST and all MCP tools
+│       ├── cost_calculator.py       # compute_token_cost(): single cost-math implementation shared by /cost-estimate(+batch)/usage and their estimate_cost/compare_costs/record_usage MCP-tool counterparts
 │       ├── pricing_history.py       # SQLite price-history + routing_feedback tables
 │       ├── benchmark_service.py     # Quality scores: static table + HF API fallback (24h TTL)
 │       ├── router.py                # LLM routing recommendation engine
@@ -204,6 +205,8 @@ def get_x_service() -> XService:
 ```
 All `init_*` calls live in the `startup_pricing_history()` FastAPI lifespan handler. Services: `PricingAggregator`, `PricingHistory`, `BenchmarkService`, `SavingsTracker`, `UsageTracker`, `BudgetAlertService`, `BillingService`.
 
+`PricingAggregatorService`'s singleton (`get_pricing_aggregator()`, lazy + `asyncio.Lock`-guarded, defined in `pricing_aggregator.py` itself) is the one exception reused across *both* the REST API and every MCP tool in-process: `ToolManager` takes an optional `aggregator` param forwarded to all 13 pricing-dependent tools, and both MCP transports (`mcp/server.py`'s STDIO `main()`, `src/main.py`'s HTTP `/mcp` `_get_http_mcp_tool_manager()`) resolve `get_pricing_aggregator()` once and hand it to their `ToolManager`. This means one warm pricing cache per process, not one per surface — a REST call and an MCP tool call for the same model agree within the cache's TTL. Each tool's constructor still falls back to building its own instance when `aggregator` is omitted (e.g. direct instantiation in tests), so no existing call site broke.
+
 ### 2. Authentication Middleware (`src/main.py`)
 Layered auth — billing DB first, global key fallback — so existing deployments without billing are unaffected:
 ```
@@ -233,6 +236,8 @@ Enabled for: OpenAI, Anthropic, Groq, Mistral AI, Together AI, Fireworks AI, xAI
 - **STDIO** (`mcp/server.py`): JSON-RPC 2.0 over stdin/stdout for Claude Desktop local integration
 - **HTTP** (`POST /mcp`): Same JSON-RPC 2.0 payload over HTTP for remote MCP clients — no local install needed
 - Protocol version: `2024-11-05`; 29 tools exposed
+- Both transports' `ToolManager` is built with the same process-wide `get_pricing_aggregator()` singleton the REST API uses (see "Singleton Services" above) — one pricing cache per process shared by every surface, not one per transport. Cross-process sharing (STDIO process vs. the HTTP/REST process) is out of scope; each process still gets its own aggregator.
+- The 3 confirmed duplicate cost-math pairs (`/cost-estimate` ↔ `estimate_cost`, `/cost-estimate/batch` ↔ `compare_costs`, `/usage` ↔ `record_usage`) now call the same `cost_calculator.compute_token_cost()` instead of each re-implementing the arithmetic inline.
 
 ### 5. Agent Architecture (ReAct Loop)
 ```

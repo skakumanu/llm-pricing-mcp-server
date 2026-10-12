@@ -2,6 +2,7 @@
 from typing import Any, Dict, Optional
 
 from src.services.benchmark_service import enrich_models
+from src.services.cost_calculator import compute_token_cost
 from src.services.pricing_aggregator import PricingAggregatorService
 from src.services.task_profiles import (
     estimate_output_tokens,
@@ -19,8 +20,8 @@ from src.services.token_counter import (
 class PredictCostTool:
     """Tool that counts tokens in an actual prompt and returns ranked model costs."""
 
-    def __init__(self):
-        self.service = PricingAggregatorService()
+    def __init__(self, aggregator: Optional[PricingAggregatorService] = None):
+        self.service = aggregator or PricingAggregatorService()
 
     async def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         try:
@@ -79,9 +80,12 @@ class PredictCostTool:
             # are dollars-per-single-token, so multiply directly by the token count.
             ranked = []
             for m in candidates:
-                input_cost = m.cost_per_input_token * input_tokens
-                output_cost = m.cost_per_output_token * output_tokens
-                total_cost = input_cost + output_cost
+                token_cost = compute_token_cost(
+                    m.cost_per_input_token, m.cost_per_output_token, input_tokens, output_tokens
+                )
+                input_cost = token_cost.input_cost
+                output_cost = token_cost.output_cost
+                total_cost = token_cost.total_cost
                 cache_savings = compute_cache_savings(
                     m.provider, input_tokens, m.cost_per_input_token, cache_hit_ratio
                 )

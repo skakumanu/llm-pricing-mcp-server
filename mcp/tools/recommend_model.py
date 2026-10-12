@@ -74,8 +74,8 @@ class RecommendModelTool:
     vocabulary. Read-only: no feedback submission.
     """
 
-    def __init__(self):
-        self.service = PricingAggregatorService()
+    def __init__(self, aggregator: Optional[PricingAggregatorService] = None):
+        self.service = aggregator or PricingAggregatorService()
         self.router = ModelRouter(self.service)
         # ~5 minute in-memory cache so repeated/equivalent requests (e.g. an
         # IDE re-asking on every keystroke pause) skip full recomputation.
