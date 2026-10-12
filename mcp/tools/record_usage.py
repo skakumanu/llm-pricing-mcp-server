@@ -1,7 +1,8 @@
 """MCP Tool: Record an actual LLM usage event."""
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from src.config.settings import settings
+from src.services.cost_calculator import compute_token_cost
 from src.services.pricing_aggregator import PricingAggregatorService
 from src.services.usage_tracker import get_usage_tracker
 from src.services.budget_alerts import get_budget_alert_service
@@ -10,8 +11,8 @@ from src.services.budget_alerts import get_budget_alert_service
 class RecordUsageTool:
     """Record actual token usage for a completed LLM call and compute its cost server-side."""
 
-    def __init__(self):
-        self.service = PricingAggregatorService()
+    def __init__(self, aggregator: Optional[PricingAggregatorService] = None):
+        self.service = aggregator or PricingAggregatorService()
 
     async def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         model_name = arguments.get("model_name")
@@ -33,10 +34,9 @@ class RecordUsageTool:
                 "available_models_hint": "Use get_all_pricing tool to see available models",
             }
 
-        cost_usd = (
-            input_tokens * pricing.cost_per_input_token
-            + output_tokens * pricing.cost_per_output_token
-        )
+        cost_usd = compute_token_cost(
+            pricing.cost_per_input_token, pricing.cost_per_output_token, input_tokens, output_tokens
+        ).total_cost
 
         try:
             tracker = get_usage_tracker()

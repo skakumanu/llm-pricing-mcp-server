@@ -1,5 +1,5 @@
 """MCP Tool: Report an aggregate data-quality/accuracy summary for customers."""
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from src.services.data_quality import compute_data_quality_report
 from src.services.price_oracle import get_price_oracle
@@ -14,8 +14,8 @@ class GetDataQualityTool:
     inspecting every model's provenance fields themselves.
     """
 
-    def __init__(self):
-        self.service = PricingAggregatorService()
+    def __init__(self, aggregator: Optional[PricingAggregatorService] = None):
+        self.service = aggregator or PricingAggregatorService()
 
     async def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         try:

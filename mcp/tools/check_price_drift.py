@@ -1,5 +1,5 @@
 """MCP Tool: Report curated prices that disagree with the reference registry."""
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from src.services.price_oracle import DRIFT_THRESHOLD_PCT, get_price_oracle
 from src.services.pricing_aggregator import PricingAggregatorService
@@ -16,8 +16,8 @@ class CheckPriceDriftTool:
     drift is a human decision.
     """
 
-    def __init__(self):
-        self.service = PricingAggregatorService()
+    def __init__(self, aggregator: Optional[PricingAggregatorService] = None):
+        self.service = aggregator or PricingAggregatorService()
 
     async def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         try:
