@@ -1,5 +1,5 @@
 """MCP Tool: Get Use Cases for Models"""
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from src.services.pricing_aggregator import PricingAggregatorService
 
@@ -7,9 +7,9 @@ from src.services.pricing_aggregator import PricingAggregatorService
 class GetUseCasesTool:
     """Tool to get recommended use cases for LLM models."""
 
-    def __init__(self):
+    def __init__(self, aggregator: Optional[PricingAggregatorService] = None):
         """Initialize the tool with the pricing service."""
-        self.service = PricingAggregatorService()
+        self.service = aggregator or PricingAggregatorService()
 
     async def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """

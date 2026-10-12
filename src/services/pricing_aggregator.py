@@ -316,3 +316,32 @@ class PricingAggregatorService:
                 return pricing
 
         return None
+
+
+# ---------------------------------------------------------------------------
+# Process-wide singleton — mirrors src/services/router.py's init_router()/
+# get_router() and src/services/usage_tracker.py's get_usage_tracker(). Every
+# REST endpoint and every MCP tool (STDIO or HTTP /mcp transport) within one
+# running process shares this single, lazily-initialized aggregator instead
+# of each maintaining its own independent pricing cache/TTL.
+# ---------------------------------------------------------------------------
+_aggregator: Optional[PricingAggregatorService] = None
+_aggregator_lock = asyncio.Lock()
+
+
+async def get_pricing_aggregator() -> PricingAggregatorService:
+    """
+    Lazy-load the process-wide pricing aggregator singleton on first use.
+    Uses a lock to ensure thread-safe initialization.
+    """
+    global _aggregator
+
+    if _aggregator is None:
+        logger.info("First request - initializing pricing aggregator...")
+        async with _aggregator_lock:
+            # Double-check in case another coroutine initialized while we waited
+            if _aggregator is None:
+                _aggregator = PricingAggregatorService()
+                logger.info("Pricing aggregator initialized successfully")
+
+    return _aggregator

@@ -1,5 +1,5 @@
 """MCP Tool: Analyze one session's actual recorded usage and recommend a model."""
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from src.services.pricing_aggregator import PricingAggregatorService
 from src.services.router import ModelRouter
@@ -24,8 +24,8 @@ class AnalyzeSessionUsageTool:
     were themselves recorded with that org_id.
     """
 
-    def __init__(self):
-        self.service = PricingAggregatorService()
+    def __init__(self, aggregator: Optional[PricingAggregatorService] = None):
+        self.service = aggregator or PricingAggregatorService()
         self.router = ModelRouter(self.service)
 
     async def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:

@@ -61,7 +61,8 @@ from src.models.deployment import (  # noqa: E402
     GracefulShutdownRequest, GracefulShutdownStatus
 )
 from pydantic import BaseModel, Field  # noqa: E402
-from src.services.pricing_aggregator import PricingAggregatorService  # noqa: E402
+from src.services.pricing_aggregator import PricingAggregatorService, get_pricing_aggregator  # noqa: E402
+from src.services.cost_calculator import compute_token_cost  # noqa: E402
 from src.services.price_oracle import get_price_oracle  # noqa: E402
 from src.services.data_quality import compute_data_quality_report  # noqa: E402
 from src.services.telemetry import get_telemetry_service  # noqa: E402
@@ -579,27 +580,10 @@ async def telemetry_middleware(request: Request, call_next):
 
 logger.info("Middleware registered: deployment tracking and telemetry")
 
-# Global pricing aggregator instance (lazy initialized)
-pricing_aggregator: Optional[PricingAggregatorService] = None
-_aggregator_lock = asyncio.Lock()
-
-
-async def get_pricing_aggregator() -> PricingAggregatorService:
-    """
-    Lazy-load the pricing aggregator on first use.
-    Uses a lock to ensure thread-safe initialization.
-    """
-    global pricing_aggregator
-
-    if pricing_aggregator is None:
-        logger.info("First request - initializing pricing aggregator...")
-        async with _aggregator_lock:
-            # Double-check in case another coroutine initialized while we waited
-            if pricing_aggregator is None:
-                pricing_aggregator = PricingAggregatorService()
-                logger.info("Pricing aggregator initialized successfully")
-
-    return pricing_aggregator
+# Pricing aggregator singleton now lives in src.services.pricing_aggregator
+# (imported above) so it can be shared with MCP tools within this same
+# process, not just REST endpoints. get_pricing_aggregator()'s signature and
+# behavior are unchanged; only its home moved.
 
 logger.info("Application initialization complete")
 
@@ -1324,9 +1308,15 @@ async def estimate_cost(request: CostEstimateRequest):
         )
 
     # Calculate costs
-    input_cost = request.input_tokens * model_pricing.cost_per_input_token
-    output_cost = request.output_tokens * model_pricing.cost_per_output_token
-    total_cost = input_cost + output_cost
+    token_cost = compute_token_cost(
+        model_pricing.cost_per_input_token,
+        model_pricing.cost_per_output_token,
+        request.input_tokens,
+        request.output_tokens,
+    )
+    input_cost = token_cost.input_cost
+    output_cost = token_cost.output_cost
+    total_cost = token_cost.total_cost
 
     # Track telemetry
     telemetry = get_telemetry_service()
@@ -1381,9 +1371,15 @@ async def estimate_cost_batch(request: BatchCostEstimateRequest):
             continue
 
         # Calculate costs
-        input_cost = request.input_tokens * model_pricing.cost_per_input_token
-        output_cost = request.output_tokens * model_pricing.cost_per_output_token
-        total_cost = input_cost + output_cost
+        token_cost = compute_token_cost(
+            model_pricing.cost_per_input_token,
+            model_pricing.cost_per_output_token,
+            request.input_tokens,
+            request.output_tokens,
+        )
+        input_cost = token_cost.input_cost
+        output_cost = token_cost.output_cost
+        total_cost = token_cost.total_cost
 
         # Calculate cost per 1M tokens (average of input and output)
         total_tokens = request.input_tokens + request.output_tokens
@@ -1815,10 +1811,12 @@ async def record_usage(req: UsageEventRequest, request: Request):
             detail=f"Model '{req.model_name}' not found. Please check the /pricing endpoint for available models."
         )
 
-    cost_usd = (
-        req.input_tokens * model_pricing.cost_per_input_token
-        + req.output_tokens * model_pricing.cost_per_output_token
-    )
+    cost_usd = compute_token_cost(
+        model_pricing.cost_per_input_token,
+        model_pricing.cost_per_output_token,
+        req.input_tokens,
+        req.output_tokens,
+    ).total_cost
     org_id = _resolve_org_id(request)
     tracker = get_usage_tracker()
     result = await tracker.record_event(
@@ -3171,14 +3169,23 @@ _MCP_SERVER_NAME = "LLM Pricing MCP Server"
 _MCP_SERVER_VERSION = __version__
 _MCP_PROTOCOL_VERSION = "2024-11-05"
 
-# Lazily initialized ToolManager — shared across requests
+# Lazily initialized ToolManager — shared across requests. Built with the
+# same process-wide pricing aggregator singleton REST endpoints use (via
+# get_pricing_aggregator()), so an MCP tool call and a REST call within the
+# same cache window read from one shared, already-warm pricing cache instead
+# of each transport holding its own.
 _http_mcp_tool_manager: Optional[ToolManager] = None
+_http_mcp_tool_manager_lock = asyncio.Lock()
 
 
-def _get_http_mcp_tool_manager() -> ToolManager:
+async def _get_http_mcp_tool_manager() -> ToolManager:
     global _http_mcp_tool_manager
     if _http_mcp_tool_manager is None:
-        _http_mcp_tool_manager = ToolManager()
+        async with _http_mcp_tool_manager_lock:
+            # Double-check in case another coroutine initialized while we waited
+            if _http_mcp_tool_manager is None:
+                aggregator = await get_pricing_aggregator()
+                _http_mcp_tool_manager = ToolManager(aggregator=aggregator)
     return _http_mcp_tool_manager
 
 
@@ -3221,13 +3228,13 @@ async def _handle_mcp_request(body: dict) -> Optional[dict]:
         return None  # notification — no response required
 
     if method == "tools/list":
-        tm = _get_http_mcp_tool_manager()
+        tm = await _get_http_mcp_tool_manager()
         return _mcp_ok(request_id, {"tools": tm.list_tools()})
 
     if method == "tools/call":
         if not isinstance(params, dict) or "name" not in params:
             return _mcp_err(request_id, -32602, "Invalid params: name is required")
-        tm = _get_http_mcp_tool_manager()
+        tm = await _get_http_mcp_tool_manager()
         result = await tm.execute_tool(params["name"], params.get("arguments", {}))
         return _mcp_ok(request_id, {
             "content": [{"type": "text", "text": _json.dumps(result, indent=2)}],

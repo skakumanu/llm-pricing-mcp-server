@@ -1,15 +1,23 @@
 """MCP Tool: Estimate Cost for a Single Model"""
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
+from src.services.cost_calculator import compute_token_cost
 from src.services.pricing_aggregator import PricingAggregatorService
 
 
 class EstimateCostTool:
     """Tool to estimate cost for a single LLM model."""
 
-    def __init__(self):
-        """Initialize the tool with the pricing service."""
-        self.service = PricingAggregatorService()
+    def __init__(self, aggregator: Optional[PricingAggregatorService] = None):
+        """Initialize the tool with the pricing service.
+
+        Args:
+            aggregator: Shared PricingAggregatorService instance (process-wide
+                singleton from ToolManager). Falls back to a fresh instance
+                when constructed directly (e.g. in tests), matching prior
+                behavior.
+        """
+        self.service = aggregator or PricingAggregatorService()
 
     async def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -60,9 +68,12 @@ class EstimateCostTool:
 
             # Calculate costs. cost_per_input_token / cost_per_output_token are
             # dollars-per-single-token, so multiply directly by the token count.
-            input_cost = pricing.cost_per_input_token * input_tokens
-            output_cost = pricing.cost_per_output_token * output_tokens
-            total_cost = input_cost + output_cost
+            token_cost = compute_token_cost(
+                pricing.cost_per_input_token, pricing.cost_per_output_token, input_tokens, output_tokens
+            )
+            input_cost = token_cost.input_cost
+            output_cost = token_cost.output_cost
+            total_cost = token_cost.total_cost
 
             return {
                 "success": True,

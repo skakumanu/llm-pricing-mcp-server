@@ -1,5 +1,5 @@
 """MCP Tool: Optimize a multi-task workload across models instead of picking one."""
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from src.services.benchmark_service import enrich_models
 from src.services.pricing_aggregator import PricingAggregatorService
@@ -10,8 +10,8 @@ from src.services.task_profiles import get_task_description, list_task_types
 class OptimizeWorkloadTool:
     """Assign the cheapest qualifying model per task, then report savings."""
 
-    def __init__(self):
-        self.service = PricingAggregatorService()
+    def __init__(self, aggregator: Optional[PricingAggregatorService] = None):
+        self.service = aggregator or PricingAggregatorService()
 
     async def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         try:

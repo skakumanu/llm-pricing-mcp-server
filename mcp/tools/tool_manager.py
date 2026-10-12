@@ -1,5 +1,6 @@
 """Tool management for MCP server."""
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from src.services.pricing_aggregator import PricingAggregatorService
 from mcp.tools.get_all_pricing import GetAllPricingTool
 from mcp.tools.estimate_cost import EstimateCostTool
 from mcp.tools.compare_costs import CompareCostsTool
@@ -34,8 +35,19 @@ from mcp.tools.delete_budget_alert import DeleteBudgetAlertTool
 class ToolManager:
     """Manages all MCP tools and their metadata."""
 
-    def __init__(self):
-        """Initialize all tools."""
+    def __init__(self, aggregator: Optional[PricingAggregatorService] = None):
+        """Initialize all tools.
+
+        Args:
+            aggregator: Shared PricingAggregatorService instance to hand to
+                every pricing-dependent tool, so STDIO and HTTP MCP transports
+                share one process-wide pricing cache with each other and with
+                the REST API (see src.services.pricing_aggregator.get_pricing_aggregator).
+                Defaults to None, in which case each tool falls back to
+                constructing its own instance — unchanged behavior for direct
+                no-arg construction (e.g. in tests).
+        """
+        self.aggregator = aggregator
         self.tools: Dict[str, Any] = {}
         self._register_tools()
 
@@ -43,7 +55,7 @@ class ToolManager:
         """Register all available tools."""
         self.tools = {
             "get_all_pricing": {
-                "instance": GetAllPricingTool(),
+                "instance": GetAllPricingTool(aggregator=self.aggregator),
                 "name": "get_all_pricing",
                 "description": "Get current pricing for all LLM models from all providers",
                 "input_schema": {
@@ -53,7 +65,7 @@ class ToolManager:
                 },
             },
             "estimate_cost": {
-                "instance": EstimateCostTool(),
+                "instance": EstimateCostTool(aggregator=self.aggregator),
                 "name": "estimate_cost",
                 "description": "Estimate the cost of using a specific LLM model",
                 "input_schema": {
@@ -78,7 +90,7 @@ class ToolManager:
                 },
             },
             "compare_costs": {
-                "instance": CompareCostsTool(),
+                "instance": CompareCostsTool(aggregator=self.aggregator),
                 "name": "compare_costs",
                 "description": "Compare costs for multiple LLM models",
                 "input_schema": {
@@ -104,7 +116,7 @@ class ToolManager:
                 },
             },
             "get_performance_metrics": {
-                "instance": GetPerformanceMetricsTool(),
+                "instance": GetPerformanceMetricsTool(aggregator=self.aggregator),
                 "name": "get_performance_metrics",
                 "description": "Get performance metrics (throughput, latency, context window) for models",
                 "input_schema": {
@@ -124,7 +136,7 @@ class ToolManager:
                 },
             },
             "get_use_cases": {
-                "instance": GetUseCasesTool(),
+                "instance": GetUseCasesTool(aggregator=self.aggregator),
                 "name": "get_use_cases",
                 "description": "Get recommended use cases and strengths for LLM models",
                 "input_schema": {
@@ -409,7 +421,7 @@ class ToolManager:
                 },
             },
             "predict_cost": {
-                "instance": PredictCostTool(),
+                "instance": PredictCostTool(aggregator=self.aggregator),
                 "name": "predict_cost",
                 "description": (
                     "Predict the real cost of an LLM call from your actual prompt text — "
@@ -480,7 +492,7 @@ class ToolManager:
                 },
             },
             "optimize_workload": {
-                "instance": OptimizeWorkloadTool(),
+                "instance": OptimizeWorkloadTool(aggregator=self.aggregator),
                 "name": "optimize_workload",
                 "description": (
                     "Optimise a multi-task LLM workload by assigning the cheapest qualifying "
@@ -579,7 +591,7 @@ class ToolManager:
                 },
             },
             "recommend_model": {
-                "instance": RecommendModelTool(),
+                "instance": RecommendModelTool(aggregator=self.aggregator),
                 "name": "recommend_model",
                 "description": (
                     "Recommend the optimal LLM model from a free-text description of your use "
@@ -687,7 +699,7 @@ class ToolManager:
                 },
             },
             "check_price_drift": {
-                "instance": CheckPriceDriftTool(),
+                "instance": CheckPriceDriftTool(aggregator=self.aggregator),
                 "name": "check_price_drift",
                 "description": (
                     "Audit this server's own pricing data against an external reference "
@@ -724,7 +736,7 @@ class ToolManager:
                 },
             },
             "get_data_quality": {
-                "instance": GetDataQualityTool(),
+                "instance": GetDataQualityTool(aggregator=self.aggregator),
                 "name": "get_data_quality",
                 "description": (
                     "Report an aggregate accuracy summary for the pricing catalogue: what "
@@ -759,7 +771,7 @@ class ToolManager:
                 },
             },
             "record_usage": {
-                "instance": RecordUsageTool(),
+                "instance": RecordUsageTool(aggregator=self.aggregator),
                 "name": "record_usage",
                 "description": (
                     "Record actual token usage for a completed LLM call. Cost is computed "
@@ -838,7 +850,7 @@ class ToolManager:
                 },
             },
             "analyze_session_usage": {
-                "instance": AnalyzeSessionUsageTool(),
+                "instance": AnalyzeSessionUsageTool(aggregator=self.aggregator),
                 "name": "analyze_session_usage",
                 "description": (
                     "Analyze one specific session's actual recorded LLM usage (tagged via "
@@ -871,7 +883,7 @@ class ToolManager:
                 },
             },
             "import_session_usage": {
-                "instance": ImportSessionUsageTool(),
+                "instance": ImportSessionUsageTool(aggregator=self.aggregator),
                 "name": "import_session_usage",
                 "description": (
                     "Bulk-import a completed session's usage in a single call — the retroactive "
