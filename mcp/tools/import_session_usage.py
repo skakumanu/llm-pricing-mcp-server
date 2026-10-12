@@ -38,8 +38,8 @@ class ImportSessionUsageTool:
     (org_id, request_id) UNIQUE index.
     """
 
-    def __init__(self):
-        self.service = PricingAggregatorService()
+    def __init__(self, aggregator: Optional[PricingAggregatorService] = None):
+        self.service = aggregator or PricingAggregatorService()
 
     async def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         session_id = arguments.get("session_id")
