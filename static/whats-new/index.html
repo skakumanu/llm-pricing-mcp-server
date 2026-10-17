@@ -142,8 +142,54 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.72.0 -->
+  <!-- v1.72.3 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.72.3</span>
+      <span class="release-date">Sep 30, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Fixed a false-positive price-drift bug, corrected 3 genuinely drifted Bedrock prices</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li>The price-drift check had no tie-breaking logic when a registry carries multiple same-provider entries that disagree with each other (e.g. per-region Bedrock/Azure variants) — it trusted whichever candidate came first in iteration order rather than the value the majority actually report, which could flag an already-correct price as drift. Now resolved by majority vote among agreeing candidates</li>
+        <li>Three Amazon Bedrock models had genuinely drifted since their last reconfirmation and are now corrected: <strong>meta.llama3-1-405b-instruct-v1:0</strong> $5.32 → $2.40 per 1M tokens, <strong>mistral.mistral-large-2407-v1:0</strong> $3.00/$9.00 → $2.00/$6.00 per 1M input/output, <strong>meta.llama3-1-70b-instruct-v1:0</strong> $0.99 → $0.72 per 1M tokens</li>
+        <li><code>check_price_drift</code> and <code>get_data_quality</code> now report these prices as confirmed again</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">Withheld for drift <strong>4 → 0</strong></div>
+        <div class="stat-chip">Confirmed <strong>97.2% → 99.1%</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.72.1 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.72.1</span>
+      <span class="release-date">Sep 13, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Corrected two drifted Mistral AI prices flagged by the weekly audit</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li><strong>codestral-latest</strong> was 233% overstated — $1.00 → $0.30 per 1M input tokens, $3.00 → $0.90 per 1M output tokens</li>
+        <li><strong>mistral-small-latest</strong> was 60% understated — $0.06 → $0.15 per 1M input tokens, $0.18 → $0.60 per 1M output tokens</li>
+        <li>Both prices had been withheld from serving since drift was auto-detected; now confirmed and served again</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">Prices corrected <strong>2</strong></div>
+        <div class="stat-chip">Confirmed <strong>97.6% → 98.6%</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.72.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.72.0</span>
