@@ -13,7 +13,8 @@
 | Transport | Endpoint | Use case |
 |-----------|----------|----------|
 | HTTP POST | `https://llm-pricing-api.fly.dev/mcp` | Remote clients (Claude Desktop, Cursor, CI) |
-| STDIO | `python mcp/server.py` | Local Claude Desktop, offline |
+| STDIO (npx) | `npx -y llm-pricing-mcp` | STDIO-only clients, no Python/clone needed — bridges to the HTTP endpoint above |
+| STDIO (local) | `python mcp/server.py` | Fully offline, runs the actual server locally |
 
 ---
 
@@ -66,7 +67,23 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 
 ---
 
-## STDIO Transport (Local)
+## STDIO Transport (npx, no clone)
+
+Add to any STDIO-only MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "llm-pricing": { "command": "npx", "args": ["-y", "llm-pricing-mcp"] }
+  }
+}
+```
+
+This is a zero-dependency bridge ([`npm/llm-pricing-mcp`](../npm/llm-pricing-mcp)) that forwards stdin/stdout to the HTTP endpoint above — no Python, clone, or local pricing data involved.
+
+---
+
+## STDIO Transport (Local, fully offline)
 
 ### Setup
 
