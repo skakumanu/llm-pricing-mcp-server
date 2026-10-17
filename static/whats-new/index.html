@@ -142,8 +142,29 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.72.3 -->
+  <!-- v1.73.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.73.0</span>
+      <span class="release-date">Oct 17, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">New <code>npx -y llm-pricing-mcp</code> — STDIO access with no clone, no Python</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li>New npm package <a href="https://www.npmjs.com/package/llm-pricing-mcp"><code>llm-pricing-mcp</code></a> (<code>npm/llm-pricing-mcp</code> in this repo) — a zero-dependency Node.js bridge for MCP clients that only support <code>command</code>-based STDIO servers, not a direct remote/HTTP <code>url</code> config</li>
+        <li>It holds no tool logic or pricing data of its own: each stdin line is forwarded as-is to the hosted <code>POST /mcp</code> endpoint and the JSON-RPC response is written back to stdout, so it has nothing to keep in sync as tools or pricing change server-side</li>
+        <li>Add to any STDIO-only client config: <code>{"command": "npx", "args": ["-y", "llm-pricing-mcp"]}</code> — no git clone, Python, or <code>pip install</code> needed</li>
+        <li>Concurrent requests are dispatched independently, so one slow <code>tools/call</code> never blocks other in-flight requests from completing first</li>
+        <li>Existing options — the direct remote <code>url</code> config and running <code>mcp/server.py</code> locally — are unchanged; this is a third, lower-friction path for STDIO-only clients, not a replacement</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.72.3 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.72.3</span>
