@@ -1,0 +1,40 @@
+{
+  "name": "llm-pricing-mcp",
+  "version": "1.0.0",
+  "description": "STDIO MCP server for LLM Pricing — real-time, drift-verified pricing, cost+quality model routing, and usage tracking across 26 providers. Zero local dependencies; proxies to a hosted backend.",
+  "license": "MIT",
+  "author": "skakumanu",
+  "homepage": "https://github.com/skakumanu/llm-pricing-mcp-server",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skakumanu/llm-pricing-mcp-server.git",
+    "directory": "npm/llm-pricing-mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/skakumanu/llm-pricing-mcp-server/issues"
+  },
+  "bin": {
+    "llm-pricing-mcp": "bin/llm-pricing-mcp.js"
+  },
+  "files": [
+    "bin/llm-pricing-mcp.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "llm",
+    "pricing",
+    "cost",
+    "claude",
+    "claude-desktop",
+    "cursor",
+    "anthropic"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
