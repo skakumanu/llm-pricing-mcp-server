@@ -3,9 +3,18 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A production-ready **Model Context Protocol (MCP)** server for LLM pricing data. Provides a RESTful API (FastAPI), **29 MCP tools** over STDIO and HTTP, a conversational Agent + RAG pipeline, browser-based UIs, and a self-serve billing dashboard — for pricing data from **26 major LLM providers**.
+Most LLM pricing tools are a static lookup table. This one checks its own numbers against a live, independently-maintained price registry and tells you when they disagree, routes to a model by cost *and* quality instead of just quoting a price, and tracks what you actually spent — not just what you might. All of that is backed by a RESTful API (FastAPI), **29 MCP tools** over STDIO and HTTP, a conversational Agent + RAG pipeline, browser-based UIs, and a self-serve billing dashboard, for pricing data from **26 major LLM providers**.
 
 **Live at**: https://llm-pricing-api.fly.dev
+
+---
+
+## Why this one
+
+- **Prices you can verify, not just trust** — `check_price_drift` and `get_data_quality` compare every curated price against a live external registry and withhold (never silently serve) anything that's drifted more than 5%, with a single `confirmed_pct` trust score for the whole catalogue.
+- **Routes, doesn't just quote** — `recommend_model` and `optimize_workload` pick a model by cost *and* quality for your actual task, flagging it when a cheaper pick trades away quality rather than silently recommending it.
+- **Tracks what you spent, not just what you might** — `record_usage`, `analyze_session_usage`, and `import_session_usage` record and analyze real spend, including backfilling a coding-agent session that wasn't instrumented to track usage live.
+- **More than an MCP server** — the same pricing engine also powers a REST API, browser UIs (calculator, side-by-side comparison, history/trends), and a self-serve billing dashboard.
 
 ---
 
