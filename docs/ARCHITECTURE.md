@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.72.6 | **Last updated**: 2026-10-17
+**Version**: v1.73.0 | **Last updated**: 2026-10-17
 
 ---
 
@@ -174,6 +174,12 @@ llm-pricing-mcp-server/
 │   ├── ci-cd.yml                    # Full CI/CD: test→lint→osv→bandit→gitleaks→deploy
 │   └── sync-develop.yml             # Auto-sync develop ← master after deploy
 │
+├── npm/llm-pricing-mcp/              # Published separately to npm — see "MCP Dual Transport" below
+│   ├── package.json
+│   ├── bin/llm-pricing-mcp.js       # Zero-dependency STDIO<->HTTP bridge to the hosted /mcp endpoint
+│   ├── test/mock-server.js          # Local stand-in for POST /mcp, used only by tests/test_npm_wrapper.py
+│   └── README.md
+│
 ├── tests/                           # 667 pytest tests (as of v1.48.0)
 ├── docs/
 │   └── ARCHITECTURE.md              # THIS FILE — update on every structural change
@@ -238,6 +244,7 @@ Enabled for: OpenAI, Anthropic, Groq, Mistral AI, Together AI, Fireworks AI, xAI
 - Protocol version: `2024-11-05`; 29 tools exposed
 - Both transports' `ToolManager` is built with the same process-wide `get_pricing_aggregator()` singleton the REST API uses (see "Singleton Services" above) — one pricing cache per process shared by every surface, not one per transport. Cross-process sharing (STDIO process vs. the HTTP/REST process) is out of scope; each process still gets its own aggregator.
 - The 3 confirmed duplicate cost-math pairs (`/cost-estimate` ↔ `estimate_cost`, `/cost-estimate/batch` ↔ `compare_costs`, `/usage` ↔ `record_usage`) now call the same `cost_calculator.compute_token_cost()` instead of each re-implementing the arithmetic inline.
+- **Third access path** (`npm/llm-pricing-mcp`, published to npm as `llm-pricing-mcp`): a zero-dependency Node.js STDIO<->HTTP bridge for clients that only support `command`-based STDIO servers but not a direct remote/HTTP `url` config. It holds no tool logic or pricing data of its own — it forwards each stdin line to `POST /mcp` and writes the JSON-RPC response back to stdout — so it has nothing to keep in sync as tools or pricing change server-side. `tests/test_npm_wrapper.py` exercises it against `npm/llm-pricing-mcp/test/mock-server.js`, never the live server, so these tests need no network access.
 
 ### 5. Agent Architecture (ReAct Loop)
 ```

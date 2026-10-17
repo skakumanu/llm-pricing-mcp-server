@@ -94,7 +94,7 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 - Protected endpoints (`/billing/me`, `/router/recommend`, `/router/feedback`, `/billing/portal`) require a billing API key or the global `MCP_API_KEY`
 - Rate limiting per client IP + tier bucket
 - Request size limit (1MB default)
-- 1185 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 1190 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
@@ -142,7 +142,24 @@ Add to your `claude_desktop_config.json`:
 
 Restart Claude Desktop. All 29 pricing tools are immediately available.
 
-### Option B — Local STDIO
+### Option B — STDIO via npx (no clone, no Python)
+
+For clients that only support `command`-based STDIO servers (no direct remote/HTTP config support). This runs a zero-dependency [npm package](npm/llm-pricing-mcp) that bridges stdin/stdout to the hosted server above — nothing to clone, no Python or `pip install` needed.
+
+```json
+{
+  "mcpServers": {
+    "llm-pricing": {
+      "command": "npx",
+      "args": ["-y", "llm-pricing-mcp"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop. See [npm/llm-pricing-mcp/README.md](npm/llm-pricing-mcp/README.md) for configuration options (self-hosting, timeouts).
+
+### Option C — Local STDIO, fully offline
 
 1. Clone and install:
 ```bash
