@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.73.0 | **Last updated**: 2026-10-17
+**Version**: v1.73.1 | **Last updated**: 2026-10-18
 
 ---
 
@@ -172,9 +172,11 @@ llm-pricing-mcp-server/
 │
 ├── .github/workflows/
 │   ├── ci-cd.yml                    # Full CI/CD: test→lint→osv→bandit→gitleaks→deploy
-│   └── sync-develop.yml             # Auto-sync develop ← master after deploy
+│   ├── sync-develop.yml             # Auto-sync develop ← master after deploy
+│   ├── price-audit.yml              # Weekly: surface withheld/drifted prices as an issue + open the registry-snapshot refresh PR
+│   └── npm-publish.yml              # npm Trusted Publishing (OIDC) of npm/llm-pricing-mcp on master push — filename is part of the npmjs.com trust config
 │
-├── npm/llm-pricing-mcp/              # Published separately to npm — see "MCP Dual Transport" below
+├── npm/llm-pricing-mcp/              # Published to npm by .github/workflows/npm-publish.yml — see "MCP Dual Transport" below
 │   ├── package.json
 │   ├── bin/llm-pricing-mcp.js       # Zero-dependency STDIO<->HTTP bridge to the hosted /mcp endpoint
 │   ├── test/mock-server.js          # Local stand-in for POST /mcp, used only by tests/test_npm_wrapper.py
@@ -368,7 +370,28 @@ PR / push to master
             └─ all pass? ──► deploy_fly   Fly.io (flyctl deploy --remote-only)
                                   │
                                   └─ health check: /health version matches src/__init__.py
+
+push to master touching npm/llm-pricing-mcp/**   (or workflow_dispatch)
+  └── publish     npm Trusted Publishing — OIDC via `id-token: write`, no NPM_TOKEN secret
+        ├── skip if package.json's version is already on the registry (idempotent; a README-only
+        │   change to the package does not fail the run)
+        ├── npm publish --provenance
+        └── verify: `npm view llm-pricing-mcp@<version>` resolves
 ```
+
+**npm publishing — one-time setup and the rules that bite.** `npm/llm-pricing-mcp` is versioned
+independently of `src/__init__.py` (bump its own `package.json`). Publishing is authorised by an OIDC
+trust relationship, configured once on npmjs.com: package → Settings → Trusted Publisher → GitHub
+Actions, with owner `skakumanu`, repository `llm-pricing-mcp-server`, workflow filename
+`npm-publish.yml`, environment blank. Three npm rules matter: (1) the workflow **filename** is the
+trust key — renaming the file breaks publishing until npmjs.com is updated; (2) a trusted-publisher
+config that has not yet produced a successful publish **expires 48 hours** after creation, so create
+it and trigger the first publish (`workflow_dispatch` on master is fine) within the same window;
+(3) npm rejects OIDC tokens from `issue_comment` and `pull_request_target` runs, and only
+GitHub-hosted runners are supported. Never publish with a 2FA recovery code: since Sept 2026 that
+places the account on a fixed 72-hour hold that blocks publishing and cannot be lifted early.
+`tests/test_npm_publish_workflow.py` pins the filename, the `id-token: write` permission and the
+banned-trigger rule.
 
 ---
 

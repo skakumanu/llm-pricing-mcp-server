@@ -1,0 +1,91 @@
+name: Publish npm package
+
+# Publishes npm/llm-pricing-mcp via npm Trusted Publishing (OIDC) — there is
+# no NPM_TOKEN secret anywhere. Three npm rules are load-bearing here and
+# fail silently (a 403 at publish time) if broken:
+#   - This file's NAME is part of the trust config on npmjs.com (package →
+#     Settings → Trusted Publisher → workflow filename). Rename it and
+#     publishing stops until npmjs.com is updated to match.
+#   - npm rejects OIDC tokens minted from `issue_comment` and
+#     `pull_request_target` runs. Never add either trigger.
+#   - A trusted-publisher config with no successful publish yet expires 48h
+#     after creation — configure npmjs.com and run this within the same window.
+# tests/test_npm_publish_workflow.py pins the first two.
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'npm/llm-pricing-mcp/**'
+      - '.github/workflows/npm-publish.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: npm/llm-pricing-mcp
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Ensure npm supports Trusted Publishing (>= 11.5.1)
+        run: |
+          npm install -g npm@latest
+          npm --version
+
+      - name: Decide whether this version needs publishing
+        id: check
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "$NAME@$VERSION is already on the registry — nothing to publish"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$NAME@$VERSION is not on the registry — will publish"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Show what will be published
+        if: steps.check.outputs.publish == 'true'
+        run: npm pack --dry-run
+
+      - name: Publish (Trusted Publishing / OIDC)
+        if: steps.check.outputs.publish == 'true'
+        run: npm publish --provenance --access public
+
+      - name: Verify the version is live
+        if: steps.check.outputs.publish == 'true'
+        run: |
+          NAME="${{ steps.check.outputs.name }}"
+          VERSION="${{ steps.check.outputs.version }}"
+          for attempt in $(seq 1 6); do
+            if LIVE=$(npm view "$NAME@$VERSION" version 2>/dev/null) && [ "$LIVE" = "$VERSION" ]; then
+              echo "OK: $NAME@$VERSION is live on the registry"
+              exit 0
+            fi
+            echo "Attempt $attempt/6: not visible yet, waiting..."
+            sleep 10
+          done
+          echo "ERROR: $NAME@$VERSION did not appear on the registry after publish"
+          exit 1
