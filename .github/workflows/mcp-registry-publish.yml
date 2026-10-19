@@ -1,0 +1,92 @@
+name: Publish to MCP Registry
+
+# Publishes server.json's remote-only entry to registry.modelcontextprotocol.io
+# via GitHub OIDC auth (`mcp-publisher login github-oidc`) — no secrets, no
+# PAT, no DNS key. Mirrors npm-publish.yml's OIDC pattern. This entry has no
+# `packages` array (remote-only: see server.json's `remotes`), so unlike the
+# npm workflow there is no package-registry publish step and no package
+# ownership-verification marker to maintain.
+#
+# tests/test_mcp_registry_publish_workflow.py pins the load-bearing bits:
+# `id-token: write`, the `github-oidc` auth method, and that server.json
+# stays schema-valid with a description under the registry's 100-char limit.
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'server.json'
+      - '.github/workflows/mcp-registry-publish.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-registry-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decide whether this version needs publishing
+        id: check
+        run: |
+          NAME=$(python3 -c "import json;print(json.load(open('server.json'))['name'])")
+          VERSION=$(python3 -c "import json;print(json.load(open('server.json'))['version'])")
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          ENCODED_NAME=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1], safe=''))" "$NAME")
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://registry.modelcontextprotocol.io/v0.1/servers/$ENCODED_NAME/versions/$VERSION")
+          if [ "$STATUS" = "200" ]; then
+            echo "$NAME@$VERSION is already on the registry — nothing to publish"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$NAME@$VERSION is not on the registry (HTTP $STATUS) — will publish"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install mcp-publisher
+        if: steps.check.outputs.publish == 'true'
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Authenticate to MCP Registry
+        if: steps.check.outputs.publish == 'true'
+        run: ./mcp-publisher login github-oidc
+
+      - name: Validate server.json
+        if: steps.check.outputs.publish == 'true'
+        run: ./mcp-publisher validate
+
+      - name: Publish to MCP Registry
+        if: steps.check.outputs.publish == 'true'
+        run: ./mcp-publisher publish
+
+      - name: Verify the version is live
+        if: steps.check.outputs.publish == 'true'
+        run: |
+          NAME="${{ steps.check.outputs.name }}"
+          VERSION="${{ steps.check.outputs.version }}"
+          ENCODED_NAME=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1], safe=''))" "$NAME")
+          for attempt in $(seq 1 6); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              "https://registry.modelcontextprotocol.io/v0.1/servers/$ENCODED_NAME/versions/$VERSION")
+            if [ "$STATUS" = "200" ]; then
+              echo "OK: $NAME@$VERSION is live on the registry"
+              exit 0
+            fi
+            echo "Attempt $attempt/6: HTTP $STATUS, not visible yet, waiting..."
+            sleep 10
+          done
+          echo "ERROR: $NAME@$VERSION did not appear on the registry after publish"
+          exit 1

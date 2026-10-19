@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.73.1 | **Last updated**: 2026-10-18
+**Version**: v1.73.2 | **Last updated**: 2026-10-19
 
 ---
 
@@ -174,7 +174,10 @@ llm-pricing-mcp-server/
 │   ├── ci-cd.yml                    # Full CI/CD: test→lint→osv→bandit→gitleaks→deploy
 │   ├── sync-develop.yml             # Auto-sync develop ← master after deploy
 │   ├── price-audit.yml              # Weekly: surface withheld/drifted prices as an issue + open the registry-snapshot refresh PR
-│   └── npm-publish.yml              # npm Trusted Publishing (OIDC) of npm/llm-pricing-mcp on master push — filename is part of the npmjs.com trust config
+│   ├── npm-publish.yml              # npm Trusted Publishing (OIDC) of npm/llm-pricing-mcp on master push — filename is part of the npmjs.com trust config
+│   └── mcp-registry-publish.yml     # Publishes server.json to registry.modelcontextprotocol.io via GitHub OIDC (`mcp-publisher login github-oidc`) on master push
+│
+├── server.json                      # Remote-only MCP registry listing (no packages/ownership-verification marker needed) — published by mcp-registry-publish.yml
 │
 ├── npm/llm-pricing-mcp/              # Published to npm by .github/workflows/npm-publish.yml — see "MCP Dual Transport" below
 │   ├── package.json
@@ -377,6 +380,12 @@ push to master touching npm/llm-pricing-mcp/**   (or workflow_dispatch)
         │   change to the package does not fail the run)
         ├── npm publish --provenance
         └── verify: `npm view llm-pricing-mcp@<version>` resolves
+
+push to master touching server.json   (or workflow_dispatch)
+  └── publish     MCP Registry — OIDC via `id-token: write`, `mcp-publisher login github-oidc`
+        ├── skip if server.json's name+version is already on the registry (idempotent)
+        ├── mcp-publisher validate && mcp-publisher publish
+        └── verify: GET /v0.1/servers/{name}/versions/{version} returns 200
 ```
 
 **npm publishing — one-time setup and the rules that bite.** `npm/llm-pricing-mcp` is versioned
@@ -392,6 +401,18 @@ GitHub-hosted runners are supported. Never publish with a 2FA recovery code: sin
 places the account on a fixed 72-hour hold that blocks publishing and cannot be lifted early.
 `tests/test_npm_publish_workflow.py` pins the filename, the `id-token: write` permission and the
 banned-trigger rule.
+
+**MCP registry publishing — `server.json`.** A second, independent listing: `registry.modelcontextprotocol.io`,
+the directory most MCP clients query directly, not just a browsing site. `server.json` at the repo
+root is **remote-only** — a `remotes` entry pointing at the hosted `/mcp` endpoint above, no
+`packages` array — so publishing needs no npm coupling and no package-ownership-verification
+marker. Authorised the same way as npm: `id-token: write` → `mcp-publisher login github-oidc`, no
+secret. The registry's `name` field (`io.github.skakumanu/llm-pricing-mcp-server`) must stay
+prefixed with `io.github.skakumanu/` — that's what ties the OIDC identity to the publish permission
+— and its `description` is capped at 100 characters, enforced at publish time with no local
+warning otherwise. `tests/test_mcp_registry_publish_workflow.py` pins both, plus the schema URL
+shape and the deliberate absence of `packages` (adding one later needs its own ownership marker,
+e.g. npm's `mcpName` field, and should not land silently alongside an unrelated change).
 
 ---
 

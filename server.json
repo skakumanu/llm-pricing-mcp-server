@@ -1,0 +1,17 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.skakumanu/llm-pricing-mcp-server",
+  "title": "LLM Pricing",
+  "description": "Real-time, drift-verified LLM pricing across 26 providers with cost+quality model routing.",
+  "repository": {
+    "url": "https://github.com/skakumanu/llm-pricing-mcp-server",
+    "source": "github"
+  },
+  "version": "1.73.2",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://llm-pricing-api.fly.dev/mcp"
+    }
+  ]
+}
