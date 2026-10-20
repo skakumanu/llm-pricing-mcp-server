@@ -50,9 +50,10 @@ RAW = {
         "output_cost_per_token": 0.0,
     },
     "no-price": {"mode": "chat", "litellm_provider": "acme"},
-    # Same first party, three regional/dated entries for what is really one
-    # model. Two agree at $1.21/1M input; a lone bare entry disagrees at
-    # $1.10/1M — the real shape found in the registry for Azure's o1-mini.
+    # One first party, a bare canonical key beside two regional variants that
+    # agree with each other at +10% — the real shape of Azure's o1-mini (and,
+    # after Oct 2026, of gpt-4o/o1/o3-mini too). The regionals are a different
+    # SKU (Data Zone tier), not a majority opinion about the bare price.
     "bedrock/disputed-model": {
         "mode": "chat", "litellm_provider": "bedrock",
         "input_cost_per_token": 1.1e-06, "output_cost_per_token": 4.4e-06,
@@ -64,6 +65,52 @@ RAW = {
     "bedrock/us/disputed-model": {
         "mode": "chat", "litellm_provider": "bedrock",
         "input_cost_per_token": 1.21e-06, "output_cost_per_token": 4.84e-06,
+    },
+    # No bare key at all: three regionals, two agreeing. The only sensible
+    # answer is the majority among equals.
+    "bedrock/eu/only-regional": {
+        "mode": "chat", "litellm_provider": "bedrock",
+        "input_cost_per_token": 1.21e-06, "output_cost_per_token": 4.84e-06,
+    },
+    "bedrock/us/only-regional": {
+        "mode": "chat", "litellm_provider": "bedrock",
+        "input_cost_per_token": 1.21e-06, "output_cost_per_token": 4.84e-06,
+    },
+    "bedrock/apac/only-regional": {
+        "mode": "chat", "litellm_provider": "bedrock",
+        "input_cost_per_token": 1.1e-06, "output_cost_per_token": 4.4e-06,
+    },
+    # The exact gpt-4o-mini shape: bare + global-standard at $0.15 vs eu + us
+    # at $0.165 — a 2-2 tie that a flat vote resolves by dict order.
+    "azure/tie-model": {
+        "mode": "chat", "litellm_provider": "azure",
+        "input_cost_per_token": 1.5e-07, "output_cost_per_token": 6e-07,
+    },
+    "azure/global-standard/tie-model": {
+        "mode": "chat", "litellm_provider": "azure",
+        "input_cost_per_token": 1.5e-07, "output_cost_per_token": 6e-07,
+    },
+    "azure/eu/tie-model": {
+        "mode": "chat", "litellm_provider": "azure",
+        "input_cost_per_token": 1.65e-07, "output_cost_per_token": 6.6e-07,
+    },
+    "azure/us/tie-model": {
+        "mode": "chat", "litellm_provider": "azure",
+        "input_cost_per_token": 1.65e-07, "output_cost_per_token": 6.6e-07,
+    },
+    # Bedrock's dotted cross-region keys have no slash: the bare and the
+    # `us.` profile share depth 0, and a GovCloud key sits deeper.
+    "anthropic.dotted-model": {
+        "mode": "chat", "litellm_provider": "bedrock",
+        "input_cost_per_token": 3e-06, "output_cost_per_token": 1.5e-05,
+    },
+    "us.anthropic.dotted-model": {
+        "mode": "chat", "litellm_provider": "bedrock",
+        "input_cost_per_token": 3e-06, "output_cost_per_token": 1.5e-05,
+    },
+    "bedrock/us-gov-east-1/dotted-model": {
+        "mode": "chat", "litellm_provider": "bedrock",
+        "input_cost_per_token": 3.9e-06, "output_cost_per_token": 1.95e-05,
     },
 }
 
@@ -178,21 +225,23 @@ class TestProviderAwareLookup:
 
 @pytest.mark.asyncio
 class TestSameProviderDisagreement:
-    """Multiple registry entries for one first party can disagree with each
-    other (per-region Bedrock/Azure variants, a bare key next to a dated one).
-    Picking whichever came first in iteration order can land on a lone
-    outlier — this is the exact shape that made o1-mini/Azure OpenAI report
-    false drift against a price two of three registry entries actually agree
-    with. lookup() must trust the majority, not iteration order.
+    """One first party, several registry keys for one model, different prices.
+
+    Deeper keys (``azure/eu/x``, ``bedrock/us-gov-east-1/x``) are region or
+    tier variants — different SKUs — not noisy duplicates of the bare key.
+    v1.72.3 resolved this shape by majority vote, which protected a curated
+    o1-mini price that was actually the regional tier and, once the registry
+    added regionals for four more Azure models, withheld four *correct* prices
+    as drift. lookup() must prefer the bare canonical key; a vote is only the
+    fallback among equal-depth candidates.
     """
 
-    async def test_majority_value_wins_over_lone_outlier(self, oracle):
+    async def test_bare_canonical_key_wins_over_regional_variants(self, oracle):
         rec = oracle.lookup("disputed-model", "Amazon Bedrock", require_provider_match=True)
-        assert rec.input_per_1k == pytest.approx(0.00121)
-        assert rec.output_per_1k == pytest.approx(0.00484)
+        assert rec.input_per_1k == pytest.approx(0.0011)
+        assert rec.output_per_1k == pytest.approx(0.0044)
 
     async def test_result_is_deterministic_regardless_of_dict_order(self):
-        """Same disagreement, entries authored in a different order — same winner."""
         reordered_raw = {
             "bedrock/eu/disputed-model": RAW["bedrock/eu/disputed-model"],
             "bedrock/us/disputed-model": RAW["bedrock/us/disputed-model"],
@@ -202,7 +251,33 @@ class TestSameProviderDisagreement:
         with patch.object(PriceOracle, "_fetch_remote", new=AsyncMock(return_value=reordered_raw)):
             await o.load()
         rec = o.lookup("disputed-model", "Amazon Bedrock", require_provider_match=True)
+        assert rec.input_per_1k == pytest.approx(0.0011)
+
+    async def test_no_bare_key_falls_back_to_majority_among_equals(self, oracle):
+        rec = oracle.lookup("only-regional", "Amazon Bedrock", require_provider_match=True)
         assert rec.input_per_1k == pytest.approx(0.00121)
+
+    async def test_two_two_tie_is_settled_by_depth_not_dict_order(self):
+        # gpt-4o-mini's real shape. Whichever pair is authored first, the bare
+        # key alone sits at depth 1 and must win.
+        for order in (
+            ["azure/tie-model", "azure/global-standard/tie-model", "azure/eu/tie-model", "azure/us/tie-model"],
+            ["azure/eu/tie-model", "azure/us/tie-model", "azure/global-standard/tie-model", "azure/tie-model"],
+        ):
+            raw = {k: RAW[k] for k in order}
+            o = PriceOracle()
+            with patch.object(PriceOracle, "_fetch_remote", new=AsyncMock(return_value=raw)):
+                await o.load()
+            rec = o.lookup("tie-model", "Azure OpenAI", require_provider_match=True)
+            assert rec.model_key == "azure/tie-model", order
+            assert rec.input_per_1k == pytest.approx(0.00015)
+
+    async def test_dotted_bedrock_keys_outrank_deeper_govcloud_key(self, oracle):
+        # Both dotted keys are depth 0 and agree; the depth-2 GovCloud entry
+        # must not be considered at all.
+        rec = oracle.lookup("dotted-model", "Amazon Bedrock", require_provider_match=True)
+        assert rec.input_per_1k == pytest.approx(0.003)
+        assert "us-gov" not in rec.model_key
 
 
 @pytest.mark.asyncio
