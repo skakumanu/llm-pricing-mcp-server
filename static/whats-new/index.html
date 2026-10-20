@@ -142,8 +142,27 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.73.0 -->
+  <!-- v1.73.3 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.73.3</span>
+      <span class="release-date">Oct 19, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Anonymous chat is now rate-limited</div>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li><code>POST /agent/chat</code> and <code>POST /agent/chat/stream</code> (the API behind the <code>/chat</code> UI) now go through the same per-IP rate limiter as every other anonymous endpoint. They previously bypassed it entirely — along with the request-size cap — even though each call runs a full agent loop against a hosted LLM</li>
+        <li>Still no API key required: the chat UI keeps working for anonymous visitors exactly as before. Over the limit you'll get <code>429 Rate limit exceeded</code> instead of an unbounded queue; the limit is the standard anonymous bucket (default 60/min per IP, tier-adjustable via <code>X-Api-Key-Tier</code>)</li>
+        <li>The <code>/chat</code> page itself is unaffected and always loads, so a throttled visitor still sees the UI</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.73.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.73.0</span>

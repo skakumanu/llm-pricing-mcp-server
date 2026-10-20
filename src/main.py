@@ -311,6 +311,15 @@ async def cleanup_stale_rate_limit_entries():
                 logger.debug("Rate limit cleanup: removed %d stale IP entries", len(to_remove))
         _last_rate_limit_cleanup = now
 
+# Anonymous but throttled: no API key required, yet still subject to the per-IP
+# rate limiter and the body-size cap. Distinct from _unauthenticated_paths, whose
+# members the security middleware bypasses entirely (no limiter either). Every
+# path here runs an LLM on the operator's key, so unthrottled = unbounded spend.
+_anonymous_rate_limited_paths = {
+    "/agent/chat",
+    "/agent/chat/stream",
+}
+
 _unauthenticated_paths = {
     "/",
     "/health",
@@ -393,8 +402,12 @@ async def security_middleware(request: Request, call_next):
     global _auth_warning_logged
 
     path = request.url.path
+    # Full bypass: skips auth, rate limiting AND the body-size cap. Keep this to
+    # static UIs and read-only data. /agent/chat is deliberately NOT here — it
+    # runs an LLM on the operator's key, so it stays anonymous via
+    # _anonymous_rate_limited_paths but still falls through to the rate limiter.
     if (
-        path.startswith("/chat") or path.startswith("/agent/chat")
+        path.startswith("/chat")
         or path.startswith("/history") or path.startswith("/trends")
         or path.startswith("/conversations") or path.startswith("/calculator")
         or path.startswith("/compare") or path.startswith("/widget")
@@ -427,7 +440,7 @@ async def security_middleware(request: Request, call_next):
                 client_ip,
             )
             return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
-    elif path not in _unauthenticated_paths:
+    elif path not in _unauthenticated_paths and path not in _anonymous_rate_limited_paths:
         provided_key = request.headers.get(settings.mcp_api_key_header)
 
         # Per-customer billing key lookup (falls back to global key if not found)
