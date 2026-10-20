@@ -264,20 +264,34 @@ class PriceOracle:
     def _resolve_agreeing_candidate(records: List["PriceRecord"]) -> "PriceRecord":
         """Pick one record when several same-provider registry entries exist.
 
-        The registry sometimes carries multiple entries for the same first
-        party (per-region Bedrock/Azure variants, a bare key alongside a dated
-        one) that quote different prices for what is really one model. Taking
-        whichever happened to come first in iteration order can land on a lone
-        outlier — see ``o1-mini``/Azure, where two of three entries agree and
-        the arbitrary first pick was the dissenting one. Trust the price the
-        majority of same-provider entries report instead; ties keep the
-        first-seen value so the result stays deterministic.
+        Region- and tier-specific variants live under deeper keys
+        (``azure/eu/gpt-4o``, ``bedrock/us-gov-east-1/...``) beside the bare
+        canonical key (``azure/gpt-4o``). They are different SKUs at different
+        prices -- Azure's Data Zone tier is exactly +10% over Global Standard --
+        not noisy duplicates, so a majority vote across all of them is the
+        wrong model. v1.72.3 introduced that vote to "rescue" ``o1-mini``, whose
+        bare key disagreed with two regionals; the audit later showed the bare
+        key was right and the curated price was the regional tier. The day the
+        registry added ``eu``/``us`` entries for five more Azure models, the
+        same vote withheld five correct prices as drift.
+
+        Prefer the shallowest key: the bare entry is canonical and the curated
+        table is the default tier, so compare like with like. The vote remains
+        only as a fallback among equal-depth candidates (dated snapshots, or a
+        set with no bare key), first-seen on ties so the result is
+        deterministic. Dotted cross-region Bedrock keys (``us.anthropic....``)
+        have no slash and share depth 0 with the bare ``anthropic....`` key;
+        they vote as equals, which is the pre-existing behaviour for that shape.
         """
         if len(records) == 1:
             return records[0]
+        min_depth = min(rec.model_key.count("/") for rec in records)
+        shallowest = [rec for rec in records if rec.model_key.count("/") == min_depth]
+        if len(shallowest) == 1:
+            return shallowest[0]
         counts: Dict[tuple, int] = {}
         first_seen: Dict[tuple, PriceRecord] = {}
-        for rec in records:
+        for rec in shallowest:
             key = (rec.input_per_1k, rec.output_per_1k)
             counts[key] = counts.get(key, 0) + 1
             first_seen.setdefault(key, rec)
