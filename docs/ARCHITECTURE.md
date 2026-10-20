@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.73.2 | **Last updated**: 2026-10-19
+**Version**: v1.73.3 | **Last updated**: 2026-10-19
 
 ---
 
@@ -222,7 +222,12 @@ All `init_*` calls live in the `startup_pricing_history()` FastAPI lifespan hand
 Layered auth — billing DB first, global key fallback — so existing deployments without billing are unaffected:
 ```
 Incoming request
-  └─ Unauthenticated path? (/, /pricing, /mcp, /billing/signup, …) → pass through
+  └─ Full-bypass path? (static UIs, /pricing, /mcp, and every `_unauthenticated_paths`
+     entry such as /health, /docs, /billing/signup) → skips auth, rate limit AND body cap
+  └─ Anonymous-but-throttled path? (`_anonymous_rate_limited_paths`: /agent/chat,
+     /agent/chat/stream) → skips auth only; still rate-limited per IP and body-size-capped.
+     Added in v1.73.3 — before it, no such tier existed: anonymous meant unthrottled, and
+     these endpoints run an LLM on the operator's key.
   └─ Extract x-api-key header
        └─ BillingService.get_customer_by_api_key(key) → found?
             YES → request.state.customer = customer; tier from DB; bucket = customer.id

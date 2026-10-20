@@ -7,10 +7,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+import src.main as main_module  # noqa: E402
 from src.main import app  # noqa: E402
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _clean_rate_limiter():
+    # /agent/chat is rate-limited per client IP as of v1.73.3 and the limiter's
+    # store is process-global; without this, ~50 calls from this file could
+    # exhaust TestClient's shared anonymous bucket and 429 an unrelated test.
+    main_module._rate_limit_store.clear()
+    yield
+    main_module._rate_limit_store.clear()
 
 
 # ---------------------------------------------------------------------------
