@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.73.5 | **Last updated**: 2026-10-22
+**Version**: v1.73.6 | **Last updated**: 2026-10-22
 
 ---
 
@@ -175,6 +175,7 @@ llm-pricing-mcp-server/
 │   ├── sync-develop.yml             # Auto-sync develop ← master after deploy
 │   ├── price-audit.yml              # Weekly: surface withheld/drifted prices as an issue + open the registry-snapshot refresh PR
 │   ├── npm-publish.yml              # npm Trusted Publishing (OIDC) of npm/llm-pricing-mcp on master push — filename is part of the npmjs.com trust config
+│   ├── npm-bootstrap-publish.yml    # TEMPORARY: manual-only first publish via NPM_TOKEN secret (OIDC can't create a package) — delete after first OIDC release
 │   └── mcp-registry-publish.yml     # Publishes server.json to registry.modelcontextprotocol.io via GitHub OIDC (`mcp-publisher login github-oidc`) on master push
 │
 ├── server.json                      # Remote-only MCP registry listing (no packages/ownership-verification marker needed) — published by mcp-registry-publish.yml
@@ -408,6 +409,16 @@ GitHub-hosted runners are supported. Never publish with a 2FA recovery code: sin
 places the account on a fixed 72-hour hold that blocks publishing and cannot be lifted early.
 `tests/test_npm_publish_workflow.py` pins the filename, the `id-token: write` permission and the
 banned-trigger rule.
+
+**Bootstrapping a package that does not exist yet.** A Trusted Publisher can only be attached to a
+package already on the registry, so the first-ever publish cannot use OIDC. `npm-bootstrap-publish.yml`
+covers that one step: manual `workflow_dispatch` on `master` only, publishing with a short-lived
+Granular Access Token ("Bypass 2FA" on, 7-day expiry) stored as the `NPM_TOKEN` repository secret, with
+provenance, sharing the `npm-publish` concurrency group. Sequence: create token → add `NPM_TOKEN` secret
+→ run the workflow → add the Trusted Publisher on npmjs.com within 48h → bump `package.json` and let
+`npm-publish.yml` make one OIDC release → **delete the bootstrap workflow, the secret and the token**.
+`tests/test_npm_bootstrap_publish_workflow.py` pins dispatch-only, master-only and secrets-only while
+the file exists, and skips once it is removed.
 
 **MCP registry publishing — `server.json`.** A second, independent listing: `registry.modelcontextprotocol.io`,
 the directory most MCP clients query directly, not just a browsing site. `server.json` at the repo
