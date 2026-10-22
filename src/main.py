@@ -182,7 +182,9 @@ Mutating and admin endpoints require `X-API-Key: <your-key>` in the request head
 | Pro | 120 req / min |
 | Enterprise | 600 req / min |
 
-Pass `X-Api-Key-Tier: free|pro|enterprise` to select your bucket.
+Billing API keys get their tier from the billing record. Callers using the global \
+`MCP_API_KEY` may pass `X-Api-Key-Tier: free|pro|enterprise` to select a bucket; the \
+header is ignored on anonymous requests, which always use the default limit.
 
 ### MCP transport
 The server exposes an HTTP MCP endpoint at `/mcp` for direct integration with \
@@ -488,7 +490,15 @@ async def security_middleware(request: Request, call_next):
             tier = _customer.tier
             bucket_key = _customer.id
         else:
-            tier = request.headers.get("X-Api-Key-Tier", "").lower()
+            # X-Api-Key-Tier is self-declared, so it only counts from a caller
+            # who has proven something: the global MCP_API_KEY. Otherwise an
+            # anonymous client could claim "enterprise" for 10x the default.
+            provided = request.headers.get(settings.mcp_api_key_header)
+            holds_global_key = bool(
+                settings.mcp_api_key and provided
+                and secrets.compare_digest(provided, settings.mcp_api_key)
+            )
+            tier = request.headers.get("X-Api-Key-Tier", "").lower() if holds_global_key else ""
             bucket_key = f"{client_ip}:{tier}"
         _tier_limits = {
             "free": settings.rate_limit_free,

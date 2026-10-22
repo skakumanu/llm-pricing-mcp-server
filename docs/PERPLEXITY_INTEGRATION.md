@@ -419,7 +419,7 @@ The live server also hosts interactive UIs accessible from any browser:
 | Pro | 120 req/min | Upgrade via Stripe |
 | Enterprise | 600 req/min | Upgrade via Stripe |
 
-Pass the tier via header if not using a billing key: `X-Api-Key-Tier: free|pro|enterprise`
+If you authenticate with the global `MCP_API_KEY` instead of a billing key, pass `X-Api-Key-Tier: free|pro|enterprise` to select a bucket. The header is ignored on anonymous requests (they always get the default limit), so it cannot be used to raise your own limit.
 
 ---
 
