@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.73.4 | **Last updated**: 2026-10-20
+**Version**: v1.73.5 | **Last updated**: 2026-10-22
 
 ---
 
@@ -231,7 +231,9 @@ Incoming request
   └─ Extract x-api-key header
        └─ BillingService.get_customer_by_api_key(key) → found?
             YES → request.state.customer = customer; tier from DB; bucket = customer.id
-            NO  → check against global MCP_API_KEY; tier from X-Api-Key-Tier header; bucket = ip:tier
+            NO  → check against global MCP_API_KEY; bucket = ip:tier where tier comes from the
+                  X-Api-Key-Tier header ONLY if that global key was presented and valid — anonymous
+                  requests get tier "" (default limit) regardless of the header (v1.73.5)
   └─ Rate limit check (token bucket per bucket key)
 ```
 
