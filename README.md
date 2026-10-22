@@ -86,7 +86,7 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 
 ### API Key Tiers & Rate Limiting
 - **Free**: 30 req/min · **Pro**: 120 req/min · **Enterprise**: 600 req/min
-- Tier auto-detected from billing DB (customer API key) or `X-Api-Key-Tier` header
+- Tier comes from the billing DB (customer API key), or from the `X-Api-Key-Tier` header **only when the request also carries the valid global `MCP_API_KEY`** — anonymous requests always get the default bucket, so the header can't be used to self-select a higher limit
 - `GET /rate-limits/tiers` — public endpoint listing tier details
 
 ### Security & Quality
@@ -94,7 +94,7 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 - Protected endpoints (`/billing/me`, `/router/recommend`, `/router/feedback`, `/billing/portal`) require a billing API key or the global `MCP_API_KEY`
 - Rate limiting per client IP + tier bucket — includes the anonymous `/agent/chat` and `/agent/chat/stream` endpoints (no API key needed, but throttled, since each call runs an LLM on the operator's key)
 - Request size limit (1MB default)
-- 1213 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 1219 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
