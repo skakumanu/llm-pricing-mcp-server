@@ -142,8 +142,27 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.73.4 -->
+  <!-- v1.73.5 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.73.5</span>
+      <span class="release-date">Oct 22, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title"><code>X-Api-Key-Tier</code> no longer raises an anonymous caller's rate limit</div>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li>The tier header is self-declared, and the limiter used to honor it from anyone — an anonymous request could send <code>X-Api-Key-Tier: enterprise</code> and get 600/min instead of the 60/min default. It is now honored <strong>only</strong> when the request also carries the valid global <code>MCP_API_KEY</code>; anonymous requests always use the default bucket</li>
+        <li>Billing API keys are unaffected — their tier has always come from the billing record, never the header</li>
+        <li>Deployments without <code>MCP_API_KEY</code> configured: the header is ignored there too, since there is nothing to verify it against</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.73.4 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.73.4</span>
