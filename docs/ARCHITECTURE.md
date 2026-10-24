@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.73.6 | **Last updated**: 2026-10-22
+**Version**: v1.73.7 | **Last updated**: 2026-10-24
 
 ---
 
@@ -419,6 +419,14 @@ provenance, sharing the `npm-publish` concurrency group. Sequence: create token 
 `npm-publish.yml` make one OIDC release → **delete the bootstrap workflow, the secret and the token**.
 `tests/test_npm_bootstrap_publish_workflow.py` pins dispatch-only, master-only and secrets-only while
 the file exists, and skips once it is removed.
+
+**Node version floor.** Both publish workflows pin `actions/setup-node` to an exact Node release with
+`check-latest: true`, and `npm/llm-pricing-mcp/package.json` sets `engines.node` to the oldest patched
+line, so neither the publish runner nor an end user's bridge runs on a Node build missing a known
+security fix (floor set by the October 2026 Node.js security release: 22.23.4 / 24.22.1 / 26.12.1).
+`tests/test_node_version_pins.py` fails if either floor is lowered or the pin becomes a bare major
+again. The Fly.io image contains no Node at all. Raise the floors together when Node ships the next
+security release.
 
 **MCP registry publishing — `server.json`.** A second, independent listing: `registry.modelcontextprotocol.io`,
 the directory most MCP clients query directly, not just a browsing site. `server.json` at the repo

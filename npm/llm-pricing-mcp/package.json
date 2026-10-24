@@ -21,7 +21,7 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22.23.4"
   },
   "keywords": [
     "mcp",
