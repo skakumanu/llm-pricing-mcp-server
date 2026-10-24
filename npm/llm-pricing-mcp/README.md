@@ -4,6 +4,8 @@ A zero-dependency STDIO launcher for the [LLM Pricing MCP server](https://github
 
 This package is a thin bridge, not the server itself: it reads MCP JSON-RPC requests from stdin and forwards each one to the hosted server at `https://llm-pricing-api.fly.dev/mcp`, writing the response back to stdout. There's nothing to install beyond Node — no Python, no `pip install`, no local pricing data to keep up to date.
 
+**Node requirement:** 22.23.4+, 24.22.1+ or 26.12.1+. These are the builds that carry the October 2026 Node.js security fixes (including the Brotli decoder RCE, CVE-2026-111497); the bridge uses Node's built-in `fetch`, which decodes compressed responses, so run it on a patched Node. Node 18 and 20 are end-of-life and will not receive the fix.
+
 ## Use it
 
 Most MCP clients (Claude Desktop, Cursor, Windsurf, etc.) that support remote/HTTP servers directly can skip this package entirely — point them at `https://llm-pricing-api.fly.dev/mcp` and you're done. This package exists for STDIO-only clients that can't talk HTTP directly.

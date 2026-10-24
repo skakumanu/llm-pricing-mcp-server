@@ -40,7 +40,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          # Exact pin + check-latest so the publish never runs on a cached,
+          # unpatched runner build (Oct 2026 Node security release: 24.22.1+).
+          # tests/test_node_version_pins.py enforces the floor.
+          node-version: 24.22.1
+          check-latest: true
           registry-url: https://registry.npmjs.org
 
       - name: Require the NPM_TOKEN secret
