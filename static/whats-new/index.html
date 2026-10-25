@@ -142,8 +142,30 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.73.8 -->
+  <!-- v1.73.11 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.73.11</span>
+      <span class="release-date">Oct 25, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Stale-price reconfirmation pass: 13 prices corrected, 25 reconfirmed, Cloudflare unit bug fixed</div>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li><strong>Cloudflare Workers AI prices were served 1000× too low.</strong> The table held per-token numbers under a per-1k comment, so every Cloudflare model sorted as the cheapest option in the catalogue. Four models now carry Cloudflare's published per-token rates (<code>llama-3.2-1b</code>, <code>llama-3.2-3b</code>, <code>mistral-7b-instruct-v0.1</code>, <code>deepseek-r1-distill-qwen-32b</code>); six with no verifiable current rate (retired on Workers AI, or an image model) are now listed as unconfirmed and excluded from cost math rather than priced from a 2024 estimate</li>
+        <li><strong>9 more curated prices corrected</strong> against the reference registry and provider price lists: Oracle OCI Llama 3.1 405B ($2.85 → $10.68/1M), Llama 3.1 70B, Llama 3.2 11B/90B Vision, Command R 08-2024; Snowflake Cortex Llama 3.1 70B and 8B; Together Llama 3.3 70B Turbo ($0.88 → $1.04) and Qwen2.5 72B Turbo; Replicate Mixtral 8x7B ($0.24 → $0.30 in / $1.00 out)</li>
+        <li><strong>Why these were never caught:</strong> the price oracle's key matching compared only the last dot-separated segment of a registry key, so any model name containing a dot or a slash (most of Fireworks, Together, Cerebras, Cloudflare, Replicate, Vertex, OCI) was invisible to both drift detection and reconfirmation. Matching now also accepts a <code>/name</code> suffix and the last slash segment, and provider aliases are keyed by the catalogue's display names (<code>AI21 Labs</code>, <code>Oracle OCI</code>, <code>Snowflake</code>)</li>
+        <li><strong>25 stale prices reconfirmed</strong> (dated 2026-10-25) because they still match the registry exactly or within 5%; 92 remain stale because no first-party registry entry exists to confirm them against, and that is reported rather than hidden</li>
+        <li><strong>Retired models removed:</strong> <code>gemini-2.0-flash</code> (Google and Vertex AI) and <code>gemini-2.0-flash-lite</code> (Vertex AI), which Google shut down on 2026-06-01. Google-catalogue prices are now compared with Gemini Developer API registry entries first and Vertex entries only as a fallback, since the two price lists differ</li>
+        <li><code>get_data_quality</code> before → after: stale 139 → 92, confirmed 98.6% → 95.2% (the drop is the 7 Cloudflare and 1 Anyscale models that were wrong and are now withheld, not a regression), drift findings 1 → 2 (the retired Anyscale Mixtral joins the retiring Azure gpt-4-turbo)</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.73.8 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.73.8</span>

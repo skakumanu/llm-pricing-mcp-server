@@ -21,6 +21,7 @@ class CerebrasPricingService(BasePricingProvider):
         "llama3.1-8b": {
             "input": 0.0001,
             "output": 0.0001,
+            "price_as_of": "2026-10-25",
             "context_window": 8192,
             "use_cases": [
                 "Real-time applications", "High-volume processing", "Edge streaming",
@@ -40,6 +41,7 @@ class CerebrasPricingService(BasePricingProvider):
         "llama3.1-70b": {
             "input": 0.0006,
             "output": 0.0006,
+            "price_as_of": "2026-10-25",
             "context_window": 8192,
             "use_cases": [
                 "Streaming AI apps", "Real-time assistants", "Code generation",

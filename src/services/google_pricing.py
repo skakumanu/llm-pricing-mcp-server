@@ -111,23 +111,9 @@ class GooglePricingService(BasePricingProvider):
             "supports_json_mode": True,
             "is_reasoning_model": True,
         },
-        "gemini-2.0-flash": {
-            "input": 0.0001,
-            "output": 0.0004,
-            "price_as_of": "2026-09-13",
-            "context_window": 1048576,
-            "use_cases": [
-                "Next-gen multimodal",
-                "Real-time applications",
-                "Enhanced reasoning",
-                "Multi-turn conversations"
-            ],
-            "strengths": ["Improved intelligence", "Faster responses", "Native tool use", "1M context"],
-            "best_for": "Production applications needing latest Gemini capabilities with speed",
-            "supports_vision": True,
-            "supports_function_calling": True,
-            "supports_json_mode": True,
-        },
+        # gemini-2.0-flash was removed in v1.73.11: the Gemini API shut it down on
+        # 2026-06-01 (official changelog; the reference registry carries the same
+        # deprecation date), so a price for it is no longer a price anyone can pay.
         "gemini-1.5-pro": {
             "input": 0.00125,
             "output": 0.00375,

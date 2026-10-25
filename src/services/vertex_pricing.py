@@ -20,22 +20,9 @@ class VertexAIPricingService(BasePricingProvider):
     PRICE_AS_OF = "2026-06-20"
 
     STATIC_PRICING = {
-        "gemini-2.0-flash": {
-            "input": 0.0001, "output": 0.0004,
-            "context_window": 1048576,
-            "use_cases": ["Multimodal", "Code", "Chat", "Analysis", "Summarization"],
-            "strengths": ["1M context", "Multimodal", "Fast", "Low cost", "GCP integration"],
-            "best_for": "Enterprise multimodal workloads needing 1M token context on GCP",
-            "supports_vision": True, "supports_function_calling": True, "supports_json_mode": True,
-        },
-        "gemini-2.0-flash-lite": {
-            "input": 0.000075, "output": 0.0003,
-            "context_window": 1048576,
-            "use_cases": ["High-volume tasks", "Summarization", "Classification", "Extraction"],
-            "strengths": ["Ultra low cost", "1M context", "Fast"],
-            "best_for": "High-volume cost-sensitive GCP workloads with large context needs",
-            "supports_vision": True, "supports_function_calling": True,
-        },
+        # gemini-2.0-flash and gemini-2.0-flash-lite were removed in v1.73.11:
+        # Google shut both down on 2026-06-01 (Gemini API changelog; the reference
+        # registry marks the Vertex entries deprecated on the same date).
         "gemini-1.5-pro": {
             "input": 0.00125, "output": 0.005,
             "context_window": 2097152,
