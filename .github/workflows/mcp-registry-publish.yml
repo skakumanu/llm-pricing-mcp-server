@@ -1,15 +1,24 @@
 name: Publish to MCP Registry
 
-# Publishes server.json's remote-only entry to registry.modelcontextprotocol.io
-# via GitHub OIDC auth (`mcp-publisher login github-oidc`) — no secrets, no
-# PAT, no DNS key. Mirrors npm-publish.yml's OIDC pattern. This entry has no
-# `packages` array (remote-only: see server.json's `remotes`), so unlike the
-# npm workflow there is no package-registry publish step and no package
-# ownership-verification marker to maintain.
+# Publishes server.json to registry.modelcontextprotocol.io via GitHub OIDC
+# auth (`mcp-publisher login github-oidc`) — no secrets, no PAT, no DNS key.
+# Mirrors npm-publish.yml's OIDC pattern.
 #
-# tests/test_mcp_registry_publish_workflow.py pins the load-bearing bits:
-# `id-token: write`, the `github-oidc` auth method, and that server.json
-# stays schema-valid with a description under the registry's 100-char limit.
+# server.json lists both a `remotes` entry (hosted /mcp) and an npm `packages`
+# entry (llm-pricing-mcp, the STDIO bridge). The registry verifies ownership
+# of the npm package by fetching that exact version from registry.npmjs.org
+# and checking its package.json `mcpName` equals server.json's `name`. Two
+# consequences this workflow handles:
+#   - the npm version named in server.json must already be readable on npm.
+#     A master push that bumps both triggers npm-publish.yml and this workflow
+#     at the same time, and npm processes uploads asynchronously, so the
+#     "Wait for npm packages" step polls (up to 10 min) before publishing.
+#   - package.json must carry `mcpName`; tests/test_mcp_registry_publish_workflow.py
+#     pins it, along with the identifier/version coupling between the two files.
+#
+# The same test pins `id-token: write`, the `github-oidc` auth method, and
+# that server.json stays schema-valid with a description under the registry's
+# 100-char limit.
 
 on:
   push:
@@ -54,6 +63,42 @@ jobs:
             echo "$NAME@$VERSION is not on the registry (HTTP $STATUS) — will publish"
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Wait for npm packages referenced in server.json to be readable
+        if: steps.check.outputs.publish == 'true'
+        run: |
+          # The registry's ownership check fetches <registryBaseUrl>/<identifier>/<version>
+          # and requires package.json.mcpName == server.json.name. Publishing before
+          # that version is readable fails the whole publish, so wait for it here.
+          NAME="${{ steps.check.outputs.name }}"
+          python3 - "$NAME" <<'PY'
+          import json, sys, time, urllib.request, urllib.error
+          server_name = sys.argv[1]
+          pkgs = [p for p in json.load(open("server.json")).get("packages", []) if p.get("registryType") == "npm"]
+          if not pkgs:
+              print("no npm packages in server.json — nothing to wait for"); sys.exit(0)
+          deadline = time.time() + 600
+          for p in pkgs:
+              base = p.get("registryBaseUrl", "https://registry.npmjs.org").rstrip("/")
+              url = f"{base}/{p['identifier']}/{p['version']}"
+              while True:
+                  try:
+                      with urllib.request.urlopen(url, timeout=20) as r:
+                          meta = json.load(r)
+                      got = meta.get("mcpName")
+                      if got != server_name:
+                          print(f"ERROR: {url} has mcpName={got!r}, expected {server_name!r}"); sys.exit(1)
+                      print(f"OK: {p['identifier']}@{p['version']} is readable with the right mcpName"); break
+                  except urllib.error.HTTPError as e:
+                      status = e.code
+                  except Exception as e:  # network blip
+                      status = repr(e)
+                  if time.time() > deadline:
+                      print(f"ERROR: {url} still not readable after 10 min (last: {status}); "
+                            "publish npm first, then re-run this workflow"); sys.exit(1)
+                  print(f"{p['identifier']}@{p['version']} not readable yet ({status}); waiting 15s...")
+                  time.sleep(15)
+          PY
 
       - name: Install mcp-publisher
         if: steps.check.outputs.publish == 'true'
