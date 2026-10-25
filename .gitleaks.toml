@@ -17,6 +17,9 @@ useDefault = true
 
 [allowlist]
 description = "Reference-registry model identifiers are model ids, not secrets"
+# Match the whole line, not just the extracted secret: the exemption is "a
+# value sitting in a registry_key field", which the secret alone cannot show.
+regexTarget = "line"
 regexes = [
   '''"registry_key":\s*"[^"]+"''',
 ]
