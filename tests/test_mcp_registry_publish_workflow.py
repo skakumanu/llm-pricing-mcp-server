@@ -10,11 +10,12 @@ long after the PR that broke it merged. These tests pin them:
   GitHub OIDC auth this workflow uses (`mcp-publisher login github-oidc`) —
   a mismatched namespace is rejected with "you do not have permission".
 - `id-token: write` must be present or GitHub issues no OIDC token at all.
-- This is a remote-only entry (`remotes`, no `packages`): server.json must
-  stay schema-valid as such, and must not silently grow a `packages` array
-  without also adding the package-ownership-verification marker that
-  requires (npm's `mcpName` / PyPI-NuGet's `mcp-name` README comment) —
-  that's a distinct, larger change this test deliberately does not green-light.
+- The entry has a `remotes` entry (hosted /mcp) and an npm `packages` entry
+  (`llm-pricing-mcp`, the STDIO bridge). The registry verifies npm ownership
+  by fetching the exact version named in server.json from registry.npmjs.org
+  and requiring its package.json `mcpName` to equal server.json's `name`. So
+  three things must move together or the publish is rejected: the npm
+  package's `mcpName`, its `version`, and the `version` server.json points at.
 """
 import json
 import re
@@ -24,6 +25,7 @@ import pytest
 
 project_root = Path(__file__).parent.parent
 SERVER_JSON = project_root / "server.json"
+PACKAGE_JSON = project_root / "npm" / "llm-pricing-mcp" / "package.json"
 WORKFLOW = project_root / ".github" / "workflows" / "mcp-registry-publish.yml"
 EXPECTED_NAME = "io.github.skakumanu/llm-pricing-mcp-server"
 
@@ -32,6 +34,18 @@ EXPECTED_NAME = "io.github.skakumanu/llm-pricing-mcp-server"
 def server_json():
     assert SERVER_JSON.exists()
     return json.loads(SERVER_JSON.read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
+def package_json():
+    return json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
+def npm_package(server_json):
+    pkgs = [p for p in server_json.get("packages", []) if p.get("registryType") == "npm"]
+    assert len(pkgs) == 1, "server.json should list exactly one npm package (the STDIO bridge)"
+    return pkgs[0]
 
 
 @pytest.fixture(scope="module")
@@ -57,13 +71,32 @@ class TestServerJson:
             "and rejects anything longer at publish time"
         )
 
-    def test_remote_only_has_no_packages(self, server_json):
+    def test_has_remote_and_npm_package(self, server_json, npm_package):
         assert "remotes" in server_json
-        assert "packages" not in server_json, (
-            "adding a `packages` entry needs its own ownership-verification "
-            "marker (npm's mcpName / PyPI-NuGet's mcp-name README comment) — "
-            "this test exists so that requirement isn't skipped by accident"
+        assert npm_package["identifier"] == "llm-pricing-mcp"
+        assert npm_package["registryBaseUrl"] == "https://registry.npmjs.org", (
+            "the registry only supports the public npm registry for ownership checks"
         )
+        assert npm_package["transport"]["type"] == "stdio"
+
+    def test_npm_package_version_matches_package_json(self, npm_package, package_json):
+        # The registry fetches exactly this version from npm to verify ownership,
+        # so server.json must name a version npm-publish.yml actually publishes.
+        assert npm_package["version"] == package_json["version"], (
+            f"server.json points at llm-pricing-mcp@{npm_package['version']} but "
+            f"npm/llm-pricing-mcp/package.json is {package_json['version']} — bump both together"
+        )
+
+    def test_package_json_carries_matching_mcp_name(self, package_json):
+        assert package_json.get("mcpName") == EXPECTED_NAME, (
+            "npm ownership verification requires package.json.mcpName to equal "
+            "server.json.name; without it the registry rejects the publish"
+        )
+
+    def test_env_vars_documented_in_package_readme(self, npm_package):
+        readme = (project_root / "npm" / "llm-pricing-mcp" / "README.md").read_text(encoding="utf-8")
+        for var in npm_package.get("environmentVariables", []):
+            assert var["name"] in readme, f"{var['name']} is advertised to the registry but not in the npm README"
 
     def test_remote_url_matches_hosted_mcp_endpoint(self, server_json):
         urls = {r["url"] for r in server_json["remotes"]}
@@ -94,3 +127,10 @@ class TestMcpRegistryPublishWorkflow:
 
     def test_watches_server_json_for_changes(self, workflow_text):
         assert "server.json" in workflow_text
+
+    def test_waits_for_npm_version_before_publishing(self, workflow_text):
+        # A master push that bumps package.json and server.json together starts
+        # npm-publish.yml and this workflow concurrently; the registry's ownership
+        # check 404s until npm has processed the new version.
+        assert "Wait for npm packages" in workflow_text
+        assert workflow_text.index("Wait for npm packages") < workflow_text.index("mcp-publisher publish")
