@@ -41,8 +41,11 @@ class SnowflakePricingService(BasePricingProvider):
             )
         },
         "llama3.1-70b": {
-            "input": 0.0015,
-            "output": 0.0015,
+            # v1.73.11: 1.50 -> 0.72 per 1M. Cortex bills 0.36 credits per 1M
+            # tokens at $2.00/credit (registry snowflake/llama3.1-70b agrees).
+            "input": 0.00072,
+            "output": 0.00072,
+            "price_as_of": "2026-10-25",
             "context_window": 128000,
             "use_cases": [
                 "General reasoning", "Code generation", "Data analysis",
@@ -57,8 +60,11 @@ class SnowflakePricingService(BasePricingProvider):
             "supports_json_mode": True,
         },
         "llama3.1-8b": {
-            "input": 0.0003,
-            "output": 0.0003,
+            # v1.73.11: 0.30 -> 0.24 per 1M (registry snowflake/llama3.1-8b;
+            # Cortex lists 0.11 credits per 1M, i.e. $0.22 at $2.00/credit).
+            "input": 0.00024,
+            "output": 0.00024,
+            "price_as_of": "2026-10-25",
             "context_window": 128000,
             "use_cases": [
                 "High-volume classification", "Data tagging", "Simple summarization",

@@ -61,6 +61,7 @@ class AnyscalePricingService(BasePricingProvider):
         "mistralai/Mistral-7B-Instruct-v0.1": {
             "input": 0.00015,
             "output": 0.00015,
+            "price_as_of": "2026-10-25",
             "context_window": 8192,
             "use_cases": ["Simple tasks", "High-volume", "Chatbots"],
             "strengths": ["Affordable", "Fast", "Efficient"],
@@ -69,6 +70,7 @@ class AnyscalePricingService(BasePricingProvider):
         "codellama/CodeLlama-70b-Instruct-hf": {
             "input": 0.001,
             "output": 0.001,
+            "price_as_of": "2026-10-25",
             "context_window": 16384,
             "use_cases": ["Code generation", "Code completion", "Code review"],
             "strengths": ["Specialized for code", "Strong performance", "Scalable"],

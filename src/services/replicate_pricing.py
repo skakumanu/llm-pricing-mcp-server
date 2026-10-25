@@ -49,6 +49,7 @@ class ReplicatePricingService(BasePricingProvider):
         "meta/llama-2-70b-chat": {
             "input": 0.00065,
             "output": 0.00275,
+            "price_as_of": "2026-10-25",
             "context_window": 4096,
             "use_cases": [
                 "Conversational AI", "General Q&A", "Summarization",
@@ -62,6 +63,7 @@ class ReplicatePricingService(BasePricingProvider):
         "mistralai/mistral-7b-instruct-v0.2": {
             "input": 0.00005,
             "output": 0.00025,
+            "price_as_of": "2026-10-25",
             "context_window": 32768,
             "use_cases": [
                 "General tasks", "Code assistance", "Multilingual",
@@ -73,8 +75,11 @@ class ReplicatePricingService(BasePricingProvider):
             "best_for": "Cost-effective multilingual applications with long context needs"
         },
         "mistralai/mixtral-8x7b-instruct-v0.1": {
-            "input": 0.00024,
-            "output": 0.00024,
+            # v1.73.11: 0.24/0.24 -> 0.30/1.00 per 1M (Replicate's language-model
+            # price list; registry replicate/mistralai/mixtral-8x7b-instruct-v0.1 agrees).
+            "input": 0.0003,
+            "output": 0.001,
+            "price_as_of": "2026-10-25",
             "context_window": 32768,
             "use_cases": [
                 "Code generation", "Multilingual", "Reasoning",
