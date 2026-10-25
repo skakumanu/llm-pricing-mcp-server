@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     promptql_api_key: Optional[str] = None
     snowflake_api_key: Optional[str] = None
     oracle_api_key: Optional[str] = None
+    deepinfra_api_key: Optional[str] = None
+    novita_api_key: Optional[str] = None
+    vercel_ai_gateway_api_key: Optional[str] = None
+    nebius_api_key: Optional[str] = None
 
     # API Authentication
     mcp_api_key: Optional[str] = None

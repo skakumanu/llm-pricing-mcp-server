@@ -20,12 +20,12 @@ from mcp.tools.get_data_quality import GetDataQualityTool  # noqa: E402
 
 
 def _pm(name, provider="P", inp=1.0, out=2.0, confirmed=True,
-        pricing_model="per_token", price_as_of=None):
+        pricing_model="per_token", price_as_of=None, kind="provider", registry_key=None):
     return PricingMetrics(
         model_name=name, provider=provider,
         cost_per_input_token=inp, cost_per_output_token=out,
         price_confirmed=confirmed, pricing_model=pricing_model,
-        price_as_of=price_as_of,
+        price_as_of=price_as_of, price_source_kind=kind, registry_key=registry_key,
     )
 
 
@@ -101,6 +101,84 @@ class TestComputeDataQualityReport:
         assert report.registry_source == "litellm"
         assert report.registry_models == 42
         assert report.registry_fetched == "2026-08-09"
+
+
+# ---------------------------------------------------------------------------
+# v1.75.0 — provider-confirmed vs registry-sourced split
+# ---------------------------------------------------------------------------
+
+class TestProviderVsRegistrySplit:
+    def _models(self):
+        return [
+            _pm("a", price_as_of="2026-08-01"),
+            _pm("b", price_as_of="2026-08-01"),
+            _pm("r1", price_as_of="2026-08-01", kind="registry", registry_key="x/r1"),
+            _pm("r2", price_as_of="2026-08-01", kind="registry", registry_key="x/r2"),
+            _pm("r3", price_as_of="2026-08-01", kind="registry", registry_key="x/r3"),
+            _pm("withheld", inp=9.0, confirmed=False),
+            _pm("never", inp=0.0, out=0.0, confirmed=False),
+        ]
+
+    def test_split_sums_to_confirmed(self):
+        r = compute_data_quality_report(self._models(), FakeOracle())
+        assert r.confirmed_models == 5
+        assert r.provider_confirmed == 2
+        assert r.registry_sourced == 3
+        assert r.provider_confirmed + r.registry_sourced == r.confirmed_models
+
+    def test_registry_sourced_never_counted_as_provider_confirmed(self):
+        r = compute_data_quality_report([_pm("r", kind="registry", registry_key="x/r")], FakeOracle())
+        assert r.provider_confirmed == 0 and r.registry_sourced == 1 and r.confirmed_models == 1
+
+    def test_unconfirmed_registry_kind_is_not_counted_in_either(self):
+        """A registry-sourced entry withheld for drift is unconfirmed: it is in
+        withheld_for_drift, not in the usable split."""
+        r = compute_data_quality_report(
+            [_pm("drifted", inp=5.0, confirmed=False, kind="registry", registry_key="x/d")], FakeOracle())
+        assert r.registry_sourced == 0 and r.provider_confirmed == 0
+        assert r.withheld_for_drift == 1
+
+    def test_as_dict_exposes_both_counts(self):
+        d = compute_data_quality_report(self._models(), FakeOracle()).as_dict()
+        assert d["provider_confirmed"] == 2
+        assert d["registry_sourced"] == 3
+        assert d["confirmed_models"] == 5
+
+    def test_summary_names_the_split(self):
+        r = compute_data_quality_report(self._models(), FakeOracle())
+        assert "2 provider-confirmed, 3 registry-sourced." in r.summary
+
+    def test_summary_split_also_on_all_confirmed_catalogue(self):
+        r = compute_data_quality_report([_pm("a", price_as_of="2026-08-01"),
+                                         _pm("r", price_as_of="2026-08-01", kind="registry", registry_key="x/r")],
+                                        FakeOracle())
+        assert r.summary.startswith("All 2 priced models")
+        assert "1 provider-confirmed, 1 registry-sourced." in r.summary
+
+    def test_empty_catalogue_has_zero_split_and_no_split_sentence(self):
+        r = compute_data_quality_report([], FakeOracle())
+        assert r.provider_confirmed == 0 and r.registry_sourced == 0
+        assert "provider-confirmed" not in r.summary
+
+    def test_defaults_when_models_lack_the_attribute(self):
+        """FakeOracle-style duck-typed models without price_source_kind count as provider."""
+        class Bare:
+            pricing_model = "per_token"
+            price_confirmed = True
+            cost_per_input_token = 1.0
+            model_name = "bare"
+            provider = "P"
+        r = compute_data_quality_report([Bare()], FakeOracle())
+        assert r.provider_confirmed == 1 and r.registry_sourced == 0
+
+    @pytest.mark.asyncio
+    async def test_tool_returns_the_split(self):
+        tool = GetDataQualityTool()
+        tool.service = AsyncMock()
+        tool.service.get_all_pricing_async = AsyncMock(return_value=(self._models(), []))
+        with patch("mcp.tools.get_data_quality.get_price_oracle", return_value=FakeOracle()):
+            result = await tool.execute({})
+        assert result["provider_confirmed"] == 2 and result["registry_sourced"] == 3
 
 
 # ---------------------------------------------------------------------------

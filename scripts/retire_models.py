@@ -32,10 +32,31 @@ from typing import Dict, List, Optional
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
+from src.services.base_provider import registry_models_path, render_registry_models_doc  # noqa: E402
 from src.services.price_oracle import get_price_oracle  # noqa: E402
 from src.services.pricing_aggregator import PricingAggregatorService  # noqa: E402
 
 SERVICES = os.path.join(ROOT, "src", "services")
+
+
+def remove_registry_entry(provider: str, model: str) -> Optional[str]:
+    """Delete *model* from the provider's registry-models JSON; return the path, or None if absent.
+
+    Registry-sourced entries (v1.75.0) live in data/registry_models/<slug>.json
+    rather than STATIC_PRICING. The file is re-encoded through the same
+    ``render_registry_models_doc`` the pickup uses, so the diff is one block.
+    """
+    path = registry_models_path(provider)
+    if not path.exists():
+        return None
+    with path.open(encoding="utf-8") as fh:
+        doc = json.load(fh)
+    models = doc.get("models") if isinstance(doc, dict) else None
+    if not isinstance(models, dict) or model not in models:
+        return None
+    del models[model]
+    path.write_bytes(render_registry_models_doc(doc))
+    return str(path)
 
 
 def provider_file(provider: str, model: str) -> Optional[str]:
@@ -80,7 +101,8 @@ async def scan(grace_days: int, today: Optional[str] = None) -> Dict[str, List[D
         if m.pricing_model != "per_token":
             continue
         rec = oracle.lookup(m.model_name, m.provider, require_provider_match=True)
-        row = {"provider": m.provider, "model": m.model_name}
+        row = {"provider": m.provider, "model": m.model_name,
+               "price_source_kind": getattr(m, "price_source_kind", "provider")}
         if rec is not None:
             if rec.deprecation_date:
                 row.update({"registry_key": rec.model_key, "deprecation_date": rec.deprecation_date})
@@ -104,6 +126,15 @@ def apply_removals(report: Dict) -> List[Dict]:
     for row in report["retired"]:
         if not row.get("past_grace"):
             continue
+        # A registry-sourced row lives in the provider's JSON file, not in a
+        # *_pricing.py. A registry-labelled STATIC_PRICING entry (or a runtime
+        # gap-fill) reports the same kind but is not in the JSON, so fall back.
+        if row.get("price_source_kind") == "registry":
+            json_path = remove_registry_entry(row["provider"], row["model"])
+            if json_path is not None:
+                row["file"] = os.path.relpath(json_path, ROOT)
+                removed.append(row)
+                continue
         path = provider_file(row["provider"], row["model"])
         if path is None:
             row["skipped"] = "could not locate a unique STATIC_PRICING entry"

@@ -34,11 +34,20 @@ class DataQualityReport:
     retired_listed: int = 0
     registry_coverage_pct: Optional[float] = None
     unmatched_confirmed: int = 0
+    # v1.75.0 — the split of usable prices by where the number came from.
+    # provider_confirmed + registry_sourced == confirmed_models, always. A
+    # registry-sourced price is usable in every estimate and comparison, but it
+    # was never checked against the provider's own rate card, and a customer
+    # deciding how much to trust the catalogue should see that count.
+    provider_confirmed: int = 0
+    registry_sourced: int = 0
 
     def as_dict(self) -> dict:
         return {
             "total_models": self.total_models,
             "confirmed_models": self.confirmed_models,
+            "provider_confirmed": self.provider_confirmed,
+            "registry_sourced": self.registry_sourced,
             "confirmed_pct": round(self.confirmed_pct, 1),
             "withheld_for_drift": self.withheld_for_drift,
             "never_priced": self.never_priced,
@@ -77,6 +86,8 @@ def compute_data_quality_report(all_models: List[Any], oracle: Any) -> DataQuali
     withheld = [m for m in unconfirmed if m.cost_per_input_token > 0 and m not in retired]
     never_priced = [m for m in unconfirmed if m.cost_per_input_token <= 0 and m not in retired]
     stale = [m for m in confirmed if getattr(m, "price_is_stale", False)]
+    registry_sourced = [m for m in confirmed if getattr(m, "price_source_kind", "provider") == "registry"]
+    provider_confirmed = len(confirmed) - len(registry_sourced)
 
     confirmed_pct = (len(confirmed) / total * 100) if total else 0.0
     stale_pct = (len(stale) / len(confirmed) * 100) if confirmed else 0.0
@@ -119,6 +130,8 @@ def compute_data_quality_report(all_models: List[Any], oracle: Any) -> DataQuali
             f" Registry independently confirms {coverage_pct:.1f}% of confirmed prices"
             f" ({unmatched} have no first-party registry entry)."
         )
+    if confirmed:
+        summary += f" {provider_confirmed} provider-confirmed, {len(registry_sourced)} registry-sourced."
 
     return DataQualityReport(
         total_models=total,
@@ -135,4 +148,6 @@ def compute_data_quality_report(all_models: List[Any], oracle: Any) -> DataQuali
         retired_listed=len(retired),
         registry_coverage_pct=coverage_pct,
         unmatched_confirmed=unmatched,
+        provider_confirmed=provider_confirmed,
+        registry_sourced=len(registry_sourced),
     )
