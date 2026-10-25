@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.73.8 | **Last updated**: 2026-10-25
+**Version**: v1.73.9 | **Last updated**: 2026-10-25
 
 ---
 
@@ -175,7 +175,6 @@ llm-pricing-mcp-server/
 │   ├── sync-develop.yml             # Auto-sync develop ← master after deploy
 │   ├── price-audit.yml              # Weekly: surface withheld/drifted prices as an issue + open the registry-snapshot refresh PR
 │   ├── npm-publish.yml              # npm Trusted Publishing (OIDC) of npm/llm-pricing-mcp on master push — filename is part of the npmjs.com trust config
-│   ├── npm-bootstrap-publish.yml    # TEMPORARY: manual-only first publish via NPM_TOKEN secret (OIDC can't create a package) — delete after first OIDC release
 │   └── mcp-registry-publish.yml     # Publishes server.json to registry.modelcontextprotocol.io via GitHub OIDC (`mcp-publisher login github-oidc`) on master push
 │
 ├── server.json                      # Remote-only MCP registry listing (no packages/ownership-verification marker needed) — published by mcp-registry-publish.yml
@@ -410,15 +409,17 @@ places the account on a fixed 72-hour hold that blocks publishing and cannot be 
 `tests/test_npm_publish_workflow.py` pins the filename, the `id-token: write` permission and the
 banned-trigger rule.
 
-**Bootstrapping a package that does not exist yet.** A Trusted Publisher can only be attached to a
-package already on the registry, so the first-ever publish cannot use OIDC. `npm-bootstrap-publish.yml`
-covers that one step: manual `workflow_dispatch` on `master` only, publishing with a short-lived
-Granular Access Token ("Bypass 2FA" on, 7-day expiry) stored as the `NPM_TOKEN` repository secret, with
-provenance, sharing the `npm-publish` concurrency group. Sequence: create token → add `NPM_TOKEN` secret
-→ run the workflow → add the Trusted Publisher on npmjs.com within 48h → bump `package.json` and let
-`npm-publish.yml` make one OIDC release → **delete the bootstrap workflow, the secret and the token**.
-`tests/test_npm_bootstrap_publish_workflow.py` pins dispatch-only, master-only and secrets-only while
-the file exists, and skips once it is removed.
+**How the package was bootstrapped (historical, 2026-10-25).** A Trusted Publisher can only be attached
+to a package that already exists on the registry, so the first-ever publish cannot use OIDC. `1.0.0`
+was published once by a temporary, manual-only workflow (`npm-bootstrap-publish.yml`, removed in
+v1.73.9) using a 7-day Granular Access Token held in a since-deleted `NPM_TOKEN` repository secret. The
+Trusted Publisher was then configured on npmjs.com with the `npm publish` permission (npm now also
+offers a staged-publish mode that requires website approval per release; this repo uses direct publish),
+and `1.0.1` was published through it by `npm-publish.yml`, which validated the config permanently. There
+is no token-based publish path in this repository anymore; if the package ever has to be re-created
+under a new name, repeat that sequence rather than adding a standing token. npm accepts an upload and
+then processes it asynchronously (a new version took ~90s to become readable), which is why the publish
+workflow's verification loop waits up to 10 minutes.
 
 **Node version floor.** Both publish workflows pin `actions/setup-node` to an exact Node release with
 `check-latest: true`, and `npm/llm-pricing-mcp/package.json` sets `engines.node` to the oldest patched
