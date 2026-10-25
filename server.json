@@ -7,11 +7,39 @@
     "url": "https://github.com/skakumanu/llm-pricing-mcp-server",
     "source": "github"
   },
-  "version": "1.73.2",
+  "version": "1.73.10",
   "remotes": [
     {
       "type": "streamable-http",
       "url": "https://llm-pricing-api.fly.dev/mcp"
+    }
+  ],
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "llm-pricing-mcp",
+      "version": "1.0.2",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "LLM_PRICING_MCP_URL",
+          "description": "Upstream MCP endpoint to bridge to. Defaults to the hosted server; set to point at a self-hosted instance.",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "https://llm-pricing-api.fly.dev/mcp"
+        },
+        {
+          "name": "LLM_PRICING_MCP_TIMEOUT_MS",
+          "description": "Per-request timeout to the upstream server, in milliseconds.",
+          "isRequired": false,
+          "isSecret": false,
+          "default": "30000"
+        }
+      ]
     }
   ]
 }

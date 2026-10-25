@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.73.9 | **Last updated**: 2026-10-25
+**Version**: v1.73.10 | **Last updated**: 2026-10-25
 
 ---
 
@@ -177,7 +177,7 @@ llm-pricing-mcp-server/
 │   ├── npm-publish.yml              # npm Trusted Publishing (OIDC) of npm/llm-pricing-mcp on master push — filename is part of the npmjs.com trust config
 │   └── mcp-registry-publish.yml     # Publishes server.json to registry.modelcontextprotocol.io via GitHub OIDC (`mcp-publisher login github-oidc`) on master push
 │
-├── server.json                      # Remote-only MCP registry listing (no packages/ownership-verification marker needed) — published by mcp-registry-publish.yml
+├── server.json                      # MCP registry listing: hosted remote + npm package (llm-pricing-mcp, ownership via package.json mcpName) — published by mcp-registry-publish.yml
 │
 ├── npm/llm-pricing-mcp/              # Published to npm by .github/workflows/npm-publish.yml — see "MCP Dual Transport" below
 │   ├── package.json
@@ -391,6 +391,8 @@ push to master touching npm/llm-pricing-mcp/**   (or workflow_dispatch)
 push to master touching server.json   (or workflow_dispatch)
   └── publish     MCP Registry — OIDC via `id-token: write`, `mcp-publisher login github-oidc`
         ├── skip if server.json's name+version is already on the registry (idempotent)
+        ├── wait (≤10 min) until each npm package named in server.json is readable on
+        │   registry.npmjs.org with the right mcpName — npm-publish.yml runs concurrently
         ├── mcp-publisher validate && mcp-publisher publish
         └── verify: GET /v0.1/servers/{name}/versions/{version} returns 200
 ```
@@ -431,15 +433,24 @@ security release.
 
 **MCP registry publishing — `server.json`.** A second, independent listing: `registry.modelcontextprotocol.io`,
 the directory most MCP clients query directly, not just a browsing site. `server.json` at the repo
-root is **remote-only** — a `remotes` entry pointing at the hosted `/mcp` endpoint above, no
-`packages` array — so publishing needs no npm coupling and no package-ownership-verification
-marker. Authorised the same way as npm: `id-token: write` → `mcp-publisher login github-oidc`, no
-secret. The registry's `name` field (`io.github.skakumanu/llm-pricing-mcp-server`) must stay
-prefixed with `io.github.skakumanu/` — that's what ties the OIDC identity to the publish permission
-— and its `description` is capped at 100 characters, enforced at publish time with no local
-warning otherwise. `tests/test_mcp_registry_publish_workflow.py` pins both, plus the schema URL
-shape and the deliberate absence of `packages` (adding one later needs its own ownership marker,
-e.g. npm's `mcpName` field, and should not land silently alongside an unrelated change).
+root lists two ways to run the server: a `remotes` entry pointing at the hosted `/mcp` endpoint
+above, and (since v1.73.10) an npm `packages` entry for `llm-pricing-mcp`, the STDIO bridge, with
+`runtimeHint: npx`, `transport: stdio` and its two optional env vars. Authorised the same way as
+npm: `id-token: write` → `mcp-publisher login github-oidc`, no secret. The registry's `name` field
+(`io.github.skakumanu/llm-pricing-mcp-server`) must stay prefixed with `io.github.skakumanu/` —
+that's what ties the OIDC identity to the publish permission — and its `description` is capped at
+100 characters, enforced at publish time with no local warning otherwise.
+
+The npm package entry couples three values that must move together: the registry verifies ownership
+by fetching `registry.npmjs.org/llm-pricing-mcp/<version>` for the exact `version` named in
+`server.json` and requiring that package.json's `mcpName` to equal `server.json`'s `name`. So a bridge
+release is: bump `npm/llm-pricing-mcp/package.json` **and** `server.json`'s package `version` (and
+`server.json`'s own top-level `version`, which must be new for the registry to accept it) in one PR.
+On the master push, `npm-publish.yml` and `mcp-registry-publish.yml` start concurrently; the registry
+workflow waits up to 10 minutes for the npm version to become readable (npm processes uploads
+asynchronously) before publishing. `tests/test_mcp_registry_publish_workflow.py` pins the name
+prefix, the description cap, the schema URL shape, the package identifier/version coupling, the
+`mcpName` marker, and the presence of the wait step.
 
 ---
 
