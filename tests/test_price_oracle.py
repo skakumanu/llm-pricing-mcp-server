@@ -170,11 +170,11 @@ RAW = {
 }
 
 
-def _pm(name, inp=0.0, out=0.0, confirmed=False, provider="Acme", source=None, ctx=None):
+def _pm(name, inp=0.0, out=0.0, confirmed=False, provider="Acme", source=None, ctx=None, **kw):
     return PricingMetrics(
         model_name=name, provider=provider,
         cost_per_input_token=inp, cost_per_output_token=out,
-        price_confirmed=confirmed, source=source, context_window=ctx,
+        price_confirmed=confirmed, source=source, context_window=ctx, **kw,
     )
 
 
@@ -499,11 +499,26 @@ class TestDriftDetection:
         m = _pm("cheap-model", confirmed=False)  # inp=0.0, out=0.0 by default
         assert oracle.find_drift([m]) == []
 
-    async def test_skips_registry_sourced_models(self, oracle):
-        """A filled model would otherwise be compared against itself."""
+    async def test_registry_sourced_model_matching_the_registry_is_silent(self, oracle):
+        """A model filled at runtime resolves to the record it was filled from:
+        0% drift, nothing reported. (v1.75.0 dropped the source-string skip.)"""
         m = _pm("cheap-model", inp=1e-06, out=2e-06, confirmed=True,
-                source="LiteLLM price registry (cheap-model)")
+                source="LiteLLM price registry (cheap-model)",
+                price_source_kind="registry", registry_key="cheap-model")
         assert oracle.find_drift([m]) == []
+
+    async def test_stored_registry_sourced_price_the_registry_has_moved_is_reported(self, oracle):
+        """OWNER DECISION (FR10): a registry-sourced entry stored by the weekly
+        pickup carries the registry's price as of that run. If the live registry
+        has since moved it by more than the threshold, it is drift — reported
+        here and withheld by demote_drifted — until the next pickup re-syncs."""
+        m = _pm("cheap-model", inp=2e-06, out=2e-06, confirmed=True,  # 2x registry input
+                source="LiteLLM price registry (cheap-model)",
+                price_source_kind="registry", registry_key="cheap-model")
+        found = oracle.find_drift([m])
+        assert len(found) == 1 and found[0].direction == "overstated"
+        oracle.demote_drifted([m])
+        assert m.price_confirmed is False
 
     async def test_sorted_worst_first(self, oracle):
         a = _pm("cheap-model", inp=1.5e-06, out=2e-06, confirmed=True)       # 50%

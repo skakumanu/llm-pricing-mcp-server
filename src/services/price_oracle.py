@@ -46,6 +46,27 @@ SNAPSHOT_PATH = Path(__file__).resolve().parents[2] / "data" / "model_prices_sna
 DEFAULT_TTL_SECONDS = 86_400  # 24h
 DRIFT_THRESHOLD_PCT = 5.0
 
+# Plausibility band for a per-token chat price, USD per 1M tokens. Wide on
+# purpose: this catches units mistakes (Cloudflare's table once held per-token
+# numbers under a per-1k comment and served every price 1000x too low), not
+# expensive models. Shared by tests/test_pricing_integrity.py and the weekly
+# registry pickup so a registry entry outside the band is skipped, not added.
+PLAUSIBLE_MIN_INPUT_PER_1M = 0.005
+PLAUSIBLE_MAX_INPUT_PER_1M = 300.0
+PLAUSIBLE_MAX_OUTPUT_PER_1M = 1000.0
+
+# Display ``source`` for any price taken from the registry rather than the
+# provider's rate card — runtime gap-fills, data/registry_models/*.json entries
+# and registry-labelled STATIC_PRICING entries all render through here so the
+# catalogue shows one format per provenance kind.
+REGISTRY_SOURCE_PREFIX = "LiteLLM price registry"
+
+
+def registry_source_label(registry_key: Optional[str]) -> str:
+    """``source`` string for a registry-sourced price, naming the registry key."""
+    return f"{REGISTRY_SOURCE_PREFIX} ({registry_key})"
+
+
 # Our provider names -> the ``litellm_provider`` values that represent the same
 # first party. The same model hosted by different vendors carries genuinely
 # different rates (mistral-7b costs one thing on Fireworks and another on
@@ -88,6 +109,15 @@ PROVIDER_ALIASES: Dict[str, frozenset] = {
     # carries them under provider "snowflake" (19 entries), so it is a first
     # party here even though the models themselves are third-party.
     "snowflake": frozenset({"snowflake"}),
+    # v1.75.0: the five registry-backed hosts added to the catalogue. Their
+    # registry keys are provider-prefixed ("deepinfra/Qwen/Qwen3-32B"), so the
+    # catalogue lists each model under the key minus that prefix and the
+    # "/<name>" suffix match in lookup() resolves it back.
+    "deepinfra": frozenset({"deepinfra"}),
+    "novita": frozenset({"novita"}),
+    "vercel ai gateway": frozenset({"vercel_ai_gateway"}),
+    "nebius": frozenset({"nebius"}),
+    "databricks": frozenset({"databricks"}),
     # Providers with no first-party registry presence are deliberately absent
     # (PromptQL, Salesforce): they resell other vendors' models at their own
     # rates, so there is nothing safe to compare against.
@@ -199,10 +229,19 @@ class PriceOracle:
             logger.warning("Price oracle unavailable: no remote data and no usable snapshot")
             return
 
-        self._records = self._parse(raw)
+        self.load_from_dict(raw, source)
+        logger.info("Price oracle loaded %d model(s) from %s", len(self._records), source)
+
+    def load_from_dict(self, raw: Dict[str, Any], source: str) -> None:
+        """Populate the registry from an already-fetched raw registry dict.
+
+        Used by scripts/pickup_registry_models.py (``--registry PATH`` for
+        tests, ``--snapshot-only`` for the deterministic initial population) so
+        the same parsing and lookup rules apply whatever the data's origin.
+        """
+        self._records = self._parse(raw or {})
         self._fetched_at = datetime.now(UTC)
         self._source = source
-        logger.info("Price oracle loaded %d model(s) from %s", len(self._records), source)
 
     async def _fetch_remote(self) -> Optional[Dict[str, Any]]:
         try:
@@ -363,6 +402,11 @@ class PriceOracle:
         return bool(self._records)
 
     @property
+    def records(self) -> Dict[str, PriceRecord]:
+        """All parsed records keyed by lowercased registry key (read-only use)."""
+        return self._records
+
+    @property
     def model_count(self) -> int:
         return len(self._records)
 
@@ -405,7 +449,12 @@ class PriceOracle:
                 m.supports_function_calling = True
             m.price_confirmed = True
             m.price_as_of = self.fetched_at
-            m.source = f"LiteLLM price registry ({rec.model_key})"
+            m.source = registry_source_label(rec.model_key)
+            # v1.75.0: machine-readable provenance. The source string above is
+            # for display; consumers that need to tell a provider-confirmed
+            # price from a registry one read these two fields.
+            m.price_source_kind = "registry"
+            m.registry_key = rec.model_key
             filled += 1
 
         if filled:
@@ -461,6 +510,15 @@ class PriceOracle:
         unconfirmed but still holds its original curated price, and must keep
         showing up here — otherwise the audit would go silent on exactly the
         models it most needs to flag.
+
+        Registry-sourced models are compared too (v1.75.0). One filled at
+        runtime resolves to the very record it was filled from and yields 0%
+        drift, so it is silent here. One stored in ``data/registry_models/``
+        by the weekly pickup carries the registry's price *as of that run*; if
+        the live registry has since moved it by more than the threshold, it is
+        reported — and withheld by ``demote_drifted`` — until the next pickup
+        PR re-syncs it. A number the registry no longer stands behind should
+        not be served as if it did.
         """
         if not self.loaded:
             return []
@@ -468,10 +526,6 @@ class PriceOracle:
         findings: List[DriftFinding] = []
         for m in models:
             if getattr(m, "cost_per_input_token", 0) <= 0:
-                continue
-            # Skip anything already sourced from the registry — comparing it to
-            # itself would report every filled model as drift-free noise.
-            if (m.source or "").startswith("LiteLLM price registry"):
                 continue
 
             # Only compare like with like — see lookup() for why cross-vendor
@@ -561,3 +615,14 @@ def reset_price_oracle() -> None:
     """Drop the singleton. Used by tests to avoid cross-test cache bleed."""
     global _oracle
     _oracle = None
+
+
+def set_price_oracle(oracle: Optional[PriceOracle]) -> None:
+    """Install a specific oracle as the process-wide singleton.
+
+    Lets scripts/pickup_registry_models.py point the aggregator at the exact
+    registry it is picking from (a local file, or the vendored snapshot) so the
+    runtime catalogue and the pickup decisions are made against the same data.
+    """
+    global _oracle
+    _oracle = oracle

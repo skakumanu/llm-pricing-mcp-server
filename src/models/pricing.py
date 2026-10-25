@@ -1,6 +1,6 @@
 """Pydantic models for pricing data validation."""
 from pydantic import BaseModel, Field, ConfigDict, computed_field
-from typing import Optional, List
+from typing import Literal, Optional, List
 from datetime import date, datetime, UTC
 
 # A hand-maintained price older than this is flagged stale. Providers change
@@ -85,6 +85,23 @@ class PricingMetrics(BaseModel):
             "withheld from cost math (price_confirmed=False) and listed only so the retirement "
             "is visible and the weekly audit can remove it."
         ),
+    )
+    # v1.75.0 — where a usable price came from. ``price_confirmed`` keeps meaning
+    # "has a usable price" so every consumer keeps working; this carries the
+    # provider-vs-registry distinction in a machine-readable form. A
+    # registry-sourced price is eligible for estimates, comparisons and routing,
+    # but is never counted as provider-confirmed in get_data_quality.
+    price_source_kind: Literal["provider", "registry"] = Field(
+        "provider",
+        description=(
+            "'provider' when the price was confirmed against the provider's own published "
+            "rate card; 'registry' when it was taken from the reference price registry "
+            "(see registry_key) and has not been hand-verified against the provider."
+        ),
+    )
+    registry_key: Optional[str] = Field(
+        None,
+        description="The reference registry's key this price was taken from, when price_source_kind is 'registry'",
     )
 
     @computed_field

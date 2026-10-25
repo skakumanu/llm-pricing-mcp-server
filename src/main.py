@@ -61,7 +61,9 @@ from src.models.deployment import (  # noqa: E402
     GracefulShutdownRequest, GracefulShutdownStatus
 )
 from pydantic import BaseModel, Field  # noqa: E402
-from src.services.pricing_aggregator import PricingAggregatorService, get_pricing_aggregator  # noqa: E402
+from src.services.pricing_aggregator import (  # noqa: E402
+    PROVIDER_COUNT, PricingAggregatorService, get_pricing_aggregator,
+)
 from src.services.cost_calculator import compute_token_cost  # noqa: E402
 from src.services.price_oracle import get_price_oracle  # noqa: E402
 from src.services.data_quality import compute_data_quality_report  # noqa: E402
@@ -84,7 +86,10 @@ logger.info("Imports completed successfully")
 _openapi_tags = [
     {
         "name": "Pricing",
-        "description": "Live LLM model pricing data across 26 providers (150+ models). Supports filtering by provider and capability.",
+        "description": (
+            f"Live LLM model pricing data across {PROVIDER_COUNT} providers (600+ models). "
+            "Supports filtering by provider and capability."
+        ),
     },
     {
         "name": "Pricing History",

@@ -1,18 +1,19 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.74.0 | **Last updated**: 2026-10-25
+**Version**: v1.75.0 | **Last updated**: 2026-10-25
 
 ---
 
 ## System Overview
 
-A production FastAPI service that aggregates real-time LLM pricing data from 26 providers (150+ models), exposes it via REST API and MCP protocol, and layers on a ReAct agent, self-serve SaaS billing, and a suite of browser UIs.
+A production FastAPI service that aggregates real-time LLM pricing data from 31 providers (600+ models), exposes it via REST API and MCP protocol, and layers on a ReAct agent, self-serve SaaS billing, and a suite of browser UIs.
 
 - **Primary deployment**: Fly.io (`llm-pricing-api.fly.dev`) — shared-cpu-1x, 512 MB, ~$3.40/mo
 - **CI/CD**: GitHub Actions → test → lint → bandit → OSV scan → gitleaks → Fly.io deploy
 - **Weekly price audit**: a drifted price is withheld from serving the moment it's detected (on every request, not just weekly); the scheduled workflow re-runs `check_price_drift` to report what's currently withheld and refreshes the vendored registry snapshot, opening an issue/PR when either drifts
 - **Snapshot self-validation**: `scripts/validate_price_snapshot.py` gates the refresh PR. GitHub does not run CI on `GITHUB_TOKEN`-created PRs, so the generating job verifies the data itself
 - **Pricing integrity loops (v1.74.0)**: three guards in `tests/test_pricing_integrity.py` (registry-coverage floor, per-1M plausibility band, no confirmed price for a model past its registry deprecation date) plus two weekly, human-merged PRs from `price-audit.yml` — `scripts/reconfirm_stale_prices.py` re-dates stale prices that still match the registry on input *and* output, and `scripts/retire_models.py` deletes entries whose same-provider registry deprecation date is ≥30 days old (the oracle withholds them from cost math the day the date passes and sets `retired_on`). `get_data_quality` reports `registry_coverage_pct`, `unmatched_confirmed`, `retired_listed` so the gaps are visible, not inferred. Each guard maps to a failure the Oct 2026 reconfirmation pass found live: ~40% of the catalogue invisible to drift checks, Cloudflare served 1000x too low, 55 retired models still priced
+- **Registry-sourced entries + weekly pickup (v1.75.0)**: five registry-backed hosts joined the catalogue (DeepInfra, Novita, Vercel AI Gateway, Nebius, Databricks). Beyond a small hand-maintained core, their models are *registry-sourced*: `data/registry_models/<slug>.json` holds the registry's price, key and date per model, `BasePricingProvider._merge_registry_models()` appends them at fetch time (a curated STATIC_PRICING name always wins a collision), and every `PricingMetrics` now carries `price_source_kind` (`provider` | `registry`) plus `registry_key` so the distinction is machine-readable. `price_confirmed` still means "has a usable price", so registry-sourced models flow into every estimate, comparison and route — but `get_data_quality` splits `confirmed_models` into `provider_confirmed` + `registry_sourced`, and a registry-sourced price is never counted as provider-confirmed. `scripts/pickup_registry_models.py` (a third weekly PR from `price-audit.yml`, staged via `--providers`) adds any chat model the registry prices under a covered provider that the catalogue lacks, re-syncs/re-dates existing entries while the registry still backs them, leaves dropped ones to age into stale, and never edits a `*_pricing.py`. Between runs, a stored registry-sourced price the live registry has moved >5% is withheld like any other drift (`find_drift` no longer skips registry sources). Databricks (OWNER DECISION) has no provider-confirmed core — all entries are registry-sourced with a DBU note
 - **Clean cross-branch promotion**: `scripts/promote_branch_content.sh` mirrors one branch's tree onto another (additions, updates, AND deletions) to work around develop/master squash-merge divergence, verifying the result matches exactly before returning
 - **Repo cost auditor**: `scripts/audit_repo.py` statically scans an arbitrary codebase (customer-run, not deployed) for LLM SDK call sites and reuses `predict_cost`'s token/pricing math to recommend cheaper models, prompt caching, Batch API, task-based right-sizing, and duplicate-prompt consolidation — runs locally only, since the hosted `/mcp` HTTP transport has no access to a caller's filesystem
 - **AI-native SDLC pipeline** (dev tooling, not deployed): `/release-feature` runs a feature through dedicated Spec, Design, Code, Review (parallel correctness/security/simplification), and Test & Release phase agents (`.claude/agents/phase-*.md`) orchestrated by `.claude/workflows/release-feature.js`, ending at an open PR against `develop` — Spec fixes *what*/acceptance criteria, Design fixes *how* (approach, version, branch name), so neither phase re-derives the other's decision; see `CLAUDE.md`'s "AI-Native SDLC Pipeline" section
@@ -46,7 +47,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 26 
 │  Pricing Services   │  │  Agent / RAG   │  │  Billing Service           │
 │                     │  │                │  │                            │
 │  PricingAggregator  │  │  ReAct loop    │  │  BillingService            │
-│  26 provider impls  │  │  TF-IDF RAG    │  │  billing.db (SQLite)       │
+│  31 provider impls  │  │  TF-IDF RAG    │  │  billing.db (SQLite)       │
 │  PricingHistory     │  │  Conv. memory  │  │  Free signup → API key     │
 │  BenchmarkService   │  │  LLM backend   │  │  Stripe checkout/webhook   │
 │  Router             │  │  (GPT-4o-mini  │  │  Tier sync (free/pro/ent)  │
@@ -90,7 +91,7 @@ llm-pricing-mcp-server/
 │   │   ├── pricing.py               # PricingMetrics, PerformanceMetrics, RouterResponse, …
 │   │   └── billing.py               # SignupRequest/Response, CheckoutRequest, CustomerDashboard
 │   └── services/
-│       ├── base_provider.py         # BasePricingProvider: build_metrics() shared builder, live sync, provenance
+│       ├── base_provider.py         # BasePricingProvider: build_metrics() shared builder (incl. price_source_kind/registry_key), live sync, provenance; merges data/registry_models/<slug>.json registry-sourced entries at fetch time, curated names win (v1.75.0)
 │       ├── pricing_aggregator.py    # Orchestrates + caches all provider data (async); also hosts the get_pricing_aggregator() process-wide singleton shared by REST and all MCP tools
 │       ├── cost_calculator.py       # compute_token_cost(): single cost-math implementation shared by /cost-estimate(+batch)/usage and their estimate_cost/compare_costs/record_usage MCP-tool counterparts
 │       ├── pricing_history.py       # SQLite price-history + routing_feedback tables
@@ -99,8 +100,8 @@ llm-pricing-mcp-server/
 │       ├── recommendation_cache.py  # ~5min TTL cache for recommend_model / POST /router/recommend decisions + process-lifetime hit/miss stats (get_cache_stats)
 │       ├── task_profiles.py         # 12 task I/O-ratio profiles + keyword task inference
 │       ├── portfolio_optimizer.py   # Per-task model allocation + savings vs single-model baseline
-│       ├── price_oracle.py          # External price registry: fills gaps, withholds drifted prices on input OR output (v1.74.0), withholds retired models once the registry's deprecation_date passes (sets retired_on) (24h TTL + snapshot). Key matching (v1.73.11): exact, "/<name>" suffix (multi-segment names), last slash segment (dotted names), last dot segment (Bedrock cross-region keys); provider aliases keyed by the catalogue's display names, with a per-provider preference order (Google: gemini/ before vertex_ai/). Same-provider variants resolve to the bare canonical key (regional/tier keys are different SKUs); majority vote only among equal-depth keys
-│       ├── data_quality.py          # Aggregate accuracy summary shared by /data-quality and get_data_quality
+│       ├── price_oracle.py          # External price registry: fills gaps, withholds drifted prices on input OR output (v1.74.0), withholds retired models once the registry's deprecation_date passes (sets retired_on) (24h TTL + snapshot). Key matching (v1.73.11): exact, "/<name>" suffix (multi-segment names), last slash segment (dotted names), last dot segment (Bedrock cross-region keys); provider aliases keyed by the catalogue's display names, with a per-provider preference order (Google: gemini/ before vertex_ai/). Same-provider variants resolve to the bare canonical key (regional/tier keys are different SKUs); majority vote only among equal-depth keys. v1.75.0: runtime gap-fills are marked price_source_kind="registry"+registry_key; registry-sourced entries are drift-checked too (a stored price the live registry moved >5% is withheld until the pickup re-syncs); PLAUSIBLE_* band constants; load_from_dict()/set_price_oracle() for the pickup script
+│       ├── data_quality.py          # Aggregate accuracy summary shared by /data-quality and get_data_quality; v1.75.0 splits confirmed_models into provider_confirmed + registry_sourced
 │       ├── token_counter.py         # tiktoken token counting + prompt-cache savings math
 │       ├── ide_pricing.py           # Subscription pricing for AI coding IDE tools
 │       ├── savings_tracker.py       # Per-org router savings + acceptance_rate
@@ -141,7 +142,25 @@ llm-pricing-mcp-server/
 │       ├── azure_openai_pricing.py
 │       ├── vertex_pricing.py
 │       ├── huggingface_pricing.py
-│       └── cloudflare_pricing.py
+│       ├── cloudflare_pricing.py
+│       │   # v1.75.0 — registry-backed hosts; core table + registry-sourced JSON
+│       ├── deepinfra_pricing.py
+│       ├── novita_pricing.py
+│       ├── vercel_ai_gateway_pricing.py
+│       ├── nebius_pricing.py
+│       └── databricks_pricing.py    # empty STATIC_PRICING by decision; all models registry-sourced, DBU note
+│
+├── data/
+│   ├── model_prices_snapshot.json   # Vendored reference-registry snapshot (offline fallback; weekly refresh PR)
+│   └── registry_models/             # One <slug>.json per provider: registry-sourced entries (price, registry_key, price_as_of, added_on). Written only by scripts/pickup_registry_models.py; merged by BasePricingProvider at fetch time
+│
+├── scripts/
+│   ├── pickup_registry_models.py    # Weekly PR: new registry chat models under covered providers -> registry-sourced entries; re-sync/re-date existing; never edits *_pricing.py (v1.75.0)
+│   ├── reconfirm_stale_prices.py    # Weekly PR: re-date stale curated prices that still match the registry (skips registry-sourced)
+│   ├── retire_models.py             # Weekly PR: delete entries retired >=30 days; registry-sourced rows are removed from their JSON
+│   ├── validate_price_snapshot.py   # Gates the snapshot-refresh PR
+│   ├── audit_repo.py                # Customer-run repo cost auditor (not deployed)
+│   └── promote_branch_content.sh    # Mirror one branch's tree onto another
 │
 ├── agent/
 │   ├── pricing_agent.py             # High-level agent entry point
@@ -174,7 +193,7 @@ llm-pricing-mcp-server/
 ├── .github/workflows/
 │   ├── ci-cd.yml                    # Full CI/CD: test→lint→osv→bandit→gitleaks→deploy
 │   ├── sync-develop.yml             # Auto-sync develop ← master after deploy
-│   ├── price-audit.yml              # Weekly: drift issue + snapshot-refresh PR; (v1.74.0) reconfirm-stale-prices PR + retire-models PR, both human-merged
+│   ├── price-audit.yml              # Weekly: drift issue + snapshot-refresh PR; (v1.74.0) reconfirm-stale-prices PR + retire-models PR; (v1.75.0) pickup-registry-models PR (staged via --providers; reads the vendored snapshot so its guards and the pickup see one registry) — all human-merged
 │   ├── npm-publish.yml              # npm Trusted Publishing (OIDC) of npm/llm-pricing-mcp on master push — filename is part of the npmjs.com trust config
 │   └── mcp-registry-publish.yml     # Publishes server.json to registry.modelcontextprotocol.io via GitHub OIDC (`mcp-publisher login github-oidc`) on master push
 │
@@ -239,9 +258,12 @@ Incoming request
 ```
 
 ### 3. Provider Pattern
-Each of 26 LLM providers implements `BasePricingProvider`:
+Each of 31 LLM providers implements `BasePricingProvider`:
 - `fetch_pricing_data() -> list[PricingMetrics]` — returns static pricing (with live data fallback where available)
-- `get_pricing_with_status()` — wraps `fetch_pricing_data()`, applies **live model sync**, returns `(data, status)`
+- `get_pricing_with_status()` — wraps `fetch_pricing_data()`, merges **registry-sourced entries**, applies **live model sync**, returns `(data, status)`
+
+#### Registry-sourced entries (v1.75.0)
+A provider's catalogue is the union of its curated `STATIC_PRICING` (a human's statement about the rate card, `price_source_kind="provider"`) and `data/registry_models/<slug>.json` (the reference registry's statement, `price_source_kind="registry"`, with `registry_key`, `price_as_of` = registry date, `added_on`). `_merge_registry_models()` appends the JSON entries after `fetch_pricing_data()`; a curated name always wins a collision. Entries are listed under the identifier the provider's API accepts (registry key minus the provider prefix) and the oracle's `/<name>` suffix match resolves them back to the same-provider record. The JSON is written only by `scripts/pickup_registry_models.py` (weekly PR; staged rollout via `--providers`; run with `--snapshot-only` because the guard tests price the catalogue against `data/model_prices_snapshot.json`, so new registry data reaches the pickup via the snapshot-refresh PR); a `STATIC_PRICING` entry may also declare `"price_source_kind": "registry"` + `"registry_key"` when a core number could not be verified against the rate card and was taken from the registry instead (reported as a shortfall, never presented as provider-confirmed). `PROVIDER_SERVICES` in `pricing_aggregator.py` is the single ordered list of providers; `PROVIDER_COUNT` derives from it and every "N providers" string in the docs must agree (`tests/test_new_providers.py`).
 
 #### Live Model Sync (automatic, per provider)
 `BasePricingProvider._fetch_live_model_ids()` queries the provider's `/v1/models` API (cached 6 h).
@@ -249,7 +271,7 @@ Each of 26 LLM providers implements `BasePricingProvider`:
 or prefix match in the live set. Falls back to the full static list if the API is unreachable or no key is set.
 Enabled for: OpenAI, Anthropic, Groq, Mistral AI, Together AI, Fireworks AI, xAI, DeepSeek, Cerebras, NVIDIA NIM.
 
-`PricingAggregatorService` fetches all providers concurrently (`asyncio.gather`), merges results, and caches with a configurable TTL. Adding a new provider = new file + registration in aggregator.
+`PricingAggregatorService` fetches all providers concurrently (`asyncio.gather`), merges results, and caches with a configurable TTL. Adding a new provider = new file + one `PROVIDER_SERVICES` entry (+ `PROVIDER_FILTER_ALIASES` strings) in the aggregator. DeepInfra, Novita, Vercel AI Gateway, Nebius and Databricks have no live model sync configured: their candidate list endpoints could not be verified as public/key-optional from the authoring environment, and Databricks has none.
 
 ### 4. MCP Dual Transport
 - **STDIO** (`mcp/server.py`): JSON-RPC 2.0 over stdin/stdout for Claude Desktop local integration

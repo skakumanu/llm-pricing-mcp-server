@@ -1,12 +1,44 @@
 """Base provider interface for pricing services."""
 from abc import ABC, abstractmethod
-from typing import List, Optional, FrozenSet
+from pathlib import Path
+from typing import Dict, List, Optional, FrozenSet
 from dataclasses import dataclass
+import json
 import logging
 import httpx
 from src.models.pricing import PricingMetrics
+from src.services.price_oracle import registry_source_label
 
 logger = logging.getLogger(__name__)
+
+# Registry-sourced entries live here, one generated JSON file per provider
+# (``<slug>.json``, slug = provider name lowercased, spaces -> "_", dots
+# dropped), written by scripts/pickup_registry_models.py and merged into each
+# provider's catalogue at fetch time. They are kept out of STATIC_PRICING on
+# purpose: a curated table is a human's statement about a provider's rate card,
+# and these are the registry's.
+REGISTRY_MODELS_DIR = Path(__file__).resolve().parents[2] / "data" / "registry_models"
+
+
+def registry_models_slug(provider_name: str) -> str:
+    """File stem for a provider's registry-sourced models JSON."""
+    return provider_name.lower().replace(" ", "_").replace(".", "")
+
+
+def registry_models_path(provider_name: str, out_dir: Optional[Path] = None) -> Path:
+    """Where a provider's registry-sourced models JSON lives (it may not exist yet)."""
+    return Path(out_dir or REGISTRY_MODELS_DIR) / f"{registry_models_slug(provider_name)}.json"
+
+
+def render_registry_models_doc(doc: dict) -> bytes:
+    """The one on-disk encoding of a registry-models document.
+
+    One field per line, sorted keys, trailing newline: tiny diffs and
+    byte-identical idempotency. Every writer (the weekly pickup, the retire
+    job) and the byte-stability test go through this so a format change cannot
+    leave two jobs rewriting the same file back and forth.
+    """
+    return (json.dumps(doc, indent=1, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
 
 
 @dataclass
@@ -29,6 +61,20 @@ class BasePricingProvider(ABC):
     # published rates. Subclasses should set this whenever they touch STATIC_PRICING.
     # Models that set their own price_as_of keep it; the rest inherit this.
     PRICE_AS_OF: Optional[str] = None
+
+    # Where this provider's registry-sourced models JSON lives. Class-level so a
+    # test can point a stub provider at a tmp_path; the pickup script sets it
+    # per instance when ``--out-dir`` differs from the default.
+    REGISTRY_MODELS_DIR: Path = REGISTRY_MODELS_DIR
+
+    # When set, every registry-sourced model this provider merges gets this as
+    # its ``best_for`` text — the place for a caveat a customer must see next
+    # to the number (Databricks bills in DBUs, so a USD figure is indicative).
+    REGISTRY_PRICE_NOTE: Optional[str] = None
+
+    # {resolved JSON path: (mtime_ns, models dict)} — re-read when the file
+    # changes, so the weekly pickup's rewrite is picked up without a restart.
+    _registry_models_cache: Dict[str, tuple] = {}
 
     def __init__(self, provider_name: str):
         """Initialize the provider.
@@ -114,11 +160,104 @@ class BasePricingProvider(ABC):
             # Provenance travels with the data rather than being stamped later, so
             # it survives callers that bypass get_pricing_with_status().
             price_confirmed=info.get("price_confirmed", True),
+            # v1.75.0: an entry may declare that its number came from the
+            # reference registry rather than the provider's rate card.
+            price_source_kind=info.get("price_source_kind", "provider"),
+            registry_key=info.get("registry_key"),
         )
         if info.get("price_as_of"):
             fields["price_as_of"] = info["price_as_of"]
         fields.update(extra)
         return PricingMetrics(**fields)
+
+    @staticmethod
+    def source_for(model_name: str, info: dict, curated_source: str) -> str:
+        """Display ``source`` for one STATIC_PRICING entry.
+
+        An entry that declares ``price_source_kind: "registry"`` (a core number
+        that could not be verified against the rate card and was taken from the
+        registry instead) names the registry and its key, exactly as a merged
+        data/registry_models entry or a runtime gap-fill does; anything else is
+        the provider's rate card.
+        """
+        if info.get("price_source_kind") == "registry":
+            return registry_source_label(info.get("registry_key") or model_name)
+        return curated_source
+
+    # -- registry-sourced models (data/registry_models/<slug>.json) --------------
+
+    def _registry_models_path(self) -> Path:
+        return registry_models_path(self.provider_name, Path(self.REGISTRY_MODELS_DIR))
+
+    def _load_registry_models(self) -> Dict[str, dict]:
+        """The provider's registry-sourced models, ``{name: entry}``; ``{}`` when absent.
+
+        Entries use the STATIC_PRICING per-1k convention plus
+        ``price_source_kind``/``registry_key``/``price_as_of``, so they go
+        through ``build_metrics`` unchanged.
+        """
+        path = self._registry_models_path()
+        try:
+            stat = path.stat()
+        except OSError:
+            return {}
+        key = str(path)
+        cached = BasePricingProvider._registry_models_cache.get(key)
+        if cached and cached[0] == stat.st_mtime_ns:
+            return cached[1]
+        try:
+            with path.open(encoding="utf-8") as fh:
+                doc = json.load(fh)
+            models = doc.get("models", {}) if isinstance(doc, dict) else {}
+            models = {k: v for k, v in models.items() if isinstance(v, dict)}
+        except Exception as exc:
+            logger.warning("[%s] registry models file unreadable at %s: %s", self.provider_name, path, exc)
+            return {}
+        BasePricingProvider._registry_models_cache[key] = (stat.st_mtime_ns, models)
+        return models
+
+    def _merge_registry_models(self, pricing_list: List[PricingMetrics]) -> List[PricingMetrics]:
+        """Append registry-sourced models the curated table does not already list.
+
+        A curated STATIC_PRICING entry always wins a name collision (case-
+        insensitive): the human's statement about the rate card outranks the
+        registry's. Everything merged here carries ``price_source_kind="registry"``
+        and its ``registry_key`` so consumers can tell the two apart.
+        """
+        registry = self._load_registry_models()
+        if not registry:
+            return pricing_list
+        present = {m.model_name.lower() for m in pricing_list}
+        merged = []
+        skipped = 0
+        for name, info in registry.items():
+            if name.lower() in present:
+                continue
+            entry = dict(info)
+            entry.setdefault("price_source_kind", "registry")
+            if self.REGISTRY_PRICE_NOTE and not entry.get("best_for"):
+                entry["best_for"] = self.REGISTRY_PRICE_NOTE
+            try:
+                metrics = self.build_metrics(
+                    name, entry,
+                    source=registry_source_label(entry.get("registry_key") or name),
+                    provider=self.provider_name,
+                )
+            except Exception as exc:
+                # One bad row (a hand edit, a merge-conflict leftover) must not take
+                # the curated core and every valid registry entry down with it:
+                # get_pricing_with_status() would otherwise report the provider
+                # unavailable with an empty catalogue.
+                skipped += 1
+                logger.warning("[%s] skipping malformed registry-sourced entry %r: %s",
+                               self.provider_name, name, exc)
+                continue
+            merged.append(metrics)
+            present.add(name.lower())
+        if merged or skipped:
+            logger.debug("[%s] merged %d registry-sourced model(s), skipped %d malformed",
+                         self.provider_name, len(merged), skipped)
+        return pricing_list + merged
 
     @abstractmethod
     async def fetch_pricing_data(self) -> List[PricingMetrics]:
@@ -339,6 +478,11 @@ class BasePricingProvider(ABC):
         """
         try:
             pricing_data = await self.fetch_pricing_data()
+
+            # Registry-sourced models (v1.75.0) join the curated table before the
+            # live sync runs, so they are filtered and discovered against like
+            # any other entry; curated names always win a collision.
+            pricing_data = self._merge_registry_models(pricing_data)
 
             # Apply live model filtering when an API endpoint is configured
             live_ids = await self._fetch_live_model_ids()
