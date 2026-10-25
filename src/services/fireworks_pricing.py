@@ -22,6 +22,7 @@ class FireworksPricingService(BasePricingProvider):
         "accounts/fireworks/models/llama-v3p3-70b-instruct": {
             "input": 0.0009,
             "output": 0.0009,
+            "price_as_of": "2026-10-25",
             "context_window": 131072,
             "use_cases": ["Latest Llama", "Complex reasoning", "Code generation", "Long context"],
             "strengths": ["Latest Llama 3.3", "Enhanced intelligence", "Ultra-fast", "128K context"],
@@ -32,6 +33,7 @@ class FireworksPricingService(BasePricingProvider):
         "accounts/fireworks/models/llama-v3p2-90b-vision-instruct": {
             "input": 0.0009,
             "output": 0.0009,
+            "price_as_of": "2026-10-25",
             "context_window": 131072,
             "use_cases": ["Vision + text", "Image analysis", "Multimodal reasoning", "Visual Q&A"],
             "strengths": ["Multimodal", "Large vision model", "Fast", "Long context"],
@@ -42,6 +44,7 @@ class FireworksPricingService(BasePricingProvider):
         "accounts/fireworks/models/llama-v3p1-405b-instruct": {
             "input": 0.003,
             "output": 0.003,
+            "price_as_of": "2026-10-25",
             "context_window": 131072,
             "use_cases": ["Complex reasoning", "Research", "Advanced tasks", "Long-form"],
             "strengths": ["Largest Llama", "Fast inference", "Long context"],
@@ -52,6 +55,7 @@ class FireworksPricingService(BasePricingProvider):
         "accounts/fireworks/models/llama-v3p1-70b-instruct": {
             "input": 0.0009,
             "output": 0.0009,
+            "price_as_of": "2026-10-25",
             "context_window": 131072,
             "use_cases": ["General purpose", "Code", "Analysis", "Creative"],
             "strengths": ["Well-balanced", "Fast", "Long context"],
@@ -62,6 +66,7 @@ class FireworksPricingService(BasePricingProvider):
         "accounts/fireworks/models/qwen2p5-72b-instruct": {
             "input": 0.0009,
             "output": 0.0009,
+            "price_as_of": "2026-10-25",
             "context_window": 131072,
             "use_cases": ["Multilingual", "Math reasoning", "Code generation", "Analysis"],
             "strengths": ["Latest Qwen", "Excellent multilingual", "Strong math", "128K context"],
@@ -72,6 +77,7 @@ class FireworksPricingService(BasePricingProvider):
         "accounts/fireworks/models/mixtral-8x7b-instruct": {
             "input": 0.0005,
             "output": 0.0005,
+            "price_as_of": "2026-10-25",
             "context_window": 32768,
             "use_cases": ["Code", "Multilingual", "Reasoning"],
             "strengths": ["MoE architecture", "Versatile", "Fast"],
@@ -81,6 +87,7 @@ class FireworksPricingService(BasePricingProvider):
         "accounts/fireworks/models/yi-large": {
             "input": 0.003,
             "output": 0.003,
+            "price_as_of": "2026-10-25",
             "context_window": 32768,
             "use_cases": ["Enterprise", "Complex reasoning", "Analysis"],
             "strengths": ["High performance", "Strong reasoning", "Fast"],

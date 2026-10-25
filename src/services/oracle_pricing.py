@@ -24,8 +24,11 @@ class OraclePricingService(BasePricingProvider):
 
     STATIC_PRICING = {
         "meta.llama-3.1-405b-instruct": {
-            "input": 0.00285,
-            "output": 0.00285,
+            # v1.73.11: 2.85 -> 10.68 per 1M; the curated figure was ~4x under
+            # OCI's on-demand rate (registry oci/meta.llama-3.1-405b-instruct).
+            "input": 0.01068,
+            "output": 0.01068,
+            "price_as_of": "2026-10-25",
             "context_window": 128000,
             "use_cases": [
                 "Complex reasoning", "Advanced coding", "Long document analysis",
@@ -39,8 +42,10 @@ class OraclePricingService(BasePricingProvider):
             "supports_function_calling": True,
         },
         "meta.llama-3.1-70b-instruct": {
-            "input": 0.00093,
-            "output": 0.00093,
+            # v1.73.11: 0.93 -> 0.72 per 1M (registry oci/meta.llama-3.1-70b-instruct).
+            "input": 0.00072,
+            "output": 0.00072,
+            "price_as_of": "2026-10-25",
             "context_window": 128000,
             "use_cases": [
                 "General purpose", "Code generation", "Data analysis",
@@ -54,8 +59,10 @@ class OraclePricingService(BasePricingProvider):
             "supports_function_calling": True,
         },
         "meta.llama-3.2-90b-vision-instruct": {
-            "input": 0.00096,
-            "output": 0.00096,
+            # v1.73.11: 0.96 -> 2.00 per 1M (registry oci/meta.llama-3.2-90b-vision-instruct).
+            "input": 0.002,
+            "output": 0.002,
+            "price_as_of": "2026-10-25",
             "context_window": 128000,
             "use_cases": [
                 "Image understanding", "Visual data analysis", "Document processing",
@@ -70,8 +77,10 @@ class OraclePricingService(BasePricingProvider):
             "supports_function_calling": True,
         },
         "meta.llama-3.2-11b-vision-instruct": {
-            "input": 0.00018,
-            "output": 0.00018,
+            # v1.73.11: 0.18 -> 2.00 per 1M (registry oci/meta.llama-3.2-11b-vision-instruct).
+            "input": 0.002,
+            "output": 0.002,
+            "price_as_of": "2026-10-25",
             "context_window": 128000,
             "use_cases": [
                 "Cost-effective vision", "Document classification",
@@ -115,8 +124,10 @@ class OraclePricingService(BasePricingProvider):
             "supports_function_calling": True,
         },
         "cohere.command-r-08-2024": {
-            "input": 0.0005,
-            "output": 0.0015,
+            # v1.73.11: 0.50/1.50 -> 0.15/0.15 per 1M (registry oci/cohere.command-r-08-2024).
+            "input": 0.00015,
+            "output": 0.00015,
+            "price_as_of": "2026-10-25",
             "context_window": 128000,
             "use_cases": [
                 "Retrieval-augmented generation", "Enterprise Q&A",

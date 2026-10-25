@@ -22,6 +22,7 @@ class AI21PricingService(BasePricingProvider):
         "jamba-1.5-large": {
             "input": 0.002,
             "output": 0.008,
+            "price_as_of": "2026-10-25",
             "context_window": 256000,
             "use_cases": ["Long documents", "Complex analysis", "Enterprise tasks", "Research"],
             "strengths": ["Hybrid SSM-Transformer", "256K context", "Enterprise-grade", "Strong reasoning"],
@@ -31,6 +32,7 @@ class AI21PricingService(BasePricingProvider):
         "jamba-1.5-mini": {
             "input": 0.0002,
             "output": 0.0004,
+            "price_as_of": "2026-10-25",
             "context_window": 256000,
             "use_cases": ["High-volume", "Long documents", "Cost-sensitive", "Simple tasks"],
             "strengths": ["Affordable", "256K context", "Fast", "Efficient"],

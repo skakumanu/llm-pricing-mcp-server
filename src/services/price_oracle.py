@@ -54,6 +54,13 @@ DRIFT_THRESHOLD_PCT = 5.0
 PROVIDER_ALIASES: Dict[str, frozenset] = {
     "openai": frozenset({"openai", "text-completion-openai"}),
     "anthropic": frozenset({"anthropic"}),
+    # "Google" is the Gemini Developer API (AI Studio) price list. Vertex AI
+    # publishes its own, sometimes different, rate for the same model
+    # (gemini-2.0-flash was $0.10 vs $0.15 per 1M input), so when both exist
+    # a Google-catalogue price must be compared with the `gemini/` entry, not
+    # the `vertex_ai/` one — see PROVIDER_PREFERENCE. `vertex_ai` stays in the
+    # set because preview models often exist only there, and filling a gap
+    # from Vertex beats leaving a current model unpriced.
     "google": frozenset({"gemini", "vertex_ai-language-models", "vertex_ai"}),
     "google vertex ai": frozenset({"vertex_ai-language-models", "vertex_ai", "gemini"}),
     "mistral ai": frozenset({"mistral"}),
@@ -71,12 +78,29 @@ PROVIDER_ALIASES: Dict[str, frozenset] = {
     "replicate": frozenset({"replicate"}),
     "cloudflare ai": frozenset({"cloudflare"}),
     "ai21": frozenset({"ai21", "ai21_chat"}),
+    "ai21 labs": frozenset({"ai21", "ai21_chat"}),      # the catalogue's display name
     "oracle cloud": frozenset({"oci"}),
+    "oracle oci": frozenset({"oci"}),                   # the catalogue's display name
+    "vertex ai": frozenset({"vertex_ai-language-models", "vertex_ai", "gemini"}),
     "hugging face": frozenset({"huggingface"}),
     "anyscale": frozenset({"anyscale"}),
-    # Providers with no first-party registry presence are deliberately absent:
-    # Snowflake and PromptQL resell other vendors' models at their own rates, so
-    # there is nothing safe to compare against.
+    # Snowflake Cortex publishes its own per-token rates and the registry
+    # carries them under provider "snowflake" (19 entries), so it is a first
+    # party here even though the models themselves are third-party.
+    "snowflake": frozenset({"snowflake"}),
+    # Providers with no first-party registry presence are deliberately absent
+    # (PromptQL, Salesforce): they resell other vendors' models at their own
+    # rates, so there is nothing safe to compare against.
+}
+
+
+# When one first party has several registry provider values and they carry
+# different price lists, this is the order to prefer them in. Only the first
+# value that has a candidate is used; the rest are fallbacks, not peers.
+PROVIDER_PREFERENCE: Dict[str, tuple] = {
+    "google": ("gemini", "vertex_ai-language-models", "vertex_ai"),
+    "vertex ai": ("vertex_ai", "vertex_ai-language-models", "gemini"),
+    "google vertex ai": ("vertex_ai", "vertex_ai-language-models", "gemini"),
 }
 
 
@@ -241,9 +265,25 @@ class PriceOracle:
         exact = self._records.get(name)
         if exact:
             candidates.append(exact)
+        suffix = "/" + name
         for key, rec in self._records.items():
-            tail = key.rsplit("/", 1)[-1].rsplit(".", 1)[-1]
-            if tail == name and rec not in candidates:
+            if rec in candidates:
+                continue
+            # Three shapes of namespaced key, all meaning "this model under a
+            # provider prefix":
+            #   fireworks_ai/accounts/fireworks/models/llama-v3p3-70b-instruct
+            #     -> the curated name is itself multi-segment; match on suffix
+            #   cerebras/llama3.1-8b, vertex_ai/gemini-2.0-flash
+            #     -> single segment containing a dot; match on the slash tail
+            #   us.anthropic.dotted-model
+            #     -> Bedrock's dotted cross-region keys; match on the dot tail
+            # Before v1.73.11 only the dot tail was compared, which silently
+            # never matched any curated name containing "." or "/" — most of
+            # Fireworks, Together, Cerebras, Vertex, Cloudflare and Replicate —
+            # so those prices were neither drift-checked nor reconfirmable.
+            slash_tail = key.rsplit("/", 1)[-1]
+            dot_tail = slash_tail.rsplit(".", 1)[-1]
+            if key.endswith(suffix) or slash_tail == name or dot_tail == name:
                 candidates.append(rec)
 
         if not candidates:
@@ -253,6 +293,13 @@ class PriceOracle:
             provider_matches = [
                 rec for rec in candidates if rec.provider and rec.provider.lower() in aliases
             ]
+            preference = PROVIDER_PREFERENCE.get(provider.strip().lower()) if provider else None
+            if provider_matches and preference:
+                for preferred in preference:
+                    narrowed = [r for r in provider_matches if r.provider.lower() == preferred]
+                    if narrowed:
+                        provider_matches = narrowed
+                        break
             if provider_matches:
                 return self._resolve_agreeing_candidate(provider_matches)
 
