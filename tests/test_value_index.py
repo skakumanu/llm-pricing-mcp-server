@@ -1,6 +1,5 @@
 """Tests for the benchmark_service (quality scores / value index)."""
 import sys
-import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -12,7 +11,6 @@ sys.path.insert(0, str(project_root))
 from src.services.benchmark_service import (  # noqa: E402
     STATIC_SCORES,
     _lookup_static,
-    _NORMALIZED,
     enrich_models,
     get_quality_score,
     set_cache_ttl,
@@ -163,3 +161,91 @@ def test_set_cache_ttl():
     assert bm._cache_ttl_seconds == 48 * 3600
     # Reset back to default
     set_cache_ttl(24)
+
+
+# ---------------------------------------------------------------------------
+# Leaderboard download is shared and misses are cached (v1.75.0)
+# ---------------------------------------------------------------------------
+
+def _row(name, score):
+    return {"row": {"model_name_for_query": name, "Average ⬆️": score}}
+
+
+@pytest.fixture
+def _fresh_caches():
+    import src.services.benchmark_service as bm
+    bm._reset_caches()
+    yield bm
+    bm._reset_caches()
+
+
+@pytest.mark.asyncio
+async def test_many_unknown_models_cost_one_download(_fresh_caches):
+    bm = _fresh_caches
+    download = AsyncMock(return_value=[_row("acme/open-model-7b", 61.5)])
+    models = []
+    for i in range(300):
+        m = MagicMock()
+        m.model_name = f"unknown-registry-model-{i}"
+        m.quality_score = None
+        models.append(m)
+    hit = MagicMock()
+    hit.model_name = "open-model-7b"
+    hit.quality_score = None
+    with patch.object(bm, "_download_leaderboard_rows", download):
+        await enrich_models(models + [hit])
+        # a second pass over the same catalogue is served from the caches
+        for m in models:
+            m.quality_score = None
+        await enrich_models(models)
+    assert download.await_count == 1
+    assert hit.quality_score == 61.5
+    assert all(m.quality_score is None for m in models)
+    assert _hf_cache["unknown-registry-model-0"][0] is None  # the miss is cached
+
+
+@pytest.mark.asyncio
+async def test_failed_download_is_remembered_not_retried_per_model(_fresh_caches):
+    bm = _fresh_caches
+    download = AsyncMock(side_effect=RuntimeError("leaderboard down"))
+    with patch.object(bm, "_download_leaderboard_rows", download):
+        for i in range(20):
+            assert await get_quality_score(f"nobody-knows-{i}") is None
+    assert download.await_count == 1
+    rows, _, ttl = bm._leaderboard_cache
+    assert rows == [] and ttl == bm._FAILURE_TTL_SECONDS
+
+
+@pytest.mark.asyncio
+async def test_non_200_download_counts_as_failure(_fresh_caches):
+    bm = _fresh_caches
+    resp = MagicMock(status_code=503)
+    client = MagicMock()
+    client.get = AsyncMock(return_value=resp)
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+    with patch("httpx.AsyncClient", return_value=client):
+        assert await get_quality_score("nobody-knows") is None
+    assert bm._leaderboard_cache[2] == bm._FAILURE_TTL_SECONDS
+
+
+@pytest.mark.asyncio
+async def test_expired_leaderboard_is_downloaded_again(_fresh_caches):
+    bm = _fresh_caches
+    download = AsyncMock(return_value=[])
+    with patch.object(bm, "_download_leaderboard_rows", download):
+        await get_quality_score("fresh-unknown-a")
+        rows, fetched_at, ttl = bm._leaderboard_cache
+        bm._leaderboard_cache = (rows, fetched_at - ttl - 1, ttl)
+        await get_quality_score("fresh-unknown-b")
+    assert download.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_static_scores_never_touch_the_leaderboard(_fresh_caches):
+    bm = _fresh_caches
+    download = AsyncMock(return_value=[])
+    with patch.object(bm, "_download_leaderboard_rows", download):
+        assert await get_quality_score("gpt-4o") == 87
+        assert await get_quality_score("claude-sonnet-4-6-20260101") == 82
+    assert download.await_count == 0

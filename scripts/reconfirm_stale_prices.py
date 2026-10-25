@@ -84,7 +84,16 @@ async def classify(threshold_pct: float) -> Tuple[List[Dict], List[Dict]]:
     if not oracle.loaded:
         raise RuntimeError("price registry unavailable (no live fetch, no snapshot)")
     models, _ = await PricingAggregatorService().get_all_pricing_async(include_unconfirmed=True)
-    stale = [m for m in models if m.pricing_model == "per_token" and m.price_confirmed and m.price_is_stale]
+    # Registry-sourced entries (v1.75.0) are not reconfirmed here: there is no
+    # curated statement to re-date. The weekly pickup re-dates the ones in
+    # data/registry_models/ while the registry still backs them; a
+    # registry-labelled STATIC_PRICING entry is left stale until a human
+    # verifies it against the rate card and promotes it.
+    stale = [
+        m for m in models
+        if m.pricing_model == "per_token" and m.price_confirmed and m.price_is_stale
+        and getattr(m, "price_source_kind", "provider") != "registry"
+    ]
     ok, no = [], []
     for m in stale:
         rec = oracle.lookup(m.model_name, m.provider, require_provider_match=True)

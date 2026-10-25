@@ -454,3 +454,187 @@ def issubclass_safe(cls, base) -> bool:
         return issubclass(cls, base) and cls is not base
     except TypeError:
         return False
+
+
+# ---------------------------------------------------------------------------
+# v1.75.0 — machine-readable provenance: price_source_kind / registry_key
+# ---------------------------------------------------------------------------
+
+class TestPriceSourceKind:
+    def test_defaults_to_provider_with_no_key(self):
+        m = _pm()
+        assert m.price_source_kind == "provider"
+        assert m.registry_key is None
+
+    def test_build_metrics_honours_entry_provenance(self, stub):
+        info = {"input": 1.0, "output": 2.0, "price_source_kind": "registry",
+                "registry_key": "acme/x", "price_as_of": "2026-10-25"}
+        m = stub.build_metrics("x", info, source="s")
+        assert m.price_source_kind == "registry"
+        assert m.registry_key == "acme/x"
+        assert m.price_confirmed is True        # usable; the kind carries the distinction
+        assert m.price_as_of == "2026-10-25"
+
+    def test_build_metrics_default_is_provider(self, stub):
+        m = stub.build_metrics("x", {"input": 1.0, "output": 2.0}, source="s")
+        assert m.price_source_kind == "provider" and m.registry_key is None
+
+    def test_rejects_unknown_kind(self):
+        with pytest.raises(Exception):
+            _pm(price_source_kind="guess")
+
+    def test_fill_missing_prices_marks_kind_and_key(self):
+        from src.services.price_oracle import PriceOracle
+        o = PriceOracle()
+        o.load_from_dict({"acme/new-model": {
+            "mode": "chat", "litellm_provider": "acme",
+            "input_cost_per_token": 1e-06, "output_cost_per_token": 2e-06,
+        }}, "test")
+        m = _pm("new-model", "Acme", 0.0, 0.0, price_confirmed=False)
+        assert o.fill_missing_prices([m]) == 1
+        assert m.price_source_kind == "registry"
+        assert m.registry_key == "acme/new-model"
+        assert m.price_confirmed is True
+        assert m.source == "LiteLLM price registry (acme/new-model)"
+
+    def test_fill_missing_prices_leaves_curated_kind_alone(self):
+        from src.services.price_oracle import PriceOracle
+        o = PriceOracle()
+        o.load_from_dict({"acme/curated": {
+            "mode": "chat", "litellm_provider": "acme",
+            "input_cost_per_token": 9e-06, "output_cost_per_token": 9e-06,
+        }}, "test")
+        m = _pm("curated", "Acme", 1e-06, 2e-06)
+        assert o.fill_missing_prices([m]) == 0
+        assert m.price_source_kind == "provider" and m.cost_per_input_token == 1e-06
+
+
+# ---------------------------------------------------------------------------
+# v1.75.0 — registry-sourced models merged from data/registry_models/<slug>.json
+# ---------------------------------------------------------------------------
+
+def _write_registry_models(tmp_path, provider="StubProvider", models=None):
+    import json
+    from src.services.base_provider import registry_models_slug
+    doc = {"provider": provider, "registry_provider": "stub", "generated_by": "test",
+           "models": models if models is not None else {}}
+    (tmp_path / f"{registry_models_slug(provider)}.json").write_text(json.dumps(doc), encoding="utf-8")
+
+
+REGISTRY_ENTRY = {
+    "input": 0.0005, "output": 0.0015, "context_window": 64000,
+    "supports_vision": True, "supports_function_calling": False,
+    "price_source_kind": "registry", "registry_key": "stub/from-registry",
+    "price_as_of": "2026-10-25", "added_on": "2026-10-25",
+}
+
+
+@pytest.mark.asyncio
+class TestRegistryModelsMerge:
+    async def test_missing_file_merges_nothing(self, tmp_path):
+        class P(_StubProvider):
+            REGISTRY_MODELS_DIR = tmp_path
+        data, _ = await P().get_pricing_with_status()
+        assert {m.model_name for m in data} == {"priced", "unpriced", "own-date"}
+
+    async def test_json_entries_are_appended_as_registry_sourced(self, tmp_path):
+        _write_registry_models(tmp_path, models={"from-registry": REGISTRY_ENTRY})
+
+        class P(_StubProvider):
+            REGISTRY_MODELS_DIR = tmp_path
+        data, _ = await P().get_pricing_with_status()
+        m = next(x for x in data if x.model_name == "from-registry")
+        assert m.provider == "StubProvider"
+        assert m.price_source_kind == "registry"
+        assert m.registry_key == "stub/from-registry"
+        assert m.price_confirmed is True
+        assert m.price_as_of == "2026-10-25"        # its own date, not PRICE_AS_OF
+        assert m.cost_per_input_token == pytest.approx(5e-07)   # per-1k -> per-token
+        assert m.context_window == 64000 and m.supports_vision is True
+        assert m.source == "LiteLLM price registry (stub/from-registry)"
+
+    async def test_curated_entry_wins_a_name_collision(self, tmp_path):
+        collide = dict(REGISTRY_ENTRY, input=99.0, output=99.0)
+        _write_registry_models(tmp_path, models={"priced": collide, "PRICED": collide})
+
+        class P(_StubProvider):
+            REGISTRY_MODELS_DIR = tmp_path
+        data, _ = await P().get_pricing_with_status()
+        priced = [m for m in data if m.model_name.lower() == "priced"]
+        assert len(priced) == 1
+        assert priced[0].price_source_kind == "provider"
+        assert priced[0].cost_per_input_token == 1.0  # the stub's _pm value, not 99/1000
+
+    async def test_registry_price_note_lands_in_best_for(self, tmp_path):
+        _write_registry_models(tmp_path, models={"from-registry": REGISTRY_ENTRY})
+
+        class P(_StubProvider):
+            REGISTRY_MODELS_DIR = tmp_path
+            REGISTRY_PRICE_NOTE = "Billed in DBUs; USD figure is indicative."
+        data, _ = await P().get_pricing_with_status()
+        assert next(m for m in data if m.model_name == "from-registry").best_for == P.REGISTRY_PRICE_NOTE
+        # curated entries are not annotated
+        assert next(m for m in data if m.model_name == "priced").best_for is None
+
+    async def test_note_does_not_override_an_entry_with_its_own_best_for(self, tmp_path):
+        _write_registry_models(tmp_path, models={"from-registry": dict(REGISTRY_ENTRY, best_for="own text")})
+
+        class P(_StubProvider):
+            REGISTRY_MODELS_DIR = tmp_path
+            REGISTRY_PRICE_NOTE = "note"
+        data, _ = await P().get_pricing_with_status()
+        assert next(m for m in data if m.model_name == "from-registry").best_for == "own text"
+
+    async def test_rewritten_file_is_picked_up_without_restart(self, tmp_path):
+        import os
+        import time
+        _write_registry_models(tmp_path, models={"a": REGISTRY_ENTRY})
+
+        class P(_StubProvider):
+            REGISTRY_MODELS_DIR = tmp_path
+        p = P()
+        assert "a" in {m.model_name for m in (await p.get_pricing_with_status())[0]}
+        _write_registry_models(tmp_path, models={"b": REGISTRY_ENTRY})
+        path = tmp_path / "stubprovider.json"
+        os.utime(path, ns=(time.time_ns() + 2_000_000_000, time.time_ns() + 2_000_000_000))
+        names = {m.model_name for m in (await p.get_pricing_with_status())[0]}
+        assert "b" in names and "a" not in names
+
+    async def test_unreadable_file_degrades_to_curated_only(self, tmp_path):
+        (tmp_path / "stubprovider.json").write_text("{not json", encoding="utf-8")
+
+        class P(_StubProvider):
+            REGISTRY_MODELS_DIR = tmp_path
+        data, status = await P().get_pricing_with_status()
+        assert status.is_available
+        assert {m.model_name for m in data} == {"priced", "unpriced", "own-date"}
+
+    @pytest.mark.parametrize("bad", [
+        dict(REGISTRY_ENTRY, input="0.0005"),                 # string price: TypeError in build_metrics
+        dict(REGISTRY_ENTRY, price_source_kind="Registry"),   # Literal validation
+        dict(REGISTRY_ENTRY, context_window="big"),           # non-numeric
+    ])
+    async def test_one_malformed_entry_is_skipped_not_the_whole_provider(self, tmp_path, bad):
+        """The whole-file contract (unreadable -> curated-only) must hold per row
+        too: one bad entry must not empty the provider's catalogue."""
+        _write_registry_models(tmp_path, models={"good": REGISTRY_ENTRY, "bad": bad})
+
+        class P(_StubProvider):
+            REGISTRY_MODELS_DIR = tmp_path
+        data, status = await P().get_pricing_with_status()
+        assert status.is_available
+        names = {m.model_name for m in data}
+        assert "good" in names and "bad" not in names
+        assert {"priced", "unpriced", "own-date"} <= names
+
+    async def test_merged_models_are_known_to_discovery(self, tmp_path):
+        """A registry-sourced model must not be re-discovered as an unpriced duplicate."""
+        _write_registry_models(tmp_path, models={"from-registry": REGISTRY_ENTRY})
+
+        class P(_StubProvider):
+            REGISTRY_MODELS_DIR = tmp_path
+        p = P()
+        data, _ = await p.get_pricing_with_status()
+        out = p._discover_new_models(data, frozenset({"from-registry", "brand-new"}))
+        assert [m.model_name for m in out if m.model_name == "from-registry"] == ["from-registry"]
+        assert "brand-new" in {m.model_name for m in out}

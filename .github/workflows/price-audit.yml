@@ -10,6 +10,12 @@ name: Weekly price audit
 #
 # It also refreshes the vendored registry snapshot, which is the offline
 # fallback and goes stale the same way.
+#
+# v1.74.0 added two human-merged PRs (reconfirm stale prices; retire models),
+# and v1.75.0 a third: pickup, which adds every chat model the registry prices
+# under a registry-backed catalogue provider that the catalogue lacks, as a
+# registry-sourced entry in data/registry_models/<slug>.json. Rollout is staged
+# via --providers (the five v1.75.0 providers first; widen in later weeks).
 
 on:
   schedule:
@@ -286,7 +292,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if git diff --quiet -- src/services; then
+          # v1.75.0: a retired registry-sourced entry is deleted from its
+          # data/registry_models/<slug>.json rather than from a *_pricing.py.
+          if git diff --quiet -- src/services data/registry_models; then
             echo "Nothing past the grace period — no PR."
             exit 0
           fi
@@ -294,7 +302,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           BRANCH="ci/retire-models-$(date +%Y%m%d)"
           git checkout -b "$BRANCH"
-          git add src/services
+          git add src/services data/registry_models
           git commit -m "chore(pricing): remove models retired by their provider"
           git push origin "$BRANCH"
           {
@@ -318,3 +326,71 @@ jobs:
           else
             echo "No open price-drift issue; retirement report stays in this run's log."
           fi
+
+  # v1.75.0 — registry pickup. Every chat model the registry prices under a
+  # registry-backed catalogue provider that the catalogue does not list is
+  # added to data/registry_models/<slug>.json as a registry-sourced entry
+  # (price_source_kind "registry", registry key, registry date). Existing
+  # entries are re-synced: price changed -> updated and listed; unchanged ->
+  # re-dated; no longer in the registry -> left to age into stale. The script
+  # never edits a *_pricing.py; a human merges the PR; nothing is promoted to
+  # provider-confirmed automatically.
+  #
+  # The pickup reads the VENDORED SNAPSHOT (--snapshot-only), not the live
+  # registry: the guard tests below price the catalogue against the snapshot,
+  # so a key only the live registry knows would be added and then fail
+  # test_pricing_integrity's oracle round-trip — the job could never succeed
+  # when it had something new. New registry data arrives through the
+  # refresh-snapshot PR above (validated, human-merged); the pickup picks it up
+  # on the next weekly run after that merges.
+  #
+  # OWNER DECISION — staged rollout: the first runs cover ONLY the five
+  # providers added in v1.75.0. Widen --providers in later weeks to let the
+  # existing registry-backed providers pick up too.
+  pickup:
+    runs-on: ubuntu-latest
+    needs: audit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Pick up new registry models as registry-sourced entries
+        run: |
+          python scripts/pickup_registry_models.py --apply --markdown --snapshot-only \
+            --providers 'DeepInfra,Novita,Vercel AI Gateway,Nebius,Databricks' | tee /tmp/pickup.md
+      - name: Prove the catalogue still passes its guards
+        run: |
+          python -m pytest tests/test_price_oracle.py tests/test_price_provenance.py \
+            tests/test_pricing_integrity.py tests/test_data_quality.py tests/test_registry_pickup.py -q
+      - name: Open a PR when anything changed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # -A so a provider's first-ever JSON file (untracked) counts as a change.
+          git add -A data/registry_models
+          if git diff --cached --quiet -- data/registry_models; then
+            echo "No new or changed registry models — no PR."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          BRANCH="ci/pickup-registry-models-$(date +%Y%m%d)"
+          git checkout -b "$BRANCH"
+          git commit -m "feat(pricing): pick up new registry models as registry-sourced entries"
+          git push origin "$BRANCH"
+          {
+            printf 'Automated weekly registry pickup (`scripts/pickup_registry_models.py --snapshot-only`, i.e. against the vendored `data/model_prices_snapshot.json` as last merged). Only `data/registry_models/*.json` changes — no curated `STATIC_PRICING` entry is created, modified or deleted. Every added model is a registry-sourced entry: it carries the registry'"'"'s price, its registry key and the registry date, is labelled `price_source_kind: registry`, and is usable in estimates and comparisons but never counted as provider-confirmed. Merging does not promote anything to provider-confirmed.\n\n'
+            printf '## Verified before this PR was opened\n\nGitHub does not run CI on PRs created with `GITHUB_TOKEN`; these ran in the job that produced it: `tests/test_price_oracle.py`, `tests/test_price_provenance.py`, `tests/test_pricing_integrity.py`, `tests/test_data_quality.py`, `tests/test_registry_pickup.py`.\n\n'
+            cat /tmp/pickup.md
+          } > /tmp/pr_body.md
+          gh pr create \
+            --title "feat(pricing): pick up new registry models as registry-sourced entries" \
+            --body-file /tmp/pr_body.md \
+            --base develop \
+            --head "$BRANCH" \
+            || echo "gh pr create blocked — branch '$BRANCH' was pushed; open the PR manually."

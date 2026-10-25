@@ -72,6 +72,15 @@ class GetAllPricingTool:
                 "total_cost": pricing.cost_at_1m_tokens.total_cost,
             },
             "estimated_time_1m_tokens": pricing.estimated_time_1m_tokens,
+            # Provenance (v1.75.0): where the number came from and how fresh it
+            # is, so a caller can tell a provider-confirmed price from one taken
+            # from the reference registry without a second call.
+            "source": pricing.source,
+            "price_as_of": pricing.price_as_of,
+            "price_is_stale": pricing.price_is_stale,
+            "price_confirmed": pricing.price_confirmed,
+            "price_source_kind": pricing.price_source_kind,
+            "registry_key": pricing.registry_key,
         }
 
     @staticmethod
