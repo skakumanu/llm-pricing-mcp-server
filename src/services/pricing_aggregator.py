@@ -162,6 +162,10 @@ class PricingAggregatorService:
             await oracle.load()
             oracle.fill_missing_prices(all_pricing)
             oracle.demote_drifted(all_pricing)
+            # A model the provider has shut down is withheld the day the
+            # registry's deprecation date passes (v1.74.0) — it stays listed
+            # with `retired_on` set so the weekly audit can open the removal PR.
+            oracle.withhold_retired(all_pricing)
         except Exception as e:  # never let the oracle break pricing
             logger.warning("Price oracle unavailable, serving curated prices only: %s", e)
 

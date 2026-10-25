@@ -17,6 +17,37 @@ class DeepSeekPricingService(BasePricingProvider):
     PRICE_AS_OF = "2026-05-09"
 
     STATIC_PRICING = {
+        # deepseek-chat / deepseek-reasoner (retired by DeepSeek 2026-07-24) and
+        # deepseek-coder-v2 / deepseek-v2.5 (folded into later generations) were
+        # removed in v1.74.0. The current API ids below are listed unconfirmed so
+        # the price oracle fills them from the registry (deepseek-flash,
+        # deepseek-v4-pro are first-party registry keys).
+        "deepseek-flash": {
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 128000,
+            "use_cases": ["Chat", "Coding", "High-volume analysis", "Agents"],
+            "strengths": ["Current generation (V4.1 Flash)", "Thinking and non-thinking modes"],
+            "best_for": "DeepSeek's default fast model. Pricing sourced from the reference registry.",
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+        },
+        "deepseek-v4-pro": {
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
+            "context_window": 1000000,
+            "use_cases": ["Complex reasoning", "Long documents", "Coding", "Agents"],
+            "strengths": ["Current flagship (V4 Pro)", "1M token context"],
+            "best_for": (
+                "DeepSeek's flagship for long-context and hard reasoning. "
+                "Pricing sourced from the reference registry."
+            ),
+            "supports_function_calling": True,
+            "supports_json_mode": True,
+            "is_reasoning_model": True,
+        },
         "deepseek-v3": {
             # Listed from the provider's current lineup. Price left unset and
             # price_confirmed=False so the price oracle fills it from the registry
@@ -32,34 +63,6 @@ class DeepSeekPricingService(BasePricingProvider):
             "supports_function_calling": True,
             "supports_json_mode": True,
         },
-        "deepseek-chat": {
-            "input": 0.00027,
-            "output": 0.0011,
-            "price_as_of": "2026-09-13",
-            "context_window": 64000,
-            "use_cases": [
-                "General conversation", "Code assistance", "Data analysis",
-                "Summarization", "Q&A"
-            ],
-            "strengths": ["Extremely affordable", "Strong coding", "Multi-lingual", "DeepSeek V3"],
-            "best_for": "Cost-sensitive applications needing strong general-purpose capability",
-            "supports_function_calling": True,
-            "supports_json_mode": True,
-        },
-        "deepseek-reasoner": {
-            "input": 0.00028,
-            "output": 0.00042,
-            "price_as_of": "2026-07-28",
-            "context_window": 64000,
-            "use_cases": [
-                "Complex reasoning", "Math problems", "Scientific analysis",
-                "Multi-step problem solving", "Advanced coding"
-            ],
-            "strengths": ["Chain-of-thought reasoning", "Math/science", "Very affordable", "R1 model"],
-            "best_for": "Reasoning-heavy tasks (math, science, logic) at a fraction of frontier model costs",
-            "supports_function_calling": True,
-            "is_reasoning_model": True,
-        },
         "deepseek-r1": {
             "input": 0.00055,
             "output": 0.00219,
@@ -73,35 +76,6 @@ class DeepSeekPricingService(BasePricingProvider):
             "best_for": "Open-source reasoning model rivaling frontier models at minimal cost",
             "supports_function_calling": True,
             "is_reasoning_model": True,
-        },
-        "deepseek-v2.5": {
-            "input": 0.00014,
-            "output": 0.00028,
-            "context_window": 128000,
-            "use_cases": [
-                "Long context analysis", "Code generation", "Research",
-                "Document processing", "Multi-turn chat"
-            ],
-            "strengths": ["128K context", "Ultra-affordable", "Strong coding", "Open-source"],
-            "best_for": "Long-document processing and coding with extreme cost efficiency",
-            "supports_function_calling": True,
-            "supports_json_mode": True,
-        },
-        "deepseek-coder-v2": {
-            "input": 0.00014,
-            "output": 0.00028,
-            "context_window": 128000,
-            "use_cases": [
-                "Code generation", "Code completion", "Debugging",
-                "Code review", "Technical documentation"
-            ],
-            "strengths": [
-                "Specialized for code", "128K context", "Multi-language",
-                "Ultra-affordable"
-            ],
-            "best_for": "High-volume coding tasks requiring excellent performance at minimal cost",
-            "supports_function_calling": True,
-            "supports_json_mode": True,
         },
     }
 

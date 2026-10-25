@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.73.11 | **Last updated**: 2026-10-25
+**Version**: v1.74.0 | **Last updated**: 2026-10-25
 
 ---
 
@@ -12,6 +12,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 26 
 - **CI/CD**: GitHub Actions → test → lint → bandit → OSV scan → gitleaks → Fly.io deploy
 - **Weekly price audit**: a drifted price is withheld from serving the moment it's detected (on every request, not just weekly); the scheduled workflow re-runs `check_price_drift` to report what's currently withheld and refreshes the vendored registry snapshot, opening an issue/PR when either drifts
 - **Snapshot self-validation**: `scripts/validate_price_snapshot.py` gates the refresh PR. GitHub does not run CI on `GITHUB_TOKEN`-created PRs, so the generating job verifies the data itself
+- **Pricing integrity loops (v1.74.0)**: three guards in `tests/test_pricing_integrity.py` (registry-coverage floor, per-1M plausibility band, no confirmed price for a model past its registry deprecation date) plus two weekly, human-merged PRs from `price-audit.yml` — `scripts/reconfirm_stale_prices.py` re-dates stale prices that still match the registry on input *and* output, and `scripts/retire_models.py` deletes entries whose same-provider registry deprecation date is ≥30 days old (the oracle withholds them from cost math the day the date passes and sets `retired_on`). `get_data_quality` reports `registry_coverage_pct`, `unmatched_confirmed`, `retired_listed` so the gaps are visible, not inferred. Each guard maps to a failure the Oct 2026 reconfirmation pass found live: ~40% of the catalogue invisible to drift checks, Cloudflare served 1000x too low, 55 retired models still priced
 - **Clean cross-branch promotion**: `scripts/promote_branch_content.sh` mirrors one branch's tree onto another (additions, updates, AND deletions) to work around develop/master squash-merge divergence, verifying the result matches exactly before returning
 - **Repo cost auditor**: `scripts/audit_repo.py` statically scans an arbitrary codebase (customer-run, not deployed) for LLM SDK call sites and reuses `predict_cost`'s token/pricing math to recommend cheaper models, prompt caching, Batch API, task-based right-sizing, and duplicate-prompt consolidation — runs locally only, since the hosted `/mcp` HTTP transport has no access to a caller's filesystem
 - **AI-native SDLC pipeline** (dev tooling, not deployed): `/release-feature` runs a feature through dedicated Spec, Design, Code, Review (parallel correctness/security/simplification), and Test & Release phase agents (`.claude/agents/phase-*.md`) orchestrated by `.claude/workflows/release-feature.js`, ending at an open PR against `develop` — Spec fixes *what*/acceptance criteria, Design fixes *how* (approach, version, branch name), so neither phase re-derives the other's decision; see `CLAUDE.md`'s "AI-Native SDLC Pipeline" section
@@ -98,7 +99,7 @@ llm-pricing-mcp-server/
 │       ├── recommendation_cache.py  # ~5min TTL cache for recommend_model / POST /router/recommend decisions + process-lifetime hit/miss stats (get_cache_stats)
 │       ├── task_profiles.py         # 12 task I/O-ratio profiles + keyword task inference
 │       ├── portfolio_optimizer.py   # Per-task model allocation + savings vs single-model baseline
-│       ├── price_oracle.py          # External price registry: fills gaps, withholds drifted prices (24h TTL + snapshot). Key matching (v1.73.11): exact, "/<name>" suffix (multi-segment names), last slash segment (dotted names), last dot segment (Bedrock cross-region keys); provider aliases keyed by the catalogue's display names. Same-provider variants resolve to the bare canonical key (regional/tier keys are different SKUs); majority vote only among equal-depth keys
+│       ├── price_oracle.py          # External price registry: fills gaps, withholds drifted prices on input OR output (v1.74.0), withholds retired models once the registry's deprecation_date passes (sets retired_on) (24h TTL + snapshot). Key matching (v1.73.11): exact, "/<name>" suffix (multi-segment names), last slash segment (dotted names), last dot segment (Bedrock cross-region keys); provider aliases keyed by the catalogue's display names, with a per-provider preference order (Google: gemini/ before vertex_ai/). Same-provider variants resolve to the bare canonical key (regional/tier keys are different SKUs); majority vote only among equal-depth keys
 │       ├── data_quality.py          # Aggregate accuracy summary shared by /data-quality and get_data_quality
 │       ├── token_counter.py         # tiktoken token counting + prompt-cache savings math
 │       ├── ide_pricing.py           # Subscription pricing for AI coding IDE tools
@@ -173,7 +174,7 @@ llm-pricing-mcp-server/
 ├── .github/workflows/
 │   ├── ci-cd.yml                    # Full CI/CD: test→lint→osv→bandit→gitleaks→deploy
 │   ├── sync-develop.yml             # Auto-sync develop ← master after deploy
-│   ├── price-audit.yml              # Weekly: surface withheld/drifted prices as an issue + open the registry-snapshot refresh PR
+│   ├── price-audit.yml              # Weekly: drift issue + snapshot-refresh PR; (v1.74.0) reconfirm-stale-prices PR + retire-models PR, both human-merged
 │   ├── npm-publish.yml              # npm Trusted Publishing (OIDC) of npm/llm-pricing-mcp on master push — filename is part of the npmjs.com trust config
 │   └── mcp-registry-publish.yml     # Publishes server.json to registry.modelcontextprotocol.io via GitHub OIDC (`mcp-publisher login github-oidc`) on master push
 │

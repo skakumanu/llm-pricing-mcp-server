@@ -151,6 +151,22 @@ RAW = {
         "mode": "chat", "litellm_provider": "oci",
         "input_cost_per_token": 1.5e-07, "output_cost_per_token": 1.5e-07,
     },
+    # v1.74.0: retirement and output-price drift.
+    "openai/retired-model": {
+        "mode": "chat", "litellm_provider": "openai",
+        "input_cost_per_token": 1e-05, "output_cost_per_token": 3e-05,
+        "deprecation_date": "2026-01-01",
+    },
+    "openai/sunsetting-model": {
+        "mode": "chat", "litellm_provider": "openai",
+        "input_cost_per_token": 1e-05, "output_cost_per_token": 3e-05,
+        "deprecation_date": "2099-01-01",
+    },
+    # Input agrees, output is 4x off — the Replicate Mixtral shape.
+    "replicate/output-drift-model": {
+        "mode": "chat", "litellm_provider": "replicate",
+        "input_cost_per_token": 3e-07, "output_cost_per_token": 1e-06,
+    },
 }
 
 
@@ -607,3 +623,80 @@ class TestSingleton:
         first = get_price_oracle()
         reset_price_oracle()
         assert get_price_oracle() is not first
+
+
+# ---------------------------------------------------------------------------
+# v1.74.0: retirement withholding
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+class TestWithholdRetired:
+    async def test_parses_deprecation_date(self, oracle):
+        assert oracle.lookup("retired-model", "OpenAI").deprecation_date == "2026-01-01"
+        assert oracle.lookup("cheap-model").deprecation_date is None
+
+    async def test_withholds_once_the_date_has_passed(self, oracle):
+        m = _pm("retired-model", inp=1e-05, out=3e-05, confirmed=True, provider="OpenAI")
+        retired = oracle.withhold_retired([m], today="2026-10-25")
+        assert retired == [m]
+        assert m.price_confirmed is False
+        assert m.retired_on == "2026-01-01"
+
+    async def test_leaves_a_scheduled_retirement_alone_until_the_day(self, oracle):
+        m = _pm("sunsetting-model", inp=1e-05, out=3e-05, confirmed=True, provider="OpenAI")
+        assert oracle.withhold_retired([m], today="2026-10-25") == []
+        assert m.price_confirmed is True and m.retired_on is None
+        assert oracle.withhold_retired([m], today="2099-01-01") == [m]
+
+    async def test_price_value_is_kept_for_the_audit(self, oracle):
+        m = _pm("retired-model", inp=1e-05, out=3e-05, confirmed=True, provider="OpenAI")
+        oracle.withhold_retired([m], today="2026-10-25")
+        assert m.cost_per_input_token == 1e-05
+
+    async def test_requires_the_same_provider(self, oracle):
+        # Another vendor's retirement says nothing about this host.
+        m = _pm("retired-model", inp=1e-05, out=3e-05, confirmed=True, provider="Snowflake")
+        assert oracle.withhold_retired([m], today="2026-10-25") == []
+
+    async def test_ignores_subscription_models(self, oracle):
+        m = _pm("retired-model", inp=0.0, out=0.0, confirmed=False, provider="OpenAI")
+        m.pricing_model = "subscription"
+        assert oracle.withhold_retired([m], today="2026-10-25") == []
+
+    async def test_unloaded_oracle_is_a_no_op(self):
+        o = PriceOracle()
+        assert o.withhold_retired([_pm("retired-model", provider="OpenAI")]) == []
+
+
+# ---------------------------------------------------------------------------
+# v1.74.0: output-price drift
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+class TestOutputDrift:
+    async def test_output_disagreement_is_reported_when_input_agrees(self, oracle):
+        # Registry: 0.30 in / 1.00 out per 1M. Ours: 0.30 in / 0.25 out.
+        m = _pm("output-drift-model", inp=3e-07, out=2.5e-07, confirmed=True, provider="Replicate")
+        findings = oracle.find_drift([m])
+        assert len(findings) == 1
+        f = findings[0]
+        assert f.basis == "output"
+        assert f.direction == "understated"
+        assert f.pct_difference == pytest.approx(75.0)
+        d = f.as_dict()
+        assert d["our_output_cost_per_1m_usd"] == pytest.approx(0.25)
+        assert d["registry_output_cost_per_1m_usd"] == pytest.approx(1.0)
+
+    async def test_input_basis_wins_when_it_is_the_larger_disagreement(self, oracle):
+        m = _pm("output-drift-model", inp=3e-06, out=1.1e-06, confirmed=True, provider="Replicate")
+        f = oracle.find_drift([m])[0]
+        assert f.basis == "input" and f.direction == "overstated"
+
+    async def test_agreement_on_both_sides_is_not_drift(self, oracle):
+        m = _pm("output-drift-model", inp=3e-07, out=1e-06, confirmed=True, provider="Replicate")
+        assert oracle.find_drift([m]) == []
+
+    async def test_output_drift_is_withheld_like_input_drift(self, oracle):
+        m = _pm("output-drift-model", inp=3e-07, out=2.5e-07, confirmed=True, provider="Replicate")
+        oracle.demote_drifted([m])
+        assert m.price_confirmed is False

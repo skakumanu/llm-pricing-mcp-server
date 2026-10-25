@@ -19,24 +19,6 @@ class GroqPricingService(BasePricingProvider):
     PRICE_AS_OF = "2026-05-10"
 
     STATIC_PRICING = {
-        "llama-3.2-90b-vision": {
-            "input": 0.0009,
-            "output": 0.0009,
-            "context_window": 8192,
-            "use_cases": ["Vision + text", "Image understanding", "Visual Q&A", "Multimodal analysis"],
-            "strengths": ["Multimodal", "Fast on Groq", "Open source", "Latest Llama"],
-            "best_for": "Open-source multimodal applications needing ultra-fast inference",
-            "supports_vision": True,
-        },
-        "llama-3.2-11b-vision": {
-            "input": 0.00018,
-            "output": 0.00018,
-            "context_window": 8192,
-            "use_cases": ["Edge vision tasks", "Cost-effective multimodal", "Mobile deployment"],
-            "strengths": ["Compact", "Vision capable", "Very fast", "Affordable"],
-            "best_for": "Edge and mobile vision applications with speed requirements",
-            "supports_vision": True,
-        },
         "llama-3.2-3b": {
             "input": 0.00006,
             "output": 0.00006,
@@ -52,22 +34,6 @@ class GroqPricingService(BasePricingProvider):
             "use_cases": ["IoT devices", "Extreme edge", "Real-time processing"],
             "strengths": ["Smallest Llama", "Instant responses", "Minimal cost"],
             "best_for": "IoT and extreme edge deployments requiring minimal resources"
-        },
-        "llama-3.1-405b": {
-            "input": 0.00059,
-            "output": 0.00079,
-            "context_window": 131072,
-            "use_cases": [
-                "Complex reasoning", "Long context analysis",
-                "Advanced research", "Multi-turn conversations"
-            ],
-            "strengths": ["Largest Llama model", "Excellent reasoning", "Very fast on Groq"],
-            "best_for": (
-                "Complex tasks requiring state-of-the-art reasoning "
-                "with ultra-fast inference"
-            ),
-            "supports_function_calling": True,
-            "supports_json_mode": True,
         },
         "llama-3.1-70b": {
             "input": 0.00059,
@@ -115,14 +81,6 @@ class GroqPricingService(BasePricingProvider):
             "strengths": ["Open source", "Efficient", "Fast on Groq"],
             "best_for": "Research and development with fast inference needs"
         },
-        "gemma2-9b": {
-            "input": 0.0002,
-            "output": 0.0002,
-            "context_window": 8192,
-            "use_cases": ["Improved Gemma tasks", "Balanced performance", "Research"],
-            "strengths": ["Enhanced over Gemma", "Fast", "Open source"],
-            "best_for": "Next-gen Gemma applications with speed requirements"
-        }
     }
 
     def __init__(self, api_key: Optional[str] = None):

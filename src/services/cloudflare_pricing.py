@@ -68,43 +68,6 @@ class CloudflareAIPricingService(BasePricingProvider):
             "strengths": ["Open source", "Edge-native", "Efficient", "Reliable"],
             "best_for": "Open-source instruction following at the edge with Cloudflare distribution",
         },
-        "@cf/google/gemma-7b-it": {
-            # Retired from the Workers AI catalogue; no current list price.
-            "input": 0.0, "output": 0.0,
-            "price_confirmed": False,
-            "context_window": 8192,
-            "use_cases": ["Chat", "Instruction following", "Research"],
-            "strengths": ["Google quality", "Open source", "Edge-native"],
-            "best_for": "Google-quality open-source inference distributed via Cloudflare CDN",
-        },
-        "@cf/microsoft/phi-2": {
-            # Retired from the Workers AI catalogue; no current list price.
-            "input": 0.0, "output": 0.0,
-            "price_confirmed": False,
-            "context_window": 2048,
-            "use_cases": ["Simple reasoning", "Education", "Lightweight tasks"],
-            "strengths": ["Very small", "Efficient", "Microsoft-trained", "Edge-native"],
-            "best_for": "Simple reasoning tasks at the edge with minimal resource usage",
-        },
-        "@cf/meta/llama-3.1-70b-instruct": {
-            # Superseded by llama-3.3-70b-instruct-fp8-fast on Workers AI; no
-            # current list price for this id.
-            "input": 0.0, "output": 0.0,
-            "price_confirmed": False,
-            "context_window": 128000,
-            "use_cases": ["Complex reasoning", "Code", "Analysis", "Chat"],
-            "strengths": ["High quality", "Edge-native", "Global distribution"],
-            "best_for": "Higher-quality edge inference where latency distribution is critical",
-        },
-        "@cf/qwen/qwen1.5-14b-chat-awq": {
-            # Retired from the Workers AI catalogue; no current list price.
-            "input": 0.0, "output": 0.0,
-            "price_confirmed": False,
-            "context_window": 32768,
-            "use_cases": ["Multilingual", "Chat", "Code"],
-            "strengths": ["Multilingual", "Edge-native", "Quantized for speed"],
-            "best_for": "Multilingual edge applications with AWQ quantization for efficiency",
-        },
         "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b": {
             "input": 0.000497, "output": 0.004881,
             "price_as_of": "2026-10-25",
@@ -113,17 +76,6 @@ class CloudflareAIPricingService(BasePricingProvider):
             "strengths": ["Open-source reasoning", "Edge-native", "DeepSeek R1 distilled"],
             "best_for": "Reasoning tasks at the edge leveraging DeepSeek R1 distillation",
             "is_reasoning_model": True,
-        },
-        "@cf/stabilityai/stable-diffusion-xl-base-1.0": {
-            # Image model billed per generation step, not per token; a
-            # per-token rate is not meaningful. Listed for discoverability only.
-            "input": 0.0, "output": 0.0,
-            "price_confirmed": False,
-            "context_window": 77,
-            "use_cases": ["Image generation", "Creative", "Design"],
-            "strengths": ["Edge image gen", "Fast", "Global CDN", "Free tier"],
-            "best_for": "Edge-distributed image generation with Cloudflare's global infrastructure",
-            "supports_vision": True,
         },
     }
 

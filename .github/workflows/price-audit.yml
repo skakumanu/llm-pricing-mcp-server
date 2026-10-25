@@ -139,7 +139,8 @@ jobs:
           raw = json.load(open('/tmp/registry.json'))
           KEEP = ["input_cost_per_token","output_cost_per_token","cache_read_input_token_cost",
                   "max_input_tokens","max_output_tokens","supports_vision",
-                  "supports_function_calling","litellm_provider","mode"]
+                  "supports_function_calling","litellm_provider","mode",
+                  "deprecation_date"]  # v1.74.0: retirement withholding works offline too
           trim = {k: {f: v[f] for f in KEEP if f in v}
                   for k, v in raw.items()
                   if isinstance(v, dict) and v.get("mode") == "chat"
@@ -209,3 +210,111 @@ jobs:
             --base develop \
             --head "$BRANCH" \
             || echo "gh pr create blocked — branch '$BRANCH' was pushed; open the PR manually."
+
+  # v1.74.0 — the two loops the Oct 2026 reconfirmation pass showed were
+  # missing. Both produce a PR for a human to merge; neither edits develop.
+  #
+  # reconfirm: stale prices that still match the registry (both input and
+  #   output within the drift threshold) get today's price_as_of. Without
+  #   this, staleness piled up to 139 models before anyone looked.
+  # retire: models whose same-provider registry entry has a deprecation date
+  #   at least 30 days in the past are deleted from STATIC_PRICING. The
+  #   oracle already withholds them from cost math the day the date passes;
+  #   the grace period gives an upstream registry mistake time to be fixed.
+  reconfirm:
+    runs-on: ubuntu-latest
+    needs: audit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Reconfirm stale prices that still match the registry
+        run: python scripts/reconfirm_stale_prices.py --apply | tee /tmp/reconfirm.txt
+      - name: Prove the catalogue still passes its guards
+        run: python -m pytest tests/test_price_oracle.py tests/test_price_provenance.py tests/test_pricing_integrity.py -q
+      - name: Open a PR when anything was stamped
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git diff --quiet -- src/services; then
+            echo "Nothing to reconfirm — no PR."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          BRANCH="ci/reconfirm-prices-$(date +%Y%m%d)"
+          git checkout -b "$BRANCH"
+          git add src/services
+          git commit -m "fix(pricing): reconfirm stale prices that still match the registry"
+          git push origin "$BRANCH"
+          {
+            printf 'Automated weekly reconfirmation (`scripts/reconfirm_stale_prices.py`). Only `price_as_of` dates change — no price value is touched. Every stamped model matches its same-provider registry entry on input and output within the drift threshold.\n\n'
+            printf '## Verified before this PR was opened\n\nGitHub does not run CI on PRs created with `GITHUB_TOKEN`; these ran in the job that produced it: `tests/test_price_oracle.py`, `tests/test_price_provenance.py`, `tests/test_pricing_integrity.py`.\n\n'
+            printf '## Report\n\n```\n'; cat /tmp/reconfirm.txt; printf '\n```\n'
+          } > /tmp/pr_body.md
+          gh pr create \
+            --title "fix(pricing): reconfirm stale prices that still match the registry" \
+            --body-file /tmp/pr_body.md \
+            --base develop \
+            --head "$BRANCH" \
+            || echo "gh pr create blocked — branch '$BRANCH' was pushed; open the PR manually."
+
+  retire:
+    runs-on: ubuntu-latest
+    needs: audit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Report retired, scheduled and candidate models
+        run: python scripts/retire_models.py --markdown | tee /tmp/retire.md
+      - name: Remove entries retired more than 30 days ago
+        run: python scripts/retire_models.py --apply --grace-days 30
+      - name: Prove the catalogue still passes its guards
+        run: python -m pytest tests/test_price_oracle.py tests/test_price_provenance.py tests/test_pricing_integrity.py -q
+      - name: Open a PR when anything was removed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git diff --quiet -- src/services; then
+            echo "Nothing past the grace period — no PR."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          BRANCH="ci/retire-models-$(date +%Y%m%d)"
+          git checkout -b "$BRANCH"
+          git add src/services
+          git commit -m "chore(pricing): remove models retired by their provider"
+          git push origin "$BRANCH"
+          {
+            printf 'Automated weekly retirement (`scripts/retire_models.py`). Each removed entry has a same-provider registry deprecation date at least 30 days in the past; the oracle has been withholding it from cost math since that date.\n\n'
+            printf '## Verified before this PR was opened\n\nGitHub does not run CI on PRs created with `GITHUB_TOKEN`; these ran in the job that produced it: `tests/test_price_oracle.py`, `tests/test_price_provenance.py`, `tests/test_pricing_integrity.py`.\n\n'
+            cat /tmp/retire.md
+          } > /tmp/pr_body.md
+          gh pr create \
+            --title "chore(pricing): remove models retired by their provider" \
+            --body-file /tmp/pr_body.md \
+            --base develop \
+            --head "$BRANCH" \
+            || echo "gh pr create blocked — branch '$BRANCH' was pushed; open the PR manually."
+      - name: Add the retirement report to the rolling audit issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          EXISTING=$(gh issue list --state open --label price-drift --json number --jq '.[0].number' || true)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file /tmp/retire.md
+          else
+            echo "No open price-drift issue; retirement report stays in this run's log."
+          fi

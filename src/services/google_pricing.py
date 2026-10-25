@@ -111,61 +111,6 @@ class GooglePricingService(BasePricingProvider):
             "supports_json_mode": True,
             "is_reasoning_model": True,
         },
-        # gemini-2.0-flash was removed in v1.73.11: the Gemini API shut it down on
-        # 2026-06-01 (official changelog; the reference registry carries the same
-        # deprecation date), so a price for it is no longer a price anyone can pay.
-        "gemini-1.5-pro": {
-            "input": 0.00125,
-            "output": 0.00375,
-            "context_window": 2097152,
-            "use_cases": [
-                "Entire book analysis",
-                "Large codebase understanding",
-                "Video content analysis",
-                "Complex multi-modal reasoning"
-            ],
-            "strengths": ["2M token context", "Multimodal capabilities", "Advanced reasoning"],
-            "best_for": (
-                "General-purpose applications requiring "
-                "balanced performance and cost"
-            ),
-            "supports_vision": True,
-            "supports_function_calling": True,
-            "supports_json_mode": True,
-        },
-        "gemini-1.5-flash": {
-            "input": 0.000075,
-            "output": 0.0003,
-            "context_window": 1048576,
-            "use_cases": ["Fast document processing", "Real-time chat", "Quick summarization", "Content extraction"],
-            "strengths": ["Extremely fast", "Affordable", "1M token context"],
-            "best_for": "Speed-critical applications with large documents",
-            "supports_vision": True,
-            "supports_function_calling": True,
-            "supports_json_mode": True,
-        },
-        "gemini-1.5-flash-8b": {
-            "input": 0.0000375,
-            "output": 0.00015,
-            "context_window": 1048576,
-            "use_cases": [
-                "Ultra-high-volume tasks", "Real-time inference",
-                "Edge deployment", "Cost-sensitive workloads"
-            ],
-            "strengths": ["Lowest cost", "Very fast", "1M context", "Compact model"],
-            "best_for": "High-throughput applications with strict budget constraints",
-            "supports_vision": True,
-            "supports_function_calling": True,
-        },
-        "gemini-1.0-pro": {
-            "input": 0.0005,
-            "output": 0.0015,
-            "context_window": 32760,
-            "use_cases": ["General-purpose AI", "Chatbots", "Content moderation", "Text classification"],
-            "strengths": ["Balanced performance", "Good for most tasks", "Proven stability"],
-            "best_for": "General-purpose applications across various domains",
-            "supports_function_calling": True,
-        },
     }
 
     def __init__(self, api_key: Optional[str] = None):
