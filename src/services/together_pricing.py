@@ -20,8 +20,10 @@ class TogetherPricingService(BasePricingProvider):
 
     STATIC_PRICING = {
         "meta-llama/Llama-3.3-70B-Instruct-Turbo": {
-            "input": 0.00088,
-            "output": 0.00088,
+            # v1.73.11: 0.88 -> 1.04 per 1M (together.ai/pricing; registry agrees).
+            "input": 0.00104,
+            "output": 0.00104,
+            "price_as_of": "2026-10-25",
             "context_window": 131072,
             "use_cases": ["Latest Llama capabilities", "Complex reasoning", "Code generation", "Long context"],
             "strengths": ["Latest Llama 3.3", "Enhanced reasoning", "128K context", "GPT-4 level performance"],
@@ -42,6 +44,7 @@ class TogetherPricingService(BasePricingProvider):
         "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo": {
             "input": 0.00088,
             "output": 0.00088,
+            "price_as_of": "2026-10-25",
             "context_window": 131072,
             "use_cases": ["General purpose", "Code generation", "Analysis", "Creative work"],
             "strengths": ["Well-balanced", "Long context", "Cost-effective"],
@@ -59,8 +62,10 @@ class TogetherPricingService(BasePricingProvider):
             "supports_function_calling": True,
         },
         "Qwen/Qwen2.5-72B-Instruct-Turbo": {
-            "input": 0.0009,
-            "output": 0.0009,
+            # v1.73.11: 0.90 -> 1.20 per 1M (registry together_ai/Qwen/Qwen2.5-72B-Instruct-Turbo).
+            "input": 0.0012,
+            "output": 0.0012,
+            "price_as_of": "2026-10-25",
             "context_window": 131072,
             "use_cases": ["Multilingual", "Code generation", "Math reasoning", "Analysis"],
             "strengths": ["Latest Qwen", "Excellent multilingual", "Strong math", "128K context"],
@@ -71,6 +76,7 @@ class TogetherPricingService(BasePricingProvider):
         "Qwen/Qwen2.5-7B-Instruct-Turbo": {
             "input": 0.0003,
             "output": 0.0003,
+            "price_as_of": "2026-10-25",
             "context_window": 131072,
             "use_cases": ["Cost-effective multilingual", "Efficient deployment", "High-volume"],
             "strengths": ["Affordable", "Multilingual", "Long context", "Fast"],
@@ -81,6 +87,7 @@ class TogetherPricingService(BasePricingProvider):
         "mistralai/Mixtral-8x7B-Instruct-v0.1": {
             "input": 0.0006,
             "output": 0.0006,
+            "price_as_of": "2026-10-25",
             "context_window": 32768,
             "use_cases": ["Code generation", "Multilingual", "Reasoning", "General chat"],
             "strengths": ["Mixture of experts", "Versatile", "Good performance"],
@@ -90,6 +97,7 @@ class TogetherPricingService(BasePricingProvider):
         "google/gemma-2-27b-it": {
             "input": 0.0008,
             "output": 0.0008,
+            "price_as_of": "2026-10-25",
             "context_window": 8192,
             "use_cases": ["Research", "General purpose", "Edge deployment"],
             "strengths": ["Open source", "Google quality", "Efficient"],

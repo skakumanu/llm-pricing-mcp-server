@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.73.10 | **Last updated**: 2026-10-25
+**Version**: v1.73.11 | **Last updated**: 2026-10-25
 
 ---
 
@@ -98,7 +98,7 @@ llm-pricing-mcp-server/
 │       ├── recommendation_cache.py  # ~5min TTL cache for recommend_model / POST /router/recommend decisions + process-lifetime hit/miss stats (get_cache_stats)
 │       ├── task_profiles.py         # 12 task I/O-ratio profiles + keyword task inference
 │       ├── portfolio_optimizer.py   # Per-task model allocation + savings vs single-model baseline
-│       ├── price_oracle.py          # External price registry: fills gaps, withholds drifted prices (24h TTL + snapshot). Same-provider variants resolve to the bare canonical key (regional/tier keys are different SKUs); majority vote only among equal-depth keys
+│       ├── price_oracle.py          # External price registry: fills gaps, withholds drifted prices (24h TTL + snapshot). Key matching (v1.73.11): exact, "/<name>" suffix (multi-segment names), last slash segment (dotted names), last dot segment (Bedrock cross-region keys); provider aliases keyed by the catalogue's display names. Same-provider variants resolve to the bare canonical key (regional/tier keys are different SKUs); majority vote only among equal-depth keys
 │       ├── data_quality.py          # Aggregate accuracy summary shared by /data-quality and get_data_quality
 │       ├── token_counter.py         # tiktoken token counting + prompt-cache savings math
 │       ├── ide_pricing.py           # Subscription pricing for AI coding IDE tools

@@ -112,6 +112,45 @@ RAW = {
         "mode": "chat", "litellm_provider": "bedrock",
         "input_cost_per_token": 3.9e-06, "output_cost_per_token": 1.95e-05,
     },
+    # Key shapes the pre-v1.73.11 tail match could never see. The curated name
+    # is multi-segment (Fireworks, Together, Cloudflare) or contains a dot
+    # (Cerebras, Vertex), so neither "last slash segment" nor "last dot
+    # segment" equals it; only an exact or suffix match does.
+    "fireworks_ai/accounts/fireworks/models/multi-seg-model": {
+        "mode": "chat", "litellm_provider": "fireworks_ai",
+        "input_cost_per_token": 9e-07, "output_cost_per_token": 9e-07,
+    },
+    "cerebras/llama9.9-1b": {
+        "mode": "chat", "litellm_provider": "cerebras",
+        "input_cost_per_token": 1e-07, "output_cost_per_token": 1e-07,
+    },
+    "cloudflare/@cf/meta/dotted-slashed-model": {
+        "mode": "chat", "litellm_provider": "cloudflare",
+        "input_cost_per_token": 2.7e-08, "output_cost_per_token": 2.01e-07,
+    },
+    # Vertex publishes its own rate for a model the Developer API prices
+    # differently. When both exist a "Google" lookup must take the gemini/
+    # entry; when only Vertex has it (preview models), Vertex is the fallback.
+    "gemini/pref-model": {
+        "mode": "chat", "litellm_provider": "gemini",
+        "input_cost_per_token": 1e-07, "output_cost_per_token": 4e-07,
+    },
+    "vertex_ai/pref-model": {
+        "mode": "chat", "litellm_provider": "vertex_ai",
+        "input_cost_per_token": 1.5e-07, "output_cost_per_token": 6e-07,
+    },
+    "vertex_ai/vertex-only-model": {
+        "mode": "chat", "litellm_provider": "vertex_ai",
+        "input_cost_per_token": 1.5e-07, "output_cost_per_token": 6e-07,
+    },
+    "snowflake/cortex-model": {
+        "mode": "chat", "litellm_provider": "snowflake",
+        "input_cost_per_token": 7.2e-07, "output_cost_per_token": 7.2e-07,
+    },
+    "oci/oci.vendor-model": {
+        "mode": "chat", "litellm_provider": "oci",
+        "input_cost_per_token": 1.5e-07, "output_cost_per_token": 1.5e-07,
+    },
 }
 
 
@@ -190,6 +229,32 @@ class TestLookup:
     async def test_empty_name_returns_none(self, oracle):
         assert oracle.lookup("") is None
 
+    # v1.73.11: the three key shapes the old "last dot segment" match missed.
+    async def test_multi_segment_name_matches_namespaced_key_by_suffix(self, oracle):
+        rec = oracle.lookup("accounts/fireworks/models/multi-seg-model", "Fireworks AI",
+                            require_provider_match=True)
+        assert rec is not None
+        assert rec.model_key == "fireworks_ai/accounts/fireworks/models/multi-seg-model"
+
+    async def test_dotted_single_segment_name_matches_slash_tail(self, oracle):
+        rec = oracle.lookup("llama9.9-1b", "Cerebras", require_provider_match=True)
+        assert rec is not None and rec.model_key == "cerebras/llama9.9-1b"
+
+    async def test_dotted_and_slashed_name_matches_by_suffix(self, oracle):
+        rec = oracle.lookup("@cf/meta/dotted-slashed-model", "Cloudflare AI",
+                            require_provider_match=True)
+        assert rec is not None and rec.input_per_1k == pytest.approx(2.7e-05)
+
+    async def test_dotted_vendor_prefix_name_matches_slash_tail(self, oracle):
+        rec = oracle.lookup("oci.vendor-model", "Oracle OCI", require_provider_match=True)
+        assert rec is not None and rec.model_key == "oci/oci.vendor-model"
+
+    async def test_suffix_match_does_not_fire_on_partial_segments(self, oracle):
+        # "models/multi-seg-model" is a suffix of the key only after a "/", and
+        # "seg-model" is not a segment boundary at all.
+        assert oracle.lookup("seg-model") is None
+        assert oracle.lookup("ulti-seg-model") is None
+
 
 @pytest.mark.asyncio
 class TestProviderAwareLookup:
@@ -212,8 +277,39 @@ class TestProviderAwareLookup:
         assert oracle.lookup("shared-name", "Snowflake") is not None
 
     async def test_strict_mode_refuses_cross_vendor_match(self, oracle):
-        """Snowflake has no first-party registry presence — better nothing than wrong."""
+        """shared-name exists only under Mistral and Fireworks — better nothing than wrong."""
         assert oracle.lookup("shared-name", "Snowflake", require_provider_match=True) is None
+
+    # v1.73.11: alias fixes found by the stale-price reconfirmation pass.
+    async def test_snowflake_is_a_first_party_for_its_own_cortex_entries(self, oracle):
+        rec = oracle.lookup("cortex-model", "Snowflake", require_provider_match=True)
+        assert rec is not None and rec.model_key == "snowflake/cortex-model"
+
+    async def test_google_prefers_the_developer_api_entry_over_vertex(self, oracle):
+        # Vertex AI prices the same model differently from the Developer API, so
+        # a Google-catalogue price compared with vertex_ai/ would be false drift.
+        rec = oracle.lookup("pref-model", "Google", require_provider_match=True)
+        assert rec.model_key == "gemini/pref-model"
+        assert rec.input_per_1k == pytest.approx(1e-04)
+
+    async def test_google_falls_back_to_vertex_when_nothing_else_exists(self, oracle):
+        # Preview models often exist only under vertex_ai/; filling from there
+        # beats leaving a current model unpriced.
+        rec = oracle.lookup("vertex-only-model", "Google", require_provider_match=True)
+        assert rec is not None and rec.model_key == "vertex_ai/vertex-only-model"
+
+    async def test_vertex_ai_takes_its_own_entry_even_when_gemini_exists(self, oracle):
+        rec = oracle.lookup("pref-model", "Vertex AI", require_provider_match=True)
+        assert rec.model_key == "vertex_ai/pref-model"
+        assert rec.input_per_1k == pytest.approx(1.5e-04)
+
+    async def test_catalogue_display_names_resolve_to_registry_providers(self, oracle):
+        # The catalogue says "AI21 Labs" / "Oracle OCI"; the alias table used to
+        # key these as "ai21" / "oracle cloud", so neither ever matched.
+        assert oracle.lookup("oci.vendor-model", "Oracle OCI", require_provider_match=True) is not None
+        from src.services.price_oracle import _aliases_for
+        assert "ai21" in _aliases_for("AI21 Labs")
+        assert "oci" in _aliases_for("Oracle OCI")
 
     async def test_strict_mode_allows_matching_provider(self, oracle):
         rec = oracle.lookup("shared-name", "Mistral AI", require_provider_match=True)

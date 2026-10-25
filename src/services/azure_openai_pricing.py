@@ -22,6 +22,7 @@ class AzureOpenAIPricingService(BasePricingProvider):
     STATIC_PRICING = {
         "gpt-4o": {
             "input": 0.0025, "output": 0.010,
+            "price_as_of": "2026-10-25",
             "context_window": 128000,
             "use_cases": ["Advanced reasoning", "Vision", "Code generation", "Chat", "Analysis"],
             "strengths": ["Multimodal", "Enterprise SLA", "Azure integration", "VNet support"],
@@ -30,6 +31,7 @@ class AzureOpenAIPricingService(BasePricingProvider):
         },
         "gpt-4o-mini": {
             "input": 0.000150, "output": 0.000600,
+            "price_as_of": "2026-10-25",
             "context_window": 128000,
             "use_cases": ["Fast chat", "Classification", "Summarization", "Extraction"],
             "strengths": ["Low cost", "Fast", "Azure integration", "High throughput"],
@@ -38,6 +40,7 @@ class AzureOpenAIPricingService(BasePricingProvider):
         },
         "o1": {
             "input": 0.015, "output": 0.060,
+            "price_as_of": "2026-10-25",
             "context_window": 200000,
             "use_cases": ["Complex reasoning", "Math", "Science", "Code review"],
             "strengths": ["Deep reasoning", "Enterprise SLA", "Long context"],
@@ -55,6 +58,7 @@ class AzureOpenAIPricingService(BasePricingProvider):
         },
         "o3-mini": {
             "input": 0.0011, "output": 0.0044,
+            "price_as_of": "2026-10-25",
             "context_window": 200000,
             "use_cases": ["Reasoning", "Code", "Analysis", "Math"],
             "strengths": ["Latest reasoning", "Cost-efficient", "Long context"],
@@ -71,6 +75,7 @@ class AzureOpenAIPricingService(BasePricingProvider):
         },
         "gpt-35-turbo": {
             "input": 0.0005, "output": 0.0015,
+            "price_as_of": "2026-10-25",
             "context_window": 16385,
             "use_cases": ["Chat", "Q&A", "Summarization", "Light coding"],
             "strengths": ["Very low cost", "Fast", "Reliable", "Wide availability"],
