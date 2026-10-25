@@ -83,13 +83,19 @@ jobs:
         run: |
           NAME="${{ steps.check.outputs.name }}"
           VERSION="${{ steps.check.outputs.version }}"
-          for attempt in $(seq 1 6); do
+          # npm accepts the upload ("+ name@version") and then processes it
+          # asynchronously; a new version can take several minutes to become
+          # readable. The bootstrap publish of 1.0.0 was marked failed by a
+          # 60-second window even though it succeeded, so allow 10 minutes.
+          for attempt in $(seq 1 40); do
             if LIVE=$(npm view "$NAME@$VERSION" version 2>/dev/null) && [ "$LIVE" = "$VERSION" ]; then
               echo "OK: $NAME@$VERSION is live on the registry"
               exit 0
             fi
-            echo "Attempt $attempt/6: not visible yet, waiting..."
-            sleep 10
+            echo "Attempt $attempt/40: not visible yet (npm still processing), waiting 15s..."
+            sleep 15
           done
-          echo "ERROR: $NAME@$VERSION did not appear on the registry after publish"
+          echo "ERROR: $NAME@$VERSION was accepted by npm but is still not readable after 10 minutes."
+          echo "       Check https://www.npmjs.com/package/$NAME before re-running; a re-run will skip"
+          echo "       if the version has since appeared."
           exit 1
