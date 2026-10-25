@@ -206,6 +206,11 @@ class PriceOracle:
         self._records: Dict[str, PriceRecord] = {}
         self._fetched_at: Optional[datetime] = None
         self._source: Optional[str] = None
+        # name -> records whose key matches it by suffix, slash tail or dot tail
+        # (see lookup()); built once per load so a lookup is a dict probe, not a
+        # scan of every registry key.
+        self._tail_index: Dict[str, List[PriceRecord]] = {}
+        self._indexed_records: Optional[Dict[str, PriceRecord]] = None
 
     # -- loading -----------------------------------------------------------
 
@@ -242,6 +247,8 @@ class PriceOracle:
         self._records = self._parse(raw or {})
         self._fetched_at = datetime.now(UTC)
         self._source = source
+        self._tail_index = self._build_tail_index(self._records)
+        self._indexed_records = self._records
 
     async def _fetch_remote(self) -> Optional[Dict[str, Any]]:
         try:
@@ -313,30 +320,19 @@ class PriceOracle:
         name = model_name.lower()
         aliases = _aliases_for(provider)
 
+        if self._indexed_records is not self._records:
+            # Defensive: _records is only ever assigned by load_from_dict, which
+            # rebuilds the index; this keeps a direct assignment from going stale.
+            self._tail_index = self._build_tail_index(self._records)
+            self._indexed_records = self._records
+
         candidates = []
         exact = self._records.get(name)
         if exact:
             candidates.append(exact)
-        suffix = "/" + name
-        for key, rec in self._records.items():
-            if rec in candidates:
-                continue
-            # Three shapes of namespaced key, all meaning "this model under a
-            # provider prefix":
-            #   fireworks_ai/accounts/fireworks/models/llama-v3p3-70b-instruct
-            #     -> the curated name is itself multi-segment; match on suffix
-            #   cerebras/llama3.1-8b, vertex_ai/gemini-2.0-flash
-            #     -> single segment containing a dot; match on the slash tail
-            #   us.anthropic.dotted-model
-            #     -> Bedrock's dotted cross-region keys; match on the dot tail
-            # Before v1.73.11 only the dot tail was compared, which silently
-            # never matched any curated name containing "." or "/" — most of
-            # Fireworks, Together, Cerebras, Vertex, Cloudflare and Replicate —
-            # so those prices were neither drift-checked nor reconfirmable.
-            slash_tail = key.rsplit("/", 1)[-1]
-            dot_tail = slash_tail.rsplit(".", 1)[-1]
-            if key.endswith(suffix) or slash_tail == name or dot_tail == name:
-                candidates.append(rec)
+        # Namespaced keys matching this name, in registry order (see
+        # _build_tail_index for the three key shapes).
+        candidates.extend(rec for rec in self._tail_index.get(name, ()) if rec is not exact)
 
         if not candidates:
             return None
@@ -358,6 +354,44 @@ class PriceOracle:
         if require_provider_match:
             return None
         return candidates[0]
+
+    @staticmethod
+    def _build_tail_index(records: Dict[str, "PriceRecord"]) -> Dict[str, List["PriceRecord"]]:
+        """Map every name a registry key can be looked up by to its records.
+
+        Three shapes of namespaced key all mean "this model under a provider
+        prefix", so a curated name must match any of them:
+          fireworks_ai/accounts/fireworks/models/llama-v3p3-70b-instruct
+            -> the curated name is itself multi-segment; match on any
+               "/"-delimited suffix
+          cerebras/llama3.1-8b, vertex_ai/gemini-2.0-flash
+            -> single segment containing a dot; match on the slash tail
+          us.anthropic.dotted-model
+            -> Bedrock's dotted cross-region keys; match on the dot tail
+        Before v1.73.11 only the dot tail was compared, which silently never
+        matched any curated name containing "." or "/" — most of Fireworks,
+        Together, Cerebras, Vertex, Cloudflare and Replicate — so those prices
+        were neither drift-checked nor reconfirmable.
+
+        Each record is listed once per distinct name, in registry order, so
+        ``lookup()`` sees exactly the candidates (and the same first-seen
+        order) a scan of every key would produce. v1.75.0 quadrupled the
+        catalogue; with ~3,200 registry keys the scan made one aggregator
+        pass cost seconds and the test suite half an hour.
+        """
+        index: Dict[str, List[PriceRecord]] = {}
+        for key, rec in records.items():
+            names = set()
+            start = key.find("/")
+            while start != -1:
+                names.add(key[start + 1:])
+                start = key.find("/", start + 1)
+            slash_tail = key.rsplit("/", 1)[-1]
+            names.add(slash_tail)
+            names.add(slash_tail.rsplit(".", 1)[-1])
+            for name in names:
+                index.setdefault(name, []).append(rec)
+        return index
 
     @staticmethod
     def _resolve_agreeing_candidate(records: List["PriceRecord"]) -> "PriceRecord":

@@ -715,3 +715,70 @@ class TestOutputDrift:
         m = _pm("output-drift-model", inp=3e-07, out=2.5e-07, confirmed=True, provider="Replicate")
         oracle.demote_drifted([m])
         assert m.price_confirmed is False
+
+
+# ---------------------------------------------------------------------------
+# Lookup index (v1.75.0): a lookup is a dict probe, not a scan of every key
+# ---------------------------------------------------------------------------
+
+def _scan_lookup(o, name):
+    """The pre-index reference: every key, three shapes, registry order."""
+    name = name.lower()
+    out = []
+    exact = o.records.get(name)
+    if exact:
+        out.append(exact)
+    for key, rec in o.records.items():
+        if rec in out:
+            continue
+        slash_tail = key.rsplit("/", 1)[-1]
+        if key.endswith("/" + name) or slash_tail == name or slash_tail.rsplit(".", 1)[-1] == name:
+            out.append(rec)
+    return out
+
+
+@pytest.mark.asyncio
+class TestLookupIndex:
+    async def test_index_is_built_on_load_and_covers_every_shape(self, oracle):
+        idx = oracle._tail_index
+        # multi-segment suffix of a deep Fireworks-style key
+        assert oracle.records["fireworks_ai/accounts/fireworks/models/shared-name"] in idx["models/shared-name"]
+        # slash tail shared by two first parties, in registry order
+        assert [r.model_key for r in idx["shared-name"]] == [
+            "fireworks_ai/accounts/fireworks/models/shared-name", "mistral/shared-name",
+        ]
+        # dot tail of a dotted cross-region key
+        assert oracle.records["us.anthropic.dotted-model"] in idx["dotted-model"]
+
+    async def test_indexed_candidates_match_a_full_scan_for_every_name(self, oracle):
+        names = set()
+        for key in oracle.records:
+            tail = key.rsplit("/", 1)[-1]
+            names.update({key, tail, tail.rsplit(".", 1)[-1], "models/" + tail})
+        names.add("no-such-model")
+        for name in names:
+            expected = _scan_lookup(oracle, name)
+            got = oracle.lookup(name)
+            assert got is (expected[0] if expected else None), name
+            # same candidates in the same order when a first party narrows them
+            for rec in expected:
+                if rec.provider:
+                    assert oracle.lookup(name, rec.provider, require_provider_match=True) is not None
+
+    async def test_index_follows_a_reload(self, oracle):
+        assert oracle.lookup("shared-name") is not None
+        oracle.load_from_dict({"acme/brand-new": {
+            "mode": "chat", "litellm_provider": "acme",
+            "input_cost_per_token": 1e-06, "output_cost_per_token": 1e-06,
+        }}, "test")
+        assert oracle.lookup("shared-name") is None
+        assert oracle.lookup("brand-new").model_key == "acme/brand-new"
+
+    async def test_index_is_rebuilt_if_records_are_replaced_directly(self, oracle):
+        oracle._records = {"x/replaced": oracle.records["cheap-model"]}
+        assert oracle.lookup("replaced") is oracle._records["x/replaced"]
+        assert oracle.lookup("cheap-model") is None
+
+    async def test_empty_oracle_has_an_empty_index(self):
+        o = PriceOracle()
+        assert o._tail_index == {} and o.lookup("anything") is None

@@ -6,8 +6,11 @@ any other provider everywhere providers are visible (status list, filters,
 every tool that reads the catalogue), and every price must say whether it was
 confirmed against the provider or taken from the reference registry.
 
-The catalogue here is priced against the vendored snapshot only, so the
-numbers are deterministic in CI.
+The catalogue here is priced against the vendored snapshot only, and the
+providers' live model-list sync is stubbed out, so the numbers are
+deterministic in CI. (The first CI run of v1.75.0 reached a public model-list
+endpoint the authoring sandbox could not, discovered 80 unpriced models, and
+failed the data-quality baseline that had been measured without them.)
 """
 import asyncio
 import json
@@ -24,6 +27,7 @@ sys.path.insert(0, str(project_root))
 from src.services import pricing_aggregator as pa  # noqa: E402
 from src.services.base_provider import (  # noqa: E402
     REGISTRY_MODELS_DIR,
+    BasePricingProvider,
     registry_models_slug,
     render_registry_models_doc,
 )
@@ -55,8 +59,20 @@ def snapshot_oracle():
     return o
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _no_live_model_sync():
+    """Keep the catalogue to curated + registry-sourced entries.
+
+    Where a provider's public model-list endpoint is reachable (CI, not the
+    sandbox), the live sync discovers unpriced models and filters curated
+    ones, so counts and quality ratios would depend on the network.
+    """
+    with patch.object(BasePricingProvider, "_fetch_live_model_ids", new=AsyncMock(return_value=None)):
+        yield
+
+
 @pytest.fixture(scope="module")
-def aggregator():
+def aggregator(_no_live_model_sync):
     return pa.PricingAggregatorService()
 
 
@@ -116,7 +132,8 @@ class TestPresence:
     @pytest.mark.parametrize("filter_string,provider", [
         ("deepinfra", "DeepInfra"), ("DeepInfra", "DeepInfra"), ("deep infra", "DeepInfra"),
         ("novita", "Novita"), ("Novita", "Novita"), ("novita ai", "Novita"),
-        ("vercel", "Vercel AI Gateway"), ("Vercel AI Gateway", "Vercel AI Gateway"), ("ai gateway", "Vercel AI Gateway"),
+        ("vercel", "Vercel AI Gateway"), ("Vercel AI Gateway", "Vercel AI Gateway"),
+        ("ai gateway", "Vercel AI Gateway"),
         ("nebius", "Nebius"), ("Nebius", "Nebius"), ("nebius ai studio", "Nebius"),
         ("databricks", "Databricks"), ("Databricks", "Databricks"),
     ])
@@ -272,7 +289,9 @@ class TestProvenanceContract:
         tool = EstimateCostTool()
         tool.service = AsyncMock()
         tool.service.find_model_pricing = AsyncMock(return_value=target)
-        r = await tool.execute({"model_name": target.model_name, "input_tokens": 1_000_000, "output_tokens": 1_000_000})
+        r = await tool.execute(
+            {"model_name": target.model_name, "input_tokens": 1_000_000, "output_tokens": 1_000_000}
+        )
         assert r["success"] is True
         assert r["total_cost"] > 0
         assert r["provider"] == "Nebius"
