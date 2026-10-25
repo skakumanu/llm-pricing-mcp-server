@@ -142,8 +142,28 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.73.5 -->
+  <!-- v1.73.8 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.73.8</span>
+      <span class="release-date">Oct 25, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title"><code>llm-pricing-mcp</code> is on npm — STDIO-only clients can now use <code>npx</code></div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li>The zero-dependency STDIO bridge is published as <a href="https://www.npmjs.com/package/llm-pricing-mcp"><code>llm-pricing-mcp</code></a>. Clients that only support <code>command</code>-based servers can add <code>{"command": "npx", "args": ["-y", "llm-pricing-mcp"]}</code> — no clone, no Python, nothing to keep in sync; it forwards each request to the hosted <code>/mcp</code> endpoint</li>
+        <li>Clients that support remote servers directly should keep pointing at <code>https://llm-pricing-api.fly.dev/mcp</code> — the package exists only for the ones that can't</li>
+        <li>Requires a patched Node (22.23.4+, 24.22.1+ or 26.12.1+); Node 18 and 20 are end-of-life and are flagged by the package's <code>engines</code> field at install time</li>
+        <li>Releases from 1.0.1 onward are published by GitHub Actions with npm provenance (Trusted Publishing); each version on npm links back to the exact commit and workflow run that built it</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.73.5 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.73.5</span>
