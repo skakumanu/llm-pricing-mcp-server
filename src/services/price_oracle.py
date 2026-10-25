@@ -130,6 +130,8 @@ class PriceRecord:
     supports_vision: bool
     supports_function_calling: bool
     provider: Optional[str]
+    # ISO date the provider shut the model down, when the registry knows it.
+    deprecation_date: Optional[str] = None
 
 
 @dataclass
@@ -143,17 +145,27 @@ class DriftFinding:
     pct_difference: float
     direction: str  # "overstated" | "understated"
     price_as_of: Optional[str]
+    # v1.74.0: output prices are compared too. ``basis`` names which side
+    # produced ``pct_difference`` (the larger disagreement wins).
+    ours_out_per_1m: Optional[float] = None
+    registry_out_per_1m: Optional[float] = None
+    basis: str = "input"
 
     def as_dict(self) -> Dict[str, Any]:
-        return {
+        d = {
             "model_name": self.model_name,
             "provider": self.provider,
             "our_input_cost_per_1m_usd": round(self.ours_per_1m, 4),
             "registry_input_cost_per_1m_usd": round(self.registry_per_1m, 4),
             "pct_difference": round(self.pct_difference, 1),
             "direction": self.direction,
+            "basis": self.basis,
             "our_price_as_of": self.price_as_of,
         }
+        if self.ours_out_per_1m is not None and self.registry_out_per_1m is not None:
+            d["our_output_cost_per_1m_usd"] = round(self.ours_out_per_1m, 4)
+            d["registry_output_cost_per_1m_usd"] = round(self.registry_out_per_1m, 4)
+        return d
 
 
 class PriceOracle:
@@ -233,6 +245,7 @@ class PriceOracle:
                 supports_vision=bool(rec.get("supports_vision", False)),
                 supports_function_calling=bool(rec.get("supports_function_calling", False)),
                 provider=rec.get("litellm_provider"),
+                deprecation_date=rec.get("deprecation_date") or None,
             )
         return out
 
@@ -399,6 +412,42 @@ class PriceOracle:
             logger.info("Price oracle filled %d previously unpriced model(s)", filled)
         return filled
 
+    # -- retirement --------------------------------------------------------
+
+    def withhold_retired(self, models: List[Any], today: Optional[str] = None) -> List[Any]:
+        """Withhold models whose provider has shut them down.
+
+        The registry carries ``deprecation_date`` for most first-party entries
+        (875 at the time of writing, a third already past). When the same
+        provider's record for a curated model has a date that has passed, the
+        model is withheld from cost math and ``retired_on`` is set, so it stays
+        visible as retired rather than vanishing or, worse, being priced as if
+        it were still for sale. Deleting the entry is left to a human-merged
+        PR (``scripts/retire_models.py``, run weekly).
+
+        Returns the models that were retired by this call.
+        """
+        if not self.loaded:
+            return []
+        today = today or datetime.now(UTC).date().isoformat()
+        retired: List[Any] = []
+        for m in models:
+            if getattr(m, "pricing_model", "per_token") != "per_token":
+                continue
+            rec = self.lookup(m.model_name, m.provider, require_provider_match=True)
+            if rec is None or not rec.deprecation_date:
+                continue
+            if rec.deprecation_date <= today:
+                m.price_confirmed = False
+                m.retired_on = rec.deprecation_date
+                retired.append(m)
+        if retired:
+            logger.warning(
+                "Price oracle withheld %d retired model(s): %s", len(retired),
+                ", ".join(f"{m.model_name}/{m.provider} ({m.retired_on})" for m in retired),
+            )
+        return retired
+
     # -- drift detection ---------------------------------------------------
 
     def find_drift(
@@ -436,7 +485,14 @@ class PriceOracle:
             if theirs <= 0 or ours <= 0:
                 continue
 
-            pct = (ours - theirs) / theirs * 100
+            pct_in = (ours - theirs) / theirs * 100
+            # v1.74.0: compare output too. Replicate's Mixtral output was 4x off
+            # while its input was within tolerance; input-only checking missed it.
+            ours_out = m.cost_per_output_token * 1_000_000
+            theirs_out = rec.output_per_1k / 1000 * 1_000_000
+            pct_out = (ours_out - theirs_out) / theirs_out * 100 if theirs_out > 0 and ours_out > 0 else 0.0
+
+            pct, basis = (pct_in, "input") if abs(pct_in) >= abs(pct_out) else (pct_out, "output")
             if abs(pct) < threshold_pct:
                 continue
 
@@ -448,6 +504,9 @@ class PriceOracle:
                 pct_difference=abs(pct),
                 direction="overstated" if pct > 0 else "understated",
                 price_as_of=getattr(m, "price_as_of", None),
+                ours_out_per_1m=ours_out,
+                registry_out_per_1m=theirs_out,
+                basis=basis,
             ))
 
         findings.sort(key=lambda f: f.pct_difference, reverse=True)

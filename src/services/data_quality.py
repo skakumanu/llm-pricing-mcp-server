@@ -27,6 +27,13 @@ class DataQualityReport:
     registry_models: int
     registry_fetched: Optional[str]
     summary: str
+    # v1.74.0 — the three numbers the Oct 2026 reconfirmation pass showed were
+    # missing: how much of the catalogue the registry can actually vouch for,
+    # how many listed models the provider has already shut down, and how many
+    # confirmed prices have no independent check at all.
+    retired_listed: int = 0
+    registry_coverage_pct: Optional[float] = None
+    unmatched_confirmed: int = 0
 
     def as_dict(self) -> dict:
         return {
@@ -35,8 +42,13 @@ class DataQualityReport:
             "confirmed_pct": round(self.confirmed_pct, 1),
             "withheld_for_drift": self.withheld_for_drift,
             "never_priced": self.never_priced,
+            "retired_listed": self.retired_listed,
             "stale_models": self.stale_models,
             "stale_pct": round(self.stale_pct, 1),
+            "registry_coverage_pct": (
+                round(self.registry_coverage_pct, 1) if self.registry_coverage_pct is not None else None
+            ),
+            "unmatched_confirmed": self.unmatched_confirmed,
             "registry_source": self.registry_source,
             "registry_models": self.registry_models,
             "registry_fetched": self.registry_fetched,
@@ -59,12 +71,33 @@ def compute_data_quality_report(all_models: List[Any], oracle: Any) -> DataQuali
     # A withheld (drift-demoted) model keeps its original nonzero price; a
     # never-priced one holds the 0.0 placeholder — see find_drift()/demote_drifted()
     # in price_oracle.py for why that's the right discriminator between the two.
-    withheld = [m for m in unconfirmed if m.cost_per_input_token > 0]
-    never_priced = [m for m in unconfirmed if m.cost_per_input_token <= 0]
+    retired = [m for m in unconfirmed if getattr(m, "retired_on", None)]
+    # A retired model is withheld too, but it is a different story from drift:
+    # the provider shut it down. Count it once, under retirement.
+    withheld = [m for m in unconfirmed if m.cost_per_input_token > 0 and m not in retired]
+    never_priced = [m for m in unconfirmed if m.cost_per_input_token <= 0 and m not in retired]
     stale = [m for m in confirmed if getattr(m, "price_is_stale", False)]
 
     confirmed_pct = (len(confirmed) / total * 100) if total else 0.0
     stale_pct = (len(stale) / len(confirmed) * 100) if confirmed else 0.0
+
+    # How much of the confirmed catalogue the registry can independently vouch
+    # for. Before v1.73.11 this was ~60% without anyone knowing, because the
+    # oracle's key matching silently skipped dotted and slashed model names.
+    lookup = getattr(oracle, "lookup", None)
+    coverage_pct: Optional[float] = None
+    unmatched = 0
+    if callable(lookup) and confirmed:
+        matched = 0
+        for m in confirmed:
+            try:
+                hit = lookup(m.model_name, m.provider, require_provider_match=True)
+            except TypeError:
+                hit = None
+            if hit is not None:
+                matched += 1
+        unmatched = len(confirmed) - matched
+        coverage_pct = matched / len(confirmed) * 100
 
     if not unconfirmed and not stale:
         summary = f"All {total} priced models have a confirmed, fresh price."
@@ -76,9 +109,16 @@ def compute_data_quality_report(all_models: List[Any], oracle: Any) -> DataQuali
             )
         if never_priced:
             parts.append(f"{len(never_priced)} newly discovered, not yet priced.")
+        if retired:
+            parts.append(f"{len(retired)} listed model(s) retired by their provider, withheld.")
         if stale:
             parts.append(f"{len(stale)} confirmed price(s) are over 90 days old.")
         summary = " ".join(parts)
+    if coverage_pct is not None:
+        summary += (
+            f" Registry independently confirms {coverage_pct:.1f}% of confirmed prices"
+            f" ({unmatched} have no first-party registry entry)."
+        )
 
     return DataQualityReport(
         total_models=total,
@@ -92,4 +132,7 @@ def compute_data_quality_report(all_models: List[Any], oracle: Any) -> DataQuali
         registry_models=oracle.model_count,
         registry_fetched=oracle.fetched_at,
         summary=summary,
+        retired_listed=len(retired),
+        registry_coverage_pct=coverage_pct,
+        unmatched_confirmed=unmatched,
     )
