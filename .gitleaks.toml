@@ -1,0 +1,25 @@
+# Gitleaks configuration (picked up automatically by gitleaks-action in CI and
+# by the pre-commit hook). The default ruleset is kept in full; the allowlist
+# below exempts the one field in generated data that trips `generic-api-key`:
+#
+#   "registry_key": "deepinfra/tencent/Hy3"
+#
+# `registry_key` in data/registry_models/*.json (and on registry-sourced
+# STATIC_PRICING entries) holds a reference-registry model identifier, not a
+# credential — the rule fires on the word "key" next to a high-entropy value.
+# The weekly pickup PR adds hundreds of these lines, so without this exemption
+# the secret_scan gate would fail on every registry-sourced model.
+# tests/test_gitleaks_config.py pins the exemption.
+title = "llm-pricing-mcp-server gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Reference-registry model identifiers are model ids, not secrets"
+regexes = [
+  '''"registry_key":\s*"[^"]+"''',
+]
+paths = [
+  '''^data/registry_models/[^/]+\.json$''',
+]
