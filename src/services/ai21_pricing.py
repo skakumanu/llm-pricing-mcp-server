@@ -38,30 +38,6 @@ class AI21PricingService(BasePricingProvider):
             "strengths": ["Affordable", "256K context", "Fast", "Efficient"],
             "best_for": "High-volume applications needing long context at low cost"
         },
-        "j2-ultra": {
-            "input": 0.015,
-            "output": 0.015,
-            "context_window": 8192,
-            "use_cases": ["Enterprise", "Complex tasks", "High quality", "Production"],
-            "strengths": ["Highest quality", "Enterprise support", "Reliable", "Well-tested"],
-            "best_for": "Mission-critical enterprise applications requiring highest quality"
-        },
-        "j2-mid": {
-            "input": 0.010,
-            "output": 0.010,
-            "context_window": 8192,
-            "use_cases": ["General purpose", "Business tasks", "Content creation"],
-            "strengths": ["Well-balanced", "Good quality", "Enterprise support"],
-            "best_for": "General enterprise applications"
-        },
-        "j2-light": {
-            "input": 0.003,
-            "output": 0.003,
-            "context_window": 8192,
-            "use_cases": ["Simple tasks", "High-volume", "Cost-effective"],
-            "strengths": ["Fast", "Affordable", "Efficient"],
-            "best_for": "Cost-effective enterprise tasks"
-        }
     }
 
     def __init__(self, api_key: Optional[str] = None):

@@ -142,8 +142,31 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.73.11 -->
+  <!-- v1.74.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.74.0</span>
+      <span class="release-date">Oct 25, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Pricing integrity: 55 retired models removed, and the catalogue now polices itself</div>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li><strong>55 shut-down models removed</strong>, each checked against the provider's own notice: OpenAI's Oct 23 retirements (<code>gpt-4</code>, <code>gpt-4-turbo</code>, <code>gpt-3.5-turbo</code>, <code>o1</code>, <code>o3-mini</code>, <code>o4-mini</code>, <code>gpt-4.1-nano</code>), Anthropic's Claude 2.1 / 3 / 3.5 / 3.7 line, Gemini 1.0 and 1.5 (Google and Vertex), DeepSeek's legacy <code>deepseek-chat</code> / <code>deepseek-reasoner</code> ids, five Together sunsets, Cohere Command legacy, Jurassic-2, xAI grok-2, four Groq previews, three Mistral legacy ids, three Bedrock EOLs, five retired Cloudflare entries. DeepSeek's current ids (<code>deepseek-flash</code>, <code>deepseek-v4-pro</code>) are listed and priced from the registry</li>
+        <li><strong>Automatic retirement from now on.</strong> The price oracle keeps the registry's deprecation date; the day it passes the model is withheld from cost math and returned with a new <code>retired_on</code> field. The weekly audit opens a PR deleting entries retired more than 30 days earlier, and lists models the registry no longer knows at all as candidates for a human to check</li>
+        <li><strong>Automatic reconfirmation.</strong> The weekly audit also opens a PR re-dating stale prices that still match the registry on input and output, so staleness can no longer pile up unnoticed</li>
+        <li><strong>Three new guards in CI:</strong> a registry-coverage floor (the oracle must be able to vouch for at least half the confirmed catalogue), a plausibility band on every price table (catches units mistakes like the 1000× Cloudflare bug), and a check that no confirmed price belongs to a model past its deprecation date</li>
+        <li><strong>Drift detection now compares output prices too.</strong> Replicate's Mixtral output was 4× off while its input matched; input-only checking missed it. <code>check_price_drift</code> findings carry a <code>basis</code> field and both output prices</li>
+        <li><strong><code>get_data_quality</code> gains</strong> <code>registry_coverage_pct</code>, <code>unmatched_confirmed</code> and <code>retired_listed</code>, so the share of prices the registry independently confirms (53% today) is a published number rather than an unknown</li>
+        <li>Salesforce <code>agentforce</code> and <code>einstein-copilot</code> are per-conversation / per-request products; their derived per-token estimates (up to $1,330 per 1M) are no longer served as prices. Both stay listed as unconfirmed</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.73.11 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.73.11</span>

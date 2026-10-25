@@ -49,19 +49,6 @@ class MistralPricingService(BasePricingProvider):
             "supports_function_calling": True,
             "supports_json_mode": True,
         },
-        "mistral-large-2": {
-            "input": 0.003,
-            "output": 0.009,
-            "context_window": 128000,
-            "use_cases": [
-                "Complex reasoning", "Advanced code generation",
-                "Multi-step planning", "128K context tasks"
-            ],
-            "strengths": ["Latest flagship", "Enhanced reasoning", "128K context", "Function calling"],
-            "best_for": "Complex tasks with long context requiring best reasoning",
-            "supports_function_calling": True,
-            "supports_json_mode": True,
-        },
         "mistral-large-latest": {
             "input": 0.0005,
             "output": 0.0015,
@@ -70,16 +57,6 @@ class MistralPricingService(BasePricingProvider):
             "use_cases": ["Complex reasoning", "Advanced analytics", "Code generation", "Multi-step planning"],
             "strengths": ["Excellent reasoning", "Strong code skills", "Well-balanced"],
             "best_for": "Complex tasks requiring strong reasoning and code understanding",
-            "supports_function_calling": True,
-            "supports_json_mode": True,
-        },
-        "mistral-small-2": {
-            "input": 0.0006,
-            "output": 0.0018,
-            "context_window": 128000,
-            "use_cases": ["Cost-effective long context", "FAQ automation", "Text classification", "RAG applications"],
-            "strengths": ["Latest small model", "128K context", "Best price/performance", "Fast"],
-            "best_for": "High-volume long-context applications with budget constraints",
             "supports_function_calling": True,
             "supports_json_mode": True,
         },
@@ -115,16 +92,6 @@ class MistralPricingService(BasePricingProvider):
             "best_for": "Self-hosted applications needing long context at minimal cost",
             "supports_function_calling": True,
             "supports_json_mode": True,
-        },
-        "open-mixtral-8x7b": {
-            "input": 0.0007,
-            "output": 0.0007,
-            "price_as_of": "2026-09-13",
-            "context_window": 32000,
-            "use_cases": ["Advanced open-source use", "Custom deployment", "High-performance inference"],
-            "strengths": ["Mixture of experts", "Self-hostable", "Good performance"],
-            "best_for": "Advanced use cases with self-hosted open-source requirements",
-            "supports_function_calling": True,
         },
     }
 

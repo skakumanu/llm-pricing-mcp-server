@@ -114,31 +114,6 @@ class XAIPricingService(BasePricingProvider):
             "supports_function_calling": True,
             "supports_json_mode": True,
         },
-        "grok-2-mini": {
-            "input": 0.0001,
-            "output": 0.0002,
-            "context_window": 131072,
-            "use_cases": [
-                "High-volume processing", "Classification", "Simple Q&A",
-                "Summarization", "Content moderation"
-            ],
-            "strengths": ["Ultra-affordable", "Fast", "Long context", "xAI ecosystem"],
-            "best_for": "High-throughput, cost-sensitive workloads on the xAI platform",
-            "supports_function_calling": True,
-        },
-        "grok-vision-beta": {
-            "input": 0.005,
-            "output": 0.015,
-            "context_window": 8192,
-            "use_cases": [
-                "Image understanding", "Visual Q&A", "Document analysis",
-                "Multimodal reasoning"
-            ],
-            "strengths": ["Vision capable", "xAI ecosystem", "Real-time data"],
-            "best_for": "Multimodal tasks combining vision and text on the xAI platform",
-            "supports_vision": True,
-            "supports_function_calling": True,
-        },
     }
 
     def __init__(self, api_key: Optional[str] = None):

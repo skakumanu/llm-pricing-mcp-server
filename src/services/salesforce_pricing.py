@@ -30,9 +30,13 @@ class SalesforcePricingService(BasePricingProvider):
         # ── Commercial products ──────────────────────────────────────────────
         "agentforce": {
             # Salesforce Agentforce: $2.00 per autonomous agent conversation.
-            # Estimate assumes ~5 000 input tokens + ~1 500 output tokens / conversation.
-            "input": 0.40,
-            "output": 1.33,
+            # Not a per-token product. Until v1.74.0 this carried a derived
+            # estimate ($400/$1,330 per 1M tokens) that sorted as the most
+            # expensive model in the catalogue; it is listed unconfirmed now
+            # so it stays discoverable but never enters cost math.
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
             "context_window": 128000,
             "use_cases": [
                 "Autonomous CRM agents", "Customer service resolution",
@@ -54,9 +58,11 @@ class SalesforcePricingService(BasePricingProvider):
         "einstein-copilot": {
             # Einstein Copilot: bundled with Einstein AI add-on ($50–75/user/month).
             # Approximate token cost derived from reported 1 000–5 000 Einstein Requests
-            # included per license at ~$0.025/request.
-            "input": 0.10,
-            "output": 0.30,
+            # included per license at ~$0.025/request. A per-request bundle is not
+            # a per-token price; listed unconfirmed since v1.74.0 (see agentforce).
+            "input": 0.0,
+            "output": 0.0,
+            "price_confirmed": False,
             "context_window": 32768,
             "use_cases": [
                 "Conversational CRM guidance", "Opportunity summaries",
