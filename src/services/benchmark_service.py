@@ -1,8 +1,15 @@
 """Benchmark quality scores for LLM models.
 
 Provides quality_score (0-100, benchmark-derived) for known models via a
-curated static mapping, supplemented by a HuggingFace Datasets API call for
-open-source models (cached 24 h, graceful fallback).
+curated static mapping, supplemented by the HuggingFace Open LLM Leaderboard
+for open-source models (graceful fallback).
+
+The leaderboard is one dataset, so it is downloaded once and cached (24 h on
+success, one hour on failure) and every model is matched against the cached
+rows in memory; misses are cached per model for the same period. Before
+v1.75.0 each unknown model issued its own identical HTTP request and a miss
+was never cached, so a catalogue of 600 models cost hundreds of sequential
+requests on every /performance, router or predict_cost call.
 """
 import logging
 import time
@@ -68,12 +75,30 @@ STATIC_SCORES: Dict[str, float] = {
     "mixtral-8x7b-32768": 72,
 }
 
-# Normalised lookup (lowercase keys)
+# Normalised lookup (lowercase keys), plus the same entries longest-first for
+# partial matching so the sort is not repeated on every lookup.
 _NORMALIZED: Dict[str, float] = {k.lower(): v for k, v in STATIC_SCORES.items()}
+_NORMALIZED_LONGEST_FIRST = sorted(_NORMALIZED.items(), key=lambda x: len(x[0]), reverse=True)
 
-# In-memory HF cache: model_name -> (score, cached_at_unix)
+# In-memory HF cache: model_name -> (score or None, cached_at_unix). A None
+# score is a cached miss, so an unknown model is matched once per TTL.
 _hf_cache: Dict[str, tuple] = {}
 _cache_ttl_seconds: int = 24 * 3600  # default; overridden by set_cache_ttl()
+
+# The leaderboard rows themselves: (rows, fetched_at_unix, ttl_seconds). One
+# download serves every model; a failed download is remembered for an hour so
+# an outage costs one request per hour, not one per model per call.
+_leaderboard_cache: Optional[tuple] = None
+_FAILURE_TTL_SECONDS = 3600
+
+_LEADERBOARD_ROWS_URL = "https://datasets-server.huggingface.co/rows"
+_LEADERBOARD_ROWS_PARAMS = {
+    "dataset": "open-llm-leaderboard/results",
+    "config": "default",
+    "split": "train",
+    "offset": 0,
+    "limit": 5,
+}
 
 _HF_LEADERBOARD_URL = (
     "https://huggingface.co/spaces/open-llm-leaderboard/open_llm_leaderboard"
@@ -93,10 +118,53 @@ def _lookup_static(model_name: str) -> Optional[float]:
     if key in _NORMALIZED:
         return _NORMALIZED[key]
     # Partial match: find the best (longest) prefix
-    for k, v in sorted(_NORMALIZED.items(), key=lambda x: len(x[0]), reverse=True):
+    for k, v in _NORMALIZED_LONGEST_FIRST:
         if key.startswith(k) or k in key:
             return v
     return None
+
+
+def _reset_caches() -> None:
+    """Forget cached leaderboard rows and per-model scores (tests)."""
+    global _leaderboard_cache
+    _hf_cache.clear()
+    _leaderboard_cache = None
+
+
+async def _download_leaderboard_rows() -> Optional[List[dict]]:
+    """One HTTP request for the leaderboard rows; None on any failure."""
+    import httpx
+    async with httpx.AsyncClient(timeout=8.0) as client:
+        resp = await client.get(_LEADERBOARD_ROWS_URL, params=_LEADERBOARD_ROWS_PARAMS)
+        if resp.status_code != 200:
+            return None
+        rows = resp.json().get("rows", [])
+        return rows if isinstance(rows, list) else []
+
+
+async def _leaderboard_rows() -> List[dict]:
+    """The cached leaderboard rows, downloading at most once per TTL.
+
+    A failed or non-200 download is cached as an empty list for
+    ``_FAILURE_TTL_SECONDS`` so every model does not retry it.
+    """
+    global _leaderboard_cache
+    now = time.time()
+    if _leaderboard_cache is not None:
+        rows, fetched_at, ttl = _leaderboard_cache
+        if now - fetched_at < ttl:
+            return rows
+
+    rows: List[dict] = []
+    ttl = _FAILURE_TTL_SECONDS
+    try:
+        fetched = await _download_leaderboard_rows()
+        if fetched is not None:
+            rows, ttl = fetched, _cache_ttl_seconds
+    except Exception as exc:
+        logger.debug("HF leaderboard fetch failed: %s", exc)
+    _leaderboard_cache = (rows, now, ttl)
+    return rows
 
 
 async def _fetch_hf_score(model_name: str) -> Optional[float]:
@@ -104,7 +172,9 @@ async def _fetch_hf_score(model_name: str) -> Optional[float]:
     Try to retrieve a quality score from the HuggingFace Open LLM Leaderboard.
 
     Returns None on any failure (network, parse, not found) so that callers
-    always fall back gracefully to STATIC_SCORES or a default.
+    always fall back gracefully to STATIC_SCORES or a default. Both hits and
+    misses are cached per model, and all models share one download of the
+    leaderboard rows.
     """
     cached = _hf_cache.get(model_name)
     if cached is not None:
@@ -112,37 +182,21 @@ async def _fetch_hf_score(model_name: str) -> Optional[float]:
         if time.time() - cached_at < _cache_ttl_seconds:
             return score
 
-    try:
-        import httpx
-        # The Open LLM Leaderboard exposes a dataset API we can query
-        url = "https://datasets-server.huggingface.co/rows"
-        params = {
-            "dataset": "open-llm-leaderboard/results",
-            "config": "default",
-            "split": "train",
-            "offset": 0,
-            "limit": 5,
-        }
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            resp = await client.get(url, params=params)
-            if resp.status_code != 200:
-                return None
-            data = resp.json()
-            rows = data.get("rows", [])
-            name_lower = model_name.lower()
-            for row in rows:
-                row_data = row.get("row", {})
-                full_name = str(row_data.get("model_name_for_query", "")).lower()
-                if name_lower in full_name or full_name in name_lower:
-                    avg_score = row_data.get("Average ⬆️")
-                    if avg_score is not None:
-                        score = float(avg_score)
-                        _hf_cache[model_name] = (score, time.time())
-                        return score
-    except Exception as exc:
-        logger.debug("HF leaderboard fetch failed for %s: %s", model_name, exc)
-
-    return None
+    score = None
+    name_lower = model_name.lower()
+    for row in await _leaderboard_rows():
+        row_data = row.get("row", {}) if isinstance(row, dict) else {}
+        full_name = str(row_data.get("model_name_for_query", "")).lower()
+        if full_name and (name_lower in full_name or full_name in name_lower):
+            avg_score = row_data.get("Average ⬆️")
+            if avg_score is not None:
+                try:
+                    score = float(avg_score)
+                except (TypeError, ValueError):
+                    continue
+                break
+    _hf_cache[model_name] = (score, time.time())
+    return score
 
 
 async def get_quality_score(model_name: str) -> Optional[float]:
@@ -160,7 +214,7 @@ async def get_quality_score(model_name: str) -> Optional[float]:
     return await _fetch_hf_score(model_name)
 
 
-async def enrich_models(models: List) -> List:
+async def enrich_models(models: List["PricingMetrics"]) -> List["PricingMetrics"]:
     """
     Attach quality_score to each PricingMetrics in the list.
 

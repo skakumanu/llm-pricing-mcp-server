@@ -142,8 +142,36 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.74.0 -->
+  <!-- v1.75.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.75.0</span>
+      <span class="release-date">Oct 25, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Five new providers, 450+ models, and every price now says where it came from</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong>DeepInfra, Novita, Vercel AI Gateway, Nebius and Databricks</strong> join the catalogue (26 → 31 providers). Filter with the display name or a short form (<code>deepinfra</code>, <code>novita</code>, <code>vercel</code>, <code>nebius</code>, <code>databricks</code>); every tool that reads the catalogue sees them</li>
+        <li><strong>Registry-sourced prices, labelled as such.</strong> Beyond each provider's hand-maintained core, models are priced from the reference price registry and carry a machine-readable <code>price_source_kind: "registry"</code> plus the <code>registry_key</code> and registry date. They are usable in estimates, comparisons and routing, but are never presented or counted as provider-confirmed. Provider-confirmed prices carry <code>price_source_kind: "provider"</code>. <code>get_all_pricing</code> now returns <code>source</code>, <code>price_as_of</code>, <code>price_is_stale</code>, <code>price_confirmed</code> and both new fields per model</li>
+        <li><strong>Databricks is registry-sourced throughout:</strong> Databricks bills Foundation Model APIs in DBUs, so each entry carries a note that the USD figure is indicative and depends on your DBU rate and cloud</li>
+        <li><strong><code>get_data_quality</code> splits confirmed prices</strong> into <code>provider_confirmed</code> and <code>registry_sourced</code> (they always sum to <code>confirmed_models</code>), so the share of the catalogue checked against a provider's own rate card is a published number</li>
+        <li><strong>Weekly automatic pickup.</strong> A new scheduled job finds chat models the registry prices under a covered provider that the catalogue lacks, adds them as registry-sourced entries, re-syncs and re-dates existing ones while the registry still backs them, and opens a PR for a human to merge — with additions grouped by provider, every skipped candidate and its reason, and the guards that ran. Nothing is promoted to provider-confirmed automatically; the first runs cover only the five new providers</li>
+        <li><strong>Honest about the core.</strong> The authoring environment could not reach the five providers' rate cards, so their core entries carry the registry's number and are labelled registry-sourced rather than provider-confirmed — the shortfall is stated, not faked</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">Providers <strong>26 → 31</strong></div>
+        <div class="stat-chip">Priced models <strong>155 → 606</strong></div>
+        <div class="stat-chip">Registry coverage <strong>54.1% → 88.6%</strong></div>
+        <div class="stat-chip">Confirmed <strong>95.5% → 98.8%</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.74.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.74.0</span>

@@ -3,7 +3,7 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Most LLM pricing tools are a static lookup table. This one checks its own numbers against a live, independently-maintained price registry and tells you when they disagree, routes to a model by cost *and* quality instead of just quoting a price, and tracks what you actually spent — not just what you might. All of that is backed by a RESTful API (FastAPI), **29 MCP tools** over STDIO and HTTP, a conversational Agent + RAG pipeline, browser-based UIs, and a self-serve billing dashboard, for pricing data from **26 major LLM providers**.
+Most LLM pricing tools are a static lookup table. This one checks its own numbers against a live, independently-maintained price registry and tells you when they disagree, routes to a model by cost *and* quality instead of just quoting a price, and tracks what you actually spent — not just what you might. All of that is backed by a RESTful API (FastAPI), **29 MCP tools** over STDIO and HTTP, a conversational Agent + RAG pipeline, browser-based UIs, and a self-serve billing dashboard, for pricing data from **31 major LLM providers**.
 
 **Live at**: https://llm-pricing-api.fly.dev
 
@@ -27,7 +27,7 @@ Most LLM pricing tools are a static lookup table. This one checks its own number
 - MCP Protocol version: `2024-11-05`
 
 ### RESTful API
-- Real-time pricing from 26 providers (150+ models), async fetching with smart caching
+- Real-time pricing from 31 providers (600+ models), async fetching with smart caching. Every price says where it came from: `price_source_kind` is `provider` when confirmed against the provider's rate card, `registry` when taken from the reference price registry (with `registry_key` and date); registry-sourced models are usable in estimates and comparisons but never counted as provider-confirmed, and the weekly pickup PR adds new registry models under covered providers automatically
 - Cost estimation: single model (`POST /cost-estimate`) and batch comparison (`POST /cost-estimate/batch`)
 - Performance metrics, use-case recommendations, pricing history, trends
 - Router recommendation (`POST /router/recommend`) with feedback loop; `GET /cache-stats` reports process-lifetime hit/miss stats for its ~5-minute recommendation cache
@@ -94,7 +94,7 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 - Protected endpoints (`/billing/me`, `/router/recommend`, `/router/feedback`, `/billing/portal`) require a billing API key or the global `MCP_API_KEY`
 - Rate limiting per client IP + tier bucket — includes the anonymous `/agent/chat` and `/agent/chat/stream` endpoints (no API key needed, but throttled, since each call runs an LLM on the operator's key)
 - Request size limit (1MB default)
-- 1253 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 1419 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo

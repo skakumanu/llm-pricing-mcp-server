@@ -587,7 +587,9 @@ def test_use_cases_context_window_included():
     data = response.json()
 
     # Find models with known large context windows
-    large_context_models = [m for m in data["models"] if m.get("context_window", 0) > 100000]
+    # context_window is Optional on the API contract: a registry-sourced model
+    # whose registry record carries no max_input_tokens is returned as null.
+    large_context_models = [m for m in data["models"] if (m.get("context_window") or 0) > 100000]
     assert len(large_context_models) > 0, "Should have models with large context windows"
 
     # Check Gemini 1.5 Pro has 2M context

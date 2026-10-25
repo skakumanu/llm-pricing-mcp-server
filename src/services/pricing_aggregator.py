@@ -1,8 +1,9 @@
 """Service for aggregating pricing data from multiple providers."""
 import asyncio
 import logging
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple, Type
 from src.models.pricing import PricingMetrics, ProviderStatusInfo
+from src.services.base_provider import BasePricingProvider
 from src.services.openai_pricing import OpenAIPricingService
 from src.services.anthropic_pricing import AnthropicPricingService
 from src.services.google_pricing import GooglePricingService
@@ -29,42 +30,127 @@ from src.services.azure_openai_pricing import AzureOpenAIPricingService
 from src.services.vertex_pricing import VertexAIPricingService
 from src.services.huggingface_pricing import HuggingFacePricingService
 from src.services.cloudflare_pricing import CloudflareAIPricingService
+from src.services.deepinfra_pricing import DeepInfraPricingService
+from src.services.novita_pricing import NovitaPricingService
+from src.services.vercel_ai_gateway_pricing import VercelAIGatewayPricingService
+from src.services.nebius_pricing import NebiusPricingService
+from src.services.databricks_pricing import DatabricksPricingService
 from src.services.price_oracle import get_price_oracle
 
 logger = logging.getLogger(__name__)
+
+
+# Every provider the aggregator fans out to, in output order. Each entry is the
+# attribute name the service is stored under (kept stable: callers and tests
+# reach for ``aggregator.openai_service``) and its class. Before v1.75.0 this
+# list was hard-wired three times (constructor, gather, provider filter) and
+# adding a provider meant editing all three and remembering the doc count.
+PROVIDER_SERVICES: List[Tuple[str, Type[BasePricingProvider]]] = [
+    ("openai_service", OpenAIPricingService),
+    ("anthropic_service", AnthropicPricingService),
+    ("google_service", GooglePricingService),
+    ("cohere_service", CoherePricingService),
+    ("mistral_service", MistralPricingService),
+    ("groq_service", GroqPricingService),
+    ("together_service", TogetherPricingService),
+    ("fireworks_service", FireworksPricingService),
+    ("perplexity_service", PerplexityPricingService),
+    ("ai21_service", AI21PricingService),
+    ("anyscale_service", AnyscalePricingService),
+    ("bedrock_service", BedrockPricingService),
+    ("xai_service", XAIPricingService),
+    ("deepseek_service", DeepSeekPricingService),
+    ("cerebras_service", CerebrasPricingService),
+    ("nvidia_service", NVIDIAPricingService),
+    ("replicate_service", ReplicatePricingService),
+    ("salesforce_service", SalesforcePricingService),
+    ("promptql_service", PromptQLPricingService),
+    ("snowflake_service", SnowflakePricingService),
+    ("oracle_service", OraclePricingService),
+    ("ide_service", IDEPricingService),
+    ("azure_openai_service", AzureOpenAIPricingService),
+    ("vertex_service", VertexAIPricingService),
+    ("huggingface_service", HuggingFacePricingService),
+    ("cloudflare_service", CloudflareAIPricingService),
+    # v1.75.0 — registry-backed hosts; most of their catalogue is registry-sourced
+    ("deepinfra_service", DeepInfraPricingService),
+    ("novita_service", NovitaPricingService),
+    ("vercel_ai_gateway_service", VercelAIGatewayPricingService),
+    ("nebius_service", NebiusPricingService),
+    ("databricks_service", DatabricksPricingService),
+]
+
+# The number every "N providers" string in docs and the OpenAPI description
+# derives from — tests/test_new_providers.py checks the docs agree with it.
+PROVIDER_COUNT = len(PROVIDER_SERVICES)
+
+# Lowercased ``?provider=`` filter strings -> service attribute. Display names,
+# short forms and the odd historical spelling all resolve; anything else is an
+# unknown provider and returns an empty result.
+PROVIDER_FILTER_ALIASES: Dict[str, str] = {
+    "openai": "openai_service",
+    "anthropic": "anthropic_service",
+    "google": "google_service",
+    "cohere": "cohere_service",
+    "mistral": "mistral_service",
+    "mistral ai": "mistral_service",
+    "groq": "groq_service",
+    "together": "together_service",
+    "together ai": "together_service",
+    "fireworks": "fireworks_service",
+    "fireworks ai": "fireworks_service",
+    "perplexity": "perplexity_service",
+    "perplexity ai": "perplexity_service",
+    "ai21": "ai21_service",
+    "ai21 labs": "ai21_service",
+    "anyscale": "anyscale_service",
+    "bedrock": "bedrock_service",
+    "amazon bedrock": "bedrock_service",
+    "xai": "xai_service",
+    "x.ai": "xai_service",
+    "deepseek": "deepseek_service",
+    "cerebras": "cerebras_service",
+    "nvidia": "nvidia_service",
+    "nvidia nim": "nvidia_service",
+    "replicate": "replicate_service",
+    "salesforce": "salesforce_service",
+    "salesforce einstein": "salesforce_service",
+    "promptql": "promptql_service",
+    "snowflake": "snowflake_service",
+    "snowflake cortex": "snowflake_service",
+    "oracle": "oracle_service",
+    "oracle oci": "oracle_service",
+    "azure": "azure_openai_service",
+    "azure openai": "azure_openai_service",
+    "vertex": "vertex_service",
+    "vertex ai": "vertex_service",
+    "huggingface": "huggingface_service",
+    "hugging face": "huggingface_service",
+    "cloudflare": "cloudflare_service",
+    "cloudflare ai": "cloudflare_service",
+    "deepinfra": "deepinfra_service",
+    "deep infra": "deepinfra_service",
+    "novita": "novita_service",
+    "novita ai": "novita_service",
+    "vercel": "vercel_ai_gateway_service",
+    "vercel ai gateway": "vercel_ai_gateway_service",
+    "ai gateway": "vercel_ai_gateway_service",
+    "nebius": "nebius_service",
+    "nebius ai studio": "nebius_service",
+    "databricks": "databricks_service",
+}
 
 
 class PricingAggregatorService:
     """Service to aggregate pricing data from multiple LLM providers."""
 
     def __init__(self):
-        """Initialize the aggregator service."""
-        self.openai_service = OpenAIPricingService()
-        self.anthropic_service = AnthropicPricingService()
-        self.google_service = GooglePricingService()
-        self.cohere_service = CoherePricingService()
-        self.mistral_service = MistralPricingService()
-        self.groq_service = GroqPricingService()
-        self.together_service = TogetherPricingService()
-        self.fireworks_service = FireworksPricingService()
-        self.perplexity_service = PerplexityPricingService()
-        self.ai21_service = AI21PricingService()
-        self.anyscale_service = AnyscalePricingService()
-        self.bedrock_service = BedrockPricingService()
-        self.xai_service = XAIPricingService()
-        self.deepseek_service = DeepSeekPricingService()
-        self.cerebras_service = CerebrasPricingService()
-        self.nvidia_service = NVIDIAPricingService()
-        self.replicate_service = ReplicatePricingService()
-        self.salesforce_service = SalesforcePricingService()
-        self.promptql_service = PromptQLPricingService()
-        self.snowflake_service = SnowflakePricingService()
-        self.oracle_service = OraclePricingService()
-        self.ide_service = IDEPricingService()
-        self.azure_openai_service = AzureOpenAIPricingService()
-        self.vertex_service = VertexAIPricingService()
-        self.huggingface_service = HuggingFacePricingService()
-        self.cloudflare_service = CloudflareAIPricingService()
+        """Initialize the aggregator service — one instance per PROVIDER_SERVICES entry."""
+        for attr, cls in PROVIDER_SERVICES:
+            setattr(self, attr, cls())
+
+    def _services(self) -> List[BasePricingProvider]:
+        return [getattr(self, attr) for attr, _ in PROVIDER_SERVICES]
 
     async def get_all_pricing_async(
         self, include_unconfirmed: bool = False
@@ -89,34 +175,7 @@ class PricingAggregatorService:
         """
         # Fetch data from all providers concurrently
         # Using return_exceptions=True to handle individual provider failures gracefully
-        tasks = [
-            self.openai_service.get_pricing_with_status(),
-            self.anthropic_service.get_pricing_with_status(),
-            self.google_service.get_pricing_with_status(),
-            self.cohere_service.get_pricing_with_status(),
-            self.mistral_service.get_pricing_with_status(),
-            self.groq_service.get_pricing_with_status(),
-            self.together_service.get_pricing_with_status(),
-            self.fireworks_service.get_pricing_with_status(),
-            self.perplexity_service.get_pricing_with_status(),
-            self.ai21_service.get_pricing_with_status(),
-            self.anyscale_service.get_pricing_with_status(),
-            self.bedrock_service.get_pricing_with_status(),
-            self.xai_service.get_pricing_with_status(),
-            self.deepseek_service.get_pricing_with_status(),
-            self.cerebras_service.get_pricing_with_status(),
-            self.nvidia_service.get_pricing_with_status(),
-            self.replicate_service.get_pricing_with_status(),
-            self.salesforce_service.get_pricing_with_status(),
-            self.promptql_service.get_pricing_with_status(),
-            self.snowflake_service.get_pricing_with_status(),
-            self.oracle_service.get_pricing_with_status(),
-            self.ide_service.get_pricing_with_status(),
-            self.azure_openai_service.get_pricing_with_status(),
-            self.vertex_service.get_pricing_with_status(),
-            self.huggingface_service.get_pricing_with_status(),
-            self.cloudflare_service.get_pricing_with_status(),
-        ]
+        tasks = [svc.get_pricing_with_status() for svc in self._services()]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -186,60 +245,11 @@ class PricingAggregatorService:
         Returns:
             Tuple of (pricing_data, provider_statuses)
         """
-        provider_lower = provider.lower()
-
-        if provider_lower == "openai":
-            pricing_data, status = await self.openai_service.get_pricing_with_status()
-        elif provider_lower == "anthropic":
-            pricing_data, status = await self.anthropic_service.get_pricing_with_status()
-        elif provider_lower == "google":
-            pricing_data, status = await self.google_service.get_pricing_with_status()
-        elif provider_lower == "cohere":
-            pricing_data, status = await self.cohere_service.get_pricing_with_status()
-        elif provider_lower == "mistral" or provider_lower == "mistral ai":
-            pricing_data, status = await self.mistral_service.get_pricing_with_status()
-        elif provider_lower == "groq":
-            pricing_data, status = await self.groq_service.get_pricing_with_status()
-        elif provider_lower == "together" or provider_lower == "together ai":
-            pricing_data, status = await self.together_service.get_pricing_with_status()
-        elif provider_lower == "fireworks" or provider_lower == "fireworks ai":
-            pricing_data, status = await self.fireworks_service.get_pricing_with_status()
-        elif provider_lower == "perplexity" or provider_lower == "perplexity ai":
-            pricing_data, status = await self.perplexity_service.get_pricing_with_status()
-        elif provider_lower == "ai21" or provider_lower == "ai21 labs":
-            pricing_data, status = await self.ai21_service.get_pricing_with_status()
-        elif provider_lower == "anyscale":
-            pricing_data, status = await self.anyscale_service.get_pricing_with_status()
-        elif provider_lower == "bedrock" or provider_lower == "amazon bedrock":
-            pricing_data, status = await self.bedrock_service.get_pricing_with_status()
-        elif provider_lower == "xai" or provider_lower == "x.ai":
-            pricing_data, status = await self.xai_service.get_pricing_with_status()
-        elif provider_lower == "deepseek":
-            pricing_data, status = await self.deepseek_service.get_pricing_with_status()
-        elif provider_lower == "cerebras":
-            pricing_data, status = await self.cerebras_service.get_pricing_with_status()
-        elif provider_lower == "nvidia" or provider_lower == "nvidia nim":
-            pricing_data, status = await self.nvidia_service.get_pricing_with_status()
-        elif provider_lower == "replicate":
-            pricing_data, status = await self.replicate_service.get_pricing_with_status()
-        elif provider_lower == "salesforce" or provider_lower == "salesforce einstein":
-            pricing_data, status = await self.salesforce_service.get_pricing_with_status()
-        elif provider_lower == "promptql":
-            pricing_data, status = await self.promptql_service.get_pricing_with_status()
-        elif provider_lower == "snowflake" or provider_lower == "snowflake cortex":
-            pricing_data, status = await self.snowflake_service.get_pricing_with_status()
-        elif provider_lower == "oracle" or provider_lower == "oracle oci":
-            pricing_data, status = await self.oracle_service.get_pricing_with_status()
-        elif provider_lower == "azure" or provider_lower == "azure openai":
-            pricing_data, status = await self.azure_openai_service.get_pricing_with_status()
-        elif provider_lower == "vertex" or provider_lower == "vertex ai":
-            pricing_data, status = await self.vertex_service.get_pricing_with_status()
-        elif provider_lower == "huggingface" or provider_lower == "hugging face":
-            pricing_data, status = await self.huggingface_service.get_pricing_with_status()
-        elif provider_lower == "cloudflare" or provider_lower == "cloudflare ai":
-            pricing_data, status = await self.cloudflare_service.get_pricing_with_status()
-        else:
+        attr = PROVIDER_FILTER_ALIASES.get(provider.lower().strip())
+        if attr is None:
             return [], []
+
+        pricing_data, status = await getattr(self, attr).get_pricing_with_status()
 
         provider_status = ProviderStatusInfo(
             provider_name=status.provider_name,
