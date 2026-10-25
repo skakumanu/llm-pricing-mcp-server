@@ -63,23 +63,6 @@ class CoherePricingService(BasePricingProvider):
             "supports_function_calling": True,
             "supports_json_mode": True,
         },
-        "command": {
-            "input": 0.001,
-            "output": 0.002,
-            "context_window": 4096,
-            "use_cases": ["Content generation", "Copywriting", "Product descriptions"],
-            "strengths": ["Good for generation", "Affordable", "Reliable"],
-            "best_for": "Content creation tasks with reasonable budgets"
-        },
-        "command-light": {
-            "input": 0.0003,
-            "output": 0.0006,
-            "price_as_of": "2026-09-13",
-            "context_window": 4096,
-            "use_cases": ["Lightweight chatbots", "Quick classification", "Simple generation"],
-            "strengths": ["Minimal cost", "Fast responses", "Good for simple tasks"],
-            "best_for": "Budget-conscious applications with simpler requirements"
-        },
     }
 
     def __init__(self, api_key: Optional[str] = None):

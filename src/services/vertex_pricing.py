@@ -20,33 +20,6 @@ class VertexAIPricingService(BasePricingProvider):
     PRICE_AS_OF = "2026-06-20"
 
     STATIC_PRICING = {
-        # gemini-2.0-flash and gemini-2.0-flash-lite were removed in v1.73.11:
-        # Google shut both down on 2026-06-01 (Gemini API changelog; the reference
-        # registry marks the Vertex entries deprecated on the same date).
-        "gemini-1.5-pro": {
-            "input": 0.00125, "output": 0.005,
-            "context_window": 2097152,
-            "use_cases": ["Long document analysis", "Video understanding", "Complex reasoning", "Research"],
-            "strengths": ["2M context", "Multimodal", "Enterprise SLA", "High quality"],
-            "best_for": "Long-context document and video analysis with enterprise compliance",
-            "supports_vision": True, "supports_function_calling": True, "supports_json_mode": True,
-        },
-        "gemini-1.5-flash": {
-            "input": 0.000075, "output": 0.0003,
-            "context_window": 1048576,
-            "use_cases": ["Fast processing", "Summarization", "Chat", "Code"],
-            "strengths": ["Low latency", "Low cost", "1M context", "Reliable"],
-            "best_for": "Fast enterprise applications needing large context at low cost",
-            "supports_vision": True, "supports_function_calling": True, "supports_json_mode": True,
-        },
-        "gemini-1.0-pro": {
-            "input": 0.0005, "output": 0.0015,
-            "context_window": 32760,
-            "use_cases": ["Chat", "Code", "Analysis", "Classification"],
-            "strengths": ["Stable", "Widely available", "GCP integration"],
-            "best_for": "Production GCP workloads requiring stable, proven model performance",
-            "supports_function_calling": True, "supports_json_mode": True,
-        },
         "text-bison": {
             "input": 0.000125, "output": 0.000125,
             "context_window": 8192,

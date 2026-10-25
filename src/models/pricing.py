@@ -77,6 +77,15 @@ class PricingMetrics(BaseModel):
             "ranking and budget math, so an unknown price is never mistaken for a cheap one."
         ),
     )
+    retired_on: Optional[str] = Field(
+        None,
+        description=(
+            "ISO date (YYYY-MM-DD) on which the provider shut this model down, per the "
+            "reference registry. Set automatically once the date has passed; such a model is "
+            "withheld from cost math (price_confirmed=False) and listed only so the retirement "
+            "is visible and the weekly audit can remove it."
+        ),
+    )
 
     @computed_field
     @property

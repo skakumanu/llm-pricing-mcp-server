@@ -531,14 +531,15 @@ def test_use_cases_with_provider_filter():
     data = response.json()
     assert all(model["provider"] == "OpenAI" for model in data["models"])
 
-    # Verify OpenAI models have proper use cases
+    # Verify OpenAI models have proper use cases. gpt-4 itself was retired by
+    # OpenAI on 2026-10-23 and removed from the catalogue in v1.74.0; pin a
+    # current model instead of a wording-specific strength.
     model_names = [m["model_name"] for m in data["models"]]
-    assert "gpt-4" in model_names
+    assert "gpt-4o" in model_names
 
-    # Check gpt-4 specific strengths
-    gpt4 = next(m for m in data["models"] if m["model_name"] == "gpt-4")
-    assert "Complex reasoning" in gpt4["use_cases"]
-    assert "High accuracy" in gpt4["strengths"]
+    gpt4o = next(m for m in data["models"] if m["model_name"] == "gpt-4o")
+    assert gpt4o["use_cases"] and isinstance(gpt4o["use_cases"], list)
+    assert gpt4o["strengths"] and isinstance(gpt4o["strengths"], list)
 
 
 def test_use_cases_cost_tier():
@@ -626,10 +627,11 @@ def test_google_provider_filter():
     # All models should be from Google
     assert all(model["provider"] == "Google" for model in data["models"])
 
-    # Should have Gemini models
+    # Should have current Gemini models (1.5 was shut down by Google in
+    # Sept 2025 and removed from the catalogue in v1.74.0).
     model_names = [model["model_name"] for model in data["models"]]
-    assert "gemini-1.5-pro" in model_names
-    assert "gemini-1.5-flash" in model_names
+    assert "gemini-2.5-pro" in model_names
+    assert "gemini-2.5-flash" in model_names
 
 
 def test_cohere_provider_filter():
@@ -706,16 +708,16 @@ def test_cost_estimate_with_new_provider_models(monkeypatch):
         "src.services.pricing_aggregator.get_price_oracle", lambda: _NoOpPriceOracle()
     )
 
-    # Test with Google model
+    # Test with Google model (gemini-1.5-flash was retired; v1.74.0)
     request_data = {
-        "model_name": "gemini-1.5-flash",
+        "model_name": "gemini-2.5-flash",
         "input_tokens": 1000,
         "output_tokens": 500
     }
     response = client.post("/cost-estimate", json=request_data)
     assert response.status_code == 200
     data = response.json()
-    assert data["model_name"] == "gemini-1.5-flash"
+    assert data["model_name"] == "gemini-2.5-flash"
     assert data["provider"] == "Google"
     assert data["total_cost"] > 0
 
@@ -744,9 +746,11 @@ def test_batch_cost_estimate_with_mixed_providers(monkeypatch):
 
     request_data = {
         "model_names": [
-            "gpt-4",  # OpenAI
-            "claude-3-haiku-20240307",  # Anthropic
-            "gemini-1.5-flash",  # Google
+            # Current ids as of v1.74.0; the originals (gpt-4, claude-3-haiku,
+            # gemini-1.5-flash) were retired by their providers and removed.
+            "gpt-4o",  # OpenAI
+            "claude-haiku-4-5-20251001",  # Anthropic
+            "gemini-2.5-flash",  # Google
             "command-r",  # Cohere
             "mistral-small-latest"  # Mistral
         ],

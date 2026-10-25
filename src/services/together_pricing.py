@@ -19,18 +19,6 @@ class TogetherPricingService(BasePricingProvider):
     PRICE_AS_OF = "2026-05-10"
 
     STATIC_PRICING = {
-        "meta-llama/Llama-3.3-70B-Instruct-Turbo": {
-            # v1.73.11: 0.88 -> 1.04 per 1M (together.ai/pricing; registry agrees).
-            "input": 0.00104,
-            "output": 0.00104,
-            "price_as_of": "2026-10-25",
-            "context_window": 131072,
-            "use_cases": ["Latest Llama capabilities", "Complex reasoning", "Code generation", "Long context"],
-            "strengths": ["Latest Llama 3.3", "Enhanced reasoning", "128K context", "GPT-4 level performance"],
-            "best_for": "Applications needing latest open-source capabilities at scale",
-            "supports_function_calling": True,
-            "supports_json_mode": True,
-        },
         "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo": {
             "input": 0.005,
             "output": 0.015,
@@ -38,17 +26,6 @@ class TogetherPricingService(BasePricingProvider):
             "use_cases": ["Complex reasoning", "Research", "Advanced analysis", "Long documents"],
             "strengths": ["Largest Llama model", "Strong reasoning", "Long context"],
             "best_for": "Complex tasks requiring state-of-the-art open-source reasoning",
-            "supports_function_calling": True,
-            "supports_json_mode": True,
-        },
-        "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo": {
-            "input": 0.00088,
-            "output": 0.00088,
-            "price_as_of": "2026-10-25",
-            "context_window": 131072,
-            "use_cases": ["General purpose", "Code generation", "Analysis", "Creative work"],
-            "strengths": ["Well-balanced", "Long context", "Cost-effective"],
-            "best_for": "General-purpose applications with long context needs",
             "supports_function_calling": True,
             "supports_json_mode": True,
         },
@@ -61,18 +38,6 @@ class TogetherPricingService(BasePricingProvider):
             "best_for": "Edge and mobile applications requiring minimal resources",
             "supports_function_calling": True,
         },
-        "Qwen/Qwen2.5-72B-Instruct-Turbo": {
-            # v1.73.11: 0.90 -> 1.20 per 1M (registry together_ai/Qwen/Qwen2.5-72B-Instruct-Turbo).
-            "input": 0.0012,
-            "output": 0.0012,
-            "price_as_of": "2026-10-25",
-            "context_window": 131072,
-            "use_cases": ["Multilingual", "Code generation", "Math reasoning", "Analysis"],
-            "strengths": ["Latest Qwen", "Excellent multilingual", "Strong math", "128K context"],
-            "best_for": "Multilingual applications requiring strong reasoning and code",
-            "supports_function_calling": True,
-            "supports_json_mode": True,
-        },
         "Qwen/Qwen2.5-7B-Instruct-Turbo": {
             "input": 0.0003,
             "output": 0.0003,
@@ -83,25 +48,6 @@ class TogetherPricingService(BasePricingProvider):
             "best_for": "Budget-friendly multilingual applications with long context",
             "supports_function_calling": True,
             "supports_json_mode": True,
-        },
-        "mistralai/Mixtral-8x7B-Instruct-v0.1": {
-            "input": 0.0006,
-            "output": 0.0006,
-            "price_as_of": "2026-10-25",
-            "context_window": 32768,
-            "use_cases": ["Code generation", "Multilingual", "Reasoning", "General chat"],
-            "strengths": ["Mixture of experts", "Versatile", "Good performance"],
-            "best_for": "Applications needing balanced performance and affordability",
-            "supports_function_calling": True,
-        },
-        "google/gemma-2-27b-it": {
-            "input": 0.0008,
-            "output": 0.0008,
-            "price_as_of": "2026-10-25",
-            "context_window": 8192,
-            "use_cases": ["Research", "General purpose", "Edge deployment"],
-            "strengths": ["Open source", "Google quality", "Efficient"],
-            "best_for": "Research and development with open-source requirements"
         },
         "databricks/dbrx-instruct": {
             "input": 0.0006,
