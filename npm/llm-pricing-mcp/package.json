@@ -1,6 +1,6 @@
 {
   "name": "llm-pricing-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "STDIO MCP server for LLM Pricing — real-time, drift-verified pricing, cost+quality model routing, and usage tracking across 26 providers. Zero local dependencies; proxies to a hosted backend.",
   "license": "MIT",
   "author": "skakumanu",
