@@ -192,6 +192,11 @@
         <div style="color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">Tools</div>
         <span style="color:var(--success);font-weight:600">29 tools · No auth required</span>
       </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.75rem 1.1rem;font-size:.82rem;" id="npm-package-card">
+        <div style="color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">npm package</div>
+        <code style="font-size:.88rem">npx -y llm-pricing-mcp</code>
+        <span style="color:var(--muted);margin-left:.5rem">v1.0.2 · <a href="https://www.npmjs.com/package/llm-pricing-mcp" style="color:var(--accent)">npmjs.com</a> · MCP Registry <code>io.github.skakumanu/llm-pricing-mcp-server</code></span>
+      </div>
     </div>
   </div>
 
@@ -201,6 +206,7 @@
 
     <div class="tab-bar">
       <button class="tab-btn active" onclick="showTab('remote')">Remote HTTP</button>
+      <button class="tab-btn" onclick="showTab('npx')">npx (STDIO)</button>
       <button class="tab-btn" onclick="showTab('claude')">Claude Desktop</button>
       <button class="tab-btn" onclick="showTab('vscode')">VS Code</button>
       <button class="tab-btn" onclick="showTab('cursor')">Cursor</button>
@@ -243,9 +249,49 @@
       </div>
     </div>
 
+    <!-- npx (STDIO bridge from npm) -->
+    <div class="tab-panel" id="tab-npx">
+      <div class="callout"><strong>For STDIO-only clients.</strong> The <code>llm-pricing-mcp</code> npm package is a zero-dependency bridge: it reads MCP requests on stdin and forwards them to the hosted server. Nothing to clone, no Python, no local pricing data to keep fresh. Needs Node 22.23.4+, 24.22.1+ or 26.12.1+ (the builds with the October 2026 security fixes).</div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <h4>Add to your client's MCP config</h4>
+            <p><code>npx -y</code> fetches the package on first run and caches it; nothing else to install.</p>
+            <div class="code-block solo" id="code-npx">{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"llm-pricing"</span>: {
+      <span class="key">"command"</span>: <span class="str">"npx"</span>,
+      <span class="key">"args"</span>: [<span class="str">"-y"</span>, <span class="str">"llm-pricing-mcp"</span>]
+    }
+  }
+}</div>
+            <div class="copy-row"><button class="copy-btn" onclick="copyCode('npx', this)">Copy JSON</button></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <h4>Optional: point it elsewhere</h4>
+            <p>Both settings are optional; the defaults work out of the box.</p>
+            <div class="code-block solo"><span class="cmt"># env vars for the bridge</span>
+LLM_PRICING_MCP_URL=https://llm-pricing-api.fly.dev/mcp   <span class="cmt"># a self-hosted or local instance</span>
+LLM_PRICING_MCP_TIMEOUT_MS=30000                          <span class="cmt"># per-request timeout upstream</span></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <h4>Restart your client</h4>
+            <p>The 29 tools appear automatically. Package: <a href="https://www.npmjs.com/package/llm-pricing-mcp" style="color:var(--accent)">npmjs.com/package/llm-pricing-mcp</a> (MIT), listed in the MCP Registry as <code>io.github.skakumanu/llm-pricing-mcp-server</code>.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Claude Desktop -->
     <div class="tab-panel" id="tab-claude">
-      <div class="callout"><strong>Option A (remote, easiest):</strong> use the Remote HTTP tab above. Option B below runs a local Python server — works offline.</div>
+      <div class="callout"><strong>Option A (remote, easiest):</strong> use the Remote HTTP tab. <strong>Option B (no Python):</strong> the npx tab — <code>npx -y llm-pricing-mcp</code> bridges STDIO to the hosted server. Option C below runs a local Python server — works offline.</div>
       <div class="steps">
         <div class="step">
           <div class="step-num">1</div>
@@ -659,6 +705,7 @@ function showTab(name) {
 
 var _configs = {
   remote: '{\n  "mcpServers": {\n    "llm-pricing": {\n      "url": "https://llm-pricing-api.fly.dev/mcp"\n    }\n  }\n}',
+  npx: '{\n  "mcpServers": {\n    "llm-pricing": {\n      "command": "npx",\n      "args": ["-y", "llm-pricing-mcp"]\n    }\n  }\n}',
   claude: '{\n  "mcpServers": {\n    "llm-pricing": {\n      "command": "python",\n      "args": ["-u", "/absolute/path/to/llm-pricing-mcp-server/mcp/server.py"],\n      "cwd": "/absolute/path/to/llm-pricing-mcp-server",\n      "env": { "PYTHONUNBUFFERED": "1" }\n    }\n  }\n}',
   'vscode-copilot': '{\n  "servers": {\n    "llm-pricing": {\n      "type": "http",\n      "url": "https://llm-pricing-api.fly.dev/mcp"\n    }\n  }\n}',
   'vscode-cline': '{\n  "mcpServers": {\n    "llm-pricing": {\n      "url": "https://llm-pricing-api.fly.dev/mcp"\n    }\n  }\n}',

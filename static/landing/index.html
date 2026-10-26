@@ -492,16 +492,18 @@ window.LLMPCurrency = (function () {
 <div class="section" id="mcp" style="padding-top:0">
   <div class="section-label">MCP Integration</div>
   <h2>Use from Claude, VS Code &amp; Cursor</h2>
-  <p>Connect any MCP-compatible AI assistant to your LLM Pricing server in under 2 minutes. <strong style="color:var(--success)">No API key required</strong> — the server runs locally and imports pricing data directly.</p>
+  <p>Connect any MCP-compatible AI assistant in under 2 minutes. <strong style="color:var(--success)">No API key required</strong> — nothing to clone, no Python: the hosted server answers every tool call.</p>
 
   <!-- Step 1 -->
   <div class="mcp-step">
-    <div class="mcp-step-label">Step 1 — Clone &amp; install</div>
+    <div class="mcp-step-label">Step 1 — Pick a connection</div>
     <div class="demo-block">
-      git clone <span class="str">https://github.com/skakumanu/llm-pricing-mcp-server.git</span><br>
-      cd llm-pricing-mcp-server<br>
-      pip install -r requirements.txt
+      <span class="comment"># Option A — clients that speak HTTP: point them at the hosted server</span><br>
+      <span class="url">https://llm-pricing-api.fly.dev/mcp</span><br><br>
+      <span class="comment"># Option B — STDIO-only clients: the npm bridge (Node 22.23.4+ / 24.22.1+ / 26.12.1+)</span><br>
+      <span class="str">npx -y llm-pricing-mcp</span>
     </div>
+    <p style="margin-top:.6rem;font-size:.85rem;color:var(--muted)">Published on <a href="https://www.npmjs.com/package/llm-pricing-mcp" style="color:var(--accent)">npm as llm-pricing-mcp</a> (v1.0.2, MIT) and in the MCP Registry as <code>io.github.skakumanu/llm-pricing-mcp-server</code>. Full setup, including a local Python option, on the <a href="/mcp-setup" style="color:var(--accent)">MCP page</a>.</p>
   </div>
 
   <!-- Step 2 -->
@@ -523,10 +525,8 @@ window.LLMPCurrency = (function () {
 {<br>
 &nbsp;&nbsp;<span class="key">"mcpServers"</span>: {<br>
 &nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"llm-pricing"</span>: {<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"command"</span>: <span class="str">"python"</span>,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"args"</span>: [<span class="str">"-u"</span>, <span class="str">"mcp/server.py"</span>],<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"cwd"</span>: <span class="str">"/path/to/llm-pricing-mcp-server"</span>,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"env"</span>: { <span class="key">"PYTHONPATH"</span>: <span class="str">"/path/to/llm-pricing-mcp-server"</span>, <span class="key">"PYTHONUNBUFFERED"</span>: <span class="str">"1"</span> }<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"command"</span>: <span class="str">"npx"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"args"</span>: [<span class="str">"-y"</span>, <span class="str">"llm-pricing-mcp"</span>]<br>
 &nbsp;&nbsp;&nbsp;&nbsp;}<br>
 &nbsp;&nbsp;}<br>
 }
@@ -543,10 +543,8 @@ window.LLMPCurrency = (function () {
 {<br>
 &nbsp;&nbsp;<span class="key">"mcpServers"</span>: {<br>
 &nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"llm-pricing"</span>: {<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"command"</span>: <span class="str">"python"</span>,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"args"</span>: [<span class="str">"-u"</span>, <span class="str">"mcp/server.py"</span>],<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"cwd"</span>: <span class="str">"/path/to/llm-pricing-mcp-server"</span>,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"env"</span>: { <span class="key">"PYTHONPATH"</span>: <span class="str">"/path/to/llm-pricing-mcp-server"</span>, <span class="key">"PYTHONUNBUFFERED"</span>: <span class="str">"1"</span> }<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"command"</span>: <span class="str">"npx"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"args"</span>: [<span class="str">"-y"</span>, <span class="str">"llm-pricing-mcp"</span>]<br>
 &nbsp;&nbsp;&nbsp;&nbsp;}<br>
 &nbsp;&nbsp;}<br>
 }
@@ -564,10 +562,8 @@ window.LLMPCurrency = (function () {
 {<br>
 &nbsp;&nbsp;<span class="key">"mcpServers"</span>: {<br>
 &nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"llm-pricing"</span>: {<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"command"</span>: <span class="str">"python"</span>,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"args"</span>: [<span class="str">"-u"</span>, <span class="str">"mcp/server.py"</span>],<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"cwd"</span>: <span class="str">"/path/to/llm-pricing-mcp-server"</span>,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"env"</span>: { <span class="key">"PYTHONPATH"</span>: <span class="str">"/path/to/llm-pricing-mcp-server"</span>, <span class="key">"PYTHONUNBUFFERED"</span>: <span class="str">"1"</span> }<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"command"</span>: <span class="str">"npx"</span>,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="key">"args"</span>: [<span class="str">"-y"</span>, <span class="str">"llm-pricing-mcp"</span>]<br>
 &nbsp;&nbsp;&nbsp;&nbsp;}<br>
 &nbsp;&nbsp;}<br>
 }
@@ -701,7 +697,7 @@ window.LLMPCurrency = (function () {
     document.getElementById('mcp-' + name).classList.add('active');
   }
 
-  var _mcpJson = '{\n  "mcpServers": {\n    "llm-pricing": {\n      "command": "python",\n      "args": ["-u", "mcp/server.py"],\n      "cwd": "/path/to/llm-pricing-mcp-server",\n      "env": { "PYTHONPATH": "/path/to/llm-pricing-mcp-server", "PYTHONUNBUFFERED": "1" }\n    }\n  }\n}';
+  var _mcpJson = '{\n  "mcpServers": {\n    "llm-pricing": {\n      "command": "npx",\n      "args": ["-y", "llm-pricing-mcp"]\n    }\n  }\n}';
 
   function copyMcpConfig(tab) {
     navigator.clipboard.writeText(_mcpJson).then(function() {
