@@ -89,98 +89,14 @@ class ModelRouter:
 
         models = await enrich_models(models)
 
-        # --- Hard filters ---
-        candidates = []
-        for m in models:
-            avg_cost_1m = (m.cost_per_input_token + m.cost_per_output_token) / 2 * 1_000_000
-
-            if constraints.max_cost_per_1m_tokens is not None:
-                if avg_cost_1m > constraints.max_cost_per_1m_tokens:
-                    continue
-
-            if constraints.min_quality_score is not None:
-                if m.quality_score is None or m.quality_score < constraints.min_quality_score:
-                    continue
-
-            if constraints.min_context_window is not None:
-                if m.context_window is None or m.context_window < constraints.min_context_window:
-                    continue
-
-            if constraints.task_type is not None:
-                task_keywords = self._TASK_USE_CASES.get(constraints.task_type.lower(), [])
-                if task_keywords and m.use_cases:
-                    use_case_text = " ".join(m.use_cases).lower()
-                    if not any(kw in use_case_text for kw in task_keywords):
-                        continue
-
-            if constraints.exclude_reasoning_models and m.is_reasoning_model:
-                continue
-
-            if constraints.monthly_budget_usd is not None:
-                pricing_model = getattr(m, "pricing_model", "per_token")
-                sub_price = getattr(m, "subscription_monthly_usd", None)
-                if pricing_model == "subscription" and sub_price is not None:
-                    # subscription tool: monthly cost IS the subscription price
-                    if sub_price > constraints.monthly_budget_usd:
-                        continue
-                else:
-                    # per-token tool: project monthly cost from request estimates
-                    projected = (
-                        constraints.estimated_monthly_requests
-                        * (
-                            constraints.avg_input_tokens * m.cost_per_input_token
-                            + constraints.avg_output_tokens * m.cost_per_output_token
-                        )
-                    )
-                    if projected > constraints.monthly_budget_usd:
-                        continue
-
-            candidates.append(m)
-
+        candidates = self.rank_models(models, constraints)
         if not candidates:
             return None
 
-        # --- Scoring ---
-        _latency_sensitive = constraints.task_type in ("code_completion",) or constraints.prefer_low_latency
-
-        def score_model(m) -> float:
-            base = m.quality_value_score or 0.0
-
-            # Preferred provider gets a 10% boost
-            if (
-                constraints.preferred_provider
-                and m.provider.lower() == constraints.preferred_provider.lower()
-            ):
-                base *= 1.10
-
-            # ide_context: native IDE tools get a strong boost; same provider, non-native gets a mild one
-            if constraints.ide_context:
-                native_providers = self._IDE_NATIVE_PROVIDERS.get(constraints.ide_context.lower(), [])
-                if any(np in m.provider.lower() for np in native_providers):
-                    if getattr(m, "ide_native", False):
-                        base *= 5.0   # strong: user is in this IDE, prefer its own tooling
-                    else:
-                        base *= 1.15  # mild: matching provider but not an IDE-native tool
-
-            # Latency-sensitive tasks: penalise slow models, reward fast ones
-            if _latency_sensitive and m.latency_ms is not None:
-                if m.latency_ms <= 300:
-                    base *= 1.20
-                elif m.latency_ms >= 2000:
-                    base *= 0.70
-
-            # Penalise high-token-cost reasoning models for token-efficiency tasks
-            if constraints.task_type in ("code_completion", "code_chat"):
-                if m.is_reasoning_model:
-                    base *= 0.60
-
-            return base
-
-        candidates.sort(key=score_model, reverse=True)
         best = candidates[0]
         alternatives = candidates[1:4]
 
-        best_score = score_model(best)
+        best_score = self._score_model(best, constraints)
         avg_cost_1m = (best.cost_per_input_token + best.cost_per_output_token) / 2 * 1_000_000
 
         best_projected = None
@@ -206,6 +122,112 @@ class ModelRouter:
             reason=reason,
             alternatives=alternatives,
         )
+
+    def rank_models(self, models: List[object], constraints: RouterConstraints) -> List[object]:
+        """Apply the hard filters and return every survivor, best first.
+
+        This is exactly the filter + score + sort step get_optimal_model() has
+        always run (recommended = ranked[0], alternatives = ranked[1:4]); it is
+        exposed so the dispatch gateway (v1.77.0) can rank an already-enriched,
+        already-eligibility-filtered candidate set with the same rules and the
+        same order, without a second scoring implementation.
+        """
+        # --- Hard filters ---
+        candidates = [m for m in models if self.hard_filter_reason(m, constraints) is None]
+
+        if not candidates:
+            return []
+
+        # --- Scoring ---
+        candidates.sort(key=lambda m: self._score_model(m, constraints), reverse=True)
+        return candidates
+
+    def hard_filter_reason(self, m, constraints: RouterConstraints) -> Optional[str]:
+        """Name the first hard constraint `m` fails, or None when it passes them all.
+
+        Checked in the order the filters have always run. The dispatch gateway
+        reports the returned code in its receipt's exclusion list; rank_models()
+        keeps exactly the models for which this returns None.
+        """
+        avg_cost_1m = (m.cost_per_input_token + m.cost_per_output_token) / 2 * 1_000_000
+
+        if constraints.max_cost_per_1m_tokens is not None:
+            if avg_cost_1m > constraints.max_cost_per_1m_tokens:
+                return "above_cost_ceiling"
+
+        if constraints.min_quality_score is not None:
+            if m.quality_score is None or m.quality_score < constraints.min_quality_score:
+                return "below_quality_floor"
+
+        if constraints.min_context_window is not None:
+            if m.context_window is None or m.context_window < constraints.min_context_window:
+                return "context_window_too_small"
+
+        if constraints.task_type is not None:
+            task_keywords = self._TASK_USE_CASES.get(constraints.task_type.lower(), [])
+            if task_keywords and m.use_cases:
+                use_case_text = " ".join(m.use_cases).lower()
+                if not any(kw in use_case_text for kw in task_keywords):
+                    return "task_type_mismatch"
+
+        if constraints.exclude_reasoning_models and m.is_reasoning_model:
+            return "reasoning_model_excluded"
+
+        if constraints.monthly_budget_usd is not None:
+            pricing_model = getattr(m, "pricing_model", "per_token")
+            sub_price = getattr(m, "subscription_monthly_usd", None)
+            if pricing_model == "subscription" and sub_price is not None:
+                # subscription tool: monthly cost IS the subscription price
+                if sub_price > constraints.monthly_budget_usd:
+                    return "over_monthly_budget"
+            else:
+                # per-token tool: project monthly cost from request estimates
+                projected = (
+                    constraints.estimated_monthly_requests
+                    * (
+                        constraints.avg_input_tokens * m.cost_per_input_token
+                        + constraints.avg_output_tokens * m.cost_per_output_token
+                    )
+                )
+                if projected > constraints.monthly_budget_usd:
+                    return "over_monthly_budget"
+
+        return None
+
+    def _score_model(self, m, constraints: RouterConstraints) -> float:
+        """quality_value_score with the constraint-driven boosts/penalties applied."""
+        _latency_sensitive = constraints.task_type in ("code_completion",) or constraints.prefer_low_latency
+        base = m.quality_value_score or 0.0
+
+        # Preferred provider gets a 10% boost
+        if (
+            constraints.preferred_provider
+            and m.provider.lower() == constraints.preferred_provider.lower()
+        ):
+            base *= 1.10
+
+        # ide_context: native IDE tools get a strong boost; same provider, non-native gets a mild one
+        if constraints.ide_context:
+            native_providers = self._IDE_NATIVE_PROVIDERS.get(constraints.ide_context.lower(), [])
+            if any(np in m.provider.lower() for np in native_providers):
+                if getattr(m, "ide_native", False):
+                    base *= 5.0   # strong: user is in this IDE, prefer its own tooling
+                else:
+                    base *= 1.15  # mild: matching provider but not an IDE-native tool
+
+        # Latency-sensitive tasks: penalise slow models, reward fast ones
+        if _latency_sensitive and m.latency_ms is not None:
+            if m.latency_ms <= 300:
+                base *= 1.20
+            elif m.latency_ms >= 2000:
+                base *= 0.70
+
+        # Penalise high-token-cost reasoning models for token-efficiency tasks
+        if constraints.task_type in ("code_completion", "code_chat"):
+            if m.is_reasoning_model:
+                base *= 0.60
+
+        return base
 
 
 def _build_reason(
