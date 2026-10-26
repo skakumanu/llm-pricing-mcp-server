@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.77.0 | **Last updated**: 2026-10-26
+**Version**: v1.77.1 | **Last updated**: 2026-10-26
 
 ---
 
@@ -214,7 +214,7 @@ llm-pricing-mcp-server/
 ├── .github/workflows/
 │   ├── ci-cd.yml                    # Full CI/CD: test→lint→osv→bandit→gitleaks→deploy
 │   ├── sync-develop.yml             # Auto-sync develop ← master after deploy
-│   ├── price-audit.yml              # Weekly: drift issue + snapshot-refresh PR; (v1.74.0) reconfirm-stale-prices PR + retire-models PR; (v1.75.0) pickup-registry-models PR (staged via --providers; reads the vendored snapshot so its guards and the pickup see one registry); (v1.76.0) refresh-exchange-rates PR — all human-merged
+│   ├── price-audit.yml              # Weekly: drift issue + snapshot-refresh PR; (v1.74.0) reconfirm-stale-prices PR + retire-models PR; (v1.75.0) pickup-registry-models PR (staged via --providers; reads the vendored snapshot so its guards and the pickup see one registry); (v1.76.0) refresh-exchange-rates PR (v1.77.1: needs only `audit`, so a rejected snapshot never blocks it) — all human-merged. The snapshot validator (v1.77.1) discounts provider namespaces that vanish upstream wholesale (Oct 2026: all `openrouter/*`) from its 10% removal limit, keeps a 40% hard ceiling, and rejects outright if a provider the catalogue is priced from disappears
 │   ├── npm-publish.yml              # npm Trusted Publishing (OIDC) of npm/llm-pricing-mcp on master push — filename is part of the npmjs.com trust config
 │   └── mcp-registry-publish.yml     # Publishes server.json to registry.modelcontextprotocol.io via GitHub OIDC (`mcp-publisher login github-oidc`) on master push
 │

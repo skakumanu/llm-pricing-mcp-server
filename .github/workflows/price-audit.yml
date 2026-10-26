@@ -229,7 +229,9 @@ jobs:
   # and exits 0, so a flaky source never fails the audit run.
   refresh-exchange-rates:
     runs-on: ubuntu-latest
-    needs: refresh-snapshot
+    # Independent of refresh-snapshot: a rejected price snapshot must not leave
+    # the exchange-rate table (and its placeholder rates) un-refreshed as well.
+    needs: audit
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
