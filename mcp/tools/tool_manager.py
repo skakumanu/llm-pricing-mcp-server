@@ -30,6 +30,29 @@ from mcp.tools.import_session_usage import ImportSessionUsageTool
 from mcp.tools.register_budget_alert import RegisterBudgetAlertTool
 from mcp.tools.list_budget_alerts import ListBudgetAlertsTool
 from mcp.tools.delete_budget_alert import DeleteBudgetAlertTool
+from src.services.currency import SUPPORTED_CURRENCIES
+
+# v1.76.0 — optional on the five pricing-output tools. MCP never detects a
+# location (no visitor IP on STDIO); omitting both yields exactly the USD output.
+_LOCALE_PROPERTIES = {
+    "currency": {
+        "type": "string",
+        "enum": list(SUPPORTED_CURRENCIES),
+        "description": (
+            "Optional ISO-4217 code to convert prices into, alongside the canonical USD figures. "
+            "Beats country. Unsupported codes return success=false listing the supported set."
+        ),
+    },
+    "country": {
+        "type": "string",
+        "description": (
+            "Optional ISO-3166 alpha-2 country whose currency to use (e.g. DE -> EUR, IN -> INR). "
+            "A country whose currency is unsupported yields USD with fallback_to_usd=true."
+        ),
+        "minLength": 2,
+        "maxLength": 2,
+    },
+}
 
 
 class ToolManager:
@@ -60,7 +83,7 @@ class ToolManager:
                 "description": "Get current pricing for all LLM models from all providers",
                 "input_schema": {
                     "type": "object",
-                    "properties": {},
+                    "properties": {**_LOCALE_PROPERTIES},
                     "required": [],
                 },
             },
@@ -85,6 +108,7 @@ class ToolManager:
                             "description": "Number of output tokens",
                             "minimum": 0,
                         },
+                        **_LOCALE_PROPERTIES,
                     },
                     "required": ["model_name", "input_tokens", "output_tokens"],
                 },
@@ -111,6 +135,7 @@ class ToolManager:
                             "description": "Number of output tokens",
                             "minimum": 0,
                         },
+                        **_LOCALE_PROPERTIES,
                     },
                     "required": ["model_names", "input_tokens", "output_tokens"],
                 },
@@ -146,6 +171,7 @@ class ToolManager:
                             "type": "string",
                             "description": "Optional provider filter",
                         },
+                        **_LOCALE_PROPERTIES,
                     },
                     "required": [],
                 },
@@ -694,6 +720,7 @@ class ToolManager:
                             "default": 200,
                             "minimum": 1,
                         },
+                        **_LOCALE_PROPERTIES,
                     },
                     "required": ["description"],
                 },

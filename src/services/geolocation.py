@@ -112,15 +112,20 @@ class GeolocationService:
             }
 
     @staticmethod
-    async def get_geolocation(ip_address: str) -> Optional[Dict[str, any]]:
+    async def get_geolocation(ip_address: str, timeout: float = 5.0) -> Optional[Dict[str, any]]:
         """
         Get geolocation information for an IP address.
 
         Args:
             ip_address: IPv4 or IPv6 address
+            timeout: HTTP timeout in seconds for the lookup (default 5.0; the
+                request-path currency resolver passes a shorter one)
 
         Returns:
             Dictionary with country, city, lat/lon or None if lookup fails
+
+        The address itself is never logged here (v1.76.0 privacy rule): failure
+        messages carry the reason, not the IP.
         """
         # Check cache first
         if ip_address in GeolocationService._geolocation_cache:
@@ -140,7 +145,7 @@ class GeolocationService:
 
         try:
             # Use ip-api.com free tier (45 requests per minute)
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.get(
                     f"http://ip-api.com/json/{ip_address}",
                     params={"fields": "country,countryCode,city,lat,lon,status,message"}
@@ -164,7 +169,7 @@ class GeolocationService:
 
                         return result
                     else:
-                        logger.debug(f"Geolocation lookup failed for {ip_address}: {data.get('message')}")
+                        logger.debug("Geolocation lookup failed: %s", data.get("message"))
                         GeolocationService._geolocation_cache[ip_address] = None
                         return None
                 else:
@@ -173,11 +178,11 @@ class GeolocationService:
                     return None
 
         except asyncio.TimeoutError:
-            logger.debug(f"Geolocation lookup timeout for {ip_address}")
+            logger.debug("Geolocation lookup timed out")
             GeolocationService._geolocation_cache[ip_address] = None
             return None
         except Exception as e:
-            logger.debug(f"Error during geolocation lookup for {ip_address}: {e}")
+            logger.debug("Error during geolocation lookup: %s", type(e).__name__)
             GeolocationService._geolocation_cache[ip_address] = None
             return None
 
