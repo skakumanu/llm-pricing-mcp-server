@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.75.0 | **Last updated**: 2026-10-25
+**Version**: v1.75.1 | **Last updated**: 2026-10-26
 
 ---
 
@@ -318,7 +318,9 @@ All 13 browser UIs share the same CSS custom properties (defined in each page's 
 | `--danger` | `#f56565` |
 | `--radius` | `10px` |
 
-All use `'Segoe UI', system-ui, sans-serif`, `font-size: 14px`, sticky `.main-nav` (52px), hamburger at 640px breakpoint. **Admin page is the canonical design reference.**
+All use `'Segoe UI', system-ui, sans-serif`, `font-size: 14px`, sticky `.main-nav` (52px), hamburger at 760px breakpoint. **Admin page is the canonical design reference.**
+
+**Shared navigation (v1.75.1)**: every page embeds the same nav block — markup, CSS and toggle script — with eight items (Calculator, Compare, Trends, Chat, MCP, API, What's New, Sign in); Admin, Widget, History, IDE Compare and Conversations are reached from page content or by URL, not from the bar. The pages are self-contained static files, so the block is copied rather than included: `scripts/sync_nav.py` holds the one canonical nav (links, CSS, toggle script) and stamps it into every page (`--check` reports drift), and `tests/test_nav_consistency.py` fails if any copy differs from the script's constants. Change the nav by editing the script and running it, never by editing a page's nav by hand.
 
 ---
 

@@ -553,17 +553,19 @@ def test_use_cases_cost_tier():
     valid_tiers = {"ultra-low", "low", "medium", "high"}
     assert cost_tiers.issubset(valid_tiers)
 
-    # Check that budget models (gpt-3.5) are in ultra-low tier
-    # gpt-3.5-turbo: $0.0005-0.0015 per 1k tokens = ultra-low per-token cost
-    gpt35 = next((m for m in data["models"] if m["model_name"] == "gpt-3.5-turbo"), None)
-    if gpt35:
-        assert gpt35["cost_tier"] in ["ultra-low"]
-
-    # Check that premium models (gpt-4) are in low tier
-    # gpt-4: $0.03-0.06 per 1k tokens = low per-token cost
-    gpt4 = next((m for m in data["models"] if m["model_name"] == "gpt-4"), None)
-    if gpt4:
-        assert gpt4["cost_tier"] in ["low"]
+    # Bands are on the average $/1M tokens: <1.5 ultra-low, <10 low, <40 medium.
+    by_name = {m["model_name"]: m["cost_tier"] for m in data["models"]}
+    # gpt-4o-mini: $0.15 / $0.60 -> avg $0.375 per 1M
+    if "gpt-4o-mini" in by_name:
+        assert by_name["gpt-4o-mini"] == "ultra-low"
+    # gpt-4o: $2.50 / $10 -> avg $6.25 per 1M. Pre-v1.75.1 this was "ultra-low".
+    if "gpt-4o" in by_name:
+        assert by_name["gpt-4o"] == "low"
+    # claude-opus-4-6: $5 / $25 -> avg $15 per 1M
+    if "claude-opus-4-6" in by_name:
+        assert by_name["claude-opus-4-6"] == "medium"
+    # Every band must be reachable by the current catalogue, or the labels are noise.
+    assert {"ultra-low", "low", "high"} <= cost_tiers
 
 
 def test_use_cases_quick_recommendations():

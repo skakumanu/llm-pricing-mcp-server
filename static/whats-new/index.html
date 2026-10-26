@@ -23,26 +23,24 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 1.6; }
 
-  /* ── Nav ── */
-  .main-nav {
-    position: sticky; top: 0; z-index: 100;
-    background: var(--surface); border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; gap: 4px;
-    padding: 0 16px; height: 52px;
-  }
-  .nav-brand { font-weight: 700; font-size: 15px; color: var(--accent); text-decoration: none; margin-right: 8px; }
-  .main-nav a { color: var(--muted); text-decoration: none; padding: 6px 10px; border-radius: 6px; font-size: 13px; transition: all .15s; white-space: nowrap; }
-  .main-nav a:hover { background: var(--surface2); color: var(--text); }
-  .main-nav a.active { background: var(--surface2); color: var(--accent); font-weight: 600; }
-  .nav-spacer { flex: 1; }
-  .hamburger { display: none; background: none; border: none; color: var(--text); font-size: 20px; cursor: pointer; padding: 4px 8px; }
-  .nav-links { display: flex; align-items: center; gap: 2px; }
-  @media (max-width: 640px) {
-    .hamburger { display: block; }
-    .nav-links { display: none; flex-direction: column; position: absolute; top: 52px; left: 0; right: 0; background: var(--surface); border-bottom: 1px solid var(--border); padding: 8px 16px; gap: 2px; }
-    .nav-links.open { display: flex; }
-    .nav-links a { padding: 10px 12px; width: 100%; }
-  }
+    /* ── Shared nav (identical on every page; scripts/sync_nav.py, tests/test_nav_consistency.py) ── */
+    .main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;border-bottom:1px solid #23263a;position:sticky;top:0;z-index:200;gap:.5rem;flex-shrink:0}
+    .nav-brand{font-weight:700;color:#7c6af7;text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
+    .nav-spacer{flex:1}
+    .nav-links{display:flex;align-items:center;gap:.125rem}
+    .nav-links a{color:#8b93a5;text-decoration:none;padding:.35rem .6rem;border-radius:6px;font-size:.8rem;white-space:nowrap;transition:all .15s;border:none}
+    .nav-links a:hover{background:#1a1d2e;color:#e5e7eb}
+    .nav-links a.active{background:#1a1d2e;color:#7c6af7;font-weight:600}
+    .nav-links a.nav-cta{margin-left:.35rem;border:1px solid #7c6af7;color:#7c6af7}
+    .nav-links a.nav-cta:hover{background:#7c6af7;color:#fff}
+    .nav-toggle{display:none;background:none;border:1px solid #2a2d3a;color:#9ca3af;font-size:1.1rem;cursor:pointer;padding:.25rem .5rem;border-radius:6px;line-height:1;flex-shrink:0}
+    @media(max-width:760px){
+      .nav-toggle{display:block}
+      .nav-links{display:none;position:absolute;top:52px;left:0;right:0;flex-direction:column;align-items:stretch;background:#0f1117;border-bottom:1px solid #23263a;padding:.5rem 1rem;gap:.25rem;z-index:199}
+      .nav-links.open{display:flex}
+      .nav-links a{padding:.6rem .75rem;font-size:.875rem}
+      .nav-links a.nav-cta{margin-left:0;text-align:center}
+    }
 
   /* ── Layout ── */
   .container { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
@@ -92,8 +90,10 @@
   .section-label:first-child { margin-top: 0; }
 
   .change-list { list-style: none; display: flex; flex-direction: column; gap: 5px; }
-  .change-list li { display: flex; align-items: flex-start; gap: 8px; color: var(--text); font-size: 13.5px; }
-  .change-list li::before { content: ''; flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-top: 7px; }
+  /* Block, not flex: a flex <li> turns every inline <strong>/<code> into its own column. */
+  .change-list li { display: block; position: relative; padding-left: 14px; color: var(--text); font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere; }
+  .change-list li::before { content: ''; position: absolute; left: 0; top: 7px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .change-list code { white-space: normal; overflow-wrap: anywhere; }
 
   /* ── Provider pills ── */
   .provider-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
@@ -120,20 +120,33 @@
 <body>
 
 <nav class="main-nav">
-  <a href="/" class="nav-brand">LLM Pricing</a>
-  <button class="hamburger" onclick="this.nextElementSibling.classList.toggle('open')">&#9776;</button>
-  <div class="nav-links">
+  <a href="/" class="nav-brand">⚡ LLM Pricing</a>
+  <span class="nav-spacer"></span>
+  <div class="nav-links" id="navLinks">
     <a href="/calculator">Calculator</a>
     <a href="/compare">Compare</a>
-    <a href="/history">History</a>
     <a href="/trends">Trends</a>
     <a href="/chat">Chat</a>
     <a href="/mcp-setup">MCP</a>
-    <a href="/api-docs">Docs</a>
-    <a href="/billing">Billing</a>
-    <a href="/whats-new" class="active">What's New</a>
+    <a href="/api-docs">API</a>
+    <a href="/whats-new">What's New</a>
+    <a href="/billing" class="nav-cta">Sign in</a>
   </div>
+  <button class="nav-toggle" id="navToggle" aria-label="Menu" aria-expanded="false" aria-controls="navLinks">☰</button>
 </nav>
+<script>
+(function(){
+  var t=document.getElementById('navToggle'),l=document.getElementById('navLinks');
+  if(!t||!l)return;
+  t.onclick=function(){var o=l.classList.toggle('open');t.setAttribute('aria-expanded',o?'true':'false');};
+  var p=location.pathname.replace(/\/$/,'')||'/';
+  l.querySelectorAll('a').forEach(function(a){
+    var h=a.getAttribute('href');
+    if(h===p||h===p+'/')a.classList.add('active');
+    a.addEventListener('click',function(){l.classList.remove('open');t.setAttribute('aria-expanded','false');});
+  });
+})();
+</script>
 
 <div class="container">
 
@@ -142,8 +155,33 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.75.0 -->
+  <!-- v1.75.1 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.75.1</span>
+      <span class="release-date">Oct 26, 2026</span>
+      <span class="release-tag tag-ui">UI</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">A cleaner site: one navigation, honest numbers, and pages that fit a phone</div>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li><strong>One navigation bar on every page.</strong> Eight items — Calculator, Compare, Trends, Chat, MCP, API, What's New, Sign in — replace twelve emoji links that differed from page to page. Admin and Widget leave the public bar (both still work at their URLs; the landing page's tool grid now points to the MCP server instead of Admin). The menu collapses to a hamburger below 760px and is keyboard-accessible</li>
+        <li><strong>Cost tiers mean something.</strong> Tiers are now bands on the average price per 1M tokens: ultra-low under $1.50, low under $10, medium under $40, high above. Before, a $2.50/$10 model was "ultra-low" and a $30/$60 one "low" — the bands were 100× too loose. The compare page shows all four tiers</li>
+        <li><strong>Landing page claims match the product.</strong> The unverifiable "90% avg. cost reduction" and "real-time pricing" stats are gone; prices are audited weekly against the providers and an independent registry, and the page says so. "3 steps" now matches its four cards</li>
+        <li><strong>Calculator</strong> no longer prints <code>$$2.50</code> for per-million rates, and embedding models (no output price) are excluded from the cheapest-chat-model ranking they used to win</li>
+      </ul>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li>Every page fits a 390px phone without horizontal scrolling: the comparison and admin tables scroll inside their cards, compare cards wrap onto new rows, the calculator's 600-model picker no longer widens the column, MCP tool-argument chips wrap, and the hamburger button stays on screen</li>
+        <li>What's New entries render as sentences again — the list layout had been splitting each inline <code>code</code> and bold span into its own column</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.75.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.75.0</span>

@@ -31,21 +31,23 @@
       min-height: 100vh;
     }
 
-    /* ── Shared nav ── */
-    .main-nav{display:flex;align-items:center;background:var(--bg);padding:0 1.25rem;height:52px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:200;gap:.5rem}
-    .nav-brand{font-weight:700;color:var(--accent);text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
+    /* ── Shared nav (identical on every page; scripts/sync_nav.py, tests/test_nav_consistency.py) ── */
+    .main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;border-bottom:1px solid #23263a;position:sticky;top:0;z-index:200;gap:.5rem;flex-shrink:0}
+    .nav-brand{font-weight:700;color:#7c6af7;text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
     .nav-spacer{flex:1}
-    .nav-links{display:flex;align-items:center;gap:.125rem;overflow-x:auto;-webkit-overflow-scrolling:touch}
-    .nav-links::-webkit-scrollbar{display:none}
-    .nav-links a{color:var(--muted);text-decoration:none;padding:.35rem .6rem;border-radius:6px;font-size:.8rem;white-space:nowrap;transition:all .15s}
-    .nav-links a:hover{background:var(--surface);color:var(--text)}
-    .nav-links a.active{background:var(--surface);color:var(--accent);font-weight:600}
-    .nav-toggle{display:none;background:none;border:1px solid var(--border);color:var(--muted);font-size:1.1rem;cursor:pointer;padding:.25rem .5rem;border-radius:6px;line-height:1}
-    @media(max-width:640px){
+    .nav-links{display:flex;align-items:center;gap:.125rem}
+    .nav-links a{color:#8b93a5;text-decoration:none;padding:.35rem .6rem;border-radius:6px;font-size:.8rem;white-space:nowrap;transition:all .15s;border:none}
+    .nav-links a:hover{background:#1a1d2e;color:#e5e7eb}
+    .nav-links a.active{background:#1a1d2e;color:#7c6af7;font-weight:600}
+    .nav-links a.nav-cta{margin-left:.35rem;border:1px solid #7c6af7;color:#7c6af7}
+    .nav-links a.nav-cta:hover{background:#7c6af7;color:#fff}
+    .nav-toggle{display:none;background:none;border:1px solid #2a2d3a;color:#9ca3af;font-size:1.1rem;cursor:pointer;padding:.25rem .5rem;border-radius:6px;line-height:1;flex-shrink:0}
+    @media(max-width:760px){
       .nav-toggle{display:block}
-      .nav-links{display:none;position:absolute;top:52px;left:0;right:0;flex-direction:column;background:var(--bg);border-bottom:1px solid var(--border);padding:.5rem 1rem;gap:.25rem;z-index:199}
+      .nav-links{display:none;position:absolute;top:52px;left:0;right:0;flex-direction:column;align-items:stretch;background:#0f1117;border-bottom:1px solid #23263a;padding:.5rem 1rem;gap:.25rem;z-index:199}
       .nav-links.open{display:flex}
       .nav-links a{padding:.6rem .75rem;font-size:.875rem}
+      .nav-links a.nav-cta{margin-left:0;text-align:center}
     }
 
     .main {
@@ -223,20 +225,30 @@
   <a href="/" class="nav-brand">⚡ LLM Pricing</a>
   <span class="nav-spacer"></span>
   <div class="nav-links" id="navLinks">
-    <a href="/chat">💬 Chat</a>
-    <a href="/calculator">🧮 Calc</a>
-    <a href="/compare">⚖️ Compare</a>
-    <a href="/history">📈 History</a>
-    <a href="/trends">🔥 Trends</a>
-    <a href="/widget">🔌 Widget</a>
-    <a href="/mcp-setup">⚡ MCP</a>
-    <a href="/api-docs">📖 Docs</a>
-    <a href="/billing">💳 Billing</a>
-    <a href="/admin">⚙️ Admin</a>
-    <a href="/whats-new">✨ What's New</a>
+    <a href="/calculator">Calculator</a>
+    <a href="/compare">Compare</a>
+    <a href="/trends">Trends</a>
+    <a href="/chat">Chat</a>
+    <a href="/mcp-setup">MCP</a>
+    <a href="/api-docs">API</a>
+    <a href="/whats-new">What's New</a>
+    <a href="/billing" class="nav-cta">Sign in</a>
   </div>
-  <button class="nav-toggle" id="navToggle" aria-label="Menu">☰</button>
+  <button class="nav-toggle" id="navToggle" aria-label="Menu" aria-expanded="false" aria-controls="navLinks">☰</button>
 </nav>
+<script>
+(function(){
+  var t=document.getElementById('navToggle'),l=document.getElementById('navLinks');
+  if(!t||!l)return;
+  t.onclick=function(){var o=l.classList.toggle('open');t.setAttribute('aria-expanded',o?'true':'false');};
+  var p=location.pathname.replace(/\/$/,'')||'/';
+  l.querySelectorAll('a').forEach(function(a){
+    var h=a.getAttribute('href');
+    if(h===p||h===p+'/')a.classList.add('active');
+    a.addEventListener('click',function(){l.classList.remove('open');t.setAttribute('aria-expanded','false');});
+  });
+})();
+</script>
 
 <div class="main">
   <div class="controls">
@@ -576,17 +588,6 @@
       if (e.key === "Enter") loadHistory();
     });
   });
-</script>
-<script>
-  (function(){
-    var t=document.getElementById('navToggle'),l=document.getElementById('navLinks');
-    if(t)t.onclick=function(){l.classList.toggle('open');};
-    var p=location.pathname.replace(/\/$/,'');
-    l.querySelectorAll('a').forEach(function(a){
-      if(a.getAttribute('href')===p||a.getAttribute('href')===p+'/')a.classList.add('active');
-      a.addEventListener('click',function(){l.classList.remove('open');});
-    });
-  })();
 </script>
 </body>
 </html>
