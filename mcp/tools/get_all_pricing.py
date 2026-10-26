@@ -1,6 +1,8 @@
 """MCP Tool: Get All Pricing Data"""
 from typing import Any, Dict, Optional
 
+from mcp.tools._locale import resolve_tool_locale
+from src.services.currency import conversion_metadata, local_prices_for
 from src.services.pricing_aggregator import PricingAggregatorService
 
 
@@ -16,23 +18,37 @@ class GetAllPricingTool:
         Execute the get all pricing tool.
 
         Args:
-            arguments: Tool arguments (typically empty for this tool)
+            arguments: Tool arguments:
+                - currency: str (optional) — ISO-4217 code to convert into
+                - country: str (optional) — ISO-3166 alpha-2 whose currency to use
+              Omitted -> exactly the USD-only output.
 
         Returns:
             Dictionary with pricing data and provider status
         """
         try:
+            locale = resolve_tool_locale(arguments)
+            if isinstance(locale, dict):
+                return locale
+
             # Fetch pricing data asynchronously
             pricing_data, provider_statuses = await self.service.get_all_pricing_async()
 
             # Convert to JSON-serializable format
-            return {
+            models = [self._serialize_pricing(p) for p in pricing_data]
+            if locale.active:
+                for row, pricing in zip(models, pricing_data):
+                    row["local_prices"] = local_prices_for(pricing, locale).model_dump()
+            result = {
                 "success": True,
                 "total_models": len(pricing_data),
-                "models": [self._serialize_pricing(p) for p in pricing_data],
+                "models": models,
                 "providers": [self._serialize_status(s) for s in provider_statuses],
                 "timestamp": str(pricing_data[0].last_updated) if pricing_data else None,
             }
+            if locale.active:
+                result["currency_conversion"] = conversion_metadata(locale)
+            return result
         except Exception as e:
             return {
                 "success": False,

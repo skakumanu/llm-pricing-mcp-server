@@ -1,0 +1,21 @@
+{
+  "base": "USD",
+  "as_of": "2026-10-24",
+  "source": "authored placeholder - replaced weekly by scripts/refresh_exchange_rates.py (Frankfurter / ECB reference rates)",
+  "placeholder": true,
+  "rates": {
+    "USD": 1.0,
+    "EUR": 0.92,
+    "GBP": 0.78,
+    "INR": 84.0,
+    "JPY": 152.0,
+    "CAD": 1.38,
+    "AUD": 1.52,
+    "BRL": 5.6,
+    "CNY": 7.2,
+    "SGD": 1.32,
+    "CHF": 0.87,
+    "KRW": 1380.0,
+    "MXN": 19.5
+  }
+}

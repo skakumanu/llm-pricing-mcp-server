@@ -1,6 +1,8 @@
 """MCP Tool: Recommend a model from a free-text use-case description."""
 from typing import Any, Dict, Optional
 
+from mcp.tools._locale import resolve_tool_locale
+from src.services.currency import LocaleContext, conversion_metadata, local_prices_for
 from src.services.pricing_aggregator import PricingAggregatorService
 from src.services.quality_tradeoff_caveat import build_quality_tradeoff_caveat
 from src.services.recommendation_cache import RecommendationCache
@@ -46,10 +48,14 @@ def _to_router_task_type(task_type: str) -> str:
     return _TASK_TYPE_TO_ROUTER_TASK_TYPE.get(task_type, task_type)
 
 
-def _model_summary(m) -> Dict[str, Any]:
-    """Build a compact JSON-friendly summary of a PricingMetrics model."""
+def _model_summary(m, locale: Optional[LocaleContext] = None) -> Dict[str, Any]:
+    """Build a compact JSON-friendly summary of a PricingMetrics model.
+
+    With an active locale the summary also carries ``local_prices`` (v1.76.0);
+    the USD keys are unchanged either way.
+    """
     avg_cost_1m = (m.cost_per_input_token + m.cost_per_output_token) / 2 * 1_000_000
-    return {
+    summary = {
         "model_name": m.model_name,
         "provider": m.provider,
         "quality_score": m.quality_score,
@@ -63,6 +69,9 @@ def _model_summary(m) -> Dict[str, Any]:
         "pricing_model": m.pricing_model,
         "subscription_monthly_usd": m.subscription_monthly_usd,
     }
+    if locale is not None and locale.active:
+        summary["local_prices"] = local_prices_for(m, locale).model_dump()
+    return summary
 
 
 class RecommendModelTool:
@@ -95,6 +104,10 @@ class RecommendModelTool:
                     "success": False,
                     "error": "description is required and must be a non-empty string",
                 }
+
+            locale = resolve_tool_locale(arguments)
+            if isinstance(locale, dict):
+                return locale
 
             task_type_arg: Optional[str] = arguments.get("task_type")
             valid_types = list_task_types()
@@ -195,14 +208,16 @@ class RecommendModelTool:
                 "task_type": task_type,
                 "task_type_inferred": inferred,
                 "task_description": get_task_description(task_type),
-                "recommended": _model_summary(result.recommended),
+                "recommended": _model_summary(result.recommended, locale),
                 "score": result.score,
                 "reason": result.reason,
-                "alternatives": [_model_summary(m) for m in result.alternatives],
+                "alternatives": [_model_summary(m, locale) for m in result.alternatives],
                 "cached": result.cached,
             }
             if caveats:
                 response["caveats"] = caveats
+            if locale.active:
+                response["currency_conversion"] = conversion_metadata(locale)
             return response
 
         except (TypeError, ValueError) as e:

@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.75.1 | **Last updated**: 2026-10-26
+**Version**: v1.76.0 | **Last updated**: 2026-10-26
 
 ---
 
@@ -14,6 +14,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 31 
 - **Snapshot self-validation**: `scripts/validate_price_snapshot.py` gates the refresh PR. GitHub does not run CI on `GITHUB_TOKEN`-created PRs, so the generating job verifies the data itself
 - **Pricing integrity loops (v1.74.0)**: three guards in `tests/test_pricing_integrity.py` (registry-coverage floor, per-1M plausibility band, no confirmed price for a model past its registry deprecation date) plus two weekly, human-merged PRs from `price-audit.yml` — `scripts/reconfirm_stale_prices.py` re-dates stale prices that still match the registry on input *and* output, and `scripts/retire_models.py` deletes entries whose same-provider registry deprecation date is ≥30 days old (the oracle withholds them from cost math the day the date passes and sets `retired_on`). `get_data_quality` reports `registry_coverage_pct`, `unmatched_confirmed`, `retired_listed` so the gaps are visible, not inferred. Each guard maps to a failure the Oct 2026 reconfirmation pass found live: ~40% of the catalogue invisible to drift checks, Cloudflare served 1000x too low, 55 retired models still priced
 - **Registry-sourced entries + weekly pickup (v1.75.0)**: five registry-backed hosts joined the catalogue (DeepInfra, Novita, Vercel AI Gateway, Nebius, Databricks). Beyond a small hand-maintained core, their models are *registry-sourced*: `data/registry_models/<slug>.json` holds the registry's price, key and date per model, `BasePricingProvider._merge_registry_models()` appends them at fetch time (a curated STATIC_PRICING name always wins a collision), and every `PricingMetrics` now carries `price_source_kind` (`provider` | `registry`) plus `registry_key` so the distinction is machine-readable. `price_confirmed` still means "has a usable price", so registry-sourced models flow into every estimate, comparison and route — but `get_data_quality` splits `confirmed_models` into `provider_confirmed` + `registry_sourced`, and a registry-sourced price is never counted as provider-confirmed. `scripts/pickup_registry_models.py` (a third weekly PR from `price-audit.yml`, staged via `--providers`) adds any chat model the registry prices under a covered provider that the catalogue lacks, re-syncs/re-dates existing entries while the registry still backs them, leaves dropped ones to age into stale, and never edits a `*_pricing.py`. Between runs, a stored registry-sourced price the live registry has moved >5% is withheld like any other drift (`find_drift` no longer skips registry sources). Databricks (OWNER DECISION) has no provider-confirmed core — all entries are registry-sourced with a DBU note
+- **Local currency (v1.76.0)**: a presentation-layer service, `src/services/currency.py`, owns the 13 supported currencies, the deterministic country→currency map, the vendored rate table `data/exchange_rates.json` (7-day staleness; never fetched per request; refreshed by a fourth weekly PR from `price-audit.yml` via `scripts/refresh_exchange_rates.py`) and one precedence function `resolve_locale()`. Six REST endpoints reach it through a single FastAPI dependency (`resolve_request_locale`: currency/country query or header → platform geo header → best-effort IP lookup → USD), five MCP tools through explicit arguments only (MCP never detects), and the browser pages through `GET /locale` + `GET /currency/rates` with client-side conversion. Converted figures are additive `local_*` fields omitted entirely when nothing is stated or detected, so the no-input path is byte-identical to before; pricing data, the oracle, the aggregator and data-quality are untouched (conversion happens on per-request `model_copy()`s). Privacy rule: the IP is used transiently to resolve a country — never stored, never logged by this feature, never echoed
 - **Clean cross-branch promotion**: `scripts/promote_branch_content.sh` mirrors one branch's tree onto another (additions, updates, AND deletions) to work around develop/master squash-merge divergence, verifying the result matches exactly before returning
 - **Repo cost auditor**: `scripts/audit_repo.py` statically scans an arbitrary codebase (customer-run, not deployed) for LLM SDK call sites and reuses `predict_cost`'s token/pricing math to recommend cheaper models, prompt caching, Batch API, task-based right-sizing, and duplicate-prompt consolidation — runs locally only, since the hosted `/mcp` HTTP transport has no access to a caller's filesystem
 - **AI-native SDLC pipeline** (dev tooling, not deployed): `/release-feature` runs a feature through dedicated Spec, Design, Code, Review (parallel correctness/security/simplification), and Test & Release phase agents (`.claude/agents/phase-*.md`) orchestrated by `.claude/workflows/release-feature.js`, ending at an open PR against `develop` — Spec fixes *what*/acceptance criteria, Design fixes *how* (approach, version, branch name), so neither phase re-derives the other's decision; see `CLAUDE.md`'s "AI-Native SDLC Pipeline" section
@@ -38,6 +39,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 31 
 │  /billing/*            MCP 2024-11-05           /billing  /admin             │
 │  /agent/chat                                    /mcp-setup  /api-docs        │
 │  /v1/chat/completions                           /whats-new                   │
+│  /locale  /currency/rates  (+ currency/country on 6 pricing endpoints)      │
 │                                                                             │
 │  Security middleware: billing DB key → global MCP_API_KEY fallback          │
 │  Rate limiting: per {ip}:{tier} token-bucket (30/120/600 req/min)           │
@@ -56,6 +58,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 31 
 │  UsageTracker       │          │
 │  BudgetAlerts       │          │
 │  PricingAlerts      │          │
+│  Currency (locale)  │          │
 └──────────┬──────────┘          │
            │                     │
 ┌──────────▼─────────────────────▼────────────────────────────────────────────┐
@@ -94,6 +97,7 @@ llm-pricing-mcp-server/
 │       ├── base_provider.py         # BasePricingProvider: build_metrics() shared builder (incl. price_source_kind/registry_key), live sync, provenance; merges data/registry_models/<slug>.json registry-sourced entries at fetch time, curated names win (v1.75.0)
 │       ├── pricing_aggregator.py    # Orchestrates + caches all provider data (async); also hosts the get_pricing_aggregator() process-wide singleton shared by REST and all MCP tools
 │       ├── cost_calculator.py       # compute_token_cost(): single cost-math implementation shared by /cost-estimate(+batch)/usage and their estimate_cost/compare_costs/record_usage MCP-tool counterparts
+│       ├── currency.py              # v1.76.0: SUPPORTED_CURRENCIES (13), COUNTRY_TO_CURRENCY, vendored rate table loader (data/exchange_rates.json, 7-day stale flag, no network), resolve_locale() precedence, convert/localize_* helpers; shared by the REST dependency, the five MCP tools and /locale + /currency/rates
 │       ├── pricing_history.py       # SQLite price-history + routing_feedback tables
 │       ├── benchmark_service.py     # Quality scores: static table + HF API fallback (24h TTL)
 │       ├── router.py                # LLM routing recommendation engine
@@ -114,7 +118,7 @@ llm-pricing-mcp-server/
 │       ├── telemetry.py             # Request telemetry aggregation
 │       ├── data_fetcher.py          # Async HTTP fetching helpers
 │       ├── data_sources.py          # Static provider data fallbacks
-│       ├── geolocation.py           # IP geolocation for rate-limit buckets
+│       ├── geolocation.py           # IP -> country lookup (telemetry aggregates; v1.76.0 currency preset via a 1s request-path timeout; the address is never logged)
 │       ├── deployment.py            # Blue-green deployment helpers
 │       │
 │       │   # Provider implementations (one per LLM provider):
@@ -152,9 +156,11 @@ llm-pricing-mcp-server/
 │
 ├── data/
 │   ├── model_prices_snapshot.json   # Vendored reference-registry snapshot (offline fallback; weekly refresh PR)
+│   ├── exchange_rates.json          # v1.76.0: vendored USD rate table (13 codes, as_of, source, placeholder flag). Read at request time by currency.py; written only by scripts/refresh_exchange_rates.py (weekly PR). The Dockerfile copies data/ into the image AND this file to /app/vendored/ because fly.toml's volume mount shadows /app/data (EXCHANGE_RATES_PATH points there)
 │   └── registry_models/             # One <slug>.json per provider: registry-sourced entries (price, registry_key, price_as_of, added_on). Written only by scripts/pickup_registry_models.py; merged by BasePricingProvider at fetch time
 │
 ├── scripts/
+│   ├── refresh_exchange_rates.py    # Weekly PR (v1.76.0): Frankfurter -> ECB-XML fallback, re-based to USD; validates 13 codes / positive / USD==1 / as_of not future / <=15% move; any failure leaves the file untouched and exits 0; --from-file for offline tests
 │   ├── pickup_registry_models.py    # Weekly PR: new registry chat models under covered providers -> registry-sourced entries; re-sync/re-date existing; never edits *_pricing.py (v1.75.0)
 │   ├── reconfirm_stale_prices.py    # Weekly PR: re-date stale curated prices that still match the registry (skips registry-sourced)
 │   ├── retire_models.py             # Weekly PR: delete entries retired >=30 days; registry-sourced rows are removed from their JSON
@@ -193,7 +199,7 @@ llm-pricing-mcp-server/
 ├── .github/workflows/
 │   ├── ci-cd.yml                    # Full CI/CD: test→lint→osv→bandit→gitleaks→deploy
 │   ├── sync-develop.yml             # Auto-sync develop ← master after deploy
-│   ├── price-audit.yml              # Weekly: drift issue + snapshot-refresh PR; (v1.74.0) reconfirm-stale-prices PR + retire-models PR; (v1.75.0) pickup-registry-models PR (staged via --providers; reads the vendored snapshot so its guards and the pickup see one registry) — all human-merged
+│   ├── price-audit.yml              # Weekly: drift issue + snapshot-refresh PR; (v1.74.0) reconfirm-stale-prices PR + retire-models PR; (v1.75.0) pickup-registry-models PR (staged via --providers; reads the vendored snapshot so its guards and the pickup see one registry); (v1.76.0) refresh-exchange-rates PR — all human-merged
 │   ├── npm-publish.yml              # npm Trusted Publishing (OIDC) of npm/llm-pricing-mcp on master push — filename is part of the npmjs.com trust config
 │   └── mcp-registry-publish.yml     # Publishes server.json to registry.modelcontextprotocol.io via GitHub OIDC (`mcp-publisher login github-oidc`) on master push
 │
@@ -208,8 +214,8 @@ llm-pricing-mcp-server/
 ├── tests/                           # 667 pytest tests (as of v1.48.0)
 ├── docs/
 │   └── ARCHITECTURE.md              # THIS FILE — update on every structural change
-├── fly.toml                         # Fly.io app config (volume, health checks)
-├── Dockerfile                       # Container image
+├── fly.toml                         # Fly.io app config (volume at /app/data, health checks, EXCHANGE_RATES_PATH)
+├── Dockerfile                       # Container image (copies src/ static/ agent/ rag/ mcp/ docs/ data/ + vendored/exchange_rates.json)
 ├── requirements.txt                 # Python dependencies
 ├── .pre-commit-config.yaml          # Local gitleaks + branch guard hooks
 └── CLAUDE.md                        # Claude Code session rules (mandatory checklists)
@@ -301,7 +307,28 @@ POST /billing/webhook       → verify HMAC sig → update tier in billing.db
 ```
 Tier changes propagate to rate limits automatically: next request reads tier from `billing.db`.
 
-### 7. UI Design System
+### 7. Local Currency (v1.76.0)
+```
+request ──► resolve_request_locale (FastAPI dependency on the 6 pricing endpoints + /locale)
+              currency query > X-Currency > country query > X-Country
+              > platform geo header (CF-IPCountry, X-Vercel-IP-Country, CloudFront-Viewer-Country, X-Country-Code)
+              > IP lookup (settings.currency_detection_enabled; reuses the telemetry middleware's
+                request.state.geo_country_code — the middleware geolocates _client_ip_for_geo():
+                Fly-Client-IP > XFF first hop > X-Real-IP > peer, public addresses only, so a
+                client-prepended XFF hop cannot steer it — else GeolocationService with a 1s timeout) > USD
+              │  unsupported explicit currency -> 400 {error: unsupported_currency, supported_currencies: [13]}
+              ▼
+          currency.resolve_locale() -> LocaleContext (pure; country mapped via COUNTRY_TO_CURRENCY;
+              unmapped -> USD + fallback_to_usd/country_not_mapped; missing table -> rates_unavailable)
+              │  ctx.active == currency != USD or a country was involved or fallback_to_usd
+              ▼
+          localize_metrics / localize_cost / localize_use_case_cost on per-request model_copy()s
+              -> additive local_prices / local_cost / local_cost_range + currency_conversion
+              (omitted entirely when inactive: Field(None, exclude_if=lambda v: v is None))
+```
+Rates: `data/exchange_rates.json` (USD base, 13 codes, `as_of`, `source`, `placeholder`), loaded once (lru-cached, `reset_rate_table_cache()` for tests), stale after 7 days but still served. MCP tools (`get_all_pricing`, `estimate_cost`, `compare_costs`, `get_use_cases`, `recommend_model`) call `mcp/tools/_locale.py::resolve_tool_locale(arguments)` with explicit `currency`/`country` only — no detection on STDIO or HTTP MCP. Caching: every response of the six endpoints (active or not — the plain USD variant too, so a shared cache never serves it to a header-driven request) sends `Vary: X-Currency, X-Country, CF-IPCountry, X-Vercel-IP-Country, CloudFront-Viewer-Country, X-Country-Code`; a *detected* locale (IP or platform header) is `Cache-Control: private` on every endpoint (`private, max-age=300` on `/pricing`, whose explicit query-param variants stay `public, max-age=300`). The weekly refresh's >15% move check is skipped while the previous table is the authored placeholder (it was never a market rate), so the first real refresh cannot be blocked by a hand-guessed value. Non-goals held: no model filtering/reordering by country, no regional prices, no localized billing or history, no IP/city/coordinates anywhere in a response. Settings: `CURRENCY_DETECTION_ENABLED`, `GEO_LOOKUP_TIMEOUT_SECONDS`, `EXCHANGE_RATES_PATH`.
+
+### 8. UI Design System
 All 13 browser UIs share the same CSS custom properties (defined in each page's `:root`):
 
 | Variable | Value |
@@ -319,6 +346,8 @@ All 13 browser UIs share the same CSS custom properties (defined in each page's 
 | `--radius` | `10px` |
 
 All use `'Segoe UI', system-ui, sans-serif`, `font-size: 14px`, sticky `.main-nav` (52px), hamburger at 760px breakpoint. **Admin page is the canonical design reference.**
+
+**Shared currency control (v1.76.0)**: `/calculator`, `/compare` and the landing page embed one identical `<script>` block (`/* llmp-currency v1 */ window.LLMPCurrency`) — `tests/test_currency_ui.py` compares the three copies. It stores the visitor's choice under the `llmp.currency` localStorage key (user choices only; a detected default is re-resolved per load via `GET /locale`), fetches `GET /currency/rates` once, converts the pages' USD payloads client-side and formats with `Intl.NumberFormat` (JPY/KRW without minor units; per-token rates as unit-less numbers plus the code). The landing renders the selector and note only (OWNER DECISION: no converted numbers there).
 
 **Shared navigation (v1.75.1)**: every page embeds the same nav block — markup, CSS and toggle script — with eight items (Calculator, Compare, Trends, Chat, MCP, API, What's New, Sign in); Admin, Widget, History, IDE Compare and Conversations are reached from page content or by URL, not from the bar. The pages are self-contained static files, so the block is copied rather than included: `scripts/sync_nav.py` holds the one canonical nav (links, CSS, toggle script) and stamps it into every page (`--check` reports drift), and `tests/test_nav_consistency.py` fails if any copy differs from the script's constants. Change the nav by editing the script and running it, never by editing a page's nav by hand.
 
@@ -341,23 +370,25 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/health`, `/health/live`, `/health/ready`, `/health/detailed` | None | Health probes |
-| GET | `/pricing` | None | All model pricing; supports `provider`, `supports_vision`, `supports_function_calling`, `supports_json_mode`, `batch_available`, `is_reasoning_model` query filters |
+| GET | `/pricing` | None | All model pricing; supports `provider`, `supports_vision`, `supports_function_calling`, `supports_json_mode`, `batch_available`, `is_reasoning_model` query filters; `currency` / `country` (or `X-Currency` / `X-Country`) add `models[].local_prices` + `currency_conversion` (v1.76.0) |
 | GET | `/data-quality` | None | Aggregate accuracy summary: % confirmed/fresh, models withheld for drift, unpriced, stale |
 | GET | `/models` | None | Model list |
-| GET | `/pricing/public` | None | Embed-safe public pricing |
+| GET | `/pricing/public` | None | Embed-safe public pricing; `currency` / `country` add `*_per_1m_local`, `local_currency`, `currency_conversion` |
+| GET | `/locale` | None | Currency/country the request resolves to + `source` + the 13 supported codes (browser preset; `no-store`; never echoes an IP) |
+| GET | `/currency/rates` | None | Vendored USD rate table: `as_of`, `rate_age_days`, `stale` (7-day rule), `source`, `placeholder`, `zero_decimal` |
 | GET | `/pricing/history` | None | Historical price snapshots |
 | GET | `/pricing/trends` | None | Price-change leaderboard |
 | GET | `/pricing/history/export` | None | CSV / JSON export |
 | GET | `/pricing/alerts/signing-info` | Required | Webhook HMAC signing key info |
 | GET | `/performance` | None | Performance metrics |
-| GET | `/use-cases` | None | Use-case recommendations |
-| POST | `/cost-estimate` | None | Single-model cost |
-| POST | `/cost-estimate/batch` | None | Multi-model cost comparison |
+| GET | `/use-cases` | None | Use-case recommendations; `currency` / `country` add `models[].local_cost` (set, order and USD-band `cost_tier` unchanged) |
+| POST | `/cost-estimate` | None | Single-model cost; `currency` / `country` add `local_cost` + `currency_conversion` |
+| POST | `/cost-estimate/batch` | None | Multi-model cost comparison; `currency` / `country` add `models[].local_cost`, `local_cost_range` (cheapest/most-expensive stay USD-derived) |
 | GET | `/rate-limits/tiers` | None | Tier rate limits |
 | GET | `/api/versions` | None | API version negotiation |
 | GET | `/telemetry` | None | Request telemetry |
 | GET | `/cache-stats` | None | Process-lifetime hit/miss counts + hit rate for the recommendation cache, per call site (`recommend_model`, `router_recommend`) |
-| POST | `/router/recommend` | Required | LLM routing recommendation (~5min in-memory cache; response `cached` field) |
+| POST | `/router/recommend` | Required | LLM routing recommendation (~5min in-memory cache; response `cached` field); `currency` / `country` add `local_prices` on `recommended` and `alternatives[]` (constraints stay USD) |
 | POST | `/router/recommend/stream` | Required | SSE streaming router |
 | POST | `/router/feedback` | Required | Accept/reject feedback |
 | GET | `/telemetry/savings` | Required | Per-org savings stats |

@@ -1,7 +1,9 @@
 """MCP Tool: Estimate Cost for a Single Model"""
 from typing import Any, Dict, Optional
 
+from mcp.tools._locale import resolve_tool_locale
 from src.services.cost_calculator import compute_token_cost
+from src.services.currency import conversion_metadata, localize_cost
 from src.services.pricing_aggregator import PricingAggregatorService
 
 
@@ -28,14 +30,21 @@ class EstimateCostTool:
                 - model_name: str (required)
                 - input_tokens: int (required, >= 0)
                 - output_tokens: int (required, >= 0)
+                - currency: str (optional) — ISO-4217 code to convert into
+                - country: str (optional) — ISO-3166 alpha-2 whose currency to use
 
         Returns:
-            Dictionary with cost estimation results
+            Dictionary with cost estimation results (USD, plus local_cost and
+            currency_conversion when a currency/country was given)
         """
         try:
             model_name = arguments.get("model_name")
             input_tokens = arguments.get("input_tokens")
             output_tokens = arguments.get("output_tokens")
+
+            locale = resolve_tool_locale(arguments)
+            if isinstance(locale, dict):
+                return locale
 
             # Validate arguments
             if not model_name:
@@ -75,7 +84,7 @@ class EstimateCostTool:
             output_cost = token_cost.output_cost
             total_cost = token_cost.total_cost
 
-            return {
+            result = {
                 "success": True,
                 "model_name": pricing.model_name,
                 "provider": pricing.provider,
@@ -90,6 +99,10 @@ class EstimateCostTool:
                     "cost_per_output_token": pricing.cost_per_output_token,
                 },
             }
+            if locale.active:
+                result["local_cost"] = localize_cost(input_cost, output_cost, total_cost, locale).model_dump()
+                result["currency_conversion"] = conversion_metadata(locale)
+            return result
         except Exception as e:
             return {
                 "success": False,
