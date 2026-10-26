@@ -27,21 +27,23 @@
     a:hover { text-decoration: underline; }
     code { font-family: 'Consolas', 'Cascadia Code', monospace; font-size: 0.85em; background: var(--surface2); padding: 0.1em 0.4em; border-radius: 4px; color: var(--accent2); }
 
-    /* Nav */
-    .main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;border-bottom:1px solid #23263a;position:sticky;top:0;z-index:200;gap:.5rem}
+    /* ── Shared nav (identical on every page; scripts/sync_nav.py, tests/test_nav_consistency.py) ── */
+    .main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;border-bottom:1px solid #23263a;position:sticky;top:0;z-index:200;gap:.5rem;flex-shrink:0}
     .nav-brand{font-weight:700;color:#7c6af7;text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
     .nav-spacer{flex:1}
-    .nav-links{display:flex;align-items:center;gap:.125rem;overflow-x:auto;-webkit-overflow-scrolling:touch}
-    .nav-links::-webkit-scrollbar{display:none}
+    .nav-links{display:flex;align-items:center;gap:.125rem}
     .nav-links a{color:#8b93a5;text-decoration:none;padding:.35rem .6rem;border-radius:6px;font-size:.8rem;white-space:nowrap;transition:all .15s;border:none}
     .nav-links a:hover{background:#1a1d2e;color:#e5e7eb}
     .nav-links a.active{background:#1a1d2e;color:#7c6af7;font-weight:600}
-    .nav-toggle{display:none;background:none;border:1px solid #2a2d3a;color:#9ca3af;font-size:1.1rem;cursor:pointer;padding:.25rem .5rem;border-radius:6px;line-height:1}
-    @media(max-width:640px){
+    .nav-links a.nav-cta{margin-left:.35rem;border:1px solid #7c6af7;color:#7c6af7}
+    .nav-links a.nav-cta:hover{background:#7c6af7;color:#fff}
+    .nav-toggle{display:none;background:none;border:1px solid #2a2d3a;color:#9ca3af;font-size:1.1rem;cursor:pointer;padding:.25rem .5rem;border-radius:6px;line-height:1;flex-shrink:0}
+    @media(max-width:760px){
       .nav-toggle{display:block}
-      .nav-links{display:none;position:absolute;top:52px;left:0;right:0;flex-direction:column;background:#0f1117;border-bottom:1px solid #23263a;padding:.5rem 1rem;gap:.25rem;z-index:199}
+      .nav-links{display:none;position:absolute;top:52px;left:0;right:0;flex-direction:column;align-items:stretch;background:#0f1117;border-bottom:1px solid #23263a;padding:.5rem 1rem;gap:.25rem;z-index:199}
       .nav-links.open{display:flex}
       .nav-links a{padding:.6rem .75rem;font-size:.875rem}
+      .nav-links a.nav-cta{margin-left:0;text-align:center}
     }
 
     /* Layout */
@@ -109,7 +111,7 @@
     .steps { display: flex; flex-direction: column; gap: 1.5rem; }
     .step { display: flex; gap: 1rem; }
     .step-num { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: rgba(124,106,247,.15); border: 1px solid rgba(124,106,247,.3); color: var(--accent); font-size: .8rem; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: .1rem; }
-    .step-body { flex: 1; }
+    .step-body { flex: 1; min-width: 0; }   /* let the code block scroll instead of widening the page */
     .step-body h4 { font-size: .9rem; font-weight: 700; margin-bottom: .4rem; }
     .step-body p { font-size: .85rem; color: var(--muted); margin-bottom: .6rem; }
 
@@ -118,8 +120,8 @@
     .tool-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .9rem 1rem; }
     .tool-card .tool-name { font-family: 'Consolas', monospace; font-size: .8rem; color: var(--accent2); font-weight: 600; margin-bottom: .3rem; }
     .tool-card .tool-desc { font-size: .78rem; color: var(--muted); line-height: 1.4; }
-    .tool-card .tool-args { font-size: .72rem; color: var(--muted); margin-top: .4rem; }
-    .tool-card .tool-args span { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: .1em .4em; margin-right: .25rem; }
+    .tool-card .tool-args { font-size: .72rem; color: var(--muted); margin-top: .4rem; display: flex; flex-wrap: wrap; gap: .25rem; }
+    .tool-card .tool-args span { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: .1em .4em; overflow-wrap: anywhere; }
     .tool-card .tool-args span.req { border-color: rgba(124,106,247,.4); color: var(--accent); }
 
     /* Troubleshooting table */
@@ -136,20 +138,30 @@
   <a href="/" class="nav-brand">⚡ LLM Pricing</a>
   <span class="nav-spacer"></span>
   <div class="nav-links" id="navLinks">
-    <a href="/chat">💬 Chat</a>
-    <a href="/calculator">🧮 Calc</a>
-    <a href="/compare">⚖️ Compare</a>
-    <a href="/history">📈 History</a>
-    <a href="/trends">🔥 Trends</a>
-    <a href="/widget">🔌 Widget</a>
-    <a href="/billing">💳 Billing</a>
-    <a href="/mcp-setup">⚡ MCP</a>
-    <a href="/api-docs">📖 Docs</a>
-    <a href="/admin">⚙️ Admin</a>
-    <a href="/whats-new">✨ What's New</a>
+    <a href="/calculator">Calculator</a>
+    <a href="/compare">Compare</a>
+    <a href="/trends">Trends</a>
+    <a href="/chat">Chat</a>
+    <a href="/mcp-setup">MCP</a>
+    <a href="/api-docs">API</a>
+    <a href="/whats-new">What's New</a>
+    <a href="/billing" class="nav-cta">Sign in</a>
   </div>
-  <button class="nav-toggle" id="navToggle" aria-label="Menu">☰</button>
+  <button class="nav-toggle" id="navToggle" aria-label="Menu" aria-expanded="false" aria-controls="navLinks">☰</button>
 </nav>
+<script>
+(function(){
+  var t=document.getElementById('navToggle'),l=document.getElementById('navLinks');
+  if(!t||!l)return;
+  t.onclick=function(){var o=l.classList.toggle('open');t.setAttribute('aria-expanded',o?'true':'false');};
+  var p=location.pathname.replace(/\/$/,'')||'/';
+  l.querySelectorAll('a').forEach(function(a){
+    var h=a.getAttribute('href');
+    if(h===p||h===p+'/')a.classList.add('active');
+    a.addEventListener('click',function(){l.classList.remove('open');t.setAttribute('aria-expanded','false');});
+  });
+})();
+</script>
 
 <div class="page">
 
@@ -638,16 +650,6 @@ pip install -r requirements.txt</div>
 </div><!-- /page -->
 
 <script>
-(function(){
-  var t=document.getElementById('navToggle'),l=document.getElementById('navLinks');
-  if(t)t.onclick=function(){l.classList.toggle('open');};
-  var p=location.pathname.replace(/\/$/,'');
-  l.querySelectorAll('a').forEach(function(a){
-    if(a.getAttribute('href')===p)a.classList.add('active');
-    a.addEventListener('click',function(){l.classList.remove('open');});
-  });
-})();
-
 function showTab(name) {
   document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});
   document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});

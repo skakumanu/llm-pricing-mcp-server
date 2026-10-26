@@ -1615,12 +1615,16 @@ async def get_use_cases(
 
     # Determine cost tier based on token costs (costs are per token)
     def get_cost_tier(input_cost: float, output_cost: float) -> str:
-        avg_cost = (input_cost + output_cost) / 2
-        if avg_cost < 0.00001:
+        # Bands on the average of input and output price per 1M tokens:
+        # ultra-low < $1.50, low < $10, medium < $40, high otherwise. The
+        # pre-v1.75.1 bands were 100x looser and called a $2.50/$10 model
+        # "ultra-low" and a $30/$60 one "low".
+        avg_per_1m = (input_cost + output_cost) / 2 * 1_000_000
+        if avg_per_1m < 1.5:
             return "ultra-low"
-        elif avg_cost < 0.0001:
+        elif avg_per_1m < 10:
             return "low"
-        elif avg_cost < 0.001:
+        elif avg_per_1m < 40:
             return "medium"
         else:
             return "high"
