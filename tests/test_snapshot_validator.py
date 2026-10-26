@@ -145,3 +145,63 @@ class TestSummaryOutput:
         code, out = run(COMMITTED)
         assert code == 0
         assert "Repriced" not in out
+
+
+class TestWholesaleProviderRemoval:
+    """Oct 2026: upstream dropped every `openrouter/*` entry (486 keys, 15% of the file)
+    and the 10% removal guard rejected three refreshes in a row, leaving the vendored
+    snapshot — and the pickup job that reads it — frozen. A provider namespace that
+    vanishes entirely is an editorial change, discounted from the limit and noted in
+    the summary; a protected provider vanishing, or a removal above the hard ceiling,
+    is still a bad fetch."""
+
+    @staticmethod
+    def _by_provider(committed):
+        out = {}
+        for k, v in committed.items():
+            out.setdefault(v.get("litellm_provider") or "", []).append(k)
+        return out
+
+    def test_a_vanished_provider_namespace_is_discounted_and_noted(self, tmp_path, committed):
+        by_prov = self._by_provider(committed)
+        prov, keys = max(((p, ks) for p, ks in by_prov.items() if p not in ("", "openai", "anthropic")),
+                         key=lambda pk: len(pk[1]))
+        assert len(keys) / len(committed) > 0.10, "fixture must exceed the plain 10% limit to be meaningful"
+        new = {k: v for k, v in committed.items() if k not in set(keys)}
+        code, out = run(write(tmp_path, "editorial.json", new), COMMITTED)
+        assert code == 0, out
+        assert "removed upstream entirely" in out and f"`{prov}`" in out
+
+    def test_residual_removals_beyond_the_limit_still_reject(self, tmp_path, committed):
+        by_prov = self._by_provider(committed)
+        prov, keys = max(((p, ks) for p, ks in by_prov.items() if p not in ("", "openai", "anthropic")),
+                         key=lambda pk: len(pk[1]))
+        gone = set(keys)
+        # plus 12% scattered across other providers, each provider only partly removed
+        others = [k for k in committed if k not in gone]
+        gone |= set(others[::8])
+        new = {k: v for k, v in committed.items() if k not in gone}
+        code, out = run(write(tmp_path, "scatter.json", new), COMMITTED)
+        assert code == 1
+        assert "removed" in out.lower()
+
+    def test_a_protected_provider_vanishing_is_a_bad_fetch(self, tmp_path, committed):
+        by_prov = self._by_provider(committed)
+        assert by_prov.get("openai"), "fixture expects openai keys in the snapshot"
+        new = {k: v for k, v in committed.items() if k not in set(by_prov["openai"])}
+        code, out = run(write(tmp_path, "no-openai.json", new), COMMITTED)
+        assert code == 1
+        assert "vanished entirely" in out and "openai" in out
+
+    def test_removing_most_of_the_file_is_rejected_even_as_whole_providers(self, tmp_path, committed):
+        by_prov = self._by_provider(committed)
+        ranked = sorted(by_prov.items(), key=lambda pk: -len(pk[1]))
+        gone, i = set(), 0
+        while len(gone) / len(committed) <= 0.40 and i < len(ranked):
+            if ranked[i][0] not in ("openai", "anthropic"):
+                gone |= set(ranked[i][1])
+            i += 1
+        new = {k: v for k, v in committed.items() if k not in gone}
+        code, out = run(write(tmp_path, "gutted.json", new), COMMITTED)
+        assert code == 1
+        assert "hard limit" in out

@@ -268,6 +268,14 @@ class TestWorkflowJob:
         assert "--base develop" in job
         assert "Verified before this PR was opened" in job
 
+    def test_job_does_not_depend_on_the_snapshot_refresh(self):
+        # v1.77.1: refresh-snapshot had rejected three refreshes in a row, and this job
+        # sat behind it with `needs: refresh-snapshot`, so the placeholder rates were
+        # never replaced. It now only needs the audit job.
+        job = self.text.split("refresh-exchange-rates:", 1)[1].split("reconfirm:", 1)[0]
+        assert "needs: audit" in job
+        assert "needs: refresh-snapshot" not in job
+
     def test_pickup_step_isolation_still_holds(self):
         # tests/test_registry_pickup.py splits on "pickup:"; our job must not contain it
         job = self.text.split("refresh-exchange-rates:", 1)[1].split("reconfirm:", 1)[0]
