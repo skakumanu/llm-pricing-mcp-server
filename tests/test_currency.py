@@ -241,8 +241,10 @@ class TestConversionAndRounding:
             assert cur.convert(usd, ctx, per_token=True) > 0
 
     def test_tiny_amount_keeps_significant_digits(self, table):
+        # Relative to whatever the vendored table holds: the weekly refresh job runs
+        # this file against the freshly fetched rates, so no rate may be hard-coded.
         ctx = cur.resolve_locale(currency="EUR", table=table)
-        assert cur.convert(1e-7, ctx) == pytest.approx(9.2e-8)
+        assert cur.convert(1e-7, ctx) == pytest.approx(1e-7 * table.rates["EUR"])
         assert cur.convert(0.0, ctx) == 0.0
 
     def test_amounts_round_to_six_decimals(self, table):
@@ -278,13 +280,14 @@ class TestConversionAndRounding:
 
     def test_localize_cost_and_use_case(self, table):
         ctx = cur.resolve_locale(currency="INR", table=table)
+        inr = table.rates["INR"]
         lc = cur.localize_cost(0.003, 0.0075, 0.0105, ctx, cost_per_1m_tokens=7.0)
-        assert lc.currency == "INR" and lc.total_cost == pytest.approx(0.0105 * 84.0)
-        assert lc.cost_per_1m_tokens == pytest.approx(7.0 * 84.0)
+        assert lc.currency == "INR" and lc.total_cost == pytest.approx(0.0105 * inr)
+        assert lc.cost_per_1m_tokens == pytest.approx(7.0 * inr)
         assert cur.localize_cost(1, 1, 2, cur.resolve_locale(table=table)) is None
         model = PricingMetrics(model_name="m", provider="p", cost_per_input_token=3e-6, cost_per_output_token=1.5e-5)
         uc = cur.localize_use_case_cost(model, ctx)
-        assert uc.avg_cost_per_1m_tokens_usd == 9.0 and uc.avg_cost_per_1m_tokens == pytest.approx(9.0 * 84.0)
+        assert uc.avg_cost_per_1m_tokens_usd == 9.0 and uc.avg_cost_per_1m_tokens == pytest.approx(9.0 * inr)
 
     def test_conversion_block_contents(self, table):
         ctx = cur.resolve_locale(currency="EUR", country="DE", table=table)
