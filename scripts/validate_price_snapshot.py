@@ -32,6 +32,21 @@ MIN_MODELS = 500
 MAX_REMOVED_FRACTION = 0.10
 MAX_REPRICED_FRACTION = 0.25
 
+# Upstream sometimes drops a whole provider namespace at once (Oct 2026: every
+# `openrouter/*` entry, 486 keys, 15% of the file) — an editorial change, not a
+# bad fetch. Keys of a provider that disappears *entirely* are discounted from
+# the removal fraction, up to a few providers per refresh, and listed in the
+# summary for the human merging the PR. Two guards stay absolute: a removal of
+# more than MAX_TOTAL_REMOVED_FRACTION is rejected whatever its shape, and a
+# provider the catalogue itself is priced from can never be discounted.
+MAX_TOTAL_REMOVED_FRACTION = 0.40
+MAX_WHOLESALE_PROVIDERS = 5
+PROTECTED_PROVIDERS = frozenset({
+    "openai", "azure", "anthropic", "gemini", "vertex_ai", "bedrock", "bedrock_converse",
+    "mistral", "groq", "together_ai", "fireworks_ai", "deepseek", "xai", "cohere",
+    "deepinfra", "novita", "nebius", "databricks", "vercel_ai_gateway",
+})
+
 
 def load(path: Path) -> Dict[str, Any]:
     with path.open(encoding="utf-8") as fh:
@@ -87,16 +102,58 @@ def diff(old: Dict[str, Any], new: Dict[str, Any]) -> Tuple[List[str], List[str]
     return added, removed, repriced
 
 
-def check_movement(old: Dict[str, Any], removed: List[str], repriced: List[str]) -> List[str]:
-    """Changes too large to be a routine upstream update."""
-    errors: List[str] = []
-    if not old:
-        return errors
+def wholesale_removed_providers(old: Dict[str, Any], removed: List[str]) -> Dict[str, int]:
+    """Providers whose every key in *old* is gone from the new snapshot -> key count."""
+    removed_set = set(removed)
+    per_provider: Dict[str, List[str]] = {}
+    for key, rec in old.items():
+        prov = (rec.get("litellm_provider") if isinstance(rec, dict) else None) or ""
+        per_provider.setdefault(prov, []).append(key)
+    return {
+        prov: len(keys)
+        for prov, keys in per_provider.items()
+        if prov and all(k in removed_set for k in keys)
+    }
 
-    removed_frac = len(removed) / len(old)
+
+def check_movement(old: Dict[str, Any], removed: List[str], repriced: List[str]) -> Tuple[List[str], List[str]]:
+    """Changes too large to be a routine upstream update -> (errors, notes)."""
+    errors: List[str] = []
+    notes: List[str] = []
+    if not old:
+        return errors, notes
+
+    total_frac = len(removed) / len(old)
+    if total_frac > MAX_TOTAL_REMOVED_FRACTION:
+        errors.append(
+            f"{len(removed)} models removed ({total_frac:.0%} of the catalogue, "
+            f"hard limit {MAX_TOTAL_REMOVED_FRACTION:.0%}) — upstream format change or bad fetch"
+        )
+        return errors, notes
+
+    wholesale = wholesale_removed_providers(old, removed)
+    protected = sorted(p for p in wholesale if p in PROTECTED_PROVIDERS)
+    if protected:
+        errors.append(
+            "provider(s) the catalogue is priced from vanished entirely: "
+            + ", ".join(f"{p} ({wholesale[p]} keys)" for p in protected)
+            + " — bad fetch, not an editorial change"
+        )
+        return errors, notes
+
+    discounted = 0
+    if wholesale and len(wholesale) <= MAX_WHOLESALE_PROVIDERS:
+        discounted = sum(wholesale.values())
+        notes.append(
+            "provider namespace(s) removed upstream entirely (discounted from the removal limit): "
+            + ", ".join(f"`{p}` ({n} keys)" for p, n in sorted(wholesale.items(), key=lambda kv: -kv[1]))
+        )
+
+    residual = len(removed) - discounted
+    removed_frac = residual / len(old)
     if removed_frac > MAX_REMOVED_FRACTION:
         errors.append(
-            f"{len(removed)} models removed ({removed_frac:.0%} of the catalogue, "
+            f"{residual} models removed ({removed_frac:.0%} of the catalogue, "
             f"limit {MAX_REMOVED_FRACTION:.0%}) — upstream format change or bad fetch"
         )
 
@@ -107,11 +164,12 @@ def check_movement(old: Dict[str, Any], removed: List[str], repriced: List[str])
             f"limit {MAX_REPRICED_FRACTION:.0%}) — suspiciously broad, review by hand"
         )
 
-    return errors
+    return errors, notes
 
 
 def summarise(old: Dict[str, Any], new: Dict[str, Any],
-              added: List[str], removed: List[str], repriced: List[str]) -> str:
+              added: List[str], removed: List[str], repriced: List[str],
+              notes: List[str] = ()) -> str:
     lines = [
         "| Metric | Value |",
         "|---|---|",
@@ -120,6 +178,8 @@ def summarise(old: Dict[str, Any], new: Dict[str, Any],
         f"| Removed | {len(removed)} |",
         f"| Repriced | {len(repriced)} |",
     ]
+    for note in notes:
+        lines += ["", f"**Note**: {note}"]
 
     def price_row(key: str) -> str:
         o_in = (old[key].get("input_cost_per_token") or 0) * 1e6
@@ -165,13 +225,15 @@ def main() -> int:
     added: List[str] = []
     removed: List[str] = []
     repriced: List[str] = []
+    notes: List[str] = []
     old: Dict[str, Any] = {}
 
     if args.baseline and args.baseline.exists():
         try:
             old = load(args.baseline)
             added, removed, repriced = diff(old, new)
-            errors += check_movement(old, removed, repriced)
+            movement_errors, notes = check_movement(old, removed, repriced)
+            errors += movement_errors
         except Exception as e:
             print(f"REJECT: cannot read baseline {args.baseline}: {e}")
             return 1
@@ -184,7 +246,7 @@ def main() -> int:
 
     print(f"OK: {len(new)} models validated\n")
     if old:
-        print(summarise(old, new, added, removed, repriced))
+        print(summarise(old, new, added, removed, repriced, notes))
     return 0
 
 

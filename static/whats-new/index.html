@@ -155,8 +155,26 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.77.0 -->
+  <!-- v1.77.1 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.77.1</span>
+      <span class="release-date">Oct 26, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">The weekly price-registry refresh is unblocked</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li><strong>The vendored price registry refreshes again.</strong> Upstream dropped every <code>openrouter/*</code> entry (486 keys, 15% of the file) and the refresh guard's 10% removal limit had rejected three weekly refreshes in a row, freezing the registry the catalogue is checked against. A provider namespace that vanishes wholesale is now discounted from that limit and called out in the refresh PR; a 40% hard ceiling stays, and a provider the catalogue is priced from vanishing is still treated as a bad fetch</li>
+        <li><strong>Exchange rates refresh independently.</strong> The rate-table job sat behind the snapshot refresh, so the placeholder rates shipped in v1.76.0 were never replaced; it now runs whether or not the snapshot refresh succeeds</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.77.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.77.0</span>
