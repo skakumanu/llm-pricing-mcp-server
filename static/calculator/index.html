@@ -195,6 +195,10 @@
       overflow-x: auto;
       margin-top: 20px;
     }
+    /* Long registry model ids wrap inside the name column; cost columns never do,
+       so the five columns fit the card at desktop width instead of scrolling. */
+    td:first-child { word-break: break-word; overflow-wrap: anywhere; min-width: 160px; }
+    td:nth-child(n+3) { white-space: nowrap; }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -665,7 +669,8 @@ window.LLMPCurrency = (function () {
 
     // Embedding models have no output price, so they would always "win" a
     // cheapest-chat-model ranking they do not belong in.
-    const rows = allModels.filter(m => m.cost_per_output_token > 0).map(m => ({
+    // Some embedding entries carry a nominal output price, so match the name too.
+    const rows = allModels.filter(m => m.cost_per_output_token > 0 && !/embed|rerank/i.test(m.model_name)).map(m => ({
       model_name:  m.model_name,
       provider:    m.provider,
       input_cost:  inputTok  * m.cost_per_input_token,
