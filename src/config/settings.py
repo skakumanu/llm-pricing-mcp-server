@@ -87,6 +87,12 @@ class Settings(BaseSettings):
     rag_docs_path: str = "docs"                 # path to markdown docs folder
     rag_use_embeddings: bool = False            # True = use OpenAI embeddings; False = TF-IDF
 
+    # Local currency (v1.76.0). Detection is best-effort and only ever reads the
+    # request's IP transiently; the rate table is vendored (never fetched per request).
+    currency_detection_enabled: bool = True     # False = never infer a country from the IP
+    geo_lookup_timeout_seconds: float = 1.0     # request-path cap on the IP -> country lookup
+    exchange_rates_path: Optional[str] = None   # override for data/exchange_rates.json
+
     model_config = {
         "env_file": ".env",
         "case_sensitive": False

@@ -17,6 +17,127 @@ class TokenVolumePrice(BaseModel):
     total_cost: float = Field(..., description="Total cost (50/50 input/output split) in USD")
 
 
+# ---------------------------------------------------------------------------
+# v1.76.0 — local-currency presentation. Every field below is ADDITIVE and is
+# omitted from the serialised response entirely (not emitted as null) when no
+# conversion is active, so a request with no currency/country and no detected
+# country produces exactly the pre-v1.76.0 payload. The canonical USD fields
+# are never renamed, moved or re-denominated; converted figures live under
+# ``local_*`` keys carrying their own ``currency``.
+# ---------------------------------------------------------------------------
+
+def _omit_none(v) -> bool:
+    return v is None
+
+
+class CurrencyConversion(BaseModel):
+    """How the ``local_*`` figures in a response were derived from USD."""
+
+    currency: str = Field(..., description="ISO-4217 code the local_* figures are denominated in")
+    base_currency: str = Field("USD", description="Currency the canonical figures are in (always USD)")
+    rate: float = Field(..., description="USD -> currency rate applied (1.0 when currency is USD)")
+    rate_as_of: Optional[str] = Field(None, description="ISO date (YYYY-MM-DD) the rate was captured")
+    rate_age_days: Optional[int] = Field(None, description="Days since the rate was captured")
+    rate_is_stale: bool = Field(False, description="True when the rate is older than 7 days")
+    rate_source: Optional[str] = Field(None, description="Where the rate table came from")
+    rate_placeholder: bool = Field(
+        False, description="True while the vendored table is the authored placeholder, not a refreshed one"
+    )
+    country: Optional[str] = Field(None, description="ISO-3166 alpha-2 country the request resolved to, if any")
+    country_source: Optional[str] = Field(
+        None, description="'query' | 'header' | 'platform_header' | 'ip' — how the country was obtained"
+    )
+    currency_source: str = Field(
+        ..., description="'query' | 'header' | 'country' | 'default' — how the currency was chosen"
+    )
+    fallback_to_usd: bool = Field(
+        False, description="True when a country/currency was involved but USD had to be served instead"
+    )
+    fallback_reason: Optional[str] = Field(
+        None, description="'country_not_mapped' | 'rates_unavailable' when fallback_to_usd is true"
+    )
+    note: str = Field(..., description="Disclaimer: converted amounts are indicative; providers bill in USD")
+
+
+class LocalVolumePrice(BaseModel):
+    """Converted price breakdown for a token volume, in the local currency."""
+
+    input_cost: float = Field(..., description="Cost for input tokens in the local currency")
+    output_cost: float = Field(..., description="Cost for output tokens in the local currency")
+    total_cost: float = Field(..., description="Total cost (50/50 split) in the local currency")
+
+
+class LocalPrices(BaseModel):
+    """Converted per-token and per-1M prices for one model."""
+
+    currency: str = Field(..., description="ISO-4217 code of these figures")
+    cost_per_input_token: float = Field(
+        ..., description="Per-token input price, full precision; never 0 by rounding"
+    )
+    cost_per_output_token: float = Field(
+        ..., description="Per-token output price, full precision; never 0 by rounding"
+    )
+    cost_per_1m_input: float = Field(..., description="Input price per 1M tokens")
+    cost_per_1m_output: float = Field(..., description="Output price per 1M tokens")
+    cost_at_1m_tokens: LocalVolumePrice = Field(..., description="Cost for 1,000,000 tokens (50/50 split)")
+
+
+class LocalCost(BaseModel):
+    """A converted cost estimate."""
+
+    currency: str = Field(..., description="ISO-4217 code of these figures")
+    input_cost: float = Field(..., description="Cost for input tokens in the local currency")
+    output_cost: float = Field(..., description="Cost for output tokens in the local currency")
+    total_cost: float = Field(..., description="Total cost in the local currency")
+    cost_per_1m_tokens: Optional[float] = Field(
+        None, exclude_if=_omit_none, description="Blended cost per 1M tokens in the local currency"
+    )
+
+
+class LocalCostRange(BaseModel):
+    """Min/max of a batch comparison in the local currency."""
+
+    currency: str = Field(..., description="ISO-4217 code of these figures")
+    min: float = Field(..., description="Cheapest total cost in the local currency")
+    max: float = Field(..., description="Most expensive total cost in the local currency")
+
+
+class LocalUseCaseCost(BaseModel):
+    """Converted cost figures for a use-case entry (the tier itself stays USD-derived)."""
+
+    currency: str = Field(..., description="ISO-4217 code of these figures")
+    avg_cost_per_1m_tokens: float = Field(..., description="Average of input and output per 1M tokens, local currency")
+    input_per_1m: float = Field(..., description="Input price per 1M tokens, local currency")
+    output_per_1m: float = Field(..., description="Output price per 1M tokens, local currency")
+    avg_cost_per_1m_tokens_usd: float = Field(..., description="The same average in USD (what the tier is based on)")
+
+
+class LocaleResponse(BaseModel):
+    """Response for GET /locale."""
+
+    country: Optional[str] = Field(None, description="ISO-3166 alpha-2 country, or null when undetected")
+    currency: str = Field(..., description="Currency the request resolved to")
+    source: str = Field(..., description="'query' | 'header' | 'platform_header' | 'ip' | 'default'")
+    fallback_to_usd: bool = Field(False, description="True when a country was found but its currency is unsupported")
+    fallback_reason: Optional[str] = Field(None, description="Why USD was served instead, when fallback_to_usd")
+    supported_currencies: List[str] = Field(..., description="The exact set of currencies the API accepts")
+
+
+class ExchangeRatesResponse(BaseModel):
+    """Response for GET /currency/rates."""
+
+    base: str = Field(..., description="Base currency of the table (USD)")
+    as_of: str = Field(..., description="ISO date the rates were captured")
+    rate_age_days: int = Field(..., description="Days since as_of")
+    stale: bool = Field(..., description="True when rate_age_days exceeds stale_after_days")
+    stale_after_days: int = Field(..., description="Staleness threshold (7)")
+    source: str = Field(..., description="Where the table came from")
+    placeholder: bool = Field(..., description="True while the table is the authored placeholder")
+    note: str = Field(..., description="Disclaimer: converted amounts are indicative; providers bill in USD")
+    rates: dict = Field(..., description="USD -> currency rates for every supported code")
+    zero_decimal: List[str] = Field(..., description="Currencies conventionally shown without minor units")
+
+
 class PricingMetrics(BaseModel):
     """Metrics for a specific LLM model."""
 
@@ -102,6 +223,12 @@ class PricingMetrics(BaseModel):
     registry_key: Optional[str] = Field(
         None,
         description="The reference registry's key this price was taken from, when price_source_kind is 'registry'",
+    )
+    # v1.76.0 — present only when a non-default locale is active for the request.
+    local_prices: Optional[LocalPrices] = Field(
+        None,
+        exclude_if=_omit_none,
+        description="Converted prices in the requested/detected currency; omitted when none is active",
     )
 
     @computed_field
@@ -202,6 +329,9 @@ class PricingResponse(BaseModel):
     total_models: int = Field(..., description="Total number of models returned")
     provider_status: List[ProviderStatusInfo] = Field(default_factory=list, description="Status of each provider")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Response timestamp")
+    currency_conversion: Optional[CurrencyConversion] = Field(
+        None, exclude_if=_omit_none, description="Present when models[].local_prices is populated"
+    )
 
 
 class EndpointInfo(BaseModel):
@@ -246,6 +376,12 @@ class CostEstimateResponse(BaseModel):
     total_cost: float = Field(..., description="Total cost in USD")
     currency: str = Field(default="USD", description="Currency for cost")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Calculation timestamp")
+    local_cost: Optional[LocalCost] = Field(
+        None, exclude_if=_omit_none, description="The same estimate in the requested/detected currency"
+    )
+    currency_conversion: Optional[CurrencyConversion] = Field(
+        None, exclude_if=_omit_none, description="Present when local_cost is populated"
+    )
 
 
 class BatchCostEstimateRequest(BaseModel):
@@ -267,6 +403,9 @@ class ModelCostComparison(BaseModel):
     cost_per_1m_tokens: float = Field(..., description="Estimated cost per 1M tokens (average of input/output)")
     is_available: bool = Field(default=True, description="Whether the model pricing was found")
     error_message: Optional[str] = Field(None, description="Error message if model not found")
+    local_cost: Optional[LocalCost] = Field(
+        None, exclude_if=_omit_none, description="The same costs in the requested/detected currency"
+    )
 
 
 class BatchCostEstimateResponse(BaseModel):
@@ -280,6 +419,12 @@ class BatchCostEstimateResponse(BaseModel):
     cost_range: Optional[dict] = Field(None, description="Min and max costs across all models")
     currency: str = Field(default="USD", description="Currency for costs")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Calculation timestamp")
+    local_cost_range: Optional[LocalCostRange] = Field(
+        None, exclude_if=_omit_none, description="cost_range in the requested/detected currency"
+    )
+    currency_conversion: Optional[CurrencyConversion] = Field(
+        None, exclude_if=_omit_none, description="Present when models[].local_cost is populated"
+    )
 
 
 class PerformanceMetrics(BaseModel):
@@ -327,6 +472,11 @@ class ModelUseCase(BaseModel):
     strengths: List[str] = Field(..., description="Key strengths of this model")
     context_window: Optional[int] = Field(None, description="Maximum context window size")
     cost_tier: str = Field(..., description="Cost tier: low, medium, high")
+    local_cost: Optional[LocalUseCaseCost] = Field(
+        None,
+        exclude_if=_omit_none,
+        description="Cost figures in the requested/detected currency; cost_tier itself stays USD-derived",
+    )
 
 
 class UseCaseResponse(BaseModel):
@@ -336,6 +486,9 @@ class UseCaseResponse(BaseModel):
     total_models: int = Field(..., description="Total number of models")
     providers: List[str] = Field(..., description="List of providers included")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), description="Response timestamp")
+    currency_conversion: Optional[CurrencyConversion] = Field(
+        None, exclude_if=_omit_none, description="Present when models[].local_cost is populated"
+    )
 
 
 class EndpointMetricResponse(BaseModel):
@@ -635,6 +788,11 @@ class RouterResponse(BaseModel):
             "True if this recommendation was served from the ~5 minute "
             "in-memory recommendation cache rather than freshly computed"
         ),
+    )
+    currency_conversion: Optional[CurrencyConversion] = Field(
+        None,
+        exclude_if=_omit_none,
+        description="Present when recommended.local_prices / alternatives[].local_prices are populated",
     )
 
 

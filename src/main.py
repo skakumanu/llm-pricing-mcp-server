@@ -12,8 +12,10 @@ UTC = timezone.utc
 # Add src directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from fastapi import FastAPI, Query, HTTPException, Request  # noqa: E402
+from fastapi import FastAPI, Query, HTTPException, Request, Depends  # noqa: E402
 import csv  # noqa: E402
+import ipaddress  # noqa: E402
+import textwrap  # noqa: E402
 import json  # noqa: E402
 from io import StringIO  # noqa: E402
 from fastapi.responses import JSONResponse, Response, StreamingResponse, FileResponse  # noqa: E402
@@ -40,6 +42,12 @@ from src.models.pricing import (  # noqa: E402
     UsageEventRequest, UsageEventResponse, UsageBatchRequest, UsageBatchResponse,
     UsageSummaryResponse, SessionUsageAnalysisResponse,
     BudgetAlertRequest, BudgetAlertRecord, BudgetAlertListResponse,
+    LocaleResponse, ExchangeRatesResponse, LocalCostRange,
+)
+from src.services.currency import (  # noqa: E402
+    CONVERSION_NOTE, RATE_STALE_AFTER_DAYS, SUPPORTED_CURRENCIES, ZERO_DECIMAL_CURRENCIES,
+    LocaleContext, UnsupportedCurrencyError, build_conversion, conversion_metadata, convert, load_rate_table,
+    localize_cost, localize_metrics, localize_use_case_cost, resolve_locale,
 )
 from src.services.pricing_history import init_pricing_history_service, get_pricing_history_service  # noqa: E402
 from src.services.pricing_alerts import init_pricing_alert_service, get_pricing_alert_service  # noqa: E402
@@ -355,6 +363,9 @@ _unauthenticated_paths = {
     "/data-quality",
     "/models",
     "/providers",
+    # v1.76.0 — locale preset + vendored rate table for the browser currency selector
+    "/locale",
+    "/currency/rates",
     "/agent/conversations",
     # Public read-only dashboard endpoints (non-sensitive aggregate stats)
     "/telemetry",
@@ -562,15 +573,24 @@ async def telemetry_middleware(request: Request, call_next):
     browser_info = GeolocationService.parse_user_agent(user_agent)
     browser_name = browser_info.get("browser")
 
-    # Get geolocation asynchronously (cached)
+    # Get geolocation asynchronously (cached). Geolocate the *trusted* address
+    # when there is one (Fly-Client-IP first, syntactically public only — see
+    # _client_ip_for_geo) so a client-prepended X-Forwarded-For hop cannot steer
+    # the country that v1.76.0's currency preset echoes back; otherwise keep the
+    # telemetry address so private/local peers record "Private Network" as before.
+    geo_ip = _client_ip_for_geo(request) or client_ip
     try:
-        geo_info = await GeolocationService.get_geolocation(client_ip)
+        geo_info = await GeolocationService.get_geolocation(geo_ip)
         country = geo_info.get("country") if geo_info else None
         country_code = geo_info.get("country_code") if geo_info else None
     except Exception as e:
         logger.debug("Failed to get geolocation: %s", e)
         country = None
         country_code = None
+
+    # v1.76.0 — let resolve_request_locale reuse this lookup instead of doing a
+    # second one. Only the country code is stashed; never the address.
+    request.state.geo_country_code = country_code
 
     try:
         response = await call_next(request)
@@ -614,6 +634,177 @@ logger.info("Middleware registered: deployment tracking and telemetry")
 # behavior are unchanged; only its home moved.
 
 logger.info("Application initialization complete")
+
+# ------------------------------------------------------------------
+# v1.76.0 — local currency: request-scoped locale resolution
+# ------------------------------------------------------------------
+
+# Platform-injected geo headers, first present wins. These are set by the edge
+# (Cloudflare, Vercel, CloudFront) and carry only a country code, never an IP.
+_PLATFORM_COUNTRY_HEADERS = (
+    "cf-ipcountry",
+    "x-vercel-ip-country",
+    "cloudfront-viewer-country",
+    "x-country-code",
+)
+
+_LOCALE_DOC = """
+**Currency and locale (v1.76.0).** Pass `currency` (query) or `X-Currency` (header) to get every
+price converted alongside the canonical USD figures; pass `country` (query) or `X-Country` (header,
+ISO-3166 alpha-2) to have the currency derived from the country. Precedence: `currency` query >
+`X-Currency` > `country` query > `X-Country` > platform geo header (`CF-IPCountry`,
+`X-Vercel-IP-Country`, `CloudFront-Viewer-Country`, `X-Country-Code`) > best-effort IP lookup > USD.
+A stated currency always beats a stated country. Supported: USD, EUR, GBP, INR, JPY, CAD, AUD, BRL,
+CNY, SGD, CHF, KRW, MXN; any other explicit code is rejected with 400 listing the supported set. A
+country whose currency is not supported gets USD with `fallback_to_usd: true`. Converted figures are
+additive (`local_*`, `currency_conversion`) and omitted entirely when no currency/country is stated
+or detected. Rates come from a vendored table refreshed weekly; a rate older than 7 days is still
+served but flagged `rate_is_stale`. Converted amounts are indicative — providers bill in USD.
+**Privacy:** the client IP is used transiently to resolve a country and nothing more; it is
+never stored, never logged by this feature and never in any response — only the country code may be echoed.
+"""
+
+
+def _locale_documented(func):
+    """Append the shared currency/locale text to an endpoint's docstring (its OpenAPI description).
+
+    Apply *below* the ``@app.get/post`` decorator so it runs first and the
+    route is created with the augmented docstring. The block is indented like
+    a function docstring so ``inspect.cleandoc`` strips it evenly.
+    """
+    func.__doc__ = (func.__doc__ or "") + "\n" + textwrap.indent(_LOCALE_DOC, "    ")
+    return func
+
+
+def _client_ip_for_geo(request: Request) -> Optional[str]:
+    """Best-effort public client IP, or None.
+
+    Fly-Client-IP > first hop of X-Forwarded-For > X-Real-IP > socket peer.
+    Returns None for anything that is not a syntactically valid *public*
+    address ("testclient", "unknown", loopback, RFC1918, link-local ...), so
+    no lookup is attempted for those. The value is only ever held in a local
+    variable: not stored on request.state, not logged, not echoed.
+    """
+    candidates = [
+        request.headers.get("fly-client-ip"),
+        request.headers.get("x-forwarded-for", "").split(",")[0].strip(),
+        request.headers.get("x-real-ip"),
+        request.client.host if request.client else None,
+    ]
+    for raw in candidates:
+        if not raw:
+            continue
+        try:
+            addr = ipaddress.ip_address(raw.strip())
+        except ValueError:
+            continue
+        if addr.is_global:
+            return str(addr)
+    return None
+
+
+async def resolve_request_locale(
+    request: Request,
+    currency: Optional[str] = Query(
+        None,
+        description=(
+            "ISO-4217 code to convert prices into (USD, EUR, GBP, INR, JPY, CAD, AUD, BRL, CNY, SGD, "
+            "CHF, KRW, MXN). Beats `country`. Unsupported codes are rejected with 400."
+        ),
+    ),
+    country: Optional[str] = Query(
+        None,
+        description="ISO-3166 alpha-2 country whose currency to use (e.g. DE -> EUR). Unmapped -> USD, flagged.",
+    ),
+) -> LocaleContext:
+    """FastAPI dependency: resolve the request's currency with the documented precedence."""
+    table = load_rate_table(settings.exchange_rates_path)
+
+    explicit_currency = currency
+    currency_source = "query" if currency else None
+    if not explicit_currency:
+        header_currency = request.headers.get("x-currency")
+        if header_currency:
+            explicit_currency, currency_source = header_currency, "header"
+
+    explicit_country = country
+    country_source = "query" if country else None
+    if not explicit_country:
+        header_country = request.headers.get("x-country")
+        if header_country:
+            explicit_country, country_source = header_country, "header"
+
+    detected_country: Optional[str] = None
+    detected_source = "ip"
+    if explicit_country is None:
+        for name in _PLATFORM_COUNTRY_HEADERS:
+            value = request.headers.get(name)
+            if value:
+                detected_country, detected_source = value, "platform_header"
+                break
+        if detected_country is None and settings.currency_detection_enabled:
+            detected_country = getattr(request.state, "geo_country_code", None)
+            if not detected_country:
+                ip = _client_ip_for_geo(request)
+                if ip:
+                    try:
+                        geo = await GeolocationService.get_geolocation(
+                            ip, timeout=settings.geo_lookup_timeout_seconds
+                        )
+                        detected_country = geo.get("country_code") if geo else None
+                    except Exception:
+                        detected_country = None
+                del ip
+
+    try:
+        return resolve_locale(
+            currency=explicit_currency,
+            country=explicit_country,
+            detected_country=detected_country,
+            table=table,
+            currency_source=currency_source,
+            country_source=country_source,
+            detected_source=detected_source,
+        )
+    except UnsupportedCurrencyError as exc:
+        # 400, not 422: the value is syntactically fine; this is a product rule.
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "unsupported_currency",
+                "currency": exc.code,
+                "supported_currencies": exc.supported,
+                "message": str(exc),
+            },
+        )
+
+
+# Every request header that can change the body of a locale-aware response. The
+# platform geo headers are included so a CDN that injects them keys one variant
+# per country rather than sharing the first visitor's body with everyone.
+_LOCALE_VARY_HEADERS = (
+    "X-Currency, X-Country, CF-IPCountry, X-Vercel-IP-Country, CloudFront-Viewer-Country, X-Country-Code"
+)
+
+
+def _apply_locale_headers(response: Response, locale: LocaleContext, *, cacheable_public: bool = False) -> None:
+    """Cache-safety for the locale-aware endpoints. Call on every response, active or not.
+
+    The plain USD variant must carry ``Vary`` too: otherwise a shared cache that
+    stored it for a header-less request would serve it to the next request that
+    sends ``X-Currency: EUR`` (same URL, so it matches without a Vary key).
+    A *detected* locale (IP or platform header) is visitor-specific and is
+    marked ``private`` on every endpoint, not only the one with a public TTL.
+    """
+    response.headers["Vary"] = _LOCALE_VARY_HEADERS
+    if cacheable_public:
+        # OWNER-ACCEPTED DEFAULT: explicit query-param requests keep public;
+        # only a detected locale makes the cached body visitor-specific.
+        response.headers["Cache-Control"] = (
+            "private, max-age=300" if locale.detected else "public, max-age=300"
+        )
+    elif locale.detected:
+        response.headers["Cache-Control"] = "private"
 
 # ------------------------------------------------------------------
 # Agent / RAG — request & response models
@@ -1020,6 +1211,7 @@ async def get_models(
 
 
 @app.get("/pricing", response_model=PricingResponse, tags=["Pricing"])
+@_locale_documented
 async def get_pricing(
     response: Response,
     provider: Optional[str] = Query(
@@ -1031,6 +1223,7 @@ async def get_pricing(
     supports_json_mode: Optional[bool] = Query(None, description="Filter to JSON-mode models"),
     batch_available: Optional[bool] = Query(None, description="Filter to batch-API models"),
     is_reasoning_model: Optional[bool] = Query(None, description="Filter to reasoning/chain-of-thought models"),
+    locale: LocaleContext = Depends(resolve_request_locale),
 ):
     """
     Get aggregated pricing data from multiple LLM providers.
@@ -1050,7 +1243,9 @@ async def get_pricing(
         is_reasoning_model: Filter to reasoning models
 
     Returns:
-        PricingResponse: Aggregated pricing data with metrics and provider status
+        PricingResponse: Aggregated pricing data with metrics and provider status.
+        With a currency/country stated or detected, every model also carries
+        `local_prices` and the response carries `currency_conversion`.
     """
     aggregator = await get_pricing_aggregator()
     if provider:
@@ -1080,11 +1275,16 @@ async def get_pricing(
         )
         telemetry.track_provider_usage(model.provider, model.model_name, estimated_cost)
 
-    response.headers["Cache-Control"] = "public, max-age=300"
+    # Sets Cache-Control (public, or private when the locale was detected) and Vary.
+    _apply_locale_headers(response, locale, cacheable_public=True)
+    if locale.active:
+        # Per-request copies: the aggregator's cached PricingMetrics are never touched.
+        models = [localize_metrics(m, locale) for m in models]
     return PricingResponse(
         models=models,
         total_models=len(models),
-        provider_status=provider_status
+        provider_status=provider_status,
+        currency_conversion=build_conversion(locale),
     )
 
 
@@ -1308,7 +1508,12 @@ async def get_api_versions():
 
 
 @app.post("/cost-estimate", response_model=CostEstimateResponse, tags=["Cost Estimation"])
-async def estimate_cost(request: CostEstimateRequest):
+@_locale_documented
+async def estimate_cost(
+    request: CostEstimateRequest,
+    response: Response,
+    locale: LocaleContext = Depends(resolve_request_locale),
+):
     """
     Estimate the cost for a specific model based on token usage.
 
@@ -1320,7 +1525,8 @@ async def estimate_cost(request: CostEstimateRequest):
         request: CostEstimateRequest containing model name and token counts
 
     Returns:
-        CostEstimateResponse: Detailed cost breakdown
+        CostEstimateResponse: Detailed cost breakdown in USD, plus `local_cost`
+        and `currency_conversion` when a currency/country is stated or detected
 
     Raises:
         HTTPException: If the model is not found (404)
@@ -1351,6 +1557,7 @@ async def estimate_cost(request: CostEstimateRequest):
     telemetry.track_feature_usage("cost_estimation")
     telemetry.track_provider_usage(model_pricing.provider, model_pricing.model_name, total_cost)
 
+    _apply_locale_headers(response, locale)
     return CostEstimateResponse(
         model_name=model_pricing.model_name,
         provider=model_pricing.provider,
@@ -1359,12 +1566,19 @@ async def estimate_cost(request: CostEstimateRequest):
         input_cost=input_cost,
         output_cost=output_cost,
         total_cost=total_cost,
-        currency=model_pricing.currency
+        currency=model_pricing.currency,
+        local_cost=localize_cost(input_cost, output_cost, total_cost, locale),
+        currency_conversion=build_conversion(locale),
     )
 
 
 @app.post("/cost-estimate/batch", response_model=BatchCostEstimateResponse, tags=["Cost Estimation"])
-async def estimate_cost_batch(request: BatchCostEstimateRequest):
+@_locale_documented
+async def estimate_cost_batch(
+    request: BatchCostEstimateRequest,
+    response: Response,
+    locale: LocaleContext = Depends(resolve_request_locale),
+):
     """
     Compare cost estimates across multiple models.
 
@@ -1376,7 +1590,10 @@ async def estimate_cost_batch(request: BatchCostEstimateRequest):
         request: BatchCostEstimateRequest with model names and token counts
 
     Returns:
-        BatchCostEstimateResponse: Cost comparison across all requested models
+        BatchCostEstimateResponse: Cost comparison across all requested models.
+        `cheapest_model`, `most_expensive_model` and `cost_range` are always
+        computed from USD; with a locale active each available model also
+        carries `local_cost` and the response `local_cost_range` + `currency_conversion`.
     """
     comparisons = []
     aggregator = await get_pricing_aggregator()
@@ -1423,7 +1640,8 @@ async def estimate_cost_batch(request: BatchCostEstimateRequest):
             output_cost=output_cost,
             total_cost=total_cost,
             cost_per_1m_tokens=cost_per_1m,
-            is_available=True
+            is_available=True,
+            local_cost=localize_cost(input_cost, output_cost, total_cost, locale, cost_per_1m),
         ))
 
     # Find cheapest and most expensive
@@ -1447,13 +1665,23 @@ async def estimate_cost_batch(request: BatchCostEstimateRequest):
     for comparison in available_comparisons:
         telemetry.track_provider_usage(comparison.provider, comparison.model_name, comparison.total_cost)
 
+    _apply_locale_headers(response, locale)
+    local_cost_range = None
+    if locale.active and cost_range is not None:
+        local_cost_range = LocalCostRange(
+            currency=locale.currency,
+            min=convert(cost_range["min"], locale),
+            max=convert(cost_range["max"], locale),
+        )
     return BatchCostEstimateResponse(
         input_tokens=request.input_tokens,
         output_tokens=request.output_tokens,
         models=comparisons,
         cheapest_model=cheapest,
         most_expensive_model=most_expensive,
-        cost_range=cost_range
+        cost_range=cost_range,
+        local_cost_range=local_cost_range,
+        currency_conversion=build_conversion(locale),
     )
 
 
@@ -1586,11 +1814,14 @@ async def get_performance(
 
 
 @app.get("/use-cases", response_model=UseCaseResponse, tags=["Performance"])
+@_locale_documented
 async def get_use_cases(
+    response: Response,
     provider: Optional[str] = Query(
         None,
         description="Filter by provider (e.g., 'openai', 'anthropic', 'google', 'cohere', 'mistral')"
-    )
+    ),
+    locale: LocaleContext = Depends(resolve_request_locale),
 ):
     """
     Get recommended use cases and strengths for each LLM model.
@@ -1605,7 +1836,9 @@ async def get_use_cases(
         provider: Optional provider filter
 
     Returns:
-        UseCaseResponse: Use case information for each model
+        UseCaseResponse: Use case information for each model. The set and order
+        of models never depends on country; `cost_tier` is always derived from
+        USD bands. With a locale active each model carries `local_cost`.
     """
     aggregator = await get_pricing_aggregator()
     if provider:
@@ -1640,17 +1873,20 @@ async def get_use_cases(
                 use_cases=model.use_cases or ["General tasks"],
                 strengths=model.strengths or ["Reliable", "Versatile"],
                 context_window=model.context_window,
-                cost_tier=get_cost_tier(model.cost_per_input_token, model.cost_per_output_token)
+                cost_tier=get_cost_tier(model.cost_per_input_token, model.cost_per_output_token),
+                local_cost=localize_use_case_cost(model, locale),
             )
         )
 
     # Get unique providers
     providers = sorted(list(set(model.provider for model in use_cases)))
 
+    _apply_locale_headers(response, locale)
     return UseCaseResponse(
         models=use_cases,
         total_models=len(use_cases),
-        providers=providers
+        providers=providers,
+        currency_conversion=build_conversion(locale),
     )
 
 
@@ -1684,7 +1920,13 @@ async def cache_stats():
 
 
 @app.post("/router/recommend", response_model=RouterResponse, tags=["Router"])
-async def router_recommend(req: RouterRequest, request: Request):
+@_locale_documented
+async def router_recommend(
+    req: RouterRequest,
+    request: Request,
+    response: Response,
+    locale: LocaleContext = Depends(resolve_request_locale),
+):
     """
     Recommend the optimal LLM model for the caller's constraints.
 
@@ -1698,6 +1940,10 @@ async def router_recommend(req: RouterRequest, request: Request):
 
     Optionally pass `X-Organization-Id` and `X-Api-Key-Tier` headers to enable
     per-org savings tracking.
+
+    Constraints (`max_cost_per_1m_tokens`, `monthly_budget_usd`) are always USD;
+    the recommendation and its order never depend on country. With a locale
+    active, `recommended` and each alternative carry `local_prices`.
     """
     from src.services.router import RouterConstraints
     constraints = RouterConstraints(
@@ -1762,13 +2008,21 @@ async def router_recommend(req: RouterRequest, request: Request):
         logger.warning("Failed to record routing savings: %s", exc)
 
     get_telemetry_service().track_feature_usage("router_recommend")
+    recommended = result.recommended
+    alternatives = result.alternatives
+    _apply_locale_headers(response, locale)
+    if locale.active:
+        # Copies only: the cached RouterResult must stay USD-only.
+        recommended = localize_metrics(recommended, locale)
+        alternatives = [localize_metrics(a, locale) for a in alternatives]
     return RouterResponse(
-        recommended=result.recommended,
+        recommended=recommended,
         score=result.score,
         reason=result.reason,
-        alternatives=result.alternatives,
+        alternatives=alternatives,
         routing_id=routing_id,
         cached=result.cached,
+        currency_conversion=build_conversion(locale),
     )
 
 
@@ -2925,7 +3179,9 @@ async def webhook_signing_info():
 
 
 @app.get("/pricing/public", tags=["Pricing"])
+@_locale_documented
 async def get_public_pricing(
+    response: Response,
     models: Optional[str] = Query(
         None,
         description="Comma-separated model names to include (omit for all models)",
@@ -2934,6 +3190,7 @@ async def get_public_pricing(
         None,
         description="Filter by provider name",
     ),
+    locale: LocaleContext = Depends(resolve_request_locale),
 ):
     """
     Public pricing endpoint — no API key required.
@@ -2947,7 +3204,10 @@ async def get_public_pricing(
         provider: Optional provider filter (e.g. ``openai``).
 
     Returns:
-        JSON with ``models`` list and ``updated_at`` timestamp.
+        JSON with ``models`` list and ``updated_at`` timestamp. The ``*_usd``
+        keys are always present; with a locale active each model also carries
+        ``input_per_1m_local``, ``output_per_1m_local`` and ``local_currency``,
+        and the response a top-level ``currency_conversion``.
     """
     aggregator = await get_pricing_aggregator()
     if provider:
@@ -2970,8 +3230,74 @@ async def get_public_pricing(
         }
         for m in all_models
     ]
+    if locale.active:
+        for row in result:
+            row["input_per_1m_local"] = convert(row["input_per_1m_usd"], locale)
+            row["output_per_1m_local"] = convert(row["output_per_1m_usd"], locale)
+            row["local_currency"] = locale.currency
+    _apply_locale_headers(response, locale)
     result.sort(key=lambda x: (x["provider"], x["model_name"]))
-    return {"models": result, "total": len(result), "updated_at": datetime.now(UTC).isoformat()}
+    payload = {"models": result, "total": len(result), "updated_at": datetime.now(UTC).isoformat()}
+    conversion = conversion_metadata(locale)  # None when the locale is inactive
+    if conversion is not None:
+        payload["currency_conversion"] = conversion
+    return payload
+
+
+@app.get("/locale", response_model=LocaleResponse, tags=["Pricing"])
+@_locale_documented
+async def get_locale(response: Response, locale: LocaleContext = Depends(resolve_request_locale)):
+    """
+    What currency and country this request resolves to — the browser pages'
+    preset for their currency selector.
+
+    Honours the same overrides and precedence as the pricing endpoints
+    (`currency`/`X-Currency`, `country`/`X-Country`, platform geo headers,
+    best-effort IP lookup). `source` says which one applied, or `default` when
+    nothing was stated or detected (USD). The response never contains an IP;
+    the only location datum it may echo is the ISO country code.
+    """
+    _apply_locale_headers(response, locale)
+    response.headers["Cache-Control"] = "no-store"  # after the helper: a preset is never cached
+    return LocaleResponse(
+        country=locale.country,
+        currency=locale.currency,
+        source=locale.source,
+        fallback_to_usd=locale.fallback_to_usd,
+        fallback_reason=locale.fallback_reason,
+        supported_currencies=list(SUPPORTED_CURRENCIES),
+    )
+
+
+@app.get("/currency/rates", response_model=ExchangeRatesResponse, tags=["Pricing"])
+async def get_currency_rates(response: Response):
+    """
+    The vendored USD exchange-rate table the server converts with.
+
+    Rates are not fetched per request: `data/exchange_rates.json` is refreshed
+    weekly by `scripts/refresh_exchange_rates.py` through a human-merged PR
+    (Frankfurter, falling back to ECB reference rates). `as_of` is the capture
+    date; `stale` is true once it is more than `stale_after_days` (7) old —
+    the rates are still served, just flagged. `placeholder` is true while the
+    table is still the authored one and has not yet been refreshed. Converted
+    amounts are indicative — providers bill in USD.
+    """
+    table = load_rate_table(settings.exchange_rates_path)
+    if table is None:
+        raise HTTPException(status_code=503, detail="Exchange-rate table unavailable; prices are served in USD only")
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return ExchangeRatesResponse(
+        base=table.base,
+        as_of=table.as_of.isoformat(),
+        rate_age_days=table.age_days(),
+        stale=table.is_stale(),
+        stale_after_days=RATE_STALE_AFTER_DAYS,
+        source=table.source,
+        placeholder=table.placeholder,
+        note=CONVERSION_NOTE,
+        rates={code: table.rates[code] for code in SUPPORTED_CURRENCIES if code in table.rates},
+        zero_decimal=sorted(ZERO_DECIMAL_CURRENCIES),
+    )
 
 
 # ---------------------------------------------------------------------------
