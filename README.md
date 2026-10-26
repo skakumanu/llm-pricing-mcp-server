@@ -35,7 +35,8 @@ Most LLM pricing tools are a static lookup table. This one checks its own number
 - Router recommendation (`POST /router/recommend`) with feedback loop; `GET /cache-stats` reports process-lifetime hit/miss stats for its ~5-minute recommendation cache
 - Actual usage/spend tracking (`POST /usage`, `GET /usage/summary`) — the real-cost counterpart to `/cost-estimate`; tag events with `session_id` and analyze one session on demand (`GET /usage/session/{session_id}`) for a grounded recommendation with estimated savings
 - OpenAI-compatible proxy (`POST /v1/chat/completions`) for drop-in SDK integration
-- Webhook alerts for price changes and budget-spend thresholds (`POST /usage/alerts`, HMAC-SHA256 signed)
+- Dispatch gateway (v1.77.0): add a `dispatch` policy and your own provider keys to that same endpoint and the best eligible model is executed for real — failover that never drops below your quality floor, a receipt with the chosen model, reason, actual cost and savings, budget hard stops, shadow A/B and an org-scoped audit export — see [Dispatch gateway](#dispatch-gateway)
+- Webhook alerts for price changes and budget-spend thresholds (`POST /usage/alerts`, HMAC-SHA256 signed; `hard_stop: true` also blocks dispatch for the org once reached)
 - Interactive docs: `/docs` (Swagger) and `/redoc`
 
 ### Repo Cost Auditor (`scripts/audit_repo.py`)
@@ -94,9 +95,10 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 ### Security & Quality
 - Most endpoints are public (read-only pricing data, UIs, MCP tools)
 - Protected endpoints (`/billing/me`, `/router/recommend`, `/router/feedback`, `/billing/portal`) require a billing API key or the global `MCP_API_KEY`
+- Dispatch mode of `/v1/chat/completions` requires a free-tier *customer* key (the global `MCP_API_KEY` is refused — dispatch writes per-org ledgers); provider keys are bring-your-own per request (`X-Provider-Key-*` headers), used transiently and never stored, logged or echoed — and neither are prompts or completions
 - Rate limiting per client IP + tier bucket — includes the anonymous `/agent/chat` and `/agent/chat/stream` endpoints (no API key needed, but throttled, since each call runs an LLM on the operator's key)
 - Request size limit (1MB default)
-- 1699 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 1865 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
@@ -318,7 +320,8 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 | DELETE | `/agent/conversations/{id}` | Delete a conversation |
 | GET | `/api/versions` | API version info |
 | GET | `/pricing/alerts/signing-info` | Webhook signing key info |
-| POST | `/v1/chat/completions` | OpenAI-compatible routing proxy |
+| POST | `/v1/chat/completions` | OpenAI-compatible routing proxy (recommendation only; dispatch mode below needs a customer key) |
+| GET | `/dispatch/providers` | Executable providers, their key headers, and which models are dispatchable (and why not) |
 | GET | `/mcp` | HTTP MCP server info |
 | POST | `/mcp` | HTTP MCP JSON-RPC 2.0 |
 | POST | `/billing/signup` | Free tier signup → API key |
@@ -340,6 +343,8 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 | POST | `/usage` | Record one actual usage event (cost computed server-side) |
 | POST | `/usage/batch` | Record multiple usage events at once |
 | GET | `/usage/summary` | Actual spend summary by model/provider, per org |
+| POST | `/v1/chat/completions` + `dispatch` | Dispatch mode (customer key only): execute the best eligible model with your `X-Provider-Key-*`, failover, receipt |
+| GET | `/dispatch/receipts` | Metadata-only JSON/CSV export of your org's dispatch receipts (customer key only) |
 | POST | `/billing/checkout` | Stripe Checkout session |
 | GET | `/billing/portal` | Stripe billing portal |
 | GET | `/billing/me` | Usage dashboard |
@@ -432,6 +437,97 @@ curl -X POST "http://localhost:8000/cost-estimate?country=JP" \
 - **MCP**: `get_all_pricing`, `estimate_cost`, `compare_costs`, `get_use_cases`, `recommend_model`
   accept optional `currency` and `country`. MCP never detects a location.
 
+### Dispatch gateway
+
+Since v1.77.0 the OpenAI-compatible endpoint can *act* on its recommendation. Send a `dispatch` policy,
+your free-tier service key, and your own provider keys, and the best eligible model is executed for real;
+you get a normal `chat.completion` with real `usage` plus a `dispatch_receipt`. Without `dispatch` the
+endpoint is the recommendation-only proxy it always was.
+
+```python
+import os
+from openai import OpenAI
+
+SERVICE_KEY = os.environ["LLM_PRICING_SERVICE_KEY"]   # your free-tier key from POST /billing/signup
+
+client = OpenAI(
+    base_url="https://llm-pricing-api.fly.dev/v1",
+    api_key=SERVICE_KEY,
+    default_headers={                      # bring your own provider keys — used transiently, never stored
+        "X-Provider-Key-OpenAI": "...",
+        "X-Provider-Key-Anthropic": "...",
+        "X-Provider-Key-Google": "...",
+    },
+)
+resp = client.chat.completions.create(
+    model="gpt-4o",                        # what you would have used — the receipt reports savings against it
+    messages=[{"role": "user", "content": "Summarise this ticket..."}],
+    max_tokens=300,
+    extra_body={"dispatch": {"objective": "cheapest", "min_quality_score": 70,
+                             "max_request_cost_usd": 0.01, "request_id": "ticket-4812"}},
+)
+print(resp.choices[0].message.content)
+receipt = resp.model_extra["dispatch_receipt"]
+print(receipt["chosen"]["model"], receipt["cost"]["actual_usd"],
+      receipt["savings"]["vs_requested_model"]["savings_usd"])
+```
+
+- **Presets** (`dispatch.objective`):
+
+  | Objective | Picks |
+  |---|---|
+  | `balanced` (default) | the router's quality-per-dollar order |
+  | `cheapest` | lowest blended $/1M among models meeting every constraint |
+  | `best_quality` | highest quality score (cheaper on ties) |
+  | `lowest_latency` | lowest known latency (unknown last) |
+  | `pinned` | exactly `pinned_model`; the receipt reports what the cheapest model meeting the floor would have saved |
+
+  Hard constraints reuse the router's vocabulary — `min_quality_score`, `max_cost_per_1m_tokens`,
+  `min_context_window`, `task_type`, `preferred_provider`, `exclude_reasoning_models` — plus `allow` /
+  `deny` lists (model names or `provider:<name>`) and `max_request_cost_usd` (prompt tokens × input price +
+  `max_tokens` × output price; when a cap is set, that `max_tokens` — yours, or the server default of 1024 — is
+  also sent to the provider so the cap actually bounds the call). Every field is optional; an empty
+  `dispatch: {}` means balanced with failover on.
+- **Eligibility**: only models that have a provider-confirmed price (drift-withheld, never-priced and retired
+  models are never dispatched), belong to an executable provider — OpenAI, Anthropic, Google (Gemini API),
+  Groq, Together AI, Fireworks AI, DeepSeek, Mistral AI, xAI; everything else is recommend-only — and whose
+  provider key you supplied. `GET /dispatch/providers` lists all of this up front; the receipt lists every
+  exclusion with its reason, and when nothing is eligible the error names the eliminating constraint before
+  any provider is called.
+- **Failover** (`dispatch.failover`, on by default, `max_attempts` 3, `timeout_ms` 30000): a timeout, 5xx,
+  429, context-too-long or model-not-found moves to the next candidate that still satisfies every constraint
+  (context-too-long only to a larger context window). If failover would mean dropping below your quality
+  floor the dispatch fails instead — `all_attempts_failed` names the floor. A 401/403 on *your* provider
+  key is terminal (`provider_auth_failed`, naming the provider). Pinned never fails over.
+- **Receipt**: `chosen` (model, provider, quality, blended price, provenance), `reason`, `candidates`
+  (ranked), `excluded` + `excluded_summary`, `usage`, `cost` (`actual_usd` = provider token counts ×
+  catalogue price), `savings` (`vs_most_expensive_eligible`, `vs_requested_model`, and
+  `forgone_vs_cheapest_meeting_floor` when pinned), `latency` (total / provider / overhead), `attempts`,
+  `shadow`, `dispatch_id`, `request_id`. Add `currency` / `country` to the policy (or `X-Currency` /
+  `X-Country`) for a `local` block in your currency — explicit only; this endpoint never infers a location.
+- **Ledgers**: each successful dispatch records exactly one exact usage event (`request_id` dedupes it on
+  retries — the provider call itself is not deduped) and one routing decision marked used, so
+  `GET /usage/summary`, `GET /telemetry/savings`, the acceptance rate and budget alerts reflect real
+  dispatched spend.
+- **Budget hard stop**: `POST /usage/alerts` with `hard_stop: true`, sent with your customer API key, refuses
+  dispatch for your org with `402 budget_hard_stop` once recorded spend over the alert's period reaches its
+  threshold. The alert is bound to the key's own org (you cannot stop, list or delete another org's alerts),
+  the webhook still fires as before, and alerts without an org are notify-only.
+- **Shadow A/B**: `shadow: {"model": "..."}` or `shadow: {"objective": "best_quality"}` runs a second model
+  concurrently with your own key. You receive the primary's completion only; the receipt carries both models'
+  cost, latency and outcome plus the deltas. A shadow failure never fails the request; the cost cap applies to
+  primary + shadow combined (the shadow is skipped and reported when it would breach it). Shadow spend is
+  recorded — it is real money.
+- **Audit export**: `GET /dispatch/receipts?format=csv|json&since=&until=&outcome=&limit=` returns your org's
+  receipts as metadata rows (90-day retention). Rows never contain a prompt, a completion or a key.
+- **Scope in this release**: non-streaming, text-only, single-choice chat completions. `stream: true`, `tools` /
+  `functions` / `tool_choice`, `n > 1`, a non-text `response_format` and image content parts are rejected up
+  front with the feature named (nothing is silently dropped; `user` is accepted and not forwarded). No new
+  MCP tool. Pooled service-paid keys and stored per-account keys are explicitly out of scope.
+- **Privacy**: provider keys exist only in the request headers and the outgoing provider call; prompts and
+  completions only in the request, the provider call and `choices`. Neither is persisted or logged at any
+  level, and provider error bodies are classified into an outcome, never copied. The provider bills you directly.
+
 ## Configuration
 
 ### Environment Variables
@@ -456,6 +552,13 @@ RATE_LIMIT_PER_MINUTE=60            # Default rate limit (overridden by tier)
 CURRENCY_DETECTION_ENABLED=true     # false = never infer a country from the client IP
 GEO_LOOKUP_TIMEOUT_SECONDS=1.0      # request-path cap on the IP -> country lookup
 EXCHANGE_RATES_PATH=                # override for data/exchange_rates.json (Fly sets /app/vendored/exchange_rates.json)
+
+# Dispatch gateway (v1.77.0) — provider keys are never configured here; callers bring their own per request
+DISPATCH_ENABLED=true               # false = dispatch mode of /v1/chat/completions returns 503
+DISPATCH_DEFAULT_MAX_TOKENS=1024    # used when the caller omits max_tokens (Anthropic requires one)
+DISPATCH_ATTEMPT_TIMEOUT_MS=30000   # per-attempt provider timeout
+DISPATCH_MAX_ATTEMPTS=3             # failover attempts (1 when failover is off or the model is pinned)
+DISPATCH_RECEIPT_RETENTION_DAYS=90  # metadata-only receipt rows are purged past this age
 
 # Billing (Stripe)
 STRIPE_SECRET_KEY=sk_live_...       # Optional — free signup works without this
@@ -570,6 +673,9 @@ pytest tests/test_router.py -v
 | `test_currency_mcp.py` | `currency` / `country` on the five MCP tools |
 | `test_currency_ui.py` | Shared browser currency control |
 | `test_refresh_exchange_rates.py` | Weekly rate-table refresh script + workflow job |
+| `test_dispatch_executors.py` | Provider executors over `httpx.MockTransport`: wire translation, usage/finish mapping, error classification |
+| `test_dispatch_service.py` | Dispatch policy, eligibility, ranking, failover, cap, hard stop, shadow A/B, receipts (fake executor) |
+| `test_dispatch_api.py` | Dispatch mode over HTTP: auth, unsupported features, ledgers, budget alerts, export, key/prompt leak sentinels |
 
 ---
 

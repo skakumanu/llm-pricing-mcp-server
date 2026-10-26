@@ -268,7 +268,7 @@
         <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/usage/batch</span><span class="ep-desc">Record multiple usage events at once</span><span class="ep-auth">API key</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/usage/summary</span><span class="ep-desc">Actual spend summary by model/provider, per org</span><span class="ep-auth">API key</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/usage/session/{session_id}</span><span class="ep-desc">On-demand analysis of one session's actual usage with a grounded model recommendation</span><span class="ep-auth">API key</span></div>
-        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/usage/alerts</span><span class="ep-desc">Register a webhook for spend crossing a USD threshold</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/usage/alerts</span><span class="ep-desc">Register a webhook for spend crossing a USD threshold; <code>hard_stop: true</code> (customer key required, bound to that key's org) also blocks dispatch for the org once reached</span><span class="ep-auth">API key</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/usage/alerts</span><span class="ep-desc">List registered budget alerts</span><span class="ep-auth">API key</span></div>
         <div class="endpoint-row"><span class="method DELETE">DELETE</span><span class="ep-path">/usage/alerts/{id}</span><span class="ep-desc">Delete a budget alert</span><span class="ep-auth">API key</span></div>
       </div>
@@ -306,8 +306,11 @@
       </div>
 
       <div class="endpoint-group">
-        <h3>OpenAI Compatibility</h3>
-        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/v1/chat/completions</span><span class="ep-desc">OpenAI-compatible routing proxy — drop-in replacement</span></div>
+        <h3>OpenAI Compatibility &amp; Dispatch</h3>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/v1/chat/completions</span><span class="ep-desc">OpenAI-compatible routing proxy — drop-in replacement (recommendation only, no key needed)</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/v1/chat/completions</span><span class="ep-desc">Dispatch mode: add a <code>dispatch</code> policy object + your <code>X-Provider-Key-&lt;Provider&gt;</code> headers to run the best eligible model for real, with failover and a <code>dispatch_receipt</code> (chosen model, reason, actual cost, savings)</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/dispatch/providers</span><span class="ep-desc">Executable providers, their key headers, and which models are dispatchable (and why not)</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/dispatch/receipts</span><span class="ep-desc">Metadata-only JSON/CSV export of your org's dispatch receipts — never prompts, completions or keys</span><span class="ep-auth">API key</span></div>
       </div>
 
       <div class="endpoint-group">

@@ -58,6 +58,12 @@ from src.services.usage_tracker import init_usage_tracker, get_usage_tracker  # 
 from src.services.session_recommendation import compute_session_recommendation  # noqa: E402
 from src.services.budget_alerts import init_budget_alert_service, get_budget_alert_service  # noqa: E402
 from src.services.billing_service import init_billing_service, get_billing_service  # noqa: E402
+from src.models.dispatch import DispatchPolicy  # noqa: E402
+from src.services.dispatch_executors import HeaderKeyResolver  # noqa: E402
+from src.services.dispatch_receipts import init_dispatch_receipt_store, get_dispatch_receipt_store  # noqa: E402
+from src.services.dispatch_service import (  # noqa: E402
+    DispatchError, DispatchService, init_dispatch_service, get_dispatch_service,
+)
 from src.models.billing import (  # noqa: E402
     SignupRequest, SignupResponse, CheckoutRequest, CheckoutResponse,
     BillingPortalResponse, CustomerDashboard,
@@ -165,6 +171,15 @@ _openapi_tags = [
         "description": (
             "OpenAI-compatible `/v1/chat/completions` proxy that transparently routes requests "
             "through the LLM router and returns pricing metadata in the response."
+        ),
+    },
+    {
+        "name": "Dispatch",
+        "description": (
+            "Dispatch gateway (v1.77.0): send a `dispatch` policy on `/v1/chat/completions` with your "
+            "own provider key to have the best eligible model executed for real, with failover and a "
+            "receipt (chosen model, reason, actual cost, savings). `/dispatch/providers` lists what is "
+            "dispatchable; `/dispatch/receipts` exports an org's metadata-only audit trail."
         ),
     },
 ]
@@ -326,6 +341,57 @@ async def cleanup_stale_rate_limit_entries():
                 logger.debug("Rate limit cleanup: removed %d stale IP entries", len(to_remove))
         _last_rate_limit_cleanup = now
 
+
+async def _rate_limit_allow(bucket_key: str, tier: str) -> bool:
+    """Consume one request from `bucket_key`'s per-minute token bucket; False when exhausted.
+
+    The one limiter implementation: the security middleware calls it for every
+    non-bypassed path, and the dispatch branch of /v1/chat/completions (which sits
+    in _unauthenticated_paths so the plain proxy stays public) calls it directly
+    with the authenticated customer's id and tier. Same store, same lock.
+    """
+    _tier_limits = {
+        "free": settings.rate_limit_free,
+        "pro": settings.rate_limit_pro,
+        "enterprise": settings.rate_limit_enterprise,
+    }
+    tier_limit = _tier_limits.get(tier, settings.rate_limit_per_minute)
+    now = time.time()
+    window_start = now - 60
+    async with _rate_limit_lock:
+        bucket = _rate_limit_store[bucket_key]
+        while bucket and bucket[0] < window_start:
+            bucket.popleft()
+        if len(bucket) >= tier_limit:
+            return False
+        bucket.append(now)
+    return True
+
+
+async def _body_too_large(request: Request) -> Optional[JSONResponse]:
+    """Body-size cap for POST/PUT/PATCH; None when the request may proceed.
+
+    Checks the declared Content-Length first (cheap refusal), then the actual bytes so a
+    chunked or mis-declared body cannot slip past, and buffers the body on request._body
+    for the handler. The one implementation: the security middleware calls it for every
+    non-bypassed path and for the public-but-capped paths below.
+    """
+    if request.method not in {"POST", "PUT", "PATCH"}:
+        return None
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > settings.max_body_bytes:
+                return JSONResponse(status_code=413, content={"detail": "Request body too large"})
+        except ValueError:
+            return JSONResponse(status_code=400, content={"detail": "Invalid Content-Length header"})
+    body = await request.body()
+    if len(body) > settings.max_body_bytes:
+        return JSONResponse(status_code=413, content={"detail": "Request body too large"})
+    request._body = body
+    return None
+
+
 # Anonymous but throttled: no API key required, yet still subject to the per-IP
 # rate limiter and the body-size cap. Distinct from _unauthenticated_paths, whose
 # members the security middleware bypasses entirely (no limiter either). Every
@@ -333,6 +399,14 @@ async def cleanup_stale_rate_limit_entries():
 _anonymous_rate_limited_paths = {
     "/agent/chat",
     "/agent/chat/stream",
+}
+
+# Public (no auth, no limiter) but still body-capped: /v1/chat/completions must stay
+# anonymous for the plain OpenAI-SDK proxy, yet its dispatch branch parses a policy
+# object and persists parts of it per receipt, so the cap has to run *before* FastAPI
+# reads the body — an in-handler check would run after the whole body is in memory.
+_public_body_capped_paths = {
+    "/v1/chat/completions",
 }
 
 _unauthenticated_paths = {
@@ -349,6 +423,8 @@ _unauthenticated_paths = {
     "/api-docs",
     "/whats-new",
     "/v1/chat/completions",
+    # v1.77.0 — public catalogue of executable providers / dispatchable models
+    "/dispatch/providers",
     "/rate-limits/tiers",
     "/billing",
     "/billing/signup",
@@ -437,6 +513,10 @@ async def security_middleware(request: Request, call_next):
         or path == "/admin" or path in _unauthenticated_paths
         or request.method == "OPTIONS"
     ):
+        if path in _public_body_capped_paths:
+            rejected = await _body_too_large(request)
+            if rejected is not None:
+                return rejected
         return await call_next(request)
     if path in _sensitive_paths:
         if not settings.mcp_api_key:
@@ -516,34 +596,12 @@ async def security_middleware(request: Request, call_next):
             )
             tier = request.headers.get("X-Api-Key-Tier", "").lower() if holds_global_key else ""
             bucket_key = f"{client_ip}:{tier}"
-        _tier_limits = {
-            "free": settings.rate_limit_free,
-            "pro": settings.rate_limit_pro,
-            "enterprise": settings.rate_limit_enterprise,
-        }
-        tier_limit = _tier_limits.get(tier, settings.rate_limit_per_minute)
-        now = time.time()
-        window_start = now - 60
-        async with _rate_limit_lock:
-            bucket = _rate_limit_store[bucket_key]
-            while bucket and bucket[0] < window_start:
-                bucket.popleft()
-            if len(bucket) >= tier_limit:
-                return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
-            bucket.append(now)
+        if not await _rate_limit_allow(bucket_key, tier):
+            return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
 
-    if request.method in {"POST", "PUT", "PATCH"}:
-        content_length = request.headers.get("content-length")
-        if content_length:
-            try:
-                if int(content_length) > settings.max_body_bytes:
-                    return JSONResponse(status_code=413, content={"detail": "Request body too large"})
-            except ValueError:
-                return JSONResponse(status_code=400, content={"detail": "Invalid Content-Length header"})
-        body = await request.body()
-        if len(body) > settings.max_body_bytes:
-            return JSONResponse(status_code=413, content={"detail": "Request body too large"})
-        request._body = body
+    rejected = await _body_too_large(request)
+    if rejected is not None:
+        return rejected
 
     return await call_next(request)
 
@@ -927,8 +985,28 @@ async def startup_pricing_history() -> None:
         settings.conversation_db_path or "in-memory",
     )
     aggregator = await get_pricing_aggregator()
-    init_router(aggregator)
+    router = init_router(aggregator)
     logger.info("Model router initialized")
+    # v1.77.0 — dispatch gateway: receipt store + service (reuses the router and ledgers above).
+    try:
+        receipts = await init_dispatch_receipt_store(
+            settings.pricing_history_db_path, retention_days=settings.dispatch_receipt_retention_days,
+        )
+        init_dispatch_service(DispatchService(
+            aggregator=aggregator,
+            router=router,
+            usage_tracker=get_usage_tracker(),
+            savings_tracker=get_savings_tracker(),
+            budget_alerts=get_budget_alert_service(),
+            receipts=receipts,
+            # executor_factory left at the service's default (get_executor with this default_max_tokens)
+            default_max_tokens=settings.dispatch_default_max_tokens,
+            attempt_timeout_ms=settings.dispatch_attempt_timeout_ms,
+            max_attempts=settings.dispatch_max_attempts,
+        ))
+        logger.info("Dispatch service initialized (enabled=%s)", settings.dispatch_enabled)
+    except Exception as exc:  # nosec B110
+        logger.error("Dispatch service init failed (dispatch mode disabled): %s", exc)
     asyncio.create_task(_pricing_snapshot_loop())
     logger.info(
         "Pricing snapshot loop started (interval=%dh)", settings.pricing_snapshot_interval_hours
@@ -2282,7 +2360,7 @@ async def usage_session_analysis(session_id: str, request: Request):
 
 
 @app.post("/usage/alerts", response_model=BudgetAlertRecord, status_code=201, tags=["Usage"])
-async def create_budget_alert(request: BudgetAlertRequest):
+async def create_budget_alert(body: BudgetAlertRequest, request: Request):
     """
     Register a webhook alert for actual spend crossing a USD threshold.
 
@@ -2292,30 +2370,58 @@ async def create_budget_alert(request: BudgetAlertRequest):
     usage event is recorded, and fires at most once per `period_days` while spend
     stays over threshold. Uses the same HMAC-SHA256 signing as /pricing/alerts —
     see GET /pricing/alerts/signing-info.
+
+    **Org binding (v1.77.0).** A customer-key caller's alert is always bound to that
+    key's own org (same rule as `_resolve_org_id` for POST /usage); naming another
+    org is refused with 403. `hard_stop: true` additionally requires a customer key,
+    because a hard stop blocks every dispatch for its org — it must only ever be set by
+    that org.
     """
+    customer = getattr(request.state, "customer", None)
+    org_id = body.org_id
+    if customer is not None:
+        if org_id is not None and org_id != customer.org_id:
+            return JSONResponse(status_code=403, content={
+                "error": "org_mismatch",
+                "message": "A customer key can only register budget alerts for its own org.",
+            })
+        org_id = customer.org_id
+    elif body.hard_stop:
+        return JSONResponse(status_code=403, content={
+            "error": "customer_key_required",
+            "message": (
+                "hard_stop alerts block dispatch for an org, so they can only be registered with "
+                "that org's customer API key (POST /billing/signup)."
+            ),
+        })
     svc = get_budget_alert_service()
     record = await svc.register(
-        url=request.url,
-        threshold_usd=request.threshold_usd,
-        org_id=request.org_id,
-        period_days=request.period_days,
+        url=body.url,
+        threshold_usd=body.threshold_usd,
+        org_id=org_id,
+        period_days=body.period_days,
+        hard_stop=body.hard_stop,
     )
     return BudgetAlertRecord(**record)
 
 
 @app.get("/usage/alerts", response_model=BudgetAlertListResponse, tags=["Usage"])
-async def list_budget_alerts():
-    """Return all registered budget-spend alert webhooks."""
+async def list_budget_alerts(request: Request):
+    """Return registered budget-spend alert webhooks (a customer key sees only its own org's)."""
     svc = get_budget_alert_service()
-    alerts = await svc.list_alerts()
+    customer = getattr(request.state, "customer", None)
+    alerts = await svc.list_alerts(org_id=customer.org_id) if customer is not None else await svc.list_alerts()
     return BudgetAlertListResponse(alerts=alerts, total=len(alerts))
 
 
 @app.delete("/usage/alerts/{alert_id}", status_code=204, tags=["Usage"])
-async def delete_budget_alert(alert_id: int):
-    """Delete a registered budget alert by ID."""
+async def delete_budget_alert(alert_id: int, request: Request):
+    """Delete a registered budget alert by ID (a customer key can only delete its own org's)."""
     svc = get_budget_alert_service()
-    deleted = await svc.delete(alert_id)
+    customer = getattr(request.state, "customer", None)
+    deleted = (
+        await svc.delete(alert_id, org_id=customer.org_id) if customer is not None else await svc.delete(alert_id)
+    )
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Alert {alert_id} not found")
 
@@ -3433,11 +3539,29 @@ class _ProxyRequest(BaseModel):
     model: str
     messages: List[dict]
     max_tokens: Optional[int] = None
+    # v1.77.0 — standard OpenAI fields. In dispatch mode: temperature/top_p/stop are forwarded;
+    # stream/tools/functions/tool_choice/n>1/response_format are rejected up front (FR16,
+    # _unsupported_dispatch_feature); `user` (OpenAI's end-user abuse-tracking id) is accepted
+    # and deliberately not forwarded to the provider. Plain mode ignores every one of them.
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    stop: Optional[Any] = None
+    n: Optional[int] = None
+    user: Optional[str] = None
+    stream: Optional[bool] = None
+    tools: Optional[Any] = None
+    functions: Optional[Any] = None
+    tool_choice: Optional[Any] = None
+    response_format: Optional[Any] = None
+    # The opt-in: present -> dispatch mode (real provider call); absent -> today's proxy.
+    dispatch: Optional[DispatchPolicy] = None
 
 
 def _infer_task_from_messages(messages: List[dict]) -> Optional[str]:
     """Heuristically infer a task_type from the message content."""
-    text = " ".join(m.get("content", "") or "" for m in messages).lower()
+    text = " ".join(
+        (m.get("content", "") if isinstance(m.get("content", ""), str) else "") or "" for m in messages
+    ).lower()
     if any(kw in text for kw in ("function", "code", "class", "def ", "import", "debug", "script")):
         return "code"
     if any(kw in text for kw in ("summarize", "summary", "tldr", "shorten", "abstract")):
@@ -3469,8 +3593,144 @@ def _format_routing_recommendation(requested_model: str, result) -> str:
     return "\n".join(lines)
 
 
+def _unsupported_dispatch_feature(req: _ProxyRequest) -> Optional[str]:
+    """FR16: name the first unsupported feature in a dispatch-mode request, or None."""
+    if req.stream:
+        return "stream"
+    if req.tools is not None:
+        return "tools"
+    if req.functions is not None:
+        return "functions"
+    if req.tool_choice is not None:
+        return "tool_choice"
+    if req.n is not None and req.n != 1:
+        return "n"
+    if req.response_format is not None and not (
+        isinstance(req.response_format, dict) and req.response_format.get("type") == "text"
+    ):
+        return "response_format"  # json_object / json_schema would be silently ignored otherwise
+    for m in req.messages:
+        content = m.get("content")
+        if content is not None and not isinstance(content, str):
+            return "multimodal_content"
+    return None
+
+
+def _dispatch_service_key(request: Request) -> Optional[str]:
+    """Service API key from x-api-key or Authorization: Bearer (the OpenAI SDK default)."""
+    key = request.headers.get(settings.mcp_api_key_header)
+    if key:
+        return key.strip()
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip() or None
+    return None
+
+
+async def _dispatch_chat_completion(req: _ProxyRequest, request: Request):
+    """Dispatch mode of POST /v1/chat/completions (v1.77.0): a real provider call + receipt.
+
+    Reached only when the body carries a `dispatch` object. The path stays in
+    _unauthenticated_paths so the plain proxy remains public, which is why this
+    branch authenticates and rate-limits in-handler. The body-size cap is applied by
+    the security middleware (via _public_body_capped_paths) before the body is parsed.
+    """
+    if not settings.dispatch_enabled:
+        return JSONResponse(status_code=503, content={
+            "error": "dispatch_disabled",
+            "message": "Dispatch mode is disabled on this server (DISPATCH_ENABLED=false).",
+        })
+
+    feature = _unsupported_dispatch_feature(req)
+    if feature:
+        return JSONResponse(status_code=400, content={
+            "error": "unsupported_feature",
+            "feature": feature,
+            "message": (
+                f"Dispatch does not support '{feature}' in this release: non-streaming, text-only chat "
+                "completions without tools/functions only. Omit the field or drop the `dispatch` object "
+                "to get a routing recommendation instead."
+            ),
+        })
+
+    # Service key -> customer (org scope). The global MCP_API_KEY is deliberately not
+    # consulted: dispatch writes per-org ledgers and needs an org to write them to.
+    customer = None
+    service_key = _dispatch_service_key(request)
+    if service_key:
+        try:
+            customer = await get_billing_service().get_customer_by_api_key(service_key)
+        except RuntimeError:
+            customer = None
+    if customer is None:
+        return JSONResponse(status_code=401, content={
+            "error": "dispatch_requires_api_key",
+            "message": (
+                "Dispatch requires a free-tier API key. Sign up at POST /billing/signup and send the key "
+                "as x-api-key or Authorization: Bearer. The global operator key is not accepted for dispatch."
+            ),
+            "signup": "/billing/signup",
+        })
+
+    if settings.rate_limit_per_minute > 0:
+        await cleanup_stale_rate_limit_entries()
+        if not await _rate_limit_allow(customer.id, customer.tier):
+            return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
+
+    # Locale: explicit statements only — no IP detection on this endpoint.
+    policy = req.dispatch
+    try:
+        locale = resolve_locale(
+            currency=policy.currency or request.headers.get("X-Currency"),
+            country=policy.country or request.headers.get("X-Country"),
+            table=load_rate_table(settings.exchange_rates_path),
+            currency_source="query" if policy.currency else "header",
+            country_source="query" if policy.country else "header",
+        )
+    except UnsupportedCurrencyError as exc:
+        return JSONResponse(status_code=400, content={
+            "error": "unsupported_currency",
+            "currency": exc.code,
+            "supported_currencies": exc.supported,
+            "message": str(exc),
+        })
+
+    try:
+        svc = get_dispatch_service()
+    except RuntimeError:
+        return JSONResponse(status_code=503, content={
+            "error": "dispatch_unavailable", "message": "Dispatch service is not initialized.",
+        })
+
+    key_resolver = HeaderKeyResolver(request.headers)
+    stop = req.stop
+    if isinstance(stop, str):
+        stop = [stop]
+    elif stop is not None and not isinstance(stop, list):
+        stop = None
+    try:
+        body = await svc.dispatch(
+            customer=customer,
+            requested_model=req.model,
+            messages=req.messages,
+            policy=policy,
+            key_resolver=key_resolver,
+            locale=locale,
+            inferred_task_type=_infer_task_from_messages(req.messages),
+            max_tokens=req.max_tokens,
+            temperature=req.temperature,
+            top_p=req.top_p,
+            stop=stop,
+            webhook_secret=settings.webhook_secret,
+        )
+    except DispatchError as exc:
+        return JSONResponse(status_code=exc.status_code, content=exc.payload)
+    get_telemetry_service().track_feature_usage("dispatch")
+    return body
+
+
 @app.post("/v1/chat/completions", tags=["OpenAI Proxy"])
-async def openai_proxy(req: _ProxyRequest):
+async def openai_proxy(req: _ProxyRequest, request: Request):
     """
     OpenAI-compatible routing proxy.
 
@@ -3480,7 +3740,17 @@ async def openai_proxy(req: _ProxyRequest):
     without any code changes.
 
     This endpoint is **unauthenticated** for broad client compatibility.
+
+    **Dispatch mode (v1.77.0)** — add a `dispatch` object to the body (OpenAI SDK:
+    `extra_body={"dispatch": {...}}`), your free-tier service key as `x-api-key` or
+    `Authorization: Bearer`, and your own provider keys as `X-Provider-Key-<Provider>`
+    headers, and the best eligible model is executed for real: the response is a normal
+    `chat.completion` with real `usage` plus an additive `dispatch_receipt`
+    (chosen model, reason, actual cost, savings, attempts). See `GET /dispatch/providers`
+    for what is dispatchable. Without `dispatch` the behaviour is exactly the proxy above.
     """
+    if req.dispatch is not None:
+        return await _dispatch_chat_completion(req, request)
     import uuid
     from src.services.router import RouterConstraints
     task_type = _infer_task_from_messages(req.messages)
@@ -3514,6 +3784,99 @@ async def openai_proxy(req: _ProxyRequest):
             "task_type_inferred": task_type,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Dispatch gateway (v1.77.0) — discoverability + audit export
+# ---------------------------------------------------------------------------
+
+@app.get("/dispatch/providers", tags=["Dispatch"])
+async def dispatch_providers(
+    provider: Optional[str] = Query(None, description="Only this provider's models"),
+    dispatchable_only: bool = Query(False, description="Only models that can be dispatched"),
+):
+    """
+    List executable providers and which catalogue models are dispatchable.
+
+    Public. A model is dispatchable when it has a provider-confirmed per-token price
+    (drift-withheld, never-priced and retired models are not) and belongs to one of the
+    executable providers; everything else is recommend-only and says why. Each executable
+    provider row names the `X-Provider-Key-*` header to send its key in.
+    """
+    try:
+        svc = get_dispatch_service()
+    except RuntimeError:
+        raise HTTPException(status_code=503, detail="Dispatch service is not initialized")
+    return await svc.describe_executable(provider=provider, dispatchable_only=dispatchable_only)
+
+
+def _parse_receipt_time(value: Optional[str], name: str) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"{name} must be a unix timestamp or ISO-8601 datetime")
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.timestamp()
+
+
+@app.get("/dispatch/receipts", tags=["Dispatch"])
+async def dispatch_receipts_export(
+    request: Request,
+    format: str = Query("json", pattern="^(csv|json)$", description="Output format: 'json' or 'csv'"),
+    since: Optional[str] = Query(None, description="Only receipts created at/after this time (unix or ISO-8601)"),
+    until: Optional[str] = Query(None, description="Only receipts created at/before this time (unix or ISO-8601)"),
+    outcome: Optional[str] = Query(None, pattern="^(success|failed)$", description="Filter by outcome"),
+    limit: int = Query(1000, ge=1, le=10_000, description="Max rows to export"),
+):
+    """
+    Export the caller's org's dispatch receipts (metadata only) as JSON or CSV.
+
+    Requires a customer API key: rows are always scoped to that key's org, and the global
+    operator key is refused (it has no org). Rows carry ids, model/provider names, outcomes,
+    token counts, costs and latencies — never prompts, completions or provider keys.
+    """
+    customer = getattr(request.state, "customer", None)
+    if customer is None:
+        return JSONResponse(status_code=403, content={
+            "error": "customer_key_required",
+            "message": "Receipt export requires a customer API key (receipts are scoped to its org).",
+        })
+    try:
+        store = get_dispatch_receipt_store()
+    except RuntimeError:
+        raise HTTPException(status_code=503, detail="Dispatch receipt store is not initialized")
+
+    since_ts = _parse_receipt_time(since, "since")
+    until_ts = _parse_receipt_time(until, "until")
+    rows = await store.list_receipts(
+        org_id=customer.org_id, since=since_ts, until=until_ts, outcome=outcome, limit=limit,
+    )
+    base_name = f"dispatch_receipts_{customer.org_id}"
+    if format == "csv":
+        return Response(
+            content=store.to_csv(rows),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{base_name}.csv"'},
+        )
+    payload = {
+        "exported_at": datetime.now(UTC).isoformat(),
+        "org_id": customer.org_id,
+        "filters": {"since": since, "until": until, "outcome": outcome, "limit": limit},
+        "count": len(rows),
+        "receipts": rows,
+    }
+    return Response(
+        content=json.dumps(payload, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{base_name}.json"'},
+    )
 
 
 # ---------------------------------------------------------------------------

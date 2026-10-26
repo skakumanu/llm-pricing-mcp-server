@@ -90,6 +90,72 @@ async def test_register_with_org_and_period(svc):
 
 
 @pytest.mark.asyncio
+async def test_register_defaults_to_notify_only(svc):
+    record = await svc.register("https://example.com/hook", threshold_usd=100.0, org_id="acme")
+    assert record["hard_stop"] is False
+    assert (await svc.list_alerts())[0]["hard_stop"] is False
+
+
+@pytest.mark.asyncio
+async def test_register_hard_stop_is_stored_and_listed(svc):
+    record = await svc.register("https://example.com/hook", threshold_usd=100.0, org_id="acme", hard_stop=True)
+    assert record["hard_stop"] is True
+    listed = await svc.list_alerts()
+    assert listed[0]["hard_stop"] is True and listed[0]["org_id"] == "acme"
+
+
+@pytest.mark.asyncio
+async def test_initialize_migrates_pre_v1_77_table(db_path):
+    """A budget_alerts table created before hard_stop existed gains the column with default 0."""
+    import aiosqlite
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute(
+            "CREATE TABLE budget_alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, url TEXT NOT NULL, org_id TEXT, "
+            "threshold_usd REAL NOT NULL, period_days INTEGER NOT NULL DEFAULT 30, created_at REAL NOT NULL, "
+            "last_fired_at REAL)"
+        )
+        await db.execute(
+            "INSERT INTO budget_alerts (url, org_id, threshold_usd, period_days, created_at) "
+            "VALUES ('https://a', 'acme', 10, 30, 1)"
+        )
+        await db.commit()
+    s = BudgetAlertService(db_path)
+    await s.initialize()
+    alerts = await s.list_alerts()
+    assert alerts[0]["hard_stop"] is False
+    await s.initialize()  # idempotent
+
+
+@pytest.mark.asyncio
+async def test_find_hard_stop_matches_only_reached_org_scoped_stops(svc):
+    await svc.register("https://a", threshold_usd=10.0, org_id="acme", hard_stop=True, period_days=7)
+    await svc.register("https://b", threshold_usd=10.0, org_id=None, hard_stop=True)      # org-less: notify-only
+    await svc.register("https://c", threshold_usd=10.0, org_id="acme", hard_stop=False)   # notify-only
+    tracker = _mock_tracker(50.0)
+    hit = await svc.find_hard_stop("acme", tracker)
+    assert hit == {"alert_id": 1, "org_id": "acme", "threshold_usd": 10.0, "period_days": 7, "spent_usd": 50.0}
+    tracker.get_summary.assert_awaited_once_with(org_id="acme", days=7)
+    assert await svc.find_hard_stop("other", _mock_tracker(50.0)) is None
+    assert await svc.find_hard_stop(None, _mock_tracker(50.0)) is None
+
+
+@pytest.mark.asyncio
+async def test_find_hard_stop_below_threshold_is_none(svc):
+    await svc.register("https://a", threshold_usd=10.0, org_id="acme", hard_stop=True)
+    assert await svc.find_hard_stop("acme", _mock_tracker(9.99)) is None
+
+
+@pytest.mark.asyncio
+async def test_find_hard_stop_ignores_webhook_cooldown(svc):
+    """A stop holds while spend stays over threshold, even after the webhook already fired."""
+    await svc.register("https://a", threshold_usd=10.0, org_id="acme", hard_stop=True)
+    with _patch_httpx_success():
+        assert await svc.check_and_fire(_mock_tracker(50.0)) == 1
+        assert await svc.check_and_fire(_mock_tracker(50.0)) == 0   # cooldown
+    assert (await svc.find_hard_stop("acme", _mock_tracker(50.0)))["alert_id"] == 1
+
+
+@pytest.mark.asyncio
 async def test_list_alerts_empty(svc):
     assert await svc.list_alerts() == []
 
@@ -194,6 +260,22 @@ async def test_check_and_fire_webhook_failure_does_not_raise(svc):
     with patch("src.services.budget_alerts.httpx.AsyncClient", return_value=mock_client):
         count = await svc.check_and_fire(_mock_tracker(50.0))
     assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_list_and_delete_scoped_to_org(svc):
+    """v1.77.0: a customer key only ever sees/deletes its own org's alerts (org-less rows excluded)."""
+    await svc.register("https://a", threshold_usd=10.0, org_id="acme")
+    await svc.register("https://b", threshold_usd=10.0, org_id="globex", hard_stop=True)
+    await svc.register("https://c", threshold_usd=10.0, org_id=None)
+    assert [a["url"] for a in await svc.list_alerts()] == ["https://a", "https://b", "https://c"]
+    assert [a["url"] for a in await svc.list_alerts(org_id="acme")] == ["https://a"]
+    assert await svc.list_alerts(org_id="nobody") == []
+    assert await svc.delete(2, org_id="acme") is False          # not acme's: untouched
+    assert len(await svc.list_alerts()) == 3
+    assert await svc.delete(2, org_id="globex") is True
+    assert await svc.delete(3, org_id="acme") is False          # org-less rows are nobody's to delete by org
+    assert await svc.delete(3) is True                          # unscoped (operator) delete still works
 
 
 # ---------------------------------------------------------------------------
