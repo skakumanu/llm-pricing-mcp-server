@@ -445,8 +445,9 @@ class TestUseCasesAndRouter:
         for m in eur["models"]:
             lc = m["local_cost"]
             assert lc["currency"] == "EUR"
+            # amounts are rounded to 6 decimals, so allow that much absolute slack whatever the rate
             assert lc["avg_cost_per_1m_tokens"] == pytest.approx(
-                lc["avg_cost_per_1m_tokens_usd"] * eur["currency_conversion"]["rate"], rel=1e-5)
+                lc["avg_cost_per_1m_tokens_usd"] * eur["currency_conversion"]["rate"], rel=1e-5, abs=1e-6)
             assert lc["input_per_1m"] >= 0 and lc["output_per_1m"] >= 0
         assert eur["currency_conversion"]["country"] is None
 
