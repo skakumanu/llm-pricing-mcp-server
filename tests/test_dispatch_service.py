@@ -709,15 +709,37 @@ async def test_task_type_from_policy_vs_inferred(stores):
 
 
 @pytest.mark.asyncio
-async def test_inferred_task_type_is_named_when_it_eliminates_everything(stores):
+async def test_inferred_task_type_never_filters_candidates(stores):
+    # The proxy infers "chat" for almost any short prompt, and the router's task filter
+    # matches that against curated use-case strings. Found live: with an OpenAI key and
+    # objective "cheapest", gpt-4o / gpt-4.1 / o1-mini were all excluded as
+    # task_type_mismatch because their use-cases do not say "chat". Only a task type the
+    # caller states is a hard constraint; the inferred one is recorded, not enforced.
+    models = _catalogue()
+    for m in models:
+        m.use_cases = ["chat"]                          # nothing matches the 'code' keywords
+    fake = FakeExecutor()
+    body = await _service(stores, fake, models).dispatch(
+        customer=_customer(), requested_model="gpt-4", messages=[{"role": "user", "content": "def f(): pass"}],
+        policy=DispatchPolicy(), key_resolver=HeaderKeyResolver(ALL_KEYS), locale=LocaleContext(),
+        inferred_task_type="code",
+    )
+    rc = body["dispatch_receipt"]
+    assert rc["task_type"] == "code" and rc["task_type_source"] == "inferred"
+    assert len(fake.calls) == 1
+    assert not any(e["reason"] == "task_type_mismatch" for e in rc["excluded"])
+
+
+@pytest.mark.asyncio
+async def test_stated_task_type_is_named_when_it_eliminates_everything(stores):
     models = _catalogue()
     for m in models:
         m.use_cases = ["chat"]                          # nothing matches the 'code' keywords
     with pytest.raises(DispatchError) as exc:
         await _service(stores, FakeExecutor(), models).dispatch(
             customer=_customer(), requested_model="gpt-4", messages=[{"role": "user", "content": "def f(): pass"}],
-            policy=DispatchPolicy(), key_resolver=HeaderKeyResolver(ALL_KEYS), locale=LocaleContext(),
-            inferred_task_type="code",
+            policy=DispatchPolicy(task_type="code"), key_resolver=HeaderKeyResolver(ALL_KEYS),
+            locale=LocaleContext(), inferred_task_type="chat",
         )
     p = exc.value.payload
     assert p["error"] == "no_eligible_candidate" and p["eliminating_constraint"] == "task_type"

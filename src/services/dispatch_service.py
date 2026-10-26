@@ -480,7 +480,13 @@ class DispatchService:
         models = await enrich_models(list(models or []))
         task_type = policy.task_type or inferred_task_type
         task_type_source = "policy" if policy.task_type else ("inferred" if inferred_task_type else None)
-        constraints = self._build_constraints(policy, task_type)
+        # Only a task type the caller STATED is a hard constraint. The one inferred from the
+        # message text is a heuristic ("chat" for almost any short prompt) and the router's
+        # task filter matches it against curated use-case strings, so applying it as a filter
+        # excluded gpt-4o, gpt-4.1 and o1-mini from a "cheapest" dispatch because their
+        # use-cases do not literally say "chat". The inferred value is still recorded in the
+        # receipt and the ledgers.
+        constraints = self._build_constraints(policy, policy.task_type)
 
         plain_messages = [
             {"role": str(m.get("role") or "user"), "content": str(m.get("content") or "")} for m in messages
@@ -509,7 +515,13 @@ class DispatchService:
             if pinned_matches:
                 pinned = min(pinned_matches, key=lambda c: c.blended_per_1m)
             else:
-                reason = next((r for k, r in reason_by_model.items() if k.endswith(f"::{target}")), None)
+                # The same model name can be listed by several providers (gpt-4o: OpenAI and
+                # Azure OpenAI); report the reason for an entry the gateway could execute,
+                # not the first one that happened to be recommend-only.
+                same_name = [r for k, r in reason_by_model.items() if k.endswith(f"::{target}")]
+                reason = next(
+                    (r for r in same_name if r != "provider_not_executable"), same_name[0] if same_name else None
+                )
                 in_catalogue = any(m.model_name.lower() == target for m in models)
                 code = reason or ("not_in_catalogue" if not in_catalogue else "ineligible")
                 raise DispatchError(400, {
@@ -797,7 +809,13 @@ class DispatchService:
             target = policy.shadow.model.strip().lower()
             matches = [c for c in eligible if c.model.model_name.lower() == target]
             if not matches:
-                reason = next((r for k, r in reason_by_model.items() if k.endswith(f"::{target}")), None)
+                # The same model name can be listed by several providers (gpt-4o: OpenAI and
+                # Azure OpenAI); report the reason for an entry the gateway could execute,
+                # not the first one that happened to be recommend-only.
+                same_name = [r for k, r in reason_by_model.items() if k.endswith(f"::{target}")]
+                reason = next(
+                    (r for r in same_name if r != "provider_not_executable"), same_name[0] if same_name else None
+                )
                 # Over the cap on its own is still "the cap" to the caller, not a generic ineligibility.
                 if reason == "over_request_cost_cap":
                     return None, "would_exceed_request_cost_cap"
@@ -943,7 +961,13 @@ class DispatchService:
 
     @staticmethod
     def _exhausted_constraint(excluded: List[Dict[str, Any]]) -> Optional[str]:
-        counts = Counter(e["reason"] for e in excluded if e["reason"] not in _CATALOGUE_REASONS)
+        # Name a constraint the caller can relax. Missing provider keys and catalogue
+        # reasons are not policy constraints, and would otherwise dominate the count
+        # (every executable provider without a key contributes its whole model list).
+        counts = Counter(
+            e["reason"] for e in excluded
+            if e["reason"] not in _CATALOGUE_REASONS and e["reason"] != "no_provider_key"
+        )
         if not counts:
             return None
         return counts.most_common(1)[0][0]
