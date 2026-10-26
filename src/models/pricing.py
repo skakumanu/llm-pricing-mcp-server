@@ -687,6 +687,14 @@ class BudgetAlertRequest(BaseModel):
     period_days: int = Field(
         30, ge=1, le=365, description="Rolling look-back window for the spend check, in days"
     )
+    hard_stop: bool = Field(
+        False,
+        description=(
+            "v1.77.0: when true and org_id is set, the dispatch gateway refuses new dispatches "
+            "for that org (402 budget_hard_stop) once recorded spend over period_days has reached "
+            "threshold_usd. Org-less alerts are notify-only even with this flag."
+        ),
+    )
 
 
 class BudgetAlertRecord(BaseModel):
@@ -699,6 +707,7 @@ class BudgetAlertRecord(BaseModel):
     period_days: int = Field(..., description="Rolling look-back window in days")
     created_at: float = Field(..., description="Unix timestamp when the alert was registered")
     last_fired_at: Optional[float] = Field(None, description="Unix timestamp this alert last fired, if ever")
+    hard_stop: bool = Field(False, description="Whether this alert also blocks dispatch for its org once reached")
 
 
 class BudgetAlertListResponse(BaseModel):
