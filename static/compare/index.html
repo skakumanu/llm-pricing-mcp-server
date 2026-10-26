@@ -358,7 +358,169 @@
 })();
 </script>
 
+<script>
+/* llmp-currency v1 */
+window.LLMPCurrency = (function () {
+  "use strict";
+  // Shared by /calculator, /compare and / (landing). The three copies must stay
+  // byte-identical: tests/test_currency_ui.py compares them. Conversion happens
+  // here, client-side, from the USD payloads; the server's /currency/rates is
+  // the same vendored table the API converts with, and /locale is the preset.
+  var STORAGE_KEY = "llmp.currency";
+  var SUPPORTED = ["USD", "EUR", "GBP", "INR", "JPY", "CAD", "AUD", "BRL", "CNY", "SGD", "CHF", "KRW", "MXN"];
+  var ZERO_DECIMAL = { JPY: true, KRW: true };
+  var NOTE = "indicative, providers bill in USD";
+  var COUNTRY_NAMES = {
+    AT: "Austria", AU: "Australia", BE: "Belgium", BR: "Brazil", CA: "Canada", CH: "Switzerland",
+    CN: "China", CY: "Cyprus", DE: "Germany", EE: "Estonia", ES: "Spain", FI: "Finland", FR: "France",
+    GB: "United Kingdom", GR: "Greece", HR: "Croatia", IE: "Ireland", IN: "India", IT: "Italy",
+    JP: "Japan", KR: "South Korea", LI: "Liechtenstein", LT: "Lithuania", LU: "Luxembourg",
+    LV: "Latvia", MT: "Malta", MX: "Mexico", NL: "Netherlands", PT: "Portugal", SG: "Singapore",
+    SI: "Slovenia", SK: "Slovakia", US: "United States"
+  };
+  var state = { currency: "USD", source: "default", country: null, rates: null, asOf: null, stale: false, placeholder: false, ready: false };
+  var containers = [];
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      var v = JSON.parse(raw);
+      return (v && SUPPORTED.indexOf(v.currency) >= 0) ? v : null;
+    } catch (e) { return null; }
+  }
+  function save(v) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(v)); } catch (e) { /* private mode */ } }
+  function rateFor(code) {
+    if (code === "USD") return 1;
+    return (state.rates && state.rates[code] > 0) ? state.rates[code] : null;
+  }
+
+  async function init() {
+    try {
+      var r = await fetch("/currency/rates");
+      if (r.ok) {
+        var t = await r.json();
+        state.rates = t.rates || null; state.asOf = t.as_of || null;
+        state.stale = !!t.stale; state.placeholder = !!t.placeholder;
+      }
+    } catch (e) { /* USD only */ }
+    var stored = load();
+    if (stored) {
+      // A visitor's own choice wins, across pages and reloads; never re-prompt.
+      state.currency = stored.currency; state.source = "user"; state.country = stored.country || null;
+    } else {
+      try {
+        var l = await fetch("/locale");
+        if (l.ok) {
+          var d = await l.json();
+          if (SUPPORTED.indexOf(d.currency) >= 0) {
+            state.currency = d.currency; state.country = d.country || null;
+            state.source = d.country ? "detected" : "default";
+          }
+        }
+      } catch (e) { /* undetected -> USD */ }
+    }
+    if (!rateFor(state.currency)) state.currency = "USD";
+    state.ready = true;
+    renderAll();
+    emit();
+  }
+
+  function set(code, source) {
+    if (SUPPORTED.indexOf(code) < 0 || !rateFor(code)) return;
+    state.currency = code; state.source = source || "user";
+    if (state.source === "user") save({ currency: code, source: "user", country: state.country });
+    renderAll();
+    emit();
+  }
+  function emit() {
+    try { window.dispatchEvent(new CustomEvent("llmp-currency-change", { detail: { currency: state.currency } })); } catch (e) { /* old browser */ }
+  }
+  function convert(usd) { return usd * (rateFor(state.currency) || 1); }
+
+  function money(v, minFd, maxFd) {
+    try {
+      return new Intl.NumberFormat(undefined, { style: "currency", currency: state.currency, minimumFractionDigits: minFd, maximumFractionDigits: maxFd }).format(v);
+    } catch (e) { return v.toFixed(maxFd) + " " + state.currency; }
+  }
+  // Amounts: the pages' existing magnitude bands, in the selected currency.
+  // JPY/KRW: no minor units from 1 up, up to 4 significant digits below 1.
+  function format(usd) {
+    var v = convert(usd), c = state.currency, zero = !!ZERO_DECIMAL[c];
+    if (v === 0) return money(0, zero ? 0 : 2, zero ? 0 : 2);
+    if (v < 0.000001) return v.toExponential(2) + " " + c;
+    if (zero) {
+      if (v >= 1) return money(v, 0, 0);
+      try {
+        return new Intl.NumberFormat(undefined, { style: "currency", currency: c, minimumFractionDigits: 0, maximumSignificantDigits: 4 }).format(v);
+      } catch (e) { return v.toPrecision(4) + " " + c; }
+    }
+    if (v < 0.01) return money(v, 6, 6);
+    if (v < 1) return money(v, 4, 4);
+    if (v < 100) return money(v, 2, 2);
+    return money(v, 0, 0);
+  }
+  // Per-token rates stay unit-less numbers followed by the code; never collapse to 0.
+  function formatRate(usdPerToken) {
+    var v = convert(usdPerToken);
+    var s = v === 0 ? "0" : (v < 0.000001 ? v.toExponential(2) : v.toPrecision(4));
+    return s + " " + state.currency;
+  }
+
+  function countryName(code) { return code ? (COUNTRY_NAMES[code] || code) : null; }
+  function noteHtml() {
+    var c = state.currency, parts = ["Prices in <strong>" + c + "</strong>"];
+    if (state.source === "detected" && state.country) parts.push("detected: " + countryName(state.country));
+    parts.push('<a href="#" class="currency-change">change</a>');
+    if (c !== "USD" && rateFor(c)) {
+      parts.push("1 USD = " + rateFor(c) + " " + c + (state.asOf ? " as of " + state.asOf : "")
+        + (state.stale ? ' <span class="currency-stale">(stale)</span>' : "")
+        + (state.placeholder ? " (placeholder rates)" : ""));
+      parts.push(NOTE);
+    }
+    return parts.join(" &middot; ");
+  }
+  function ensureStyle() {
+    if (document.getElementById("llmp-currency-style")) return;
+    var s = document.createElement("style");
+    s.id = "llmp-currency-style";
+    s.textContent = ".currency-control{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px;color:#8892a4;margin:0 0 14px;min-width:0;max-width:100%}"
+      + ".currency-control label{font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:11px}"
+      + ".currency-control select{background:#22263a;color:#e2e8f0;border:1px solid #2e3347;border-radius:6px;padding:4px 8px;font-size:12px;max-width:100%}"
+      + ".currency-note{overflow-wrap:anywhere;min-width:0;flex:1 1 200px}.currency-note strong{color:#e2e8f0}"
+      + ".currency-note a{color:#7c6af7;text-decoration:none}.currency-note a:hover{text-decoration:underline}"
+      + ".currency-stale{color:#ed8936;font-weight:600}";
+    document.head.appendChild(s);
+  }
+  function renderControl(el) {
+    if (!el) return;
+    ensureStyle();
+    if (containers.indexOf(el) < 0) containers.push(el);
+    if (!/\bcurrency-control\b/.test(el.className)) el.className = (el.className ? el.className + " " : "") + "currency-control";
+    var opts = SUPPORTED.map(function (c) {
+      return '<option value="' + c + '"' + (c === state.currency ? " selected" : "") + ">" + c + "</option>";
+    }).join("");
+    el.innerHTML = '<label for="currency-select">Currency</label>'
+      + '<select id="currency-select" aria-label="Display currency">' + opts + "</select>"
+      + '<span class="currency-note">' + noteHtml() + "</span>";
+    var sel = el.querySelector("select");
+    sel.onchange = function () { set(sel.value, "user"); };
+    var ch = el.querySelector(".currency-change");
+    if (ch) ch.onclick = function (ev) { ev.preventDefault(); sel.focus(); };
+  }
+  function renderAll() { containers.forEach(renderControl); }
+
+  return {
+    STORAGE_KEY: STORAGE_KEY, SUPPORTED: SUPPORTED,
+    init: init, set: set, convert: convert, format: format, formatRate: formatRate, renderControl: renderControl,
+    get currency() { return state.currency; },
+    get state() { return state; }
+  };
+})();
+</script>
+
 <div class="page">
+  <div id="currency-control"></div>
   <!-- ── Model Selector ── -->
   <div class="selector-bar">
     <h2>Select Models to Compare (2–4)</h2>
@@ -400,8 +562,8 @@
           <tr>
             <th>Model</th>
             <th>Provider</th>
-            <th>Input $/1M</th>
-            <th>Output $/1M</th>
+            <th id="th-in">Input USD/1M</th>
+            <th id="th-out">Output USD/1M</th>
             <th id="th-v1">1K tokens</th>
             <th id="th-v2">10K tokens</th>
             <th id="th-v3">100K tokens</th>
@@ -433,6 +595,10 @@ let _activeVol   = 1000;     // active token volume
 
 // ── Init ───────────────────────────────────────────────────────────────────
 async function init() {
+  // Currency selector shared with the calculator (same localStorage key, same
+  // detected preset); cost displays re-render in the selected currency.
+  LLMPCurrency.renderControl(document.getElementById("currency-control"));
+  window.addEventListener("llmp-currency-change", () => { if (_compared.length >= 2) renderResults(_compared); });
   renderSlots();
   attachVolumeTabs();
   await loadData();
@@ -458,6 +624,7 @@ async function loadData() {
       fetch(API_PRICING).then(r => r.json()),
       fetch(API_PERFORMANCE).then(r => r.json()),
       fetch(API_USE_CASES).then(r => r.json()),
+      LLMPCurrency.init(),
     ]);
 
     // Flatten pricing data — API returns {models: [{model_name, provider, cost_per_input_token, ...}]}
@@ -647,12 +814,10 @@ function calcCost(m, tokens) {
   return (m.input_usd * half + m.output_usd * half) / 1e6;
 }
 
+// Takes a USD amount; renders it in the selected currency (input_usd/output_usd
+// stay USD values, conversion is display-only).
 function fmtCost(usd) {
-  if (usd === 0) return "$0.000000";
-  if (usd < 0.000001) return `$${usd.toExponential(2)}`;
-  if (usd < 0.001) return `$${usd.toFixed(6)}`;
-  if (usd < 1) return `$${usd.toFixed(4)}`;
-  return `$${usd.toFixed(2)}`;
+  return LLMPCurrency.format(usd);
 }
 
 function fmtNum(n, decimals = 0) {
@@ -715,11 +880,11 @@ function renderResults(models) {
         </div>
         <div class="cost-row">
           <span class="cost-label">Input price</span>
-          <span class="cost-value">$${m.input_usd.toFixed(4)}/1M</span>
+          <span class="cost-value">${fmtCost(m.input_usd)}/1M</span>
         </div>
         <div class="cost-row">
           <span class="cost-label">Output price</span>
-          <span class="cost-value">$${m.output_usd.toFixed(4)}/1M</span>
+          <span class="cost-value">${fmtCost(m.output_usd)}/1M</span>
         </div>
       </div>
 
@@ -745,9 +910,9 @@ function renderResults(models) {
             </div>
           </div>
           <div class="metric-item">
-            <div class="metric-label">Tokens / $1</div>
+            <div class="metric-label">Tokens / 1 ${LLMPCurrency.currency}</div>
             <div class="metric-value">
-              ${m.input_usd > 0 ? fmtNum(1e6 / m.input_usd, 0) : '<span class="metric-na">—</span>'}
+              ${m.input_usd > 0 ? fmtNum(1e6 / LLMPCurrency.convert(m.input_usd), 0) : '<span class="metric-na">—</span>'}
             </div>
           </div>
         </div>
@@ -843,6 +1008,9 @@ function renderCostTable(models) {
     const th = document.getElementById(`th-v${i + 1}`);
     if (th) th.textContent = label + " tokens";
   });
+  const thIn = document.getElementById("th-in"), thOut = document.getElementById("th-out");
+  if (thIn) thIn.textContent = `Input ${LLMPCurrency.currency}/1M`;
+  if (thOut) thOut.textContent = `Output ${LLMPCurrency.currency}/1M`;
 
   // Compute costs per volume
   const rows = models.map(m => ({
@@ -865,8 +1033,8 @@ function renderCostTable(models) {
     tr.innerHTML = `
       <td class="cell-model">${row.m.model_name}</td>
       <td class="cell-provider">${row.m.provider}</td>
-      <td class="cell-cost">$${row.m.input_usd.toFixed(4)}</td>
-      <td class="cell-cost">$${row.m.output_usd.toFixed(4)}</td>
+      <td class="cell-cost">${fmtCost(row.m.input_usd)}</td>
+      <td class="cell-cost">${fmtCost(row.m.output_usd)}</td>
       ${row.costs.map((c, vi) => `
         <td class="cell-cost${cheapestIdx[vi][ri] ? " cheapest" : ""}">
           ${fmtCost(c)}

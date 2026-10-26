@@ -155,8 +155,34 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.75.1 -->
+  <!-- v1.76.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.76.0</span>
+      <span class="release-date">Oct 26, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Prices in your currency — detected from where you are, switchable in one click, never at the cost of your IP</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong>Local currency on the calculator, compare and landing pages.</strong> A selector presets to your country's currency (USD when it can't tell) and every amount — per-request cost, breakdown, 1K/10K/100K/1M scale cards, per-1M rates, compare cards and tables — re-renders in it, with a note stating the rate, its date and that converted figures are indicative (providers bill in USD). Your choice sticks across pages and reloads. The landing carries the selector and note only; it has no live prices to convert</li>
+        <li><strong>REST:</strong> <code>GET /pricing</code>, <code>POST /cost-estimate</code>, <code>POST /cost-estimate/batch</code>, <code>GET /use-cases</code>, <code>POST /router/recommend</code> and <code>GET /pricing/public</code> accept <code>currency</code> / <code>country</code> (query or <code>X-Currency</code> / <code>X-Country</code> headers) and return converted figures as additive <code>local_*</code> fields next to the unchanged USD ones, plus a <code>currency_conversion</code> block (rate, as-of date, staleness, source, country, fallback). Precedence: stated currency &gt; stated country &gt; platform geo header &gt; best-effort IP lookup &gt; USD. An unsupported code is a 400 that lists the supported set; a country whose currency isn't supported gets USD with <code>fallback_to_usd: true</code>. No currency, no country, nothing detected: the response is exactly what it was before</li>
+        <li><strong>MCP:</strong> <code>get_all_pricing</code>, <code>estimate_cost</code>, <code>compare_costs</code>, <code>get_use_cases</code> and <code>recommend_model</code> take optional <code>currency</code> and <code>country</code> arguments with the same behaviour. Omit both and the output is unchanged</li>
+        <li><strong>Two small public endpoints</strong> back the browser: <code>GET /locale</code> (what the request resolves to) and <code>GET /currency/rates</code> (the table itself)</li>
+        <li><strong>Supported:</strong> USD, EUR, GBP, INR, JPY, CAD, AUD, BRL, CNY, SGD, CHF, KRW, MXN. JPY and KRW show no minor units; per-token values keep their precision and are never rounded to 0</li>
+        <li><strong>Rates are vendored, not fetched per request.</strong> <code>data/exchange_rates.json</code> is refreshed weekly by the audit workflow (Frankfurter, falling back to ECB reference rates) through a PR a human merges; a rate older than 7 days is still served but flagged stale in the response and the page. Until the first refresh merges the table is an authored placeholder and says so</li>
+      </ul>
+      <div class="section-label">Privacy</div>
+      <ul class="change-list">
+        <li>Your IP is used transiently to resolve a country and nothing more: never stored, never logged by this feature, never in a response. The only location datum that can appear is the ISO country code. The same models in the same order are shown to everyone — nothing is hidden or reordered by country</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.75.1 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.75.1</span>

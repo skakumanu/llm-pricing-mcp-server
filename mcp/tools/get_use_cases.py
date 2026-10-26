@@ -1,6 +1,8 @@
 """MCP Tool: Get Use Cases for Models"""
 from typing import Any, Dict, Optional
 
+from mcp.tools._locale import resolve_tool_locale
+from src.services.currency import conversion_metadata, localize_use_case_cost
 from src.services.pricing_aggregator import PricingAggregatorService
 
 
@@ -18,12 +20,19 @@ class GetUseCasesTool:
         Args:
             arguments: Tool arguments containing:
                 - provider: str (optional) - specific provider to filter by
+                - currency: str (optional) — ISO-4217 code to convert cost figures into
+                - country: str (optional) — ISO-3166 alpha-2 whose currency to use
 
         Returns:
-            Dictionary with use case information for models
+            Dictionary with use case information for models. The model set,
+            order and cost_tier never depend on currency/country.
         """
         try:
             provider_filter = arguments.get("provider")
+
+            locale = resolve_tool_locale(arguments)
+            if isinstance(locale, dict):
+                return locale
 
             # Fetch pricing data
             if provider_filter:
@@ -57,15 +66,20 @@ class GetUseCasesTool:
                     "cost_tier": cost_tier,
                     "cost_per_input_token": pricing.cost_per_input_token,
                 }
+                if locale.active:
+                    model_data["local_cost"] = localize_use_case_cost(pricing, locale).model_dump()
 
                 models.append(model_data)
 
-            return {
+            result = {
                 "success": True,
                 "total_models": len(models),
                 "models": models,
                 "providers": sorted(list(all_providers)),
             }
+            if locale.active:
+                result["currency_conversion"] = conversion_metadata(locale)
+            return result
         except Exception as e:
             return {
                 "success": False,

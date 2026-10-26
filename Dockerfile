@@ -25,6 +25,12 @@ COPY agent/ ./agent/
 COPY rag/ ./rag/
 COPY mcp/ ./mcp/
 COPY docs/ ./docs/
+# Vendored data (price-registry snapshot, exchange-rate table). NOTE: fly.toml
+# mounts the persistent volume at /app/data, which shadows this directory at
+# runtime on Fly — so the exchange-rate table is also copied outside the mount
+# and EXCHANGE_RATES_PATH in fly.toml points there (v1.76.0).
+COPY data/ ./data/
+COPY data/exchange_rates.json ./vendored/exchange_rates.json
 COPY Procfile .
 COPY runtime.txt .
 

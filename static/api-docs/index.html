@@ -228,9 +228,11 @@
 
       <div class="endpoint-group">
         <h3>Pricing</h3>
-        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing</span><span class="ep-desc">All model pricing, optional <code>?provider=</code> filter</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing</span><span class="ep-desc">All model pricing, optional <code>?provider=</code> filter; <code>?currency=</code> / <code>?country=</code> add <code>local_prices</code></span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/models</span><span class="ep-desc">List all available model names</span></div>
-        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/public</span><span class="ep-desc">Public pricing — embed-safe, unauthenticated</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/public</span><span class="ep-desc">Public pricing — embed-safe, unauthenticated; <code>?currency=</code> adds <code>*_local</code> keys</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/locale</span><span class="ep-desc">Currency/country this request resolves to (browser preset; never echoes an IP)</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/currency/rates</span><span class="ep-desc">Vendored USD rate table: as-of date, 7-day stale flag, 13 supported codes</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/history</span><span class="ep-desc">Historical pricing snapshots</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/trends</span><span class="ep-desc">Price-change leaderboard</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/history/export</span><span class="ep-desc">CSV or JSON export of pricing history</span></div>
@@ -242,19 +244,19 @@
 
       <div class="endpoint-group">
         <h3>Cost Estimation</h3>
-        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/cost-estimate</span><span class="ep-desc">Single model cost estimate</span></div>
-        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/cost-estimate/batch</span><span class="ep-desc">Multi-model cost comparison</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/cost-estimate</span><span class="ep-desc">Single model cost estimate (<code>?currency=</code> / <code>?country=</code> add <code>local_cost</code>)</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/cost-estimate/batch</span><span class="ep-desc">Multi-model cost comparison (<code>?currency=</code> adds <code>local_cost</code> per model)</span></div>
       </div>
 
       <div class="endpoint-group">
         <h3>Performance &amp; Use Cases</h3>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/performance</span><span class="ep-desc">Throughput, latency, context window, quality scores</span></div>
-        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/use-cases</span><span class="ep-desc">Model recommendations by use case</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/use-cases</span><span class="ep-desc">Model recommendations by use case (<code>?currency=</code> adds <code>local_cost</code>; tiers stay USD bands)</span></div>
       </div>
 
       <div class="endpoint-group">
         <h3>Router</h3>
-        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/recommend</span><span class="ep-desc">Smart model routing recommendation</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/recommend</span><span class="ep-desc">Smart model routing recommendation (<code>?currency=</code> adds <code>local_prices</code>)</span><span class="ep-auth">API key</span></div>
         <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/recommend/stream</span><span class="ep-desc">Streaming router recommendation (SSE)</span><span class="ep-auth">API key</span></div>
         <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/feedback</span><span class="ep-desc">Submit routing feedback</span><span class="ep-auth">API key</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/telemetry/savings</span><span class="ep-desc">Router savings report per org</span><span class="ep-auth">API key</span></div>
@@ -317,6 +319,20 @@
       </div>
 
       <div style="margin-top:1.5rem;padding:1rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);font-size:.82rem;color:var(--muted)">
+        <strong style="color:var(--text)">Currency and locale:</strong> <code>GET /pricing</code>, <code>POST /cost-estimate</code>, <code>POST /cost-estimate/batch</code>,
+        <code>GET /use-cases</code>, <code>POST /router/recommend</code> and <code>GET /pricing/public</code> accept <code>currency</code> (query) or <code>X-Currency</code> (header)
+        and <code>country</code> (query, ISO-3166 alpha-2) or <code>X-Country</code> (header). Precedence: <code>currency</code> query &rsaquo; <code>X-Currency</code> &rsaquo;
+        <code>country</code> query &rsaquo; <code>X-Country</code> &rsaquo; platform geo header (<code>CF-IPCountry</code>, <code>X-Vercel-IP-Country</code>, <code>CloudFront-Viewer-Country</code>, <code>X-Country-Code</code>)
+        &rsaquo; best-effort IP lookup &rsaquo; USD. A stated currency always beats a stated country. Supported: USD, EUR, GBP, INR, JPY, CAD, AUD, BRL, CNY, SGD, CHF, KRW, MXN —
+        any other explicit code is a <code>400</code> listing this set; a country whose currency is unsupported gets USD with <code>fallback_to_usd: true</code>.
+        Converted figures are additive (<code>local_*</code>, <code>currency_conversion</code>) and omitted entirely when nothing is stated or detected, so existing clients see no change.
+        Rates come from a vendored table refreshed weekly (<code>GET /currency/rates</code>); a rate older than 7 days is still served but flagged <code>rate_is_stale</code>.
+        Converted amounts are indicative — providers bill in USD.
+        <strong style="color:var(--text)">Privacy:</strong> the client IP is used transiently to resolve a country and nothing more — never stored, never logged by this feature,
+        never in a response; only the country code may be echoed.
+      </div>
+
+      <div style="margin-top:1rem;padding:1rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);font-size:.82rem;color:var(--muted)">
         <strong style="color:var(--text)">Authentication:</strong> Protected endpoints require <code>x-api-key: &lt;key&gt;</code> header.
         Get a free key at <a href="/billing">/billing</a> or via <code>POST /billing/signup</code>.
         &nbsp;·&nbsp;

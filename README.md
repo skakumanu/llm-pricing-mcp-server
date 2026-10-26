@@ -22,6 +22,7 @@ Most LLM pricing tools are a static lookup table. This one checks its own number
 
 ### MCP Interface (STDIO + HTTP)
 - **29 MCP Tools**: `get_all_pricing`, `estimate_cost`, `compare_costs`, **`predict_cost`**, **`optimize_workload`**, **`recommend_model`**, **`check_price_drift`**, **`get_data_quality`**, `get_performance_metrics`, `get_use_cases`, `get_ide_pricing`, `get_telemetry`, `get_pricing_history`, `get_pricing_trends`, `register_price_alert`, `list_price_alerts`, `delete_price_alert`, `get_pricing_export_url`, `list_conversations`, `delete_conversation`, `ask_agent`, **`record_usage`**, **`get_usage_summary`**, **`register_budget_alert`**, **`list_budget_alerts`**, **`delete_budget_alert`**, **`get_cache_stats`**, **`analyze_session_usage`**, **`import_session_usage`**
+- `get_all_pricing`, `estimate_cost`, `compare_costs`, `get_use_cases` and `recommend_model` take optional `currency` / `country` arguments (v1.76.0) and add converted `local_*` figures plus a `currency_conversion` block; omit both and the output is unchanged
 - **STDIO transport** — JSON-RPC 2.0 over STDIO for local Claude Desktop integration
 - **HTTP transport** — `POST /mcp` (JSON-RPC 2.0 over HTTP) for remote MCP clients — no local install needed
 - MCP Protocol version: `2024-11-05`
@@ -29,6 +30,7 @@ Most LLM pricing tools are a static lookup table. This one checks its own number
 ### RESTful API
 - Real-time pricing from 31 providers (600+ models), async fetching with smart caching. Every price says where it came from: `price_source_kind` is `provider` when confirmed against the provider's rate card, `registry` when taken from the reference price registry (with `registry_key` and date); registry-sourced models are usable in estimates and comparisons but never counted as provider-confirmed, and the weekly pickup PR adds new registry models under covered providers automatically
 - Cost estimation: single model (`POST /cost-estimate`) and batch comparison (`POST /cost-estimate/batch`)
+- Prices in your currency (v1.76.0): `GET /pricing`, `POST /cost-estimate`, `POST /cost-estimate/batch`, `GET /use-cases`, `POST /router/recommend` and `GET /pricing/public` accept `currency` / `country` (query or `X-Currency` / `X-Country` headers) and return converted figures as additive `local_*` fields next to the unchanged USD ones; the browser calculator and compare pages preset the currency from the visitor's country and let them switch — see [Currency and locale](#currency-and-locale)
 - Performance metrics, use-case recommendations, pricing history, trends
 - Router recommendation (`POST /router/recommend`) with feedback loop; `GET /cache-stats` reports process-lifetime hit/miss stats for its ~5-minute recommendation cache
 - Actual usage/spend tracking (`POST /usage`, `GET /usage/summary`) — the real-cost counterpart to `/cost-estimate`; tag events with `session_id` and analyze one session on demand (`GET /usage/session/{session_id}`) for a grounded recommendation with estimated savings
@@ -94,7 +96,7 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 - Protected endpoints (`/billing/me`, `/router/recommend`, `/router/feedback`, `/billing/portal`) require a billing API key or the global `MCP_API_KEY`
 - Rate limiting per client IP + tier bucket — includes the anonymous `/agent/chat` and `/agent/chat/stream` endpoints (no API key needed, but throttled, since each call runs an LLM on the operator's key)
 - Request size limit (1MB default)
-- 1439 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 1692 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
@@ -294,7 +296,9 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | Landing page (HTML) |
-| GET | `/pricing` | All model pricing (`?provider=` filter) |
+| GET | `/pricing` | All model pricing (`?provider=` filter; `?currency=` / `?country=` add `local_prices`) |
+| GET | `/locale` | Currency/country this request resolves to (browser preset; never echoes an IP) |
+| GET | `/currency/rates` | Vendored USD exchange-rate table (as-of date, 7-day stale flag) |
 | GET | `/models` | All available models |
 | GET | `/performance` | Throughput, latency, context window, quality scores |
 | GET | `/use-cases` | Model use-case recommendations |
@@ -387,6 +391,47 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 
 ---
 
+### Currency and locale
+
+Every price the API serves is a USD list price. Since v1.76.0 the pricing listing, the single and
+batch cost estimates, use-cases, the router recommendation and the public pricing endpoint can also
+show each figure in one of **13 currencies** — USD, EUR, GBP, INR, JPY, CAD, AUD, BRL, CNY, SGD, CHF,
+KRW, MXN — alongside the USD it was converted from:
+
+```bash
+curl "http://localhost:8000/pricing?currency=EUR"            # every model gains local_prices
+curl -H "X-Country: IN" "http://localhost:8000/pricing/public" # INR via the country
+curl -X POST "http://localhost:8000/cost-estimate?country=JP" \
+  -H "Content-Type: application/json" \
+  -d '{"model_name": "gpt-4o", "input_tokens": 1000, "output_tokens": 500}'
+```
+
+- **Inputs and precedence**: `currency` query > `X-Currency` header > `country` query > `X-Country`
+  header > platform geo header (`CF-IPCountry`, `X-Vercel-IP-Country`, `CloudFront-Viewer-Country`,
+  `X-Country-Code`) > best-effort IP lookup > USD. A stated currency always beats a stated country
+  (the country then only labels the response).
+- **Shape**: converted figures are additive — `local_prices` (per model), `local_cost`,
+  `local_cost_range`, plus one `currency_conversion` block (`currency`, `rate`, `rate_as_of`,
+  `rate_age_days`, `rate_is_stale`, `rate_source`, `country`, `country_source`, `currency_source`,
+  `fallback_to_usd`, `fallback_reason`, `note`). The USD fields are never renamed or re-denominated,
+  and when nothing is stated or detected none of the new fields appear at all.
+- **Rejected vs. fallback**: an explicitly requested code outside the 13 is a `400` whose body lists
+  the supported set (never silently USD). A country whose currency is not supported gets USD with
+  `fallback_to_usd: true`, `fallback_reason: "country_not_mapped"`.
+- **Rates**: a vendored table, `data/exchange_rates.json`, refreshed weekly by
+  `scripts/refresh_exchange_rates.py` through a human-merged PR (Frankfurter, falling back to ECB
+  reference rates). Nothing is fetched during a request. A rate older than **7 days** is still served
+  but flagged `rate_is_stale: true`; `GET /currency/rates` exposes the table, its `as_of` date and
+  whether it is still the authored placeholder. Converted amounts are indicative — providers bill in USD.
+- **Browser**: `/calculator` and `/compare` carry a currency selector preset to the detected country's
+  currency (USD when undetected) and re-render every amount on change; the choice persists across
+  pages and reloads (`llmp.currency` in localStorage). The landing page carries the selector and note only.
+- **Privacy**: the client IP is used transiently to resolve a country and nothing more — never stored,
+  never logged by this feature, never in any response. Only the resolved ISO country code may be
+  echoed. The same models are shown to everyone in the same order; cost tiers stay USD bands.
+- **MCP**: `get_all_pricing`, `estimate_cost`, `compare_costs`, `get_use_cases`, `recommend_model`
+  accept optional `currency` and `country`. MCP never detects a location.
+
 ## Configuration
 
 ### Environment Variables
@@ -406,6 +451,11 @@ DEBUG=false
 # Security
 MCP_API_KEY=your-strong-random-key  # Global admin key (optional — billing keys work too)
 RATE_LIMIT_PER_MINUTE=60            # Default rate limit (overridden by tier)
+
+# Local currency (v1.76.0)
+CURRENCY_DETECTION_ENABLED=true     # false = never infer a country from the client IP
+GEO_LOOKUP_TIMEOUT_SECONDS=1.0      # request-path cap on the IP -> country lookup
+EXCHANGE_RATES_PATH=                # override for data/exchange_rates.json (Fly sets /app/vendored/exchange_rates.json)
 
 # Billing (Stripe)
 STRIPE_SECRET_KEY=sk_live_...       # Optional — free signup works without this
@@ -515,6 +565,11 @@ pytest tests/test_router.py -v
 | `test_history_tools.py` | Pricing history + trends |
 | `test_rag.py` | TF-IDF RAG pipeline |
 | `test_agent.py` | ReAct agent unit tests |
+| `test_currency.py` | Currency service: map, precedence, staleness, rounding, rate table |
+| `test_currency_api.py` | REST locale resolution on the six endpoints, `/locale`, `/currency/rates`, privacy |
+| `test_currency_mcp.py` | `currency` / `country` on the five MCP tools |
+| `test_currency_ui.py` | Shared browser currency control |
+| `test_refresh_exchange_rates.py` | Weekly rate-table refresh script + workflow job |
 
 ---
 

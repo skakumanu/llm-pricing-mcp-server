@@ -16,6 +16,11 @@ name: Weekly price audit
 # under a registry-backed catalogue provider that the catalogue lacks, as a
 # registry-sourced entry in data/registry_models/<slug>.json. Rollout is staged
 # via --providers (the five v1.75.0 providers first; widen in later weeks).
+#
+# v1.76.0 adds a fourth: refresh-exchange-rates, which rewrites the vendored
+# USD exchange-rate table data/exchange_rates.json (the server converts prices
+# with that file and never fetches a rate per request; a table older than 7
+# days is served flagged stale until this PR merges).
 
 on:
   schedule:
@@ -212,6 +217,54 @@ jobs:
 
           gh pr create \
             --title "chore(pricing): refresh vendored price registry snapshot" \
+            --body-file /tmp/pr_body.md \
+            --base develop \
+            --head "$BRANCH" \
+            || echo "gh pr create blocked — branch '$BRANCH' was pushed; open the PR manually."
+
+  # v1.76.0 — the vendored exchange-rate table. Same posture as the price
+  # snapshot: works offline, tells you how old it is, refreshed by a PR a human
+  # merges. The script validates (13 codes, positive, USD == 1, as_of not in
+  # the future, no rate moved >15%) and on any failure leaves the file alone
+  # and exits 0, so a flaky source never fails the audit run.
+  refresh-exchange-rates:
+    runs-on: ubuntu-latest
+    needs: refresh-snapshot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Refresh the vendored exchange-rate table
+        run: python scripts/refresh_exchange_rates.py --apply | tee /tmp/exchange_rates.txt
+      - name: Prove the app still converts with the new table
+        run: python -m pytest tests/test_currency.py -q
+      - name: Open a PR when the table changed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git diff --quiet -- data/exchange_rates.json; then
+            echo "Exchange-rate table unchanged — nothing to do."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          BRANCH="ci/refresh-exchange-rates-$(date +%Y%m%d)"
+          git checkout -b "$BRANCH"
+          git add data/exchange_rates.json
+          git commit -m "chore(currency): refresh vendored exchange-rate table"
+          git push origin "$BRANCH"
+          {
+            printf 'Automated weekly refresh of the vendored USD exchange-rate table (`scripts/refresh_exchange_rates.py`). Only `data/exchange_rates.json` changes; no price is touched. Converted amounts shown by the API and the browser pages are indicative — providers bill in USD.\n\n'
+            printf '## Verified before this PR was opened\n\nGitHub does not run CI on PRs created with `GITHUB_TOKEN`; these ran in the job that produced it: the script'"'"'s own validation (all 13 supported codes present, positive and finite, USD == 1.0, as_of not in the future, no rate moved more than 15%% against the previous table) and `tests/test_currency.py`, the code that actually consumes this file.\n\n'
+            printf '## Report\n\n'; cat /tmp/exchange_rates.txt; printf '\n'
+          } > /tmp/pr_body.md
+          gh pr create \
+            --title "chore(currency): refresh vendored exchange-rate table" \
             --body-file /tmp/pr_body.md \
             --base develop \
             --head "$BRANCH" \
