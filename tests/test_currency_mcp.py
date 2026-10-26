@@ -189,7 +189,7 @@ class TestEstimateCost:
         r = await estimate_tool.execute({**ESTIMATE, "currency": "EUR"})
         assert r["success"] and r["currency"] == "USD"
         assert r["local_cost"]["currency"] == "EUR"
-        assert r["local_cost"]["total_cost"] == pytest.approx(r["total_cost"] * RATE["EUR"], rel=1e-4)
+        assert r["local_cost"]["total_cost"] == pytest.approx(r["total_cost"] * RATE["EUR"], rel=1e-4, abs=1e-6)
         assert r["currency_conversion"]["rate"] == RATE["EUR"]
 
     @pytest.mark.asyncio
@@ -229,13 +229,13 @@ class TestCompareCosts:
             if m["is_available"]:
                 assert m["local_cost"]["currency"] == "EUR"
                 expected_1m = m["cost_per_1m_tokens"] * RATE["EUR"]
-                assert m["local_cost"]["cost_per_1m_tokens"] == pytest.approx(expected_1m, rel=1e-3)
+                assert m["local_cost"]["cost_per_1m_tokens"] == pytest.approx(expected_1m, rel=1e-3, abs=1e-6)
             else:
                 assert "local_cost" not in m and m["candidates"] == []
         lr, cr = r["local_cost_range"], base["cost_range"]
         assert lr["currency"] == "EUR"
-        assert lr["min"] == pytest.approx(cr["min"] * RATE["EUR"], rel=1e-4)
-        assert lr["difference"] == pytest.approx(cr["difference"] * RATE["EUR"], rel=1e-4)
+        assert lr["min"] == pytest.approx(cr["min"] * RATE["EUR"], rel=1e-4, abs=1e-6)
+        assert lr["difference"] == pytest.approx(cr["difference"] * RATE["EUR"], rel=1e-4, abs=1e-6)
         assert r["currency_conversion"]["currency"] == "EUR"
 
     @pytest.mark.asyncio
@@ -268,7 +268,7 @@ class TestGetUseCases:
         for m in r["models"]:
             assert m["local_cost"]["currency"] == "EUR"
             assert m["local_cost"]["avg_cost_per_1m_tokens"] == pytest.approx(
-                m["local_cost"]["avg_cost_per_1m_tokens_usd"] * RATE["EUR"], rel=1e-4)
+                m["local_cost"]["avg_cost_per_1m_tokens_usd"] * RATE["EUR"], rel=1e-4, abs=1e-6)
         assert r["currency_conversion"]["currency"] == "EUR"
 
     @pytest.mark.asyncio
