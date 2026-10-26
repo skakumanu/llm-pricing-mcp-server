@@ -155,6 +155,12 @@ class TestWholesaleProviderRemoval:
     the summary; a protected provider vanishing, or a removal above the hard ceiling,
     is still a bad fetch."""
 
+    # The vanishing namespace is synthesised rather than picked from the committed
+    # snapshot: the largest real provider changes with every refresh (openrouter one
+    # week, fireworks_ai the next) and may well be a protected one, which turns an
+    # "editorial change" fixture into a "bad fetch" fixture overnight.
+    SYNTHETIC_PROVIDER = "zz_aggregator"
+
     @staticmethod
     def _by_provider(committed):
         out = {}
@@ -162,26 +168,39 @@ class TestWholesaleProviderRemoval:
             out.setdefault(v.get("litellm_provider") or "", []).append(k)
         return out
 
+    @classmethod
+    def _baseline_with_synthetic_provider(cls, committed, fraction=0.15):
+        """committed + a whole non-protected provider namespace worth `fraction`
+        of the resulting file, so dropping it exceeds the plain 10% limit."""
+        from scripts.validate_price_snapshot import PROTECTED_PROVIDERS
+        assert cls.SYNTHETIC_PROVIDER not in PROTECTED_PROVIDERS
+        assert not any(v.get("litellm_provider") == cls.SYNTHETIC_PROVIDER for v in committed.values())
+        n = int(len(committed) * fraction / (1 - fraction)) + 1
+        baseline = dict(committed)
+        for i in range(n):
+            baseline[f"{cls.SYNTHETIC_PROVIDER}/model-{i}"] = {
+                "input_cost_per_token": 1e-06,
+                "output_cost_per_token": 2e-06,
+                "litellm_provider": cls.SYNTHETIC_PROVIDER,
+                "mode": "chat",
+            }
+        assert n / len(baseline) > 0.10, "fixture must exceed the plain 10% limit to be meaningful"
+        return baseline
+
     def test_a_vanished_provider_namespace_is_discounted_and_noted(self, tmp_path, committed):
-        by_prov = self._by_provider(committed)
-        prov, keys = max(((p, ks) for p, ks in by_prov.items() if p not in ("", "openai", "anthropic")),
-                         key=lambda pk: len(pk[1]))
-        assert len(keys) / len(committed) > 0.10, "fixture must exceed the plain 10% limit to be meaningful"
-        new = {k: v for k, v in committed.items() if k not in set(keys)}
-        code, out = run(write(tmp_path, "editorial.json", new), COMMITTED)
+        baseline = self._baseline_with_synthetic_provider(committed)
+        old = write(tmp_path, "baseline.json", baseline)
+        code, out = run(write(tmp_path, "editorial.json", committed), old)
         assert code == 0, out
-        assert "removed upstream entirely" in out and f"`{prov}`" in out
+        assert "removed upstream entirely" in out and f"`{self.SYNTHETIC_PROVIDER}`" in out
 
     def test_residual_removals_beyond_the_limit_still_reject(self, tmp_path, committed):
-        by_prov = self._by_provider(committed)
-        prov, keys = max(((p, ks) for p, ks in by_prov.items() if p not in ("", "openai", "anthropic")),
-                         key=lambda pk: len(pk[1]))
-        gone = set(keys)
-        # plus 12% scattered across other providers, each provider only partly removed
-        others = [k for k in committed if k not in gone]
-        gone |= set(others[::8])
-        new = {k: v for k, v in committed.items() if k not in gone}
-        code, out = run(write(tmp_path, "scatter.json", new), COMMITTED)
+        baseline = self._baseline_with_synthetic_provider(committed)
+        old = write(tmp_path, "baseline.json", baseline)
+        # the whole synthetic namespace, plus 12% scattered across the real providers,
+        # each of them only partly removed
+        new = {k: v for i, (k, v) in enumerate(committed.items()) if i % 8}
+        code, out = run(write(tmp_path, "scatter.json", new), old)
         assert code == 1
         assert "removed" in out.lower()
 
