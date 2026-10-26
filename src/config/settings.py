@@ -93,6 +93,15 @@ class Settings(BaseSettings):
     geo_lookup_timeout_seconds: float = 1.0     # request-path cap on the IP -> country lookup
     exchange_rates_path: Optional[str] = None   # override for data/exchange_rates.json
 
+    # Dispatch gateway (v1.77.0). Provider keys are never read from here — callers
+    # bring their own per request (X-Provider-Key-<Provider> headers); these only
+    # shape the failover loop and the receipt store.
+    dispatch_enabled: bool = True                # False = POST /v1/chat/completions dispatch mode -> 503
+    dispatch_default_max_tokens: int = 1024      # when the caller omits max_tokens (Anthropic requires one)
+    dispatch_attempt_timeout_ms: int = 30_000    # per-attempt provider timeout
+    dispatch_max_attempts: int = 3               # failover attempts (1 when failover is off or pinned)
+    dispatch_receipt_retention_days: int = 90    # metadata-only receipt rows purged past this age
+
     model_config = {
         "env_file": ".env",
         "case_sensitive": False
