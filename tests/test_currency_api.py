@@ -420,12 +420,14 @@ class TestBatch:
             if m["is_available"]:
                 assert m["local_cost"]["currency"] == "JPY"
                 assert m["local_cost"]["cost_per_1m_tokens"] == pytest.approx(
-                    m["cost_per_1m_tokens"] * data["currency_conversion"]["rate"], rel=1e-6)
+                    m["cost_per_1m_tokens"] * data["currency_conversion"]["rate"], rel=1e-6, abs=1e-6)
             else:
                 assert "local_cost" not in m
         lr = data["local_cost_range"]
         assert lr["currency"] == "JPY" and lr["min"] <= lr["max"]
-        assert lr["min"] == pytest.approx(plain["cost_range"]["min"] * data["currency_conversion"]["rate"], rel=1e-6)
+        # local amounts are rounded to 6 decimals, so allow that much absolute slack whatever the rate
+        assert lr["min"] == pytest.approx(plain["cost_range"]["min"] * data["currency_conversion"]["rate"],
+                                          rel=1e-6, abs=1e-6)
         assert "local_cost_range" not in plain and not _has_local_fields(plain)
 
     def test_all_unknown_models_has_no_range(self, client):
