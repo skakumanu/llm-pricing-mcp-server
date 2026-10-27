@@ -98,7 +98,7 @@ class GooglePricingService(BasePricingProvider):
         "gemini-2.5-flash": {
             "input": 0.0003,
             "output": 0.0025,
-            "price_as_of": "2026-07-28",
+            "price_as_of": "2026-10-27",
             "context_window": 1048576,
             "use_cases": [
                 "Fast reasoning", "Code generation", "Data analysis",

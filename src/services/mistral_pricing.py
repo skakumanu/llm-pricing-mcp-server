@@ -52,7 +52,7 @@ class MistralPricingService(BasePricingProvider):
         "mistral-large-latest": {
             "input": 0.0005,
             "output": 0.0015,
-            "price_as_of": "2026-07-28",
+            "price_as_of": "2026-10-27",
             "context_window": 32000,
             "use_cases": ["Complex reasoning", "Advanced analytics", "Code generation", "Multi-step planning"],
             "strengths": ["Excellent reasoning", "Strong code skills", "Well-balanced"],
