@@ -32,7 +32,7 @@ class PerplexityPricingService(BasePricingProvider):
         "sonar": {
             "input": 0.001,
             "output": 0.001,
-            "price_as_of": "2026-07-28",
+            "price_as_of": "2026-10-27",
             "context_window": 127072,
             "use_cases": ["Search-augmented chat", "Current events", "Research", "Q&A with citations"],
             "strengths": ["Real-time search", "Citations", "Up-to-date", "Long context"],
