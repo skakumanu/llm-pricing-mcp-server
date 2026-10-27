@@ -1,21 +1,21 @@
 {
   "base": "USD",
-  "as_of": "2026-10-24",
-  "source": "authored placeholder - replaced weekly by scripts/refresh_exchange_rates.py (Frankfurter / ECB reference rates)",
-  "placeholder": true,
+  "as_of": "2026-10-26",
+  "source": "Frankfurter (ECB reference rates, USD base) via scripts/refresh_exchange_rates.py",
+  "placeholder": false,
   "rates": {
     "USD": 1.0,
-    "EUR": 0.92,
-    "GBP": 0.78,
-    "INR": 84.0,
-    "JPY": 152.0,
-    "CAD": 1.38,
-    "AUD": 1.52,
-    "BRL": 5.6,
-    "CNY": 7.2,
-    "SGD": 1.32,
-    "CHF": 0.87,
-    "KRW": 1380.0,
-    "MXN": 19.5
+    "EUR": 0.89381,
+    "GBP": 0.7492,
+    "INR": 95.18,
+    "JPY": 157.45,
+    "CAD": 1.4028,
+    "AUD": 1.4236,
+    "BRL": 5.5884,
+    "CNY": 6.6681,
+    "SGD": 1.2806,
+    "CHF": 0.82615,
+    "KRW": 1325.28,
+    "MXN": 18.6155
   }
 }
