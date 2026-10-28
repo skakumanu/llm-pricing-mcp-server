@@ -178,8 +178,9 @@ _openapi_tags = [
         "description": (
             "Dispatch gateway (v1.77.0): send a `dispatch` policy on `/v1/chat/completions` with your "
             "own provider key to have the best eligible model executed for real, with failover and a "
-            "receipt (chosen model, reason, actual cost, savings). `/dispatch/providers` lists what is "
-            "dispatchable; `/dispatch/receipts` exports an org's metadata-only audit trail."
+            "receipt (chosen model, reason, actual cost, savings); add `stream: true` (v1.78.0) for "
+            "OpenAI-format chunk SSE with the receipt in a trailing chunk. `/dispatch/providers` lists "
+            "what is dispatchable; `/dispatch/receipts` exports an org's metadata-only audit trail."
         ),
     },
 ]
@@ -3540,15 +3541,19 @@ class _ProxyRequest(BaseModel):
     messages: List[dict]
     max_tokens: Optional[int] = None
     # v1.77.0 — standard OpenAI fields. In dispatch mode: temperature/top_p/stop are forwarded;
-    # stream/tools/functions/tool_choice/n>1/response_format are rejected up front (FR16,
+    # tools/functions/tool_choice/n>1/response_format are rejected up front (FR16,
     # _unsupported_dispatch_feature); `user` (OpenAI's end-user abuse-tracking id) is accepted
     # and deliberately not forwarded to the provider. Plain mode ignores every one of them.
+    # v1.78.0 — `stream: true` in dispatch mode streams the completion as OpenAI chunk SSE;
+    # `stream_options` (OpenAI's include_usage switch) is accepted and has no effect — the
+    # trailing chunk always carries usage. Plain mode still ignores both.
     temperature: Optional[float] = None
     top_p: Optional[float] = None
     stop: Optional[Any] = None
     n: Optional[int] = None
     user: Optional[str] = None
     stream: Optional[bool] = None
+    stream_options: Optional[Any] = None
     tools: Optional[Any] = None
     functions: Optional[Any] = None
     tool_choice: Optional[Any] = None
@@ -3594,9 +3599,10 @@ def _format_routing_recommendation(requested_model: str, result) -> str:
 
 
 def _unsupported_dispatch_feature(req: _ProxyRequest) -> Optional[str]:
-    """FR16: name the first unsupported feature in a dispatch-mode request, or None."""
-    if req.stream:
-        return "stream"
+    """FR16: name the first unsupported feature in a dispatch-mode request, or None.
+
+    `stream` is supported since v1.78.0 and is deliberately not checked here.
+    """
     if req.tools is not None:
         return "tools"
     if req.functions is not None:
@@ -3647,9 +3653,9 @@ async def _dispatch_chat_completion(req: _ProxyRequest, request: Request):
             "error": "unsupported_feature",
             "feature": feature,
             "message": (
-                f"Dispatch does not support '{feature}' in this release: non-streaming, text-only chat "
-                "completions without tools/functions only. Omit the field or drop the `dispatch` object "
-                "to get a routing recommendation instead."
+                f"Dispatch does not support '{feature}' in this release: text-only, single-choice chat "
+                "completions without tools/functions (streaming is supported). Omit the field or drop the "
+                "`dispatch` object to get a routing recommendation instead."
             ),
         })
 
@@ -3708,25 +3714,101 @@ async def _dispatch_chat_completion(req: _ProxyRequest, request: Request):
         stop = [stop]
     elif stop is not None and not isinstance(stop, list):
         stop = None
-    try:
-        body = await svc.dispatch(
-            customer=customer,
-            requested_model=req.model,
-            messages=req.messages,
-            policy=policy,
-            key_resolver=key_resolver,
-            locale=locale,
-            inferred_task_type=_infer_task_from_messages(req.messages),
-            max_tokens=req.max_tokens,
-            temperature=req.temperature,
-            top_p=req.top_p,
-            stop=stop,
-            webhook_secret=settings.webhook_secret,
+    kwargs = dict(
+        customer=customer,
+        requested_model=req.model,
+        messages=req.messages,
+        policy=policy,
+        key_resolver=key_resolver,
+        locale=locale,
+        inferred_task_type=_infer_task_from_messages(req.messages),
+        max_tokens=req.max_tokens,
+        temperature=req.temperature,
+        top_p=req.top_p,
+        stop=stop,
+        webhook_secret=settings.webhook_secret,
+    )
+    if req.stream:
+        # v1.78.0 — pull the first event *before* building the response: every pre-content
+        # refusal or exhausted failover is then the same JSON error as the non-streaming path,
+        # with no SSE bytes sent.
+        agen = svc.dispatch_stream(**kwargs)
+        try:
+            first = await agen.__anext__()
+        except DispatchError as exc:
+            return JSONResponse(status_code=exc.status_code, content=exc.payload)
+        get_telemetry_service().track_feature_usage("dispatch")
+        return StreamingResponse(
+            _relay_dispatch_stream(first, agen, request),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+    try:
+        body = await svc.dispatch(**kwargs)
     except DispatchError as exc:
         return JSONResponse(status_code=exc.status_code, content=exc.payload)
     get_telemetry_service().track_feature_usage("dispatch")
     return body
+
+
+def _sse_data(payload: dict) -> str:
+    return f"data: {json.dumps(payload, separators=(',', ':'), default=str)}\n\n"
+
+
+async def _relay_dispatch_stream(first, agen, request: Request):
+    """Translate DispatchService.dispatch_stream() events into OpenAI chat.completion.chunk SSE (v1.78.0).
+
+    Shape (OpenAI's own convention): every delta is forwarded the instant it arrives with
+    ``finish_reason: null``; a final choices-bearing chunk with an empty delta carries the
+    finish_reason; then one trailing chunk with ``choices: []`` and ``usage`` (what OpenAI's
+    ``include_usage`` sends) that additionally carries ``routing_metadata`` and the full
+    ``dispatch_receipt``; then ``data: [DONE]``. A failure after content ends the stream with a
+    ``data:`` object whose top-level ``error`` member OpenAI SDK stream readers already check (no
+    ``[DONE]`` follows). Event text is never logged here.
+    """
+    meta = first.payload or {}
+    chat_id = f"chatcmpl-{uuid.UUID(meta['dispatch_id']).hex[:24]}"
+    created, model = meta.get("created"), meta.get("model")
+    role_sent = False
+
+    def chunk(choices: list, **extra) -> dict:
+        return {"id": chat_id, "object": "chat.completion.chunk", "created": created, "model": model,
+                "choices": choices, **extra}
+
+    event = first
+    try:
+        while True:
+            if await request.is_disconnected():
+                return
+            if event.kind == "delta":
+                delta = {"content": event.text}
+                if not role_sent:
+                    delta = {"role": "assistant", **delta}
+                    role_sent = True
+                yield _sse_data(chunk([{"index": 0, "delta": delta, "finish_reason": None}]))
+            elif event.kind == "end":
+                p = event.payload
+                final_delta = {} if role_sent else {"role": "assistant"}
+                yield _sse_data(chunk([{"index": 0, "delta": final_delta, "finish_reason": p["finish_reason"]}]))
+                yield _sse_data(chunk(
+                    [], usage=p["usage"], routing_metadata=p["routing_metadata"],
+                    dispatch_receipt=p["dispatch_receipt"],
+                ))
+                yield "data: [DONE]\n\n"
+                return
+            else:  # "error": the stream failed after content was sent
+                p = dict(event.payload)
+                outcome = p.pop("outcome")
+                message = p.pop("message", outcome)
+                yield _sse_data({"error": {"message": message, "type": "dispatch_error", "code": outcome,
+                                           "outcome": outcome, **p}})
+                return
+            try:
+                event = await agen.__anext__()
+            except StopAsyncIteration:
+                return
+    finally:
+        await agen.aclose()
 
 
 @app.post("/v1/chat/completions", tags=["OpenAI Proxy"])
@@ -3748,6 +3830,14 @@ async def openai_proxy(req: _ProxyRequest, request: Request):
     `chat.completion` with real `usage` plus an additive `dispatch_receipt`
     (chosen model, reason, actual cost, savings, attempts). See `GET /dispatch/providers`
     for what is dispatchable. Without `dispatch` the behaviour is exactly the proxy above.
+
+    **Streaming (v1.78.0)** — add `stream: true` in dispatch mode and the completion arrives
+    as OpenAI-format `chat.completion.chunk` SSE: content deltas as they arrive, a final
+    empty-delta chunk carrying `finish_reason`, one trailing chunk with `usage`,
+    `routing_metadata` and the full `dispatch_receipt`, then `data: [DONE]`. Failover
+    happens only before the first delta; a failure after that ends the stream with a
+    `data: {"error": ...}` event. Pre-provider refusals are the same JSON errors as without
+    `stream`. Without `dispatch`, `stream` is ignored as before.
     """
     if req.dispatch is not None:
         return await _dispatch_chat_completion(req, request)

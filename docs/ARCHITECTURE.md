@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.77.4 | **Last updated**: 2026-10-27
+**Version**: v1.78.0 | **Last updated**: 2026-10-28
 
 ---
 
@@ -113,9 +113,9 @@ llm-pricing-mcp-server/
 │       ├── pricing_history.py       # SQLite price-history + routing_feedback tables
 │       ├── benchmark_service.py     # Quality scores: static table + HF API fallback (24h TTL)
 │       ├── router.py                # LLM routing recommendation engine; v1.77.0 exposes rank_models() + hard_filter_reason() (same filters/scoring get_optimal_model always ran) for the dispatch gateway
-│       ├── dispatch_executors.py    # v1.77.0: EXECUTABLE_PROVIDERS registry (9, keyed by catalogue display names), HeaderKeyResolver (BYOK seam; repr redacted), OpenAIWire/Anthropic/Gemini executors over httpx.AsyncClient, one error-classification table (timeout/rate_limited/server_error/context_too_long/auth_error/model_not_found/provider_rejected); error bodies classified, never copied
-│       ├── dispatch_service.py      # v1.77.0: DispatchService — budget hard stop → catalogue (unconfirmed included so they can be reported excluded) → eligibility stages (first failing reason per model; emptying stage = eliminating_constraint) → rank_models + objective ordering → per-request cap → failover loop / concurrent shadow → ledgers (usage event, routing + feedback, budget alerts, receipt) → chat.completion + dispatch_receipt
-│       ├── dispatch_receipts.py     # v1.77.0: dispatch_receipts table (metadata only, (org_id, created_at) index, retention purge) + org-scoped list/CSV for GET /dispatch/receipts
+│       ├── dispatch_executors.py    # v1.77.0: EXECUTABLE_PROVIDERS registry (9, keyed by catalogue display names), HeaderKeyResolver (BYOK seam; repr redacted), OpenAIWire/Anthropic/Gemini executors over httpx.AsyncClient, one error-classification table (timeout/rate_limited/server_error/context_too_long/auth_error/model_not_found/provider_rejected); error bodies classified, never copied. v1.78.0: BaseExecutor.stream() (client.stream + _iter_sse + per-family build_stream/parse_stream_event → StreamEvent delta|finish|usage; non-2xx classified before the first yield), OUTCOME_CLIENT_DISCONNECTED (receipt-only)
+│       ├── dispatch_service.py      # v1.77.0: DispatchService — _prepare(): budget hard stop → catalogue (unconfirmed included so they can be reported excluded) → eligibility stages (first failing reason per model; emptying stage = eliminating_constraint) → rank_models + objective ordering → per-request cap; dispatch(): failover loop / concurrent shadow → _finish(): ledgers (usage event, routing + feedback, budget alerts, receipt) → chat.completion + dispatch_receipt. v1.78.0: dispatch_stream() async generator (DispatchStreamEvent delta|end|error; failover only before first content; idle timeout per event; shielded settlement on client disconnect; partial estimated spend)
+│       ├── dispatch_receipts.py     # v1.77.0: dispatch_receipts table (metadata only, (org_id, created_at) index, retention purge) + org-scoped list/CSV for GET /dispatch/receipts. v1.78.0: streamed + usage_estimated columns (appended; ALTER TABLE migration on initialize)
 │       ├── recommendation_cache.py  # ~5min TTL cache for recommend_model / POST /router/recommend decisions + process-lifetime hit/miss stats (get_cache_stats)
 │       ├── task_profiles.py         # 12 task I/O-ratio profiles + keyword task inference
 │       ├── portfolio_optimizer.py   # Per-task model allocation + savings vs single-model baseline
@@ -362,15 +362,15 @@ request ──► resolve_request_locale (FastAPI dependency on the 6 pricing en
 ```
 Rates: `data/exchange_rates.json` (USD base, 13 codes, `as_of`, `source`, `placeholder`), loaded once (lru-cached, `reset_rate_table_cache()` for tests), stale after 7 days but still served. MCP tools (`get_all_pricing`, `estimate_cost`, `compare_costs`, `get_use_cases`, `recommend_model`) call `mcp/tools/_locale.py::resolve_tool_locale(arguments)` with explicit `currency`/`country` only — no detection on STDIO or HTTP MCP. Caching: every response of the six endpoints (active or not — the plain USD variant too, so a shared cache never serves it to a header-driven request) sends `Vary: X-Currency, X-Country, CF-IPCountry, X-Vercel-IP-Country, CloudFront-Viewer-Country, X-Country-Code`; a *detected* locale (IP or platform header) is `Cache-Control: private` on every endpoint (`private, max-age=300` on `/pricing`, whose explicit query-param variants stay `public, max-age=300`). The weekly refresh's >15% move check is skipped while the previous table is the authored placeholder (it was never a market rate), so the first real refresh cannot be blocked by a hand-guessed value. Non-goals held: no model filtering/reordering by country, no regional prices, no localized billing or history, no IP/city/coordinates anywhere in a response. Settings: `CURRENCY_DETECTION_ENABLED`, `GEO_LOOKUP_TIMEOUT_SECONDS`, `EXCHANGE_RATES_PATH`.
 
-### 8. Dispatch Gateway (v1.77.0)
+### 8. Dispatch Gateway (v1.77.0; streaming v1.78.0)
 ```
-POST /v1/chat/completions  {model, messages, max_tokens?, …, dispatch: {policy}}
+POST /v1/chat/completions  {model, messages, max_tokens?, stream?, …, dispatch: {policy}}
   headers: x-api-key | Authorization: Bearer <service key>;  X-Provider-Key-<Provider>: <caller's key>
-  │  no `dispatch`            -> today's recommendation-only proxy, unchanged (tests/test_proxy.py)
-  │  stream / tools / functions / tool_choice / n>1 / response_format / non-string content -> 400 unsupported_feature (before any work)
+  │  no `dispatch`            -> today's recommendation-only proxy, unchanged (tests/test_proxy.py); `stream` ignored
+  │  tools / functions / tool_choice / n>1 / response_format / non-string content -> 400 unsupported_feature (before any work)
   │  no customer (anonymous or global key)                          -> 401 dispatch_requires_api_key
   ▼
-DispatchService.dispatch()
+DispatchService.dispatch()  /  dispatch_stream() when `stream: true`  (both start with _prepare(), steps 1-5)
   1. BudgetAlertService.find_hard_stop(org_id)     -> 402 budget_hard_stop (org-scoped hard_stop alerts only)
   2. aggregator.get_all_pricing_async(include_unconfirmed=True) + enrich_models   (unconfirmed: reportable, never dispatched)
   3. eligibility stages, fixed order, first failing reason per model:
@@ -399,16 +399,42 @@ DispatchService.dispatch()
      budget_alerts.check_and_fire() · dispatch_receipts.record(row)   (shadow spend is recorded too — real money)
   8. response: chat.completion {id chatcmpl-<dispatch_id>, model, choices[0], usage (real)} + routing_metadata
      {actual_forwarding: true, dispatch_id} + dispatch_receipt {chosen, reason, candidates, excluded, excluded_summary,
-     usage, cost, savings{vs_most_expensive_eligible, vs_requested_model, forgone_vs_cheapest_meeting_floor}, latency,
-     attempts, shadow, local + currency_conversion (only when currency/country stated — no IP detection here)}
+     usage {…, estimated}, cost, savings{vs_most_expensive_eligible, vs_requested_model, forgone_vs_cheapest_meeting_floor},
+     latency, attempts, shadow, streamed, local + currency_conversion (only when currency/country stated — no IP detection here)}
+  9. streaming (`stream: true`, v1.78.0) — same steps 1-5, then dispatch_stream():
+       handler pulls the FIRST event before building the response -> every pre-provider refusal and every exhausted
+       failover is the identical JSON error (no SSE bytes); only a committed attempt becomes a StreamingResponse
+       (text/event-stream, Cache-Control: no-cache, X-Accel-Buffering: no — same as /router/recommend/stream)
+       executor.stream(): client.stream(POST) -> non-2xx classified by the same table BEFORE the first yield ->
+         _iter_sse -> per-family parse_stream_event -> StreamEvent(delta | finish | usage)
+         (OpenAI-wire: stream + stream_options.include_usage · Anthropic: stream on /v1/messages, input tokens from
+          message_start, output from message_delta · Gemini: :streamGenerateContent?alt=sse, last usageMetadata wins)
+       attempt commits at its first delta (or a finish with no content): before that the failover rules of step 6
+         apply unchanged (timeout = `failover.timeout_ms` to first content; the failed stream is aclose()d first);
+         after it there is NO failover — the per-event idle timeout, a provider error or EOF-without-finish ends the
+         stream with `data: {"error": {code/outcome, dispatch_id, model, provider, http_status, attempts}}` (no [DONE])
+       relay (src/main.py::_relay_dispatch_stream): each delta -> chat.completion.chunk immediately (finish_reason null;
+         role on the first); then one empty-delta chunk with finish_reason; then one chunk with choices: [] + usage +
+         routing_metadata + dispatch_receipt (OpenAI's include_usage shape); then `data: [DONE]`
+       usage: provider counts when the stream carried them, else count_tokens(prompt) / count_tokens(streamed text)
+         with receipt.usage.estimated = true and the usage event is_estimated = 1
+       shadow: asyncio task started with the primary, non-streaming, single attempt; deltas never wait for it, the
+         trailing receipt does (bounded by its own attempt timeout); its spend is recorded as before
+       client disconnect: GeneratorExit/CancelledError at a yield -> shielded settlement task (_settling, wait_settled())
+         aclose()s the provider stream, awaits the shadow, writes an estimated usage event for the tokens delivered so
+         far and a failed receipt row whose attempt outcome is `client_disconnected`
+       receipt row: streamed = 1, usage_estimated = 0/1 (columns appended at the end; ALTER TABLE migration on open)
 ```
 Executors: one `httpx.AsyncClient` per attempt (timeout = `failover.timeout_ms`), three wire families
 (`openai_wire` for OpenAI/Groq/Together/Fireworks/DeepSeek/Mistral/xAI, `anthropic_messages`, `gemini_rest`),
-catalogue `model_name` sent verbatim as the provider model id, `httpx.MockTransport` as the test seam. Why not the
+catalogue `model_name` sent verbatim as the provider model id, `httpx.MockTransport` as the test seam (an
+`httpx.Response` with an SSE byte body streams through `client.stream()` / `aiter_lines()` unchanged). Why not the
 pinned SDKs: both auto-retry 429/5xx and would fight the failover loop and its timeout budget, and no Gemini SDK is
 pinned. Settings: `DISPATCH_ENABLED` (kill switch → 503), `DISPATCH_DEFAULT_MAX_TOKENS`, `DISPATCH_ATTEMPT_TIMEOUT_MS`,
 `DISPATCH_MAX_ATTEMPTS`, `DISPATCH_RECEIPT_RETENTION_DAYS`. Non-goals held: no pooled/service-paid keys, no stored
-per-account keys (the `ProviderKeyResolver` protocol is the seam), no streaming, no tool-calling translation, no MCP tool.
+per-account keys (the `ProviderKeyResolver` protocol is the seam), no mid-stream failover or resume, the shadow and
+non-text (reasoning / tool-call) deltas are never streamed, the plain proxy keeps ignoring `stream`, no tool-calling
+translation, no MCP tool.
 
 ### 9. UI Design System
 All 13 browser UIs share the same CSS custom properties (defined in each page's `:root`):
@@ -485,7 +511,7 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | POST | `/agent/chat/stream` | None | SSE agent stream |
 | GET | `/agent/conversations` | None | List agent conversations |
 | DELETE | `/agent/conversations/{id}` | Required | Delete a conversation |
-| POST | `/v1/chat/completions` | None (plain) / customer key in-handler (dispatch mode) | OpenAI-compatible proxy; with a `dispatch` body object (v1.77.0) executes the best eligible model with the caller's `X-Provider-Key-*` and returns real `usage` + `dispatch_receipt` |
+| POST | `/v1/chat/completions` | None (plain) / customer key in-handler (dispatch mode) | OpenAI-compatible proxy; with a `dispatch` body object (v1.77.0) executes the best eligible model with the caller's `X-Provider-Key-*` and returns real `usage` + `dispatch_receipt`; with `stream: true` as well (v1.78.0) the completion is OpenAI `chat.completion.chunk` SSE with usage + receipt in a trailing chunk before `[DONE]` |
 | GET | `/dispatch/providers` | None | Executable providers (key header each), which catalogue models are dispatchable and why not (`?provider=`, `?dispatchable_only=`) |
 | GET | `/dispatch/receipts` | Required customer key | Metadata-only JSON/CSV export of the caller's org's dispatch receipts (`format`, `since`, `until`, `outcome`, `limit`); global key → 403 |
 | GET | `/mcp` | None | MCP server info |
