@@ -289,7 +289,7 @@
 
       <div class="endpoint-group">
         <h3>Billing</h3>
-        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/signup</span><span class="ep-desc">Free tier signup — returns API key</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/signup</span><span class="ep-desc">Free tier signup — returns API key once (409 if email already registered)</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/billing/me</span><span class="ep-desc">Usage dashboard (calls, savings, tier)</span><span class="ep-auth">API key</span></div>
         <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/checkout</span><span class="ep-desc">Create Stripe Checkout session</span><span class="ep-auth">API key</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/billing/portal</span><span class="ep-desc">Stripe billing self-serve portal</span><span class="ep-auth">API key</span></div>
