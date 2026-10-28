@@ -170,6 +170,7 @@
         <li><strong>Your API key is shown once, at signup.</strong> <code>POST /billing/signup</code> is public, and until now signing up again with a registered email returned that account's key. Anyone who knew your email could get your key and read your dispatch receipts or change your budget alerts. A repeat signup now returns <code>409</code> with no key. Keep your key safe, and use it on the Dashboard tab to sign in</li>
         <li><strong>The admin customer list is operator-only.</strong> <code>GET /admin/customers</code> lists every account's email and org ID. It used to accept any customer key, so any free account could read it. It now needs the operator key</li>
         <li><strong>Signup is rate-limited.</strong> <code>POST /billing/signup</code> now goes through the same per-IP rate limit and request-size cap as other public endpoints</li>
+        <li><strong>Accounts survive redeploys.</strong> The billing database is now explicitly placed on the persistent volume, alongside the pricing history</li>
       </ul>
     </div>
   </div>

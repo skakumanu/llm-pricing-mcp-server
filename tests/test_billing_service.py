@@ -86,3 +86,11 @@ async def test_get_by_stripe_id(svc):
     found = await svc.get_customer_by_stripe_id("cus_abc")
     assert found is not None
     assert found.email == "frank@example.com"
+
+
+def test_fly_keeps_the_billing_db_on_the_persistent_volume():
+    """v1.78.1: billing_db_path defaults to a relative path, which on Fly is the
+    image's ephemeral disk; customer accounts must live on the /app/data volume."""
+    fly = (project_root / "fly.toml").read_text(encoding="utf-8")
+    assert 'BILLING_DB_PATH = "/app/data/billing.db"' in fly
+    assert "destination = '/app/data'" in fly

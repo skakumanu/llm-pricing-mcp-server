@@ -11,6 +11,10 @@ primary_region = 'iad'
 [env]
   # SQLite DB stored on the persistent volume mounted at /app/data
   PRICING_HISTORY_DB_PATH = "/app/data/pricing_history.db"
+  # Customer accounts (and their service keys) must survive redeploys too. Unset,
+  # BILLING_DB_PATH defaults to the relative "billing.db", i.e. /app/billing.db on
+  # the image's ephemeral disk, not on the volume (v1.78.1).
+  BILLING_DB_PATH = "/app/data/billing.db"
   # The volume mount shadows the image's /app/data, so the vendored
   # exchange-rate table is read from the copy the Dockerfile puts outside it.
   EXCHANGE_RATES_PATH = "/app/vendored/exchange_rates.json"
