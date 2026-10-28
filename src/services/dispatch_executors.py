@@ -15,13 +15,19 @@ Privacy by construction:
     then dropped — never copied into an exception message, a log line or a
     response.
   * Prompt and completion text exist only inside ``ChatRequest`` / ``ChatResult``
-    and are never logged here at any level.
+    / ``StreamEvent`` and are never logged here at any level.
+
+Streaming (v1.78.0): ``BaseExecutor.stream()`` opens the same provider call with the
+family's streaming flag set and yields ``StreamEvent``s (text deltas, the finish
+reason, usage counts) translated from the provider's SSE stream. A non-2xx status
+is classified with the same table as ``execute()`` before anything is yielded.
 """
+import json
 import logging
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Protocol
+from typing import Any, AsyncIterator, Dict, List, Mapping, Optional, Protocol, Tuple
 
 import httpx
 
@@ -38,6 +44,9 @@ OUTCOME_CONTEXT_TOO_LONG = "context_too_long"
 OUTCOME_AUTH_ERROR = "auth_error"
 OUTCOME_MODEL_NOT_FOUND = "model_not_found"
 OUTCOME_PROVIDER_REJECTED = "provider_rejected"
+# Receipt-only outcome (v1.78.0): the client stopped reading a stream mid-way. Never a
+# failover outcome — nothing is retried once content has reached the client.
+OUTCOME_CLIENT_DISCONNECTED = "client_disconnected"
 
 # Failover-eligible outcomes (the loop moves on to the next candidate).
 RETRYABLE_OUTCOMES = frozenset({
@@ -76,6 +85,29 @@ class ChatResult:
     provider_latency_ms: float
     http_status: int
     raw_model: Optional[str] = None
+
+
+# Streaming event kinds (v1.78.0).
+EVENT_DELTA = "delta"
+EVENT_FINISH = "finish"
+EVENT_USAGE = "usage"
+
+
+@dataclass
+class StreamEvent:
+    """One translated event from a provider's streaming response.
+
+    ``delta`` carries a piece of completion text; ``finish`` the normalised finish
+    reason (stop | length | content_filter | other); ``usage`` whichever token counts
+    the provider has sent so far (either may be None — Anthropic reports input tokens
+    at message_start and output tokens at message_delta).
+    """
+
+    kind: str
+    text: str = ""
+    finish_reason: Optional[str] = None
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
 
 
 class ExecutorError(Exception):
@@ -309,6 +341,43 @@ class BaseExecutor:
             raise ExecutorError(OUTCOME_SERVER_ERROR, response.status_code)
         return result
 
+    async def stream(self, req: ChatRequest, api_key: str) -> AsyncIterator[StreamEvent]:
+        """Stream the completion as ``StreamEvent``s (v1.78.0).
+
+        A non-2xx status, a transport failure or an unparseable first event raises the
+        same ``ExecutorError`` ``execute()`` would, *before* the first yield, so the
+        service can fail over. After the first yield the same errors end the stream;
+        the service decides what that means. The attempt is timed by the service.
+        """
+        url, headers, body = self.build_stream(req, api_key)
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_s, transport=self.transport) as client:
+                async with client.stream("POST", url, headers=headers, json=body) as response:
+                    status = response.status_code
+                    if status >= 400:
+                        await response.aread()
+                        err = classify_http_error(self.spec.family, status, _safe_json(response))
+                        logger.debug("dispatch executor %s: %s (HTTP %d, streaming)", self.spec.provider,
+                                     err.outcome, status)
+                        raise err
+                    async for event_name, data in _iter_sse(response):
+                        if data.strip() == "[DONE]":
+                            return
+                        try:
+                            payload = json.loads(data)
+                            if not isinstance(payload, dict):
+                                raise ValueError("stream event is not an object")
+                            events = self.parse_stream_event(event_name, payload)
+                        except (KeyError, IndexError, TypeError, ValueError):
+                            # json.JSONDecodeError is a ValueError. Classified, never copied.
+                            raise ExecutorError(OUTCOME_SERVER_ERROR, status)
+                        for ev in events:
+                            yield ev
+        except httpx.TimeoutException:
+            raise ExecutorError(OUTCOME_TIMEOUT)
+        except httpx.HTTPError:
+            raise ExecutorError(OUTCOME_SERVER_ERROR)
+
     # Subclasses implement the wire translation.
     def build(self, req: ChatRequest, api_key: str):  # pragma: no cover - abstract
         raise NotImplementedError
@@ -316,12 +385,59 @@ class BaseExecutor:
     def parse(self, data: dict, latency_ms: float, status: int) -> ChatResult:  # pragma: no cover - abstract
         raise NotImplementedError
 
+    def build_stream(self, req: ChatRequest, api_key: str):  # pragma: no cover - abstract
+        """Same as build() with the family's streaming flag/URL applied."""
+        raise NotImplementedError
+
+    def parse_stream_event(self, event_name: Optional[str], data: dict) -> List[StreamEvent]:  # pragma: no cover
+        raise NotImplementedError
+
+
+async def _iter_sse(response: httpx.Response) -> AsyncIterator[Tuple[Optional[str], str]]:
+    """Yield ``(event_name, data)`` per SSE event: ``event:``/``data:`` fields accumulate until a
+    blank line; comments (``:``) and unknown fields are ignored; multi-line data is joined with
+    newlines per the SSE spec."""
+    event_name: Optional[str] = None
+    data_lines: List[str] = []
+    async for line in response.aiter_lines():
+        line = line.rstrip("\r\n")
+        if not line:
+            if data_lines:
+                yield event_name, "\n".join(data_lines)
+            event_name, data_lines = None, []
+            continue
+        if line.startswith(":"):
+            continue
+        fld, _, value = line.partition(":")
+        if value.startswith(" "):
+            value = value[1:]
+        if fld == "event":
+            event_name = value
+        elif fld == "data":
+            data_lines.append(value)
+    if data_lines:  # a final event without the trailing blank line
+        yield event_name, "\n".join(data_lines)
+
 
 def _as_int(value: Any) -> int:
     try:
         return int(value or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _opt_int(value: Any) -> Optional[int]:
+    """A token count the chunk carried, or None when it did not: a streaming usage record must
+    leave a count the provider never sent as *unknown* so the service falls back to its own
+    estimate (and flags the usage as estimated) instead of recording 0."""
+    return None if value is None else _as_int(value)
+
+
+def _text_of(content: Any) -> str:
+    """Message content as text: a string, or the joined text parts some hosts return."""
+    if isinstance(content, list):
+        return "".join(p.get("text", "") for p in content if isinstance(p, dict))
+    return content or ""
 
 
 class OpenAIWireExecutor(BaseExecutor):
@@ -351,12 +467,10 @@ class OpenAIWireExecutor(BaseExecutor):
     def parse(self, data: dict, latency_ms: float, status: int) -> ChatResult:
         choice = data["choices"][0]
         message = choice.get("message") or {}
-        content = message.get("content")
-        if isinstance(content, list):  # some hosts return content parts
-            content = "".join(p.get("text", "") for p in content if isinstance(p, dict))
+        content = _text_of(message.get("content"))  # some hosts return content parts
         usage = data.get("usage") or {}
         return ChatResult(
-            content=content or "",
+            content=content,
             finish_reason=self._FINISH.get(choice.get("finish_reason"), "other"),
             input_tokens=_as_int(usage.get("prompt_tokens")),
             output_tokens=_as_int(usage.get("completion_tokens")),
@@ -364,6 +478,34 @@ class OpenAIWireExecutor(BaseExecutor):
             http_status=status,
             raw_model=data.get("model"),
         )
+
+    def build_stream(self, req: ChatRequest, api_key: str):
+        url, headers, body = self.build(req, api_key)
+        body["stream"] = True
+        body["stream_options"] = {"include_usage": True}  # final chunk: choices [] + usage
+        return url, headers, body
+
+    def parse_stream_event(self, event_name: Optional[str], data: dict) -> List[StreamEvent]:
+        if isinstance(data.get("error"), (dict, str)) and data.get("error"):
+            # Some hosts report a mid-stream failure as an error object in a chunk.
+            raise ExecutorError(OUTCOME_SERVER_ERROR, 200)
+        out: List[StreamEvent] = []
+        choices = data.get("choices") or []
+        if choices:
+            choice = choices[0]
+            text = _text_of((choice.get("delta") or {}).get("content"))
+            if text:
+                out.append(StreamEvent(EVENT_DELTA, text=text))
+            finish = choice.get("finish_reason")
+            if finish:
+                out.append(StreamEvent(EVENT_FINISH, finish_reason=self._FINISH.get(finish, "other")))
+        usage = data.get("usage")
+        if isinstance(usage, dict) and usage:  # null on every chunk but the last with include_usage
+            out.append(StreamEvent(
+                EVENT_USAGE, input_tokens=_opt_int(usage.get("prompt_tokens")),
+                output_tokens=_opt_int(usage.get("completion_tokens")),
+            ))
+        return out
 
 
 class AnthropicExecutor(BaseExecutor):
@@ -415,6 +557,37 @@ class AnthropicExecutor(BaseExecutor):
             raw_model=data.get("model"),
         )
 
+    def build_stream(self, req: ChatRequest, api_key: str):
+        url, headers, body = self.build(req, api_key)
+        body["stream"] = True
+        return url, headers, body
+
+    def parse_stream_event(self, event_name: Optional[str], data: dict) -> List[StreamEvent]:
+        kind = data.get("type") or event_name
+        if kind == "message_start":
+            usage = (data.get("message") or {}).get("usage") or {}
+            if "input_tokens" in usage:
+                return [StreamEvent(EVENT_USAGE, input_tokens=_as_int(usage.get("input_tokens")))]
+            return []
+        if kind == "content_block_delta":
+            delta = data.get("delta") or {}
+            if delta.get("type") == "text_delta" and delta.get("text"):
+                return [StreamEvent(EVENT_DELTA, text=str(delta["text"]))]
+            return []  # thinking / tool-use deltas are not streamed (text only)
+        if kind == "message_delta":
+            out: List[StreamEvent] = []
+            stop = (data.get("delta") or {}).get("stop_reason")
+            if stop:
+                out.append(StreamEvent(EVENT_FINISH, finish_reason=self._STOP.get(stop, "other")))
+            usage = data.get("usage") or {}
+            if "output_tokens" in usage:
+                out.append(StreamEvent(EVENT_USAGE, output_tokens=_as_int(usage.get("output_tokens"))))
+            return out
+        if kind == "error":
+            # The body is classified and dropped, never copied (same as an HTTP error body).
+            raise ExecutorError(OUTCOME_SERVER_ERROR, 200)
+        return []  # ping, content_block_start/stop, message_stop
+
 
 class GeminiExecutor(BaseExecutor):
     """Google Gemini API (generateContent)."""
@@ -453,7 +626,7 @@ class GeminiExecutor(BaseExecutor):
         if candidates:
             cand = candidates[0]
             parts = (cand.get("content") or {}).get("parts") or []
-            text = "".join(p.get("text", "") for p in parts if isinstance(p, dict))
+            text = _text_of(parts)
             finish = self._FINISH.get(cand.get("finishReason"), "other")
         usage = data.get("usageMetadata") or {}
         output = _as_int(usage.get("candidatesTokenCount")) + _as_int(usage.get("thoughtsTokenCount"))
@@ -466,6 +639,34 @@ class GeminiExecutor(BaseExecutor):
             http_status=status,
             raw_model=data.get("modelVersion"),
         )
+
+    def build_stream(self, req: ChatRequest, api_key: str):
+        _, headers, body = self.build(req, api_key)
+        return f"{self.spec.base_url}/models/{req.model}:streamGenerateContent?alt=sse", headers, body
+
+    def parse_stream_event(self, event_name: Optional[str], data: dict) -> List[StreamEvent]:
+        out: List[StreamEvent] = []
+        candidates = data.get("candidates") or []
+        if candidates:
+            cand = candidates[0]
+            parts = (cand.get("content") or {}).get("parts") or []
+            text = _text_of(parts)
+            if text:
+                out.append(StreamEvent(EVENT_DELTA, text=text))
+            finish = cand.get("finishReason")
+            if finish:
+                out.append(StreamEvent(EVENT_FINISH, finish_reason=self._FINISH.get(finish, "other")))
+        usage = data.get("usageMetadata")
+        if isinstance(usage, dict) and usage:  # cumulative on every chunk; the last one wins
+            # Early chunks carry promptTokenCount only: output stays unknown (None) until the
+            # provider reports candidatesTokenCount, so an aborted stream is estimated, not 0.
+            candidates_out = _opt_int(usage.get("candidatesTokenCount"))
+            out.append(StreamEvent(
+                EVENT_USAGE, input_tokens=_opt_int(usage.get("promptTokenCount")),
+                output_tokens=None if candidates_out is None
+                else candidates_out + _as_int(usage.get("thoughtsTokenCount")),
+            ))
+        return out
 
 
 def get_executor(

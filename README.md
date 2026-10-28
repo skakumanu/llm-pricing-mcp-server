@@ -98,7 +98,7 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 - Dispatch mode of `/v1/chat/completions` requires a free-tier *customer* key (the global `MCP_API_KEY` is refused — dispatch writes per-org ledgers); provider keys are bring-your-own per request (`X-Provider-Key-*` headers), used transiently and never stored, logged or echoed — and neither are prompts or completions
 - Rate limiting per client IP + tier bucket — includes the anonymous `/agent/chat` and `/agent/chat/stream` endpoints (no API key needed, but throttled, since each call runs an LLM on the operator's key)
 - Request size limit (1MB default)
-- 1870 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 2005 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
@@ -505,10 +505,13 @@ print(receipt["chosen"]["model"], receipt["cost"]["actual_usd"],
   `forgone_vs_cheapest_meeting_floor` when pinned), `latency` (total / provider / overhead), `attempts`,
   `shadow`, `dispatch_id`, `request_id`. Add `currency` / `country` to the policy (or `X-Currency` /
   `X-Country`) for a `local` block in your currency — explicit only; this endpoint never infers a location.
-- **Ledgers**: each successful dispatch records exactly one exact usage event (`request_id` dedupes it on
+- **Ledgers**: each successful dispatch records exactly one usage event (`request_id` dedupes it on
   retries — the provider call itself is not deduped) and one routing decision marked used, so
   `GET /usage/summary`, `GET /telemetry/savings`, the acceptance rate and budget alerts reflect real
-  dispatched spend.
+  dispatched spend. The event is exact unless a streamed response carried no provider usage record, in
+  which case the gateway counts the prompt and the streamed text itself and flags the event `is_estimated`
+  (the receipt says so too); a stream that fails or is abandoned after content was sent records the tokens
+  delivered so far as estimated spend.
 - **Budget hard stop**: `POST /usage/alerts` with `hard_stop: true`, sent with your customer API key, refuses
   dispatch for your org with `402 budget_hard_stop` once recorded spend over the alert's period reaches its
   threshold. The alert is bound to the key's own org (you cannot stop, list or delete another org's alerts),
@@ -520,10 +523,20 @@ print(receipt["chosen"]["model"], receipt["cost"]["actual_usd"],
   recorded — it is real money.
 - **Audit export**: `GET /dispatch/receipts?format=csv|json&since=&until=&outcome=&limit=` returns your org's
   receipts as metadata rows (90-day retention). Rows never contain a prompt, a completion or a key.
-- **Scope in this release**: non-streaming, text-only, single-choice chat completions. `stream: true`, `tools` /
+- **Streaming** (v1.78.0): add `stream: true` and the completion arrives as OpenAI-format
+  `chat.completion.chunk` SSE — content deltas the moment they arrive, a final empty-delta chunk carrying
+  `finish_reason`, then one trailing chunk with `choices: []`, `usage`, `routing_metadata` and the full
+  `dispatch_receipt` (the shape OpenAI's own `include_usage` final chunk uses, so SDK stream readers accept
+  it), then `data: [DONE]`. Every pre-provider refusal is the same JSON error as without `stream`; failover
+  happens only before the first content delta (`failover.timeout_ms` bounds time-to-first-content, then
+  the gap between events); a failure after content ends the stream with a `data: {"error": {...}}` event
+  naming the outcome, model, provider and attempts — never a silent switch to another model. The shadow
+  stays non-streaming and the trailing receipt waits for it; deltas never do. The receipt and the export
+  carry `streamed` and `usage_estimated`. The plain proxy (no `dispatch`) still ignores `stream`.
+- **Scope in this release**: text-only, single-choice chat completions, streamed or not. `tools` /
   `functions` / `tool_choice`, `n > 1`, a non-text `response_format` and image content parts are rejected up
-  front with the feature named (nothing is silently dropped; `user` is accepted and not forwarded). No new
-  MCP tool. Pooled service-paid keys and stored per-account keys are explicitly out of scope.
+  front with the feature named (nothing is silently dropped; `user` and `stream_options` are accepted and not
+  forwarded). No new MCP tool. Pooled service-paid keys and stored per-account keys are explicitly out of scope.
 - **Privacy**: provider keys exist only in the request headers and the outgoing provider call; prompts and
   completions only in the request, the provider call and `choices`. Neither is persisted or logged at any
   level, and provider error bodies are classified into an outcome, never copied. The provider bills you directly.

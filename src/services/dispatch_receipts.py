@@ -5,6 +5,8 @@ refusals (auth, budget stop, no candidate) are not rows. Columns are ids, model 
 provider names, outcomes, token counts, costs and latencies — never messages,
 completion text, provider error bodies, provider keys, IPs or headers. Rows older than
 ``retention_days`` are purged on initialize() and opportunistically after each insert.
+v1.78.0 adds ``streamed`` (the dispatch was requested with ``stream: true``) and
+``usage_estimated`` (token counts were counted by the gateway, not reported by the provider).
 
 Same SQLite file and aiosqlite/WAL idiom as usage_tracker.py; same init_X/get_X
 singleton pattern as every other service.
@@ -30,7 +32,11 @@ async def _open_db(db_path: str):
         yield db
 
 
-# The column order here is the CSV column order.
+# The column order here is the CSV column order. New columns are appended at the end so
+# existing export consumers see their columns unchanged.
+#   streamed        (v1.78.0) 1 when the dispatch was requested with `stream: true`
+#   usage_estimated (v1.78.0) 1 when the token counts were counted by the gateway rather
+#                   than reported by the provider (a stream that carried no usage record)
 COLUMNS: List[str] = [
     "dispatch_id", "org_id", "created_at", "request_id", "session_id", "requested_model",
     "objective", "policy_json", "task_type", "chosen_model", "chosen_provider", "outcome",
@@ -38,8 +44,11 @@ COLUMNS: List[str] = [
     "estimated_cost_usd", "savings_vs_most_expensive_usd", "savings_vs_requested_usd",
     "latency_total_ms", "latency_provider_ms", "quality_score", "price_as_of",
     "price_source_kind", "shadow_model", "shadow_provider", "shadow_outcome",
-    "shadow_cost_usd", "shadow_latency_ms", "live_call",
+    "shadow_cost_usd", "shadow_latency_ms", "live_call", "streamed", "usage_estimated",
 ]
+
+# Boolean columns stored as 0/1 and returned as bool.
+_BOOL_COLUMNS = ("live_call", "streamed", "usage_estimated")
 
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS dispatch_receipts (
@@ -73,9 +82,17 @@ CREATE TABLE IF NOT EXISTS dispatch_receipts (
     shadow_outcome TEXT,
     shadow_cost_usd REAL,
     shadow_latency_ms REAL,
-    live_call INTEGER NOT NULL DEFAULT 1
+    live_call INTEGER NOT NULL DEFAULT 1,
+    streamed INTEGER NOT NULL DEFAULT 0,
+    usage_estimated INTEGER NOT NULL DEFAULT 0
 )
 """
+
+# Columns added after v1.77.0; applied to pre-existing databases on initialize().
+_MIGRATIONS = (
+    "ALTER TABLE dispatch_receipts ADD COLUMN streamed INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE dispatch_receipts ADD COLUMN usage_estimated INTEGER NOT NULL DEFAULT 0",
+)
 
 _CREATE_INDEX = """
 CREATE INDEX IF NOT EXISTS idx_dispatch_receipts_org_created
@@ -105,6 +122,13 @@ class DispatchReceiptStore:
         async with _open_db(self._db_path) as db:
             await db.execute(_CREATE_TABLE)
             await db.execute(_CREATE_INDEX)
+            # Migrate v1.77.0 databases (same idiom as usage_tracker.py): a column that already
+            # exists makes ALTER TABLE fail, which is the expected steady state.
+            for statement in _MIGRATIONS:
+                try:
+                    await db.execute(statement)
+                except aiosqlite.OperationalError:
+                    pass  # nosec B110 — column already exists, this is intentional
             await db.commit()
         await self.purge_expired()
 
@@ -115,6 +139,8 @@ class DispatchReceiptStore:
             v = row.get(col)
             if col == "live_call":
                 v = 1 if (v is None or v) else 0
+            elif col in _BOOL_COLUMNS:
+                v = 1 if v else 0  # NOT NULL DEFAULT 0: None means "no"
             if col == "created_at" and v is None:
                 v = time.time()
             if col == "attempts" and v is None:
@@ -168,7 +194,8 @@ class DispatchReceiptStore:
         out = []
         for r in rows:
             d = dict(r)
-            d["live_call"] = bool(d.get("live_call"))
+            for col in _BOOL_COLUMNS:
+                d[col] = bool(d.get(col))
             out.append(d)
         return out
 
