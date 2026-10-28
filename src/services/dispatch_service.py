@@ -10,6 +10,14 @@ Flow (see docs/ARCHITECTURE.md "Dispatch gateway"):
   concurrently) -> ledgers (usage event, routing decision + feedback, budget alerts,
   receipt row) -> OpenAI-shaped response + additive dispatch_receipt.
 
+Streaming (v1.78.0): ``dispatch_stream()`` runs the same pre-call pipeline
+(``_prepare``), then walks the candidates with the executor's ``stream()``: an
+attempt that fails before its first content delta fails over exactly like a
+non-streaming attempt; once a delta has been yielded to the caller there is no
+failover — a later failure ends the stream with an error event, and the tokens
+delivered so far are written to the usage ledger as estimated spend. The trailing
+receipt waits for the shadow; content deltas never do.
+
 Privacy: this module logs ids, model/provider names, outcomes, status codes,
 latencies, token counts and costs — never message or completion text, never a
 provider key, never a provider error body. Keys are read only through the
@@ -21,17 +29,18 @@ import logging
 import time
 import uuid
 from collections import Counter
-from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Set, Tuple
 
 from src.models.dispatch import DispatchPolicy
 from src.services.benchmark_service import enrich_models
 from src.services.cost_calculator import compute_token_cost
 from src.services.currency import LocaleContext, conversion_metadata, convert
 from src.services.dispatch_executors import (
-    EXECUTABLE_PROVIDERS, OUTCOME_AUTH_ERROR, OUTCOME_CONTEXT_TOO_LONG, OUTCOME_OK,
-    OUTCOME_PROVIDER_REJECTED, OUTCOME_TIMEOUT, ChatRequest, ChatResult, ExecutorError,
-    ExecutorSpec, ProviderKeyResolver, executor_spec_for, get_executor, is_executable_provider,
+    EVENT_DELTA, EVENT_FINISH, EVENT_USAGE, EXECUTABLE_PROVIDERS, OUTCOME_AUTH_ERROR,
+    OUTCOME_CLIENT_DISCONNECTED, OUTCOME_CONTEXT_TOO_LONG, OUTCOME_OK, OUTCOME_PROVIDER_REJECTED,
+    OUTCOME_SERVER_ERROR, OUTCOME_TIMEOUT, ChatRequest, ChatResult, ExecutorError, ExecutorSpec,
+    ProviderKeyResolver, StreamEvent, executor_spec_for, get_executor, is_executable_provider,
 )
 from src.services.router import ModelRouter, RouterConstraints
 from src.services.token_counter import count_tokens
@@ -123,6 +132,86 @@ class Attempt:
         }
 
 
+@dataclass
+class DispatchStreamEvent:
+    """What ``dispatch_stream()`` yields: ``delta`` (text + ids), ``end`` (the trailing envelope:
+    id, created, model, finish_reason, usage, routing_metadata, dispatch_receipt) or ``error``
+    (outcome, dispatch_id, model, provider, http_status, attempts). Exactly one ``end`` or
+    ``error`` closes a stream; neither is ever followed by a delta."""
+
+    kind: str
+    text: str = ""
+    payload: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class _Plan:
+    """Everything computed before the first provider call — shared by dispatch() and dispatch_stream()."""
+
+    dispatch_id: str
+    org_id: Optional[str]
+    t_start: float
+    customer: Any
+    requested_model: str
+    policy: DispatchPolicy
+    key_resolver: ProviderKeyResolver
+    locale: LocaleContext
+    webhook_secret: Optional[str]
+    models: List[Any]
+    task_type: Optional[str]
+    task_type_source: Optional[str]
+    constraints: Any
+    est_input_tokens: int
+    chat_req: ChatRequest
+    eligible: List[Candidate]
+    excluded: List[Dict[str, Any]]
+    excluded_summary: Dict[str, int]
+    policy_dump: Dict[str, Any]
+    pinned: Optional[Candidate]
+    ordered: List[Candidate]
+    shadow_cand: Optional[Candidate]
+    shadow_report: Optional[Dict[str, Any]]   # pre-filled only when the shadow was skipped
+    failover_on: bool
+    max_attempts: int
+    timeout_s: float
+
+
+@dataclass
+class _StreamState:
+    """Mutable state of one streaming dispatch: the attempt in flight and what it has yielded."""
+
+    attempts: List[Attempt] = field(default_factory=list)
+    cand: Optional[Candidate] = None
+    agen: Optional[AsyncIterator[StreamEvent]] = None
+    started: float = 0.0
+    text: str = ""                          # completion text relayed so far (never logged)
+    finish: Optional[str] = None
+    provider_in: Optional[int] = None
+    provider_out: Optional[int] = None
+    terminal: Optional[ExecutorError] = None
+    remaining_untried: int = 0
+    created: int = 0
+
+    def absorb_usage(self, ev: StreamEvent) -> None:
+        if ev.input_tokens is not None:
+            self.provider_in = ev.input_tokens
+        if ev.output_tokens is not None:
+            self.provider_out = ev.output_tokens
+
+    @property
+    def usage_estimated(self) -> bool:
+        """True unless the provider reported both counts."""
+        return self.provider_in is None or self.provider_out is None
+
+    def effective_tokens(self, est_input_tokens: int) -> Tuple[int, int]:
+        """(input, output) tokens to bill: the provider's counts where it sent them, otherwise the
+        gateway's own estimate of the prompt and a count of the text relayed so far. The single
+        rule for completed, failed and abandoned streams alike."""
+        in_t = self.provider_in if self.provider_in is not None else est_input_tokens
+        out_t = self.provider_out if self.provider_out is not None else count_tokens(self.text)
+        return in_t, out_t
+
+
 class DispatchService:
     """Policy, eligibility, ranking, failover, shadow, receipt and ledger writes."""
 
@@ -151,6 +240,14 @@ class DispatchService:
         self._default_max_tokens = default_max_tokens
         self._attempt_timeout_ms = attempt_timeout_ms
         self._max_attempts = max_attempts
+        # Settlement tasks (ledgers + receipt) of streams whose client went away mid-way; they are
+        # shielded from the response's cancellation so the spend is still recorded.
+        self._settling: Set[asyncio.Task] = set()
+
+    async def wait_settled(self) -> None:
+        """Await every in-flight stream settlement (tests; shutdown)."""
+        while self._settling:
+            await asyncio.gather(*list(self._settling), return_exceptions=True)
 
     # ------------------------------------------------------------------
     # Discoverability (GET /dispatch/providers)
@@ -201,7 +298,8 @@ class DispatchService:
                 "Dispatch is an opt-in mode of POST /v1/chat/completions: send a `dispatch` policy, a free-tier "
                 "service API key (x-api-key or Authorization: Bearer) and your own provider key in the listed "
                 "key_header. Only models with a confirmed price under an executable provider are ever dispatched; "
-                "everything else is recommend-only."
+                "everything else is recommend-only. `stream: true` is supported: the completion arrives as "
+                "OpenAI-format chat.completion.chunk events with the receipt in a trailing chunk before [DONE]."
             ),
         }
 
@@ -344,13 +442,19 @@ class DispatchService:
     # Execution
     # ------------------------------------------------------------------
 
-    async def _run_attempt(self, cand: Candidate, chat_req: ChatRequest, api_key: str, timeout_s: float) -> ChatResult:
-        executor = self._executor_factory(cand.spec, timeout_s)
-        req = ChatRequest(
+    @staticmethod
+    def _candidate_request(cand: Candidate, chat_req: ChatRequest) -> ChatRequest:
+        """The caller's request re-addressed to one candidate (both the non-streaming and the
+        streaming attempt build theirs here, so a forwarded field is never added to only one)."""
+        return ChatRequest(
             model=cand.model.model_name, messages=chat_req.messages, max_tokens=chat_req.max_tokens,
             temperature=chat_req.temperature, top_p=chat_req.top_p, stop=chat_req.stop,
             reasoning_model=bool(getattr(cand.model, "is_reasoning_model", False)),
         )
+
+    async def _run_attempt(self, cand: Candidate, chat_req: ChatRequest, api_key: str, timeout_s: float) -> ChatResult:
+        executor = self._executor_factory(cand.spec, timeout_s)
+        req = self._candidate_request(cand, chat_req)
         try:
             return await asyncio.wait_for(executor.execute(req, api_key), timeout=timeout_s)
         except asyncio.TimeoutError:
@@ -439,10 +543,10 @@ class DispatchService:
         }
 
     # ------------------------------------------------------------------
-    # Main entry point
+    # Pre-call pipeline (shared by dispatch() and dispatch_stream())
     # ------------------------------------------------------------------
 
-    async def dispatch(
+    async def _prepare(
         self,
         *,
         customer,
@@ -457,7 +561,9 @@ class DispatchService:
         top_p: Optional[float] = None,
         stop: Optional[List[str]] = None,
         webhook_secret: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> _Plan:
+        """Everything before the first provider call. Raises DispatchError (402/400) for every
+        pre-provider refusal — identically whether the caller streams or not."""
         t_start = time.perf_counter()
         dispatch_id = str(uuid.uuid4())
         org_id = getattr(customer, "org_id", None)
@@ -558,88 +664,169 @@ class DispatchService:
         timeout_s = (policy.failover.timeout_ms or self._attempt_timeout_ms) / 1000.0
 
         shadow_report: Optional[Dict[str, Any]] = None
-        if policy.shadow is not None:
-            if shadow_cand is None:
-                shadow_report = {"model": policy.shadow.model, "provider": None, "outcome": "skipped",
-                                 "skip_reason": shadow_skip, "input_tokens": None, "output_tokens": None,
-                                 "cost_usd": None, "provider_latency_ms": None}
-            else:
-                primary_task = self._primary_loop(
-                    ordered, chat_req, key_resolver, timeout_s, max_attempts, skip=shadow_cand,
-                )
-                shadow_task = self._shadow_run(shadow_cand, chat_req, key_resolver, timeout_s)
-                # return_exceptions so a primary failure still lets the shadow finish and be
-                # recorded (its spend is real money); _shadow_run itself only lets
-                # CancelledError/KeyboardInterrupt escape.
-                primary_out, shadow_out = await asyncio.gather(primary_task, shadow_task, return_exceptions=True)
-                shadow_report = (
-                    self._shadow_failure(shadow_cand, "error", None, None)
-                    if isinstance(shadow_out, BaseException) else shadow_out
-                )
-                if isinstance(primary_out, BaseException):
-                    raise primary_out
-                chosen, result, attempts, terminal, remaining_untried = primary_out
-                await self._record_shadow_spend(shadow_report, org_id, policy)
-        if policy.shadow is None or shadow_cand is None:
+        if policy.shadow is not None and shadow_cand is None:
+            shadow_report = {"model": policy.shadow.model, "provider": None, "outcome": "skipped",
+                             "skip_reason": shadow_skip, "input_tokens": None, "output_tokens": None,
+                             "cost_usd": None, "provider_latency_ms": None}
+
+        return _Plan(
+            dispatch_id=dispatch_id, org_id=org_id, t_start=t_start, customer=customer,
+            requested_model=requested_model, policy=policy, key_resolver=key_resolver, locale=locale,
+            webhook_secret=webhook_secret, models=models, task_type=task_type,
+            task_type_source=task_type_source, constraints=constraints, est_input_tokens=est_input_tokens,
+            chat_req=chat_req, eligible=eligible, excluded=excluded, excluded_summary=excluded_summary,
+            policy_dump=policy_dump, pinned=pinned, ordered=ordered, shadow_cand=shadow_cand,
+            shadow_report=shadow_report, failover_on=failover_on, max_attempts=max_attempts,
+            timeout_s=timeout_s,
+        )
+
+    # ------------------------------------------------------------------
+    # Main entry point (non-streaming)
+    # ------------------------------------------------------------------
+
+    async def dispatch(self, **kwargs) -> Dict[str, Any]:
+        """One real provider call (with failover) -> OpenAI chat.completion + dispatch_receipt.
+
+        Keyword arguments are those of ``_prepare``: customer, requested_model, messages, policy,
+        key_resolver, locale, inferred_task_type, max_tokens, temperature, top_p, stop,
+        webhook_secret.
+        """
+        plan = await self._prepare(**kwargs)
+        policy, key_resolver = plan.policy, plan.key_resolver
+        shadow_report = plan.shadow_report
+        if plan.shadow_cand is not None:
+            primary_task = self._primary_loop(
+                plan.ordered, plan.chat_req, key_resolver, plan.timeout_s, plan.max_attempts, skip=plan.shadow_cand,
+            )
+            shadow_task = self._shadow_run(plan.shadow_cand, plan.chat_req, key_resolver, plan.timeout_s)
+            # return_exceptions so a primary failure still lets the shadow finish and be
+            # recorded (its spend is real money); _shadow_run itself only lets
+            # CancelledError/KeyboardInterrupt escape.
+            primary_out, shadow_out = await asyncio.gather(primary_task, shadow_task, return_exceptions=True)
+            shadow_report = (
+                self._shadow_failure(plan.shadow_cand, "error", None, None)
+                if isinstance(shadow_out, BaseException) else shadow_out
+            )
+            if isinstance(primary_out, BaseException):
+                raise primary_out
+            chosen, result, attempts, terminal, remaining_untried = primary_out
+            await self._record_shadow_spend(shadow_report, plan.org_id, policy)
+        else:
             chosen, result, attempts, terminal, remaining_untried = await self._primary_loop(
-                ordered, chat_req, key_resolver, timeout_s, max_attempts,
+                plan.ordered, plan.chat_req, key_resolver, plan.timeout_s, plan.max_attempts,
             )
 
-        attempts_dicts = [a.as_dict() for a in attempts]
-        total_ms = (time.perf_counter() - t_start) * 1000.0
-
         if result is None or chosen is None:
-            if attempts:  # never reached a provider -> not a receipt row
-                await self._record_receipt(
-                    dispatch_id, org_id, requested_model, policy, policy_dump, task_type, attempts_dicts,
-                    total_ms, shadow_report,
-                )
-                logger.info("dispatch %s: outcome=failed attempts=%d org=%s", dispatch_id, len(attempts), org_id)
-            if terminal is not None and terminal.outcome == OUTCOME_AUTH_ERROR:
-                failed = attempts[-1]
-                raise DispatchError(400, {
-                    "error": "provider_auth_failed",
-                    "message": (
-                        f"{failed.provider} rejected the provider key supplied in "
-                        f"{executor_spec_for(failed.provider).key_header} (HTTP {failed.http_status}). "
-                        "The key is the caller's; dispatch does not route around it."
-                    ),
-                    "provider": failed.provider,
-                    "model": failed.model,
-                    "http_status": failed.http_status,
-                    "attempts": attempts_dicts,
-                    "dispatch_id": dispatch_id,
-                })
-            if terminal is not None and terminal.outcome == OUTCOME_PROVIDER_REJECTED:
-                failed = attempts[-1]
-                raise DispatchError(502, {
-                    "error": "provider_rejected",
-                    "message": (
-                        f"{failed.provider} rejected the request for {failed.model} (HTTP {failed.http_status})."
-                    ),
-                    "provider": failed.provider,
-                    "model": failed.model,
-                    "http_status": failed.http_status,
-                    "attempts": attempts_dicts,
-                    "dispatch_id": dispatch_id,
-                })
-            elim = self._exhausted_constraint(excluded)
-            constraint = REASON_TO_CONSTRAINT.get(elim or "", elim)
-            raise DispatchError(502, {
-                "error": "all_attempts_failed",
-                "message": self._exhausted_message(
-                    attempts, remaining_untried, elim, policy, task_type, failover_on,
+            await self._fail(plan, attempts, terminal, remaining_untried, shadow_report)  # always raises
+
+        envelope = await self._finish(
+            plan, chosen, result, attempts, shadow_report, streamed=False, usage_estimated=False,
+        )
+        return {
+            "id": envelope["id"],
+            "object": "chat.completion",
+            "created": envelope["created"],
+            "model": envelope["model"],
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": result.content},
+                    "finish_reason": result.finish_reason,
+                }
+            ],
+            "usage": envelope["usage"],
+            "routing_metadata": envelope["routing_metadata"],
+            "dispatch_receipt": envelope["dispatch_receipt"],
+        }
+
+    # ------------------------------------------------------------------
+    # Failure / success settlement (shared)
+    # ------------------------------------------------------------------
+
+    async def _fail(
+        self,
+        plan: _Plan,
+        attempts: List[Attempt],
+        terminal: Optional[ExecutorError],
+        remaining_untried: int,
+        shadow_report: Optional[Dict[str, Any]],
+        *,
+        streamed: bool = False,
+    ) -> None:
+        """Receipt row (when a provider was reached) + the 400/502 DispatchError. Always raises."""
+        dispatch_id, org_id, policy, task_type = plan.dispatch_id, plan.org_id, plan.policy, plan.task_type
+        attempts_dicts = [a.as_dict() for a in attempts]
+        total_ms = (time.perf_counter() - plan.t_start) * 1000.0
+        if attempts:  # never reached a provider -> not a receipt row
+            await self._record_receipt(
+                dispatch_id, org_id, plan.requested_model, policy, plan.policy_dump, task_type, attempts_dicts,
+                total_ms, shadow_report, streamed=streamed,
+            )
+            logger.info("dispatch %s: outcome=failed attempts=%d org=%s", dispatch_id, len(attempts), org_id)
+        if terminal is not None and terminal.outcome == OUTCOME_AUTH_ERROR:
+            failed = attempts[-1]
+            raise DispatchError(400, {
+                "error": "provider_auth_failed",
+                "message": (
+                    f"{failed.provider} rejected the provider key supplied in "
+                    f"{executor_spec_for(failed.provider).key_header} (HTTP {failed.http_status}). "
+                    "The key is the caller's; dispatch does not route around it."
                 ),
+                "provider": failed.provider,
+                "model": failed.model,
+                "http_status": failed.http_status,
                 "attempts": attempts_dicts,
-                "eligible_remaining": remaining_untried,
-                "eliminating_constraint": constraint if remaining_untried == 0 else None,
-                "constraint_value": (
-                    self._constraint_value(elim, policy, task_type) if remaining_untried == 0 else None
-                ),
-                "failover_enabled": failover_on,
-                "max_attempts": max_attempts,
                 "dispatch_id": dispatch_id,
             })
+        if terminal is not None and terminal.outcome == OUTCOME_PROVIDER_REJECTED:
+            failed = attempts[-1]
+            raise DispatchError(502, {
+                "error": "provider_rejected",
+                "message": (
+                    f"{failed.provider} rejected the request for {failed.model} (HTTP {failed.http_status})."
+                ),
+                "provider": failed.provider,
+                "model": failed.model,
+                "http_status": failed.http_status,
+                "attempts": attempts_dicts,
+                "dispatch_id": dispatch_id,
+            })
+        elim = self._exhausted_constraint(plan.excluded)
+        constraint = REASON_TO_CONSTRAINT.get(elim or "", elim)
+        raise DispatchError(502, {
+            "error": "all_attempts_failed",
+            "message": self._exhausted_message(
+                attempts, remaining_untried, elim, policy, task_type, plan.failover_on,
+            ),
+            "attempts": attempts_dicts,
+            "eligible_remaining": remaining_untried,
+            "eliminating_constraint": constraint if remaining_untried == 0 else None,
+            "constraint_value": (
+                self._constraint_value(elim, policy, task_type) if remaining_untried == 0 else None
+            ),
+            "failover_enabled": plan.failover_on,
+            "max_attempts": plan.max_attempts,
+            "dispatch_id": dispatch_id,
+        })
+
+    async def _finish(
+        self,
+        plan: _Plan,
+        chosen: Candidate,
+        result: ChatResult,
+        attempts: List[Attempt],
+        shadow_report: Optional[Dict[str, Any]],
+        *,
+        streamed: bool,
+        usage_estimated: bool,
+        created: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Costs, savings, shadow deltas, ledgers, receipt row. Returns the envelope {id, created,
+        model, finish_reason, usage, routing_metadata, dispatch_receipt, dispatch_id} — the
+        non-streaming response minus ``choices``; the stream's trailing chunk."""
+        dispatch_id, org_id, policy, task_type = plan.dispatch_id, plan.org_id, plan.policy, plan.task_type
+        eligible, pinned, locale, customer = plan.eligible, plan.pinned, plan.locale, plan.customer
+        attempts_dicts = [a.as_dict() for a in attempts]
 
         # i) Costs, savings, ledgers.
         m = chosen.model
@@ -656,7 +843,7 @@ class DispatchService:
         savings_me = _usd(max(0.0, me_cost - actual))
         savings_me_pct = round(savings_me / me_cost * 100.0, 2) if me_cost and me_cost > 0 else 0.0
 
-        vs_requested = self._savings_vs_requested(requested_model, models, chosen, result, actual)
+        vs_requested = self._savings_vs_requested(plan.requested_model, plan.models, chosen, result, actual)
         forgone = self._forgone_vs_cheapest(pinned, eligible, policy, result, actual) if pinned else None
 
         if shadow_report and shadow_report.get("outcome") == "success":
@@ -669,18 +856,20 @@ class DispatchService:
             shadow_report.setdefault("latency_delta_ms", None)
 
         await self._write_ledgers(
-            dispatch_id, customer, chosen, result, actual, most_expensive, task_type, policy, webhook_secret,
+            dispatch_id, customer, chosen, result, actual, most_expensive, task_type, policy,
+            plan.webhook_secret, is_estimated=usage_estimated,
         )
 
-        total_ms = (time.perf_counter() - t_start) * 1000.0
+        total_ms = (time.perf_counter() - plan.t_start) * 1000.0
         receipt = {
             "dispatch_id": dispatch_id,
             "request_id": policy.request_id,
             "live_call": True,
+            "streamed": streamed,
             "objective": policy.objective,
             "task_type": task_type,
-            "task_type_source": task_type_source,
-            "policy": policy_dump,
+            "task_type_source": plan.task_type_source,
+            "policy": plan.policy_dump,
             "reason": self._reason_text(policy, chosen, eligible, pinned),
             "chosen": {
                 "model": m.model_name,
@@ -706,14 +895,17 @@ class DispatchService:
                     "context_window": c.model.context_window,
                     "estimated_cost_usd": _usd(c.estimated_usd),
                 }
-                for i, c in enumerate(ordered if not pinned else self._order(eligible, "balanced", constraints))
+                for i, c in enumerate(
+                    plan.ordered if not pinned else self._order(eligible, "balanced", plan.constraints)
+                )
             ],
-            "excluded": excluded,
-            "excluded_summary": excluded_summary,
+            "excluded": plan.excluded,
+            "excluded_summary": plan.excluded_summary,
             "usage": {
                 "input_tokens": result.input_tokens,
                 "output_tokens": result.output_tokens,
                 "total_tokens": result.input_tokens + result.output_tokens,
+                "estimated": usage_estimated,
             },
             "cost": {
                 "actual_usd": actual,
@@ -753,43 +945,267 @@ class DispatchService:
             receipt["currency_conversion"] = conversion_metadata(locale)
 
         await self._record_receipt(
-            dispatch_id, org_id, requested_model, policy, policy_dump, task_type, attempts_dicts, total_ms,
-            shadow_report, chosen=chosen, result=result, actual=actual, savings_me=savings_me,
-            vs_requested=vs_requested,
+            dispatch_id, org_id, plan.requested_model, policy, plan.policy_dump, task_type, attempts_dicts,
+            total_ms, shadow_report, chosen=chosen, result=result, actual=actual, savings_me=savings_me,
+            vs_requested=vs_requested, streamed=streamed, usage_estimated=usage_estimated,
         )
 
         logger.info(
-            "dispatch %s: %s/%s outcome=ok attempts=%d tokens=%d/%d cost_usd=%.8f org=%s",
+            "dispatch %s: %s/%s outcome=ok attempts=%d tokens=%d/%d%s cost_usd=%.8f streamed=%s org=%s",
             dispatch_id, m.provider, m.model_name, len(attempts), result.input_tokens, result.output_tokens,
-            actual, org_id,
+            " (estimated)" if usage_estimated else "", actual, streamed, org_id,
         )
 
-        return {
+        envelope = {
             "id": f"chatcmpl-{uuid.UUID(dispatch_id).hex[:24]}",
-            "object": "chat.completion",
-            "created": int(time.time()),
+            "created": created if created is not None else int(time.time()),
             "model": m.model_name,
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {"role": "assistant", "content": result.content},
-                    "finish_reason": result.finish_reason,
-                }
-            ],
+            "finish_reason": result.finish_reason,
             "usage": {
                 "prompt_tokens": result.input_tokens,
                 "completion_tokens": result.output_tokens,
                 "total_tokens": result.input_tokens + result.output_tokens,
             },
             "routing_metadata": {
-                "requested_model": requested_model,
+                "requested_model": plan.requested_model,
                 "recommended_model": m.model_name,
                 "actual_forwarding": True,
                 "task_type_inferred": task_type,
                 "dispatch_id": dispatch_id,
             },
             "dispatch_receipt": receipt,
+            "dispatch_id": dispatch_id,
         }
+        return envelope
+
+    # ------------------------------------------------------------------
+    # Streaming entry point (v1.78.0)
+    # ------------------------------------------------------------------
+
+    async def dispatch_stream(self, **kwargs) -> AsyncIterator[DispatchStreamEvent]:
+        """Same pipeline as dispatch(), delivered incrementally as ``DispatchStreamEvent``s.
+
+        Every pre-provider refusal raises DispatchError before the first yield, so the caller
+        can still answer with the plain JSON error. Failover happens only before the first
+        content delta; after that a failure ends the stream with an ``error`` event (no retry,
+        no second provider's text). The ``end`` event waits for the shadow — deltas never do.
+        If the consumer stops iterating (client disconnect), the provider stream is closed and
+        the ledgers/receipt are settled in a shielded background task.
+        """
+        plan = await self._prepare(**kwargs)  # DispatchError propagates before any yield
+        state = _StreamState()
+        shadow_task: Optional[asyncio.Task] = None
+        if plan.shadow_cand is not None:
+            shadow_task = asyncio.ensure_future(
+                self._shadow_run(plan.shadow_cand, plan.chat_req, plan.key_resolver, plan.timeout_s)
+            )
+        failure: Optional[ExecutorError] = None
+        try:
+            first = await self._stream_until_first_content(plan, state)
+            if first is None:
+                shadow_report = await self._await_shadow(plan, shadow_task)
+                await self._record_shadow_spend(shadow_report, plan.org_id, plan.policy)
+                await self._fail(
+                    plan, state.attempts, state.terminal, state.remaining_untried, shadow_report, streamed=True,
+                )
+            cand, agen = state.cand, state.agen
+            meta = {"dispatch_id": plan.dispatch_id, "model": cand.model.model_name, "created": state.created}
+            if first.kind == EVENT_DELTA:
+                state.text += first.text
+                yield DispatchStreamEvent(EVENT_DELTA, first.text, meta)
+            while True:
+                try:
+                    # Idle timeout per event (FR19): a stall after first content ends the stream.
+                    ev = await asyncio.wait_for(agen.__anext__(), timeout=plan.timeout_s)
+                except StopAsyncIteration:
+                    if state.finish is None:  # truncated: the provider never said why it stopped
+                        failure = ExecutorError(OUTCOME_SERVER_ERROR)
+                    break
+                except asyncio.TimeoutError:
+                    failure = ExecutorError(OUTCOME_TIMEOUT)
+                    break
+                except ExecutorError as err:
+                    failure = err
+                    break
+                if ev.kind == EVENT_DELTA:
+                    state.text += ev.text
+                    yield DispatchStreamEvent(EVENT_DELTA, ev.text, meta)
+                elif ev.kind == EVENT_FINISH:
+                    state.finish = ev.finish_reason
+                elif ev.kind == EVENT_USAGE:
+                    state.absorb_usage(ev)
+        except (GeneratorExit, asyncio.CancelledError):
+            # The consumer went away (client disconnect) while a provider attempt was in flight
+            # (state.cand is cleared the moment an attempt has failed and been recorded, so this
+            # never re-settles one). Settle in the background, shielded: Starlette re-cancels at
+            # every await from here on.
+            if state.cand is not None:
+                task = self._settle_later(
+                    self._settle_stream(plan, state, shadow_task, ExecutorError(OUTCOME_CLIENT_DISCONNECTED))
+                )
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    pass
+            raise
+        task = self._settle_later(self._settle_stream(plan, state, shadow_task, failure))
+        yield await asyncio.shield(task)
+
+    async def _stream_until_first_content(self, plan: _Plan, state: _StreamState) -> Optional[StreamEvent]:
+        """Walk the candidates with the same failover rules as _primary_loop until one yields
+        content (a delta, or a finish with no content = a legitimately empty completion).
+
+        Returns that first event with ``state`` describing the committed attempt, or None when
+        no candidate committed (``state.attempts`` / ``state.terminal`` / ``state.remaining_untried``
+        then carry what _fail needs). The executor's generator is closed before moving on.
+        """
+        ordered, skip = plan.ordered, plan.shadow_cand
+        min_context: Optional[int] = None
+        idx = 0
+        while idx < len(ordered) and len(state.attempts) < plan.max_attempts:
+            cand = ordered[idx]
+            idx += 1
+            if skip is not None and cand is skip:
+                continue
+            if min_context is not None:
+                cw = cand.model.context_window
+                if cw is None or cw <= min_context:
+                    continue  # context_too_long: only a larger window can help
+            started = time.perf_counter()
+            deadline = started + plan.timeout_s
+            api_key = plan.key_resolver.resolve(cand.model.provider) or ""
+            executor = self._executor_factory(cand.spec, plan.timeout_s)
+            agen = executor.stream(self._candidate_request(cand, plan.chat_req), api_key)
+            state.cand, state.agen, state.started = cand, agen, started
+            state.finish, state.provider_in, state.provider_out = None, None, None
+            err: Optional[ExecutorError] = None
+            first: Optional[StreamEvent] = None
+            try:
+                while first is None:
+                    remaining = deadline - time.perf_counter()
+                    if remaining <= 0:
+                        raise asyncio.TimeoutError
+                    ev = await asyncio.wait_for(agen.__anext__(), timeout=remaining)
+                    if ev.kind == EVENT_DELTA:
+                        first = ev
+                    elif ev.kind == EVENT_FINISH:
+                        state.finish = ev.finish_reason
+                        first = ev
+                    elif ev.kind == EVENT_USAGE:
+                        state.absorb_usage(ev)  # Anthropic reports input tokens before any text
+            except StopAsyncIteration:
+                err = ExecutorError(OUTCOME_SERVER_ERROR)  # ended without content or a finish reason
+            except asyncio.TimeoutError:
+                err = ExecutorError(OUTCOME_TIMEOUT)
+            except ExecutorError as exc:
+                err = exc
+            if err is None:
+                state.created = int(time.time())
+                state.remaining_untried = len(ordered) - idx
+                return first
+            # Nothing is in flight from here until the next candidate starts: a cancellation
+            # landing in between must not settle this (already recorded) attempt again.
+            state.cand, state.agen = None, None
+            await self._close_quietly(agen)
+            elapsed = (time.perf_counter() - started) * 1000.0
+            state.attempts.append(Attempt(
+                len(state.attempts) + 1, cand.model.model_name, cand.model.provider, err.outcome, err.http_status,
+                elapsed,
+            ))
+            if err.outcome in (OUTCOME_AUTH_ERROR, OUTCOME_PROVIDER_REJECTED):
+                state.terminal = err
+                state.remaining_untried = len(ordered) - idx
+                return None
+            if err.outcome == OUTCOME_CONTEXT_TOO_LONG:
+                min_context = cand.model.context_window or 0
+        state.remaining_untried = max(0, len(ordered) - idx)
+        return None
+
+    async def _settle_stream(
+        self, plan: _Plan, state: _StreamState, shadow_task: Optional[asyncio.Task], failure: Optional[ExecutorError],
+    ) -> DispatchStreamEvent:
+        """Close the provider stream, wait for the shadow, write ledgers + receipt; return the terminal event."""
+        cand = state.cand
+        await self._close_quietly(state.agen)
+        elapsed_ms = (time.perf_counter() - state.started) * 1000.0
+        shadow_report = await self._await_shadow(plan, shadow_task)
+        await self._record_shadow_spend(shadow_report, plan.org_id, plan.policy)
+        if failure is not None:
+            state.attempts.append(Attempt(
+                len(state.attempts) + 1, cand.model.model_name, cand.model.provider, failure.outcome,
+                failure.http_status, elapsed_ms,
+            ))
+            attempts_dicts = [a.as_dict() for a in state.attempts]
+            partial = await self._record_partial_spend(plan, cand, state)
+            await self._record_receipt(
+                plan.dispatch_id, plan.org_id, plan.requested_model, plan.policy, plan.policy_dump, plan.task_type,
+                attempts_dicts, (time.perf_counter() - plan.t_start) * 1000.0, shadow_report,
+                streamed=True, usage_estimated=True, partial=partial,
+            )
+            logger.info(
+                "dispatch %s: %s/%s outcome=failed_mid_stream (%s) attempts=%d tokens~%d/%d org=%s",
+                plan.dispatch_id, cand.model.provider, cand.model.model_name, failure.outcome, len(state.attempts),
+                partial["input_tokens"], partial["output_tokens"], plan.org_id,
+            )
+            return DispatchStreamEvent(
+                "error",
+                payload={
+                    "outcome": failure.outcome,
+                    "message": (
+                        f"{cand.model.provider} stream for {cand.model.model_name} ended with "
+                        f"{failure.outcome} after content was sent; no failover is attempted mid-stream."
+                    ),
+                    "dispatch_id": plan.dispatch_id,
+                    "model": cand.model.model_name,
+                    "provider": cand.model.provider,
+                    "http_status": failure.http_status,
+                    "attempts": attempts_dicts,
+                },
+            )
+        in_t, out_t = state.effective_tokens(plan.est_input_tokens)
+        result = ChatResult(
+            content=state.text,
+            finish_reason=state.finish or "other",
+            input_tokens=in_t,
+            output_tokens=out_t,
+            provider_latency_ms=elapsed_ms,
+            http_status=200,
+        )
+        state.attempts.append(Attempt(
+            len(state.attempts) + 1, cand.model.model_name, cand.model.provider, OUTCOME_OK, 200, elapsed_ms,
+        ))
+        envelope = await self._finish(
+            plan, cand, result, state.attempts, shadow_report, streamed=True,
+            usage_estimated=state.usage_estimated, created=state.created,
+        )
+        return DispatchStreamEvent("end", payload=envelope)
+
+    def _settle_later(self, coro) -> asyncio.Task:
+        task = asyncio.ensure_future(coro)
+        self._settling.add(task)
+        task.add_done_callback(self._settling.discard)
+        return task
+
+    async def _await_shadow(self, plan: _Plan, shadow_task: Optional[asyncio.Task]) -> Optional[Dict[str, Any]]:
+        """The shadow report: the pre-filled skip report, the task's result, or an error report."""
+        if shadow_task is None:
+            return plan.shadow_report
+        try:
+            return await shadow_task
+        except asyncio.CancelledError:
+            raise  # the *awaiting* task is being cancelled (nothing cancels the shadow itself): let it
+        except BaseException:  # _shadow_run only lets KeyboardInterrupt-class exceptions escape
+            return self._shadow_failure(plan.shadow_cand, "error", None, None)
+
+    @staticmethod
+    async def _close_quietly(agen: Optional[AsyncIterator[StreamEvent]]) -> None:
+        """Close an executor stream (releases the provider connection); a no-op once it has finished."""
+        if agen is None:
+            return
+        try:
+            await agen.aclose()
+        except Exception:
+            pass  # nosec B110 — the stream is being abandoned; nothing to recover
 
     # ------------------------------------------------------------------
     # Helpers
@@ -999,7 +1415,7 @@ class DispatchService:
     # ------------------------------------------------------------------
 
     async def _write_ledgers(self, dispatch_id, customer, chosen, result, actual, most_expensive, task_type, policy,
-                             webhook_secret) -> None:
+                             webhook_secret, is_estimated: bool = False) -> None:
         m = chosen.model
         org_id = getattr(customer, "org_id", None)
         try:
@@ -1007,7 +1423,7 @@ class DispatchService:
                 provider=m.provider, model_name=m.model_name,
                 input_tokens=result.input_tokens, output_tokens=result.output_tokens,
                 cost_usd=actual, org_id=org_id, request_id=policy.request_id,
-                session_id=policy.session_id, is_estimated=False,
+                session_id=policy.session_id, is_estimated=is_estimated,
             )
         except Exception as exc:
             logger.warning("dispatch %s: usage ledger write failed: %s", dispatch_id, exc)
@@ -1042,13 +1458,37 @@ class DispatchService:
         except Exception as exc:
             logger.warning("dispatch shadow usage ledger write failed: %s", exc)
 
+    async def _record_partial_spend(self, plan: _Plan, cand: Candidate, state: _StreamState) -> Dict[str, Any]:
+        """FR21: a stream that failed (or was abandoned) after content was sent still cost money. Record
+        the tokens delivered so far as an *estimated* usage event and return the receipt-row fields."""
+        m = cand.model
+        in_t, out_t = state.effective_tokens(plan.est_input_tokens)
+        cost = _usd(compute_token_cost(m.cost_per_input_token, m.cost_per_output_token, in_t, out_t).total_cost)
+        try:
+            await self._usage.record_event(
+                provider=m.provider, model_name=m.model_name, input_tokens=in_t, output_tokens=out_t,
+                cost_usd=cost, org_id=plan.org_id, request_id=plan.policy.request_id,
+                session_id=plan.policy.session_id, is_estimated=True,
+            )
+        except Exception as exc:
+            logger.warning("dispatch %s: partial usage ledger write failed: %s", plan.dispatch_id, exc)
+        return {
+            "chosen_model": m.model_name, "chosen_provider": m.provider,
+            "input_tokens": in_t, "output_tokens": out_t, "cost_usd": cost,
+        }
+
     async def _record_receipt(
         self, dispatch_id, org_id, requested_model, policy, policy_dump, task_type, attempts, total_ms,
         shadow_report, *, chosen: Optional[Candidate] = None, result: Optional[ChatResult] = None,
         actual: Optional[float] = None, savings_me: Optional[float] = None,
-        vs_requested: Optional[Dict[str, Any]] = None,
+        vs_requested: Optional[Dict[str, Any]] = None, streamed: bool = False, usage_estimated: bool = False,
+        partial: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """One receipt row for a dispatch that reached a provider; ``chosen``/``result`` set = success."""
+        """One receipt row for a dispatch that reached a provider; ``chosen``/``result`` set = success.
+
+        ``partial`` (streams that failed after content) names the failing model and the tokens/cost
+        delivered so far; the row's outcome stays ``failed``.
+        """
         shadow = shadow_report or {}
         row: Dict[str, Any] = {
             "dispatch_id": dispatch_id, "org_id": org_id, "created_at": time.time(),
@@ -1062,8 +1502,10 @@ class DispatchService:
             "shadow_model": shadow.get("model"), "shadow_provider": shadow.get("provider"),
             "shadow_outcome": shadow.get("outcome"), "shadow_cost_usd": shadow.get("cost_usd"),
             "shadow_latency_ms": shadow.get("provider_latency_ms"),
-            "live_call": 1,
+            "live_call": 1, "streamed": 1 if streamed else 0, "usage_estimated": 1 if usage_estimated else 0,
         }
+        if partial:
+            row.update(partial)
         if chosen is not None and result is not None:
             m = chosen.model
             row.update({
