@@ -155,8 +155,29 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.77.4 -->
+  <!-- v1.78.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.78.0</span>
+      <span class="release-date">Oct 28, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Dispatch streams: tokens appear as the chosen model produces them</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong><code>stream: true</code> works in dispatch mode.</strong> Point an OpenAI SDK or any chat UI built around <code>stream=True</code> at the gateway with <code>extra_body={"dispatch": {...}}</code> and the completion arrives as standard <code>chat.completion.chunk</code> events: every content delta the instant the provider sends it, a final empty-delta chunk carrying <code>finish_reason</code>, then <code>data: [DONE]</code>. All three wire families stream — OpenAI-format hosts, Anthropic Messages and Gemini</li>
+        <li><strong>The receipt rides along.</strong> The last chunk before <code>[DONE]</code> has <code>choices: []</code> plus <code>usage</code> (the shape OpenAI's own <code>include_usage</code> uses, so SDK stream readers accept it) and additionally carries <code>routing_metadata</code> and the full <code>dispatch_receipt</code> — chosen model, reason, candidates, cost, savings, attempts and the shadow comparison. Receipts and the <code>GET /dispatch/receipts</code> export gain <code>streamed</code> and <code>usage_estimated</code> columns so an operator can tell streamed from buffered dispatches and measured from counted usage</li>
+        <li><strong>Every gateway guarantee holds while streaming.</strong> Pre-provider refusals (budget hard stop, no eligible candidate, cost cap, missing key, rate limit) are the same JSON errors as before — no SSE bytes are sent. Failover still happens, but only before the first content delta; once text has reached you the gateway never silently switches models: a provider failure or stall ends the stream with a <code>data: {"error": {...}}</code> event naming the outcome, model, provider and attempts. Shadow A/B still runs concurrently and never delays a delta</li>
+        <li><strong>Honest usage.</strong> When the provider's stream carries token counts they are used as-is; when it does not, the gateway counts the prompt and the streamed text itself and says so (<code>usage.estimated: true</code> in the receipt, <code>is_estimated</code> on the ledger event). A stream that fails or is abandoned after content was sent still records the tokens delivered so far as estimated spend — the provider bills them</li>
+        <li>Remaining dispatch limits are unchanged and still named up front: <code>tools</code> / <code>functions</code> / <code>tool_choice</code>, <code>n &gt; 1</code>, non-text <code>response_format</code> and image content parts. The plain proxy (no <code>dispatch</code>) keeps ignoring <code>stream</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.77.4 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.77.4</span>
