@@ -9,8 +9,9 @@ These tests drive the real POST /mcp handler with real temp-file
 BudgetAlertService / UsageTrackerService instances and a fake billing service that
 maps keyA -> org-a and keyB -> org-b, and check the rule from every direction:
 anonymous (no key, unknown key, STDIO, the anonymous agent), customer (x-api-key and
-Authorization: Bearer), and operator (the global MCP_API_KEY). The 22 public tools
-must behave exactly as before, with or without a credential.
+Authorization: Bearer), and operator (the global MCP_API_KEY). The 18 public tools
+must behave exactly as before, with or without a credential (v1.79.2 moved four
+alert/conversation tools to OPERATOR_ONLY; see tests/test_mcp_operator_only.py).
 
 Keys are assembled at runtime so no secret-shaped literal lands in a commit.
 """
@@ -36,7 +37,7 @@ from src.services.billing_service import CustomerRecord  # noqa: E402
 from src.services.budget_alerts import BudgetAlertService  # noqa: E402
 from src.services.usage_tracker import UsageTrackerService  # noqa: E402
 from mcp.caller import (  # noqa: E402
-    ANONYMOUS, CUSTOMER_ONLY, ORG_SCOPED, PUBLIC, McpCaller, authorize, effective_org_id,
+    ANONYMOUS, CUSTOMER_ONLY, OPERATOR_ONLY, ORG_SCOPED, PUBLIC, McpCaller, authorize, effective_org_id,
 )
 from mcp.tools.tool_manager import ToolManager  # noqa: E402
 
@@ -56,6 +57,11 @@ ORG_SCOPED_TOOLS = {
 ORG_TOOL_CLASSES = {
     "RecordUsageTool", "ImportSessionUsageTool", "GetUsageSummaryTool", "AnalyzeSessionUsageTool",
     "RegisterBudgetAlertTool", "ListBudgetAlertsTool", "DeleteBudgetAlertTool",
+}
+# v1.79.2: operator-only tools — excluded from the public set, and guarded like the above.
+OPERATOR_ONLY_TOOLS = {"list_price_alerts", "delete_price_alert", "list_conversations", "delete_conversation"}
+OPERATOR_TOOL_CLASSES = {
+    "ListPriceAlertsTool", "DeletePriceAlertTool", "ListConversationsTool", "DeleteConversationTool",
 }
 _TOOL_MODULES = {
     "record_usage": ("get_usage_tracker", "get_budget_alert_service"),
@@ -414,7 +420,7 @@ class TestUnknownKey:
 
 
 # ---------------------------------------------------------------------------
-# AC9: the 22 public tools are unchanged, with or without a credential
+# AC9: the 18 public tools are unchanged, with or without a credential
 # ---------------------------------------------------------------------------
 
 def _strip_timestamps(obj):
@@ -435,15 +441,15 @@ class TestPublicToolParity:
         op = _rpc("tools/list", headers=_headers("bearer", OPERATOR_KEY)).json()["result"]["tools"]
         assert len(anon) == 29
         assert anon == keyed == op
-        public = [t for t in anon if t["name"] not in ORG_SCOPED_TOOLS]
-        assert len(public) == 22
+        public = [t for t in anon if t["name"] not in ORG_SCOPED_TOOLS | OPERATOR_ONLY_TOOLS]
+        assert len(public) == 18
         env.billing.get_customer_by_api_key.assert_not_awaited()
 
     def test_ac9_every_public_tool_gets_identical_input_and_no_caller(self, env):
         """Each public tool's execute() sees exactly the arguments, never a caller, with or without a key."""
         tm = env.tm
         public = [n for n in tm.tools if tm.caller_access(n) == PUBLIC]
-        assert len(public) == 22 and not set(public) & ORG_SCOPED_TOOLS
+        assert len(public) == 18 and not set(public) & (ORG_SCOPED_TOOLS | OPERATOR_ONLY_TOOLS)
         seen = {}
 
         def _recorder(name):
@@ -590,13 +596,14 @@ class TestAgentPath:
             _assert_customer_key_required(result)
 
     def test_nothing_outside_mcp_tools_imports_org_scoped_tool_classes(self):
-        """Only ToolManager (which defaults to ANONYMOUS) may construct the 7 org-scoped tools."""
+        """Only ToolManager (which defaults to ANONYMOUS) may construct the 7 org-scoped
+        tools or (v1.79.2) the four operator-only tools."""
         offenders = []
         paths = list((project_root / "src").rglob("*.py")) + list((project_root / "agent").rglob("*.py"))
         paths.append(project_root / "mcp" / "server.py")
         for path in paths:
             text = path.read_text(encoding="utf-8")
-            for cls in ORG_TOOL_CLASSES:
+            for cls in ORG_TOOL_CLASSES | OPERATOR_TOOL_CLASSES:
                 if re.search(rf"\b{cls}\b", text):
                     offenders.append(f"{path.relative_to(project_root)}: {cls}")
         assert not offenders, offenders
@@ -630,6 +637,18 @@ class TestCallerUnit:
         assert authorize(cust, ORG_SCOPED, {"org_id": ""}) is None
         assert authorize(cust, ORG_SCOPED, {"org_id": ORG_B})["error_code"] == "org_mismatch"
         assert authorize(cust, CUSTOMER_ONLY, {}) is None
+        # v1.79.2: OPERATOR_ONLY admits only the operator, with one constant refusal.
+        assert authorize(op, OPERATOR_ONLY, {}) is None
+        refusals = [
+            authorize(ANONYMOUS, OPERATOR_ONLY, {}),
+            authorize(None, OPERATOR_ONLY, {"alert_id": 1}),
+            authorize(cust, OPERATOR_ONLY, {}),
+            authorize(cust, OPERATOR_ONLY, {"org_id": ORG_A}),
+            authorize(McpCaller(kind="customer", customer_id="c", org_id=None), OPERATOR_ONLY, {}),
+        ]
+        assert all(r == refusals[0] for r in refusals)
+        assert refusals[0]["error_code"] == "operator_key_required"
+        assert set(refusals[0]) == {"success", "error", "error_code"}
 
     def test_customer_without_org_is_refused(self):
         orgless = McpCaller(kind="customer", customer_id="c", org_id=None)

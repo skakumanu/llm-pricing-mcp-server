@@ -181,6 +181,31 @@
       font-size: 14px;
     }
 
+    /* Operator key bar (same look as /admin's auth banner) */
+    .auth-banner {
+      background: rgba(245,101,101,.08);
+      border: 1px solid rgba(245,101,101,.3);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      margin-bottom: 22px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+    }
+    .auth-banner input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text);
+      padding: 7px 10px;
+      font-size: 13px;
+      font-family: monospace;
+    }
+    .auth-banner input:focus { outline: none; border-color: var(--accent); }
+    .auth-banner .auth-label { color: var(--warn); font-size: 13px; flex-shrink: 0; }
+
     /* Toast */
     .toast {
       position: fixed;
@@ -258,6 +283,15 @@
 </script>
 
 <main class="main">
+  <!-- Operator key: this page manages every visitor's stored conversations, so the
+       API behind it (GET/DELETE /agent/conversations) needs the operator key (MCP_API_KEY). -->
+  <div class="auth-banner" id="auth-banner">
+    <span class="auth-label" id="auth-label">🔑 Operator key (MCP_API_KEY)</span>
+    <input id="api-key-input" type="password" placeholder="Enter the operator key…" autocomplete="off" />
+    <button class="btn btn-primary btn-sm" id="btn-connect" onclick="saveKey()">Connect</button>
+    <button class="btn btn-ghost btn-sm" id="btn-forget" onclick="forgetKey()" style="display:none">Forget</button>
+  </div>
+
   <!-- Stats -->
   <div class="stats">
     <div class="stat-card">
@@ -289,9 +323,7 @@
   </div>
 
   <!-- List -->
-  <div id="list-container">
-    <div class="loading">Loading conversations…</div>
-  </div>
+  <div id="list-container"></div>
 </main>
 
 <!-- Delete-one confirmation -->
@@ -321,6 +353,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
+  // Operator key, shared with /admin (same localStorage entry).
   const KEY_STORAGE = "llm_admin_api_key";
   let _apiKey = localStorage.getItem(KEY_STORAGE) || "";
   function headers() { return { "x-api-key": _apiKey }; }
@@ -328,23 +361,90 @@
   let allConversations = [];
   let pendingDeleteId = null;
 
+  const OPERATOR_KEY_REQUIRED_MSG =
+    "Operator key required — this page manages every visitor's stored conversations " +
+    "and is restricted to the server operator.";
+
+  function isAuthFailure(status) {
+    return status === 401 || status === 403 || status === 503;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Operator key
+  // ---------------------------------------------------------------------------
+  function saveKey() {
+    const value = document.getElementById("api-key-input").value.trim();
+    if (!value) return;
+    _apiKey = value;
+    localStorage.setItem(KEY_STORAGE, _apiKey);
+    document.getElementById("api-key-input").value = "";
+    updateKeyBar();
+    loadConversations();
+  }
+
+  function forgetKey() {
+    _apiKey = "";
+    localStorage.removeItem(KEY_STORAGE);
+    updateKeyBar();
+    showOperatorKeyRequired();
+  }
+
+  function updateKeyBar() {
+    const connected = !!_apiKey;
+    document.getElementById("btn-forget").style.display = connected ? "" : "none";
+    document.getElementById("auth-label").textContent = connected
+      ? "🔑 Operator key stored in this browser"
+      : "🔑 Operator key (MCP_API_KEY)";
+  }
+
+  // No key, or the server refused it: render no rows, zero stats, hide Delete All.
+  function showOperatorKeyRequired() {
+    allConversations = [];
+    updateStats();
+    const container = document.getElementById("list-container");
+    container.innerHTML = "";
+    const box = document.createElement("div");
+    box.className = "empty-state";
+    box.id = "operator-key-required";
+    const icon = document.createElement("div");
+    icon.className = "empty-icon";
+    icon.textContent = "🔒";
+    const h = document.createElement("h2");
+    h.textContent = "Operator key required";
+    const p = document.createElement("p");
+    p.textContent = OPERATOR_KEY_REQUIRED_MSG;
+    box.append(icon, h, p);
+    container.appendChild(box);
+  }
+
   // ---------------------------------------------------------------------------
   // Load
   // ---------------------------------------------------------------------------
   async function loadConversations() {
+    if (!_apiKey) {
+      showOperatorKeyRequired();
+      return;
+    }
     document.getElementById("list-container").innerHTML =
       '<div class="loading">Loading conversations…</div>';
     try {
       const res = await fetch("/agent/conversations", { headers: headers() });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (isAuthFailure(res.status)) {
+        showOperatorKeyRequired();
+        return;
+      }
+      if (!res.ok) throw new Error("Could not load conversations");
       const data = await res.json();
       allConversations = data.conversations || [];
       updateStats();
       renderList();
     } catch (err) {
-      document.getElementById("list-container").innerHTML =
-        `<div class="empty-state"><div class="empty-icon">⚠️</div>
-         <h2>Failed to load</h2><p>${err.message}</p></div>`;
+      allConversations = [];
+      updateStats();
+      const container = document.getElementById("list-container");
+      container.innerHTML =
+        '<div class="empty-state"><div class="empty-icon">⚠️</div><h2>Failed to load</h2><p></p></div>';
+      container.querySelector("p").textContent = "Could not load conversations. Try Refresh.";
     }
   }
 
@@ -411,8 +511,8 @@
         <div class="session-actions">
           <a class="btn btn-primary btn-sm"
              href="/chat?conversation_id=${encodeURIComponent(c.id)}">Resume</a>
-          <button class="btn btn-danger btn-sm"
-                  onclick="confirmDelete(${JSON.stringify(c.id)}, ${JSON.stringify(c.preview || '')})">
+          <button class="btn btn-danger btn-sm js-delete"
+                  data-id="${escapeHtml(c.id)}" data-preview="${escapeHtml(c.preview || "")}">
             Delete
           </button>
         </div>
@@ -444,6 +544,9 @@
         updateStats();
         renderList();
         showToast("Conversation deleted", "success");
+      } else if (isAuthFailure(res.status)) {
+        showToast("Operator key required", "error");
+        showOperatorKeyRequired();
       } else {
         const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
         if (card) card.classList.remove("deleting");
@@ -472,6 +575,11 @@
           method: "DELETE", headers: headers(),
         });
         if (res.status === 204) deleted++;
+        else if (isAuthFailure(res.status)) {
+          showToast("Operator key required", "error");
+          showOperatorKeyRequired();
+          return;
+        }
       } catch { /* continue */ }
     }
     allConversations = [];
@@ -526,7 +634,18 @@
     ov.addEventListener("click", e => { if (e.target === ov) ov.classList.remove("open"); });
   });
 
-  // Load on boot
+  // Per-item delete buttons (delegated; id and preview travel as escaped data attributes)
+  document.getElementById("list-container").addEventListener("click", e => {
+    const btn = e.target.closest(".js-delete");
+    if (btn) confirmDelete(btn.dataset.id, btn.dataset.preview);
+  });
+
+  document.getElementById("api-key-input").addEventListener("keydown", e => {
+    if (e.key === "Enter") saveKey();
+  });
+
+  // Load on boot (only fetches when an operator key is stored)
+  updateKeyBar();
   loadConversations();
 </script>
 

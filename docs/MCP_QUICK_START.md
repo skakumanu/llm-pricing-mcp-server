@@ -67,7 +67,7 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 
 ### Optional service key (v1.79.1)
 
-The 22 public tools need no credential. The 7 org-scoped usage/budget tools (`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`) need your service API key (`POST /billing/signup`) on the connection, as `x-api-key` or `Authorization: Bearer`, and act only on that key's org:
+The 18 public tools need no credential. The four operator-only tools (`list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation`) need the server operator's key (`MCP_API_KEY`) on the connection; every other caller, including the chat agent and the local STDIO server, gets `error_code: "operator_key_required"` (v1.79.2). The 7 org-scoped usage/budget tools (`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`) need your service API key (`POST /billing/signup`) on the connection, as `x-api-key` or `Authorization: Bearer`, and act only on that key's org:
 
 ```bash
 curl -X POST https://llm-pricing-api.fly.dev/mcp \
