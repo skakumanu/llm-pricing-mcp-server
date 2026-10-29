@@ -35,7 +35,7 @@ Most LLM pricing tools are a static lookup table. This one checks its own number
 - Router recommendation (`POST /router/recommend`) with feedback loop; `GET /cache-stats` reports process-lifetime hit/miss stats for its ~5-minute recommendation cache
 - Actual usage/spend tracking (`POST /usage`, `GET /usage/summary`) — the real-cost counterpart to `/cost-estimate`; tag events with `session_id` and analyze one session on demand (`GET /usage/session/{session_id}`) for a grounded recommendation with estimated savings
 - OpenAI-compatible proxy (`POST /v1/chat/completions`) for drop-in SDK integration
-- Dispatch gateway (v1.77.0): add a `dispatch` policy and your own provider keys to that same endpoint and the best eligible model is executed for real — failover that never drops below your quality floor, a receipt with the chosen model, reason, actual cost and savings, budget hard stops, shadow A/B and an org-scoped audit export — see [Dispatch gateway](#dispatch-gateway)
+- Dispatch gateway (v1.77.0): add a `dispatch` policy and your own provider keys to that same endpoint and the best eligible model is executed for real — failover that never drops below your quality floor, a receipt with the chosen model, reason, actual cost and savings, budget hard stops, shadow A/B and an org-scoped audit export; since v1.79.0 provider keys can be stored once per org (`/dispatch/keys`, encrypted at rest) so callers need only their service key — see [Dispatch gateway](#dispatch-gateway)
 - Webhook alerts for price changes and budget-spend thresholds (`POST /usage/alerts`, HMAC-SHA256 signed; `hard_stop: true` also blocks dispatch for the org once reached)
 - Interactive docs: `/docs` (Swagger) and `/redoc`
 
@@ -95,10 +95,10 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 ### Security & Quality
 - Most endpoints are public (read-only pricing data, UIs, MCP tools)
 - Protected endpoints (`/billing/me`, `/router/recommend`, `/router/feedback`, `/billing/portal`) require a billing API key or the global `MCP_API_KEY`
-- Dispatch mode of `/v1/chat/completions` requires a free-tier *customer* key (the global `MCP_API_KEY` is refused — dispatch writes per-org ledgers); provider keys are bring-your-own per request (`X-Provider-Key-*` headers), used transiently and never stored, logged or echoed — and neither are prompts or completions
+- Dispatch mode of `/v1/chat/completions` requires a free-tier *customer* key (the global `MCP_API_KEY` is refused — dispatch writes per-org ledgers); provider keys are bring-your-own — per request (`X-Provider-Key-*` headers, used transiently) or, since v1.79.0, stored once per org with `POST /dispatch/keys` (AES-256-GCM-encrypted at rest under the operator's `PROVIDER_KEY_ENCRYPTION_KEY`, scoped to your org, never returned after registration — only a last-4 fingerprint is shown); provider keys are never logged or echoed — and neither are prompts or completions
 - Rate limiting per client IP + tier bucket — includes the anonymous `/agent/chat` and `/agent/chat/stream` endpoints (no API key needed, but throttled, since each call runs an LLM on the operator's key)
 - Request size limit (1MB default)
-- 2014 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 2126 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
@@ -321,7 +321,7 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 | GET | `/api/versions` | API version info |
 | GET | `/pricing/alerts/signing-info` | Webhook signing key info |
 | POST | `/v1/chat/completions` | OpenAI-compatible routing proxy (recommendation only; dispatch mode below needs a customer key) |
-| GET | `/dispatch/providers` | Executable providers, their key headers, and which models are dispatchable (and why not) |
+| GET | `/dispatch/providers` | Executable providers, their key headers and stored-key paths, and which models are dispatchable (and why not) |
 | GET | `/mcp` | HTTP MCP server info |
 | POST | `/mcp` | HTTP MCP JSON-RPC 2.0 |
 | POST | `/billing/signup` | Free tier signup → API key |
@@ -345,6 +345,10 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 | GET | `/usage/summary` | Actual spend summary by model/provider, per org |
 | POST | `/v1/chat/completions` + `dispatch` | Dispatch mode (customer key only): execute the best eligible model with your `X-Provider-Key-*`, failover, receipt |
 | GET | `/dispatch/receipts` | Metadata-only JSON/CSV export of your org's dispatch receipts (customer key only) |
+| POST | `/dispatch/keys` | Store a provider key for your org (`{provider, api_key}`; customer key only; returns metadata, never the key) |
+| GET | `/dispatch/keys` | List your org's stored provider keys: provider, slug, fingerprint, created/rotated/last-used, status |
+| PUT | `/dispatch/keys/{provider}` | Rotate a stored provider key (`{api_key}`; provider = slug such as `openai`, `together`) |
+| DELETE | `/dispatch/keys/{provider}` | Delete a stored provider key |
 | POST | `/billing/checkout` | Stripe Checkout session |
 | GET | `/billing/portal` | Stripe billing portal |
 | GET | `/billing/me` | Usage dashboard |
@@ -477,6 +481,39 @@ print(receipt["chosen"]["model"], receipt["cost"]["actual_usd"],
       receipt["savings"]["vs_requested_model"]["savings_usd"])
 ```
 
+**Stored provider keys (v1.79.0)** — register each provider key once and drop the per-request headers, so a
+stock chat UI or the plain OpenAI SDK only needs your service key and a `dispatch` object:
+
+```bash
+curl -X POST https://llm-pricing-api.fly.dev/dispatch/keys \
+  -H "x-api-key: $LLM_PRICING_SERVICE_KEY" -H "Content-Type: application/json" \
+  -d "{\"provider\": \"OpenAI\", \"api_key\": \"$OPENAI_API_KEY\"}"
+# -> 201 {"provider": "OpenAI", "slug": "openai", "fingerprint": "…last 4…", "created_at": "…Z",
+#         "rotated_at": null, "last_used_at": null, "status": "active"}
+curl https://llm-pricing-api.fly.dev/dispatch/keys -H "x-api-key: $LLM_PRICING_SERVICE_KEY"           # list
+curl -X PUT https://llm-pricing-api.fly.dev/dispatch/keys/openai -H "x-api-key: $LLM_PRICING_SERVICE_KEY" \
+  -H "Content-Type: application/json" -d "{\"api_key\": \"$NEW_OPENAI_API_KEY\"}"                       # rotate
+curl -X DELETE https://llm-pricing-api.fly.dev/dispatch/keys/openai -H "x-api-key: $LLM_PRICING_SERVICE_KEY" # delete
+```
+
+```python
+client = OpenAI(base_url="https://llm-pricing-api.fly.dev/v1", api_key=SERVICE_KEY)   # no provider headers
+resp = client.chat.completions.create(model="gpt-4o", messages=[...],
+                                      extra_body={"dispatch": {"objective": "cheapest"}})
+```
+
+- One key per executable provider per org, on every tier; any valid service key of the org can manage them.
+  Management takes the service key in `x-api-key` (the global operator key is refused with 403).
+- A request's `X-Provider-Key-<Provider>` header always wins over the stored key; if the winning key is
+  rejected (`auth_error`) dispatch does not retry with the other one. Each receipt attempt records
+  `key_source: "header" | "stored"` — never any part of the key — and `last_used_at` is stamped whenever
+  dispatch sends an attempt with the stored key.
+- No provider call is made at registration: a bad key surfaces as `provider_auth_failed` on first use (the
+  message says to rotate it with `PUT /dispatch/keys/<slug>`).
+- If the operator changes the server's encryption secret, stored keys are listed with
+  `status: "needs_reregistration"` and are not used until you rotate them. A server without the secret
+  answers 503 on `/dispatch/keys` and dispatch keeps working with headers.
+
 - **Presets** (`dispatch.objective`):
 
   | Objective | Picks |
@@ -541,9 +578,10 @@ print(receipt["chosen"]["model"], receipt["cost"]["actual_usd"],
 - **Scope in this release**: text-only, single-choice chat completions, streamed or not. `tools` /
   `functions` / `tool_choice`, `n > 1`, a non-text `response_format` and image content parts are rejected up
   front with the feature named (nothing is silently dropped; `user` and `stream_options` are accepted and not
-  forwarded). No new MCP tool. Pooled service-paid keys and stored per-account keys are explicitly out of scope.
-- **Privacy**: provider keys exist only in the request headers and the outgoing provider call; prompts and
-  completions only in the request, the provider call and `choices`. Neither is persisted or logged at any
+  forwarded). No new MCP tool. Pooled service-paid keys are explicitly out of scope.
+- **Privacy**: header provider keys exist only in the request headers and the outgoing provider call; stored
+  keys only as AES-256-GCM ciphertext in `billing.db` and, decrypted, in memory for the one request that uses
+  them; prompts and completions only in the request, the provider call and `choices`. Neither is persisted or logged at any
   level, and provider error bodies are classified into an outcome, never copied. The provider bills you directly.
 
 ## Configuration
@@ -577,6 +615,7 @@ DISPATCH_DEFAULT_MAX_TOKENS=1024    # used when the caller omits max_tokens (Ant
 DISPATCH_ATTEMPT_TIMEOUT_MS=30000   # per-attempt provider timeout
 DISPATCH_MAX_ATTEMPTS=3             # failover attempts (1 when failover is off or the model is pinned)
 DISPATCH_RECEIPT_RETENTION_DAYS=90  # metadata-only receipt rows are purged past this age
+PROVIDER_KEY_ENCRYPTION_KEY=        # v1.79.0: base64url of >= 32 random bytes; enables stored provider keys (unset = 503 on /dispatch/keys)
 
 # Billing (Stripe)
 STRIPE_SECRET_KEY=sk_live_...       # Optional — free signup works without this
@@ -694,6 +733,8 @@ pytest tests/test_router.py -v
 | `test_dispatch_executors.py` | Provider executors over `httpx.MockTransport`: wire translation, usage/finish mapping, error classification |
 | `test_dispatch_service.py` | Dispatch policy, eligibility, ranking, failover, cap, hard stop, shadow A/B, receipts (fake executor) |
 | `test_dispatch_api.py` | Dispatch mode over HTTP: auth, unsupported features, ledgers, budget alerts, export, key/prompt leak sentinels |
+| `test_provider_key_store.py` | Stored provider keys: AES-GCM at rest, org/provider binding, tamper/wrong-secret handling, metadata-only listing, composite header-then-stored resolver, last_used |
+| `test_provider_keys_api.py` | `/dispatch/keys` over HTTP: register/list/rotate/delete, auth, org isolation, stored-key dispatch, key_source in receipts/exports, raw-DB and log leak scans, missing/changed secret |
 
 ---
 
