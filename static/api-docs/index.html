@@ -80,6 +80,7 @@
     .method.GET { background: rgba(72,187,120,.12); color: var(--success); border: 1px solid rgba(72,187,120,.25); }
     .method.POST { background: rgba(237,137,54,.12); color: var(--warn); border: 1px solid rgba(237,137,54,.25); }
     .method.DELETE { background: rgba(245,101,101,.12); color: var(--danger); border: 1px solid rgba(245,101,101,.25); }
+    .method.PUT { background: rgba(237,137,54,.12); color: var(--warn); border: 1px solid rgba(237,137,54,.25); }
     .ep-path { font-family: 'Consolas', monospace; font-size: .82rem; color: var(--text); flex: 0 0 auto; min-width: 200px; }
     .ep-desc { font-size: .82rem; color: var(--muted); flex: 1; }
     .ep-auth { font-size: .7rem; background: rgba(124,106,247,.1); border: 1px solid rgba(124,106,247,.25); color: var(--accent); padding: .1rem .4rem; border-radius: 4px; flex-shrink: 0; }
@@ -311,6 +312,10 @@
         <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/v1/chat/completions</span><span class="ep-desc">Dispatch mode: add a <code>dispatch</code> policy object + your <code>X-Provider-Key-&lt;Provider&gt;</code> headers to run the best eligible model for real, with failover and a <code>dispatch_receipt</code> (chosen model, reason, actual cost, savings)</span><span class="ep-auth">API key</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/dispatch/providers</span><span class="ep-desc">Executable providers, their key headers, and which models are dispatchable (and why not)</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/dispatch/receipts</span><span class="ep-desc">Metadata-only JSON/CSV export of your org's dispatch receipts — never prompts, completions or keys</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/dispatch/keys</span><span class="ep-desc">Store a provider key for your org (<code>{provider, api_key}</code>) so dispatch can use it without <code>X-Provider-Key-*</code> headers — encrypted at rest, never returned (v1.79.0)</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/dispatch/keys</span><span class="ep-desc">List your org's stored provider keys: provider, slug, last-4 fingerprint, created/rotated/last-used, status</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method PUT">PUT</span><span class="ep-path">/dispatch/keys/{provider}</span><span class="ep-desc">Rotate a stored provider key (<code>{api_key}</code>; provider slug such as <code>openai</code>)</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method DELETE">DELETE</span><span class="ep-path">/dispatch/keys/{provider}</span><span class="ep-desc">Delete a stored provider key</span><span class="ep-auth">API key</span></div>
       </div>
 
       <div class="endpoint-group">

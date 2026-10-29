@@ -1,4 +1,5 @@
 """Configuration settings for the MCP server."""
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 from typing import Optional
 from src import __version__
@@ -94,13 +95,21 @@ class Settings(BaseSettings):
     exchange_rates_path: Optional[str] = None   # override for data/exchange_rates.json
 
     # Dispatch gateway (v1.77.0). Provider keys are never read from here — callers
-    # bring their own per request (X-Provider-Key-<Provider> headers); these only
-    # shape the failover loop and the receipt store.
+    # bring their own per request (X-Provider-Key-<Provider> headers) or store them
+    # per org (v1.79.0, /dispatch/keys); these only shape the failover loop and the
+    # receipt store.
     dispatch_enabled: bool = True                # False = POST /v1/chat/completions dispatch mode -> 503
     dispatch_default_max_tokens: int = 1024      # when the caller omits max_tokens (Anthropic requires one)
     dispatch_attempt_timeout_ms: int = 30_000    # per-attempt provider timeout
     dispatch_max_attempts: int = 3               # failover attempts (1 when failover is off or pinned)
     dispatch_receipt_retention_days: int = 90    # metadata-only receipt rows purged past this age
+
+    # Stored per-org provider keys (v1.79.0). Server secret the customers' stored provider
+    # keys are encrypted under (AES-256-GCM via HKDF): base64url of >= 32 random bytes, env
+    # PROVIDER_KEY_ENCRYPTION_KEY. Unset/invalid = /dispatch/keys answers 503 and dispatch is
+    # header-only. Changing it makes every stored key need re-registration. SecretStr so a
+    # repr of Settings never shows it.
+    provider_key_encryption_key: Optional[SecretStr] = None
 
     model_config = {
         "env_file": ".env",

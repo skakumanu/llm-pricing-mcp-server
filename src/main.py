@@ -59,8 +59,13 @@ from src.services.session_recommendation import compute_session_recommendation  
 from src.services.budget_alerts import init_budget_alert_service, get_budget_alert_service  # noqa: E402
 from src.services.billing_service import init_billing_service, get_billing_service  # noqa: E402
 from src.models.dispatch import DispatchPolicy  # noqa: E402
-from src.services.dispatch_executors import HeaderKeyResolver  # noqa: E402
+from src.services.dispatch_executors import EXECUTABLE_PROVIDERS, HeaderKeyResolver  # noqa: E402
 from src.services.dispatch_receipts import init_dispatch_receipt_store, get_dispatch_receipt_store  # noqa: E402
+from src.services.provider_key_store import (  # noqa: E402
+    SECRET_ENV_VAR as _PROVIDER_KEY_SECRET_ENV, CompositeKeyResolver, InvalidProviderKey, ProviderKeyExists,
+    ProviderKeyNotFound, StoredKeysUnavailable, UnsupportedProvider, accepted_providers as _accepted_key_providers,
+    canonical_provider as _canonical_key_provider, get_provider_key_store, init_provider_key_store,
+)
 from src.services.dispatch_service import (  # noqa: E402
     DispatchError, DispatchService, init_dispatch_service, get_dispatch_service,
 )
@@ -180,7 +185,9 @@ _openapi_tags = [
             "own provider key to have the best eligible model executed for real, with failover and a "
             "receipt (chosen model, reason, actual cost, savings); add `stream: true` (v1.78.0) for "
             "OpenAI-format chunk SSE with the receipt in a trailing chunk. `/dispatch/providers` lists "
-            "what is dispatchable; `/dispatch/receipts` exports an org's metadata-only audit trail."
+            "what is dispatchable; `/dispatch/receipts` exports an org's metadata-only audit trail; "
+            "`/dispatch/keys` (v1.79.0) stores your org's provider keys encrypted so dispatch can use "
+            "them when a request carries no `X-Provider-Key-<Provider>` header (a header always wins)."
         ),
     },
 ]
@@ -977,6 +984,15 @@ async def startup_pricing_history() -> None:
         logger.info("Billing service initialized at %s", settings.billing_db_path)
     except Exception as exc:  # nosec B110
         logger.error("Billing service init failed (billing endpoints disabled): %s", exc)
+    # v1.79.0 — stored per-org provider keys, in billing.db next to `customers`.
+    try:
+        _pk_secret = settings.provider_key_encryption_key
+        _pk_store = await init_provider_key_store(
+            settings.billing_db_path, _pk_secret.get_secret_value() if _pk_secret else None,
+        )
+        logger.info("Stored provider keys %s", "enabled" if _pk_store.available else "disabled")
+    except Exception as exc:  # nosec B110
+        logger.error("Provider key store init failed (stored keys disabled): %s", type(exc).__name__)
     await init_pricing_history_service(settings.pricing_history_db_path)
     logger.info("Pricing history service initialized at %s", settings.pricing_history_db_path)
     await init_pricing_alert_service(settings.pricing_history_db_path)
@@ -3727,7 +3743,7 @@ async def _dispatch_chat_completion(req: _ProxyRequest, request: Request):
             "error": "dispatch_unavailable", "message": "Dispatch service is not initialized.",
         })
 
-    key_resolver = HeaderKeyResolver(request.headers)
+    key_resolver = await _dispatch_key_resolver(request, customer)
     stop = req.stop
     if isinstance(stop, str):
         stop = [stop]
@@ -3768,6 +3784,29 @@ async def _dispatch_chat_completion(req: _ProxyRequest, request: Request):
         return JSONResponse(status_code=exc.status_code, content=exc.payload)
     get_telemetry_service().track_feature_usage("dispatch")
     return body
+
+
+async def _dispatch_key_resolver(request: Request, customer):
+    """Header keys first, then the org's stored keys (v1.79.0). Never fails the dispatch: an
+    uninitialized/unavailable store or a DB error falls back to header-only."""
+    header = HeaderKeyResolver(request.headers)
+    try:
+        store = get_provider_key_store()
+    except RuntimeError:
+        return header
+    if not store.available:
+        return header
+    covered = header.providers_with_keys()
+    if len(covered) >= len(EXECUTABLE_PROVIDERS):
+        return header  # every provider already keyed by a header: no stored key could win
+    try:
+        stored = await store.load_for_dispatch(customer.org_id, exclude=covered)
+    except Exception as exc:
+        logger.warning("stored provider keys unavailable for this dispatch (%s); header-only", type(exc).__name__)
+        return header
+    if not stored:
+        return header
+    return CompositeKeyResolver(header, stored, store, customer.org_id)
 
 
 def _sse_data(payload: dict) -> str:
@@ -3844,8 +3883,9 @@ async def openai_proxy(req: _ProxyRequest, request: Request):
 
     **Dispatch mode (v1.77.0)** — add a `dispatch` object to the body (OpenAI SDK:
     `extra_body={"dispatch": {...}}`), your free-tier service key as `x-api-key` or
-    `Authorization: Bearer`, and your own provider keys as `X-Provider-Key-<Provider>`
-    headers, and the best eligible model is executed for real: the response is a normal
+    `Authorization: Bearer`, and your own provider keys — as `X-Provider-Key-<Provider>`
+    headers, or stored once for your org with `POST /dispatch/keys` (v1.79.0; a header key
+    always wins) — and the best eligible model is executed for real: the response is a normal
     `chat.completion` with real `usage` plus an additive `dispatch_receipt`
     (chosen model, reason, actual cost, savings, attempts). See `GET /dispatch/providers`
     for what is dispatchable. Without `dispatch` the behaviour is exactly the proxy above.
@@ -3910,7 +3950,9 @@ async def dispatch_providers(
     Public. A model is dispatchable when it has a provider-confirmed per-token price
     (drift-withheld, never-priced and retired models are not) and belongs to one of the
     executable providers; everything else is recommend-only and says why. Each executable
-    provider row names the `X-Provider-Key-*` header to send its key in.
+    provider row names the `X-Provider-Key-*` header to send its key in, and the
+    `/dispatch/keys/<slug>` path to store it for your org instead (v1.79.0). Nothing here
+    depends on, or reveals, whether any org has stored keys.
     """
     try:
         svc = get_dispatch_service()
@@ -3986,6 +4028,218 @@ async def dispatch_receipts_export(
         media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="{base_name}.json"'},
     )
+
+
+# ---------------------------------------------------------------------------
+# Stored provider keys (v1.79.0) — org-scoped, encrypted at rest, never returned
+# ---------------------------------------------------------------------------
+# Request bodies are parsed by hand rather than declared as pydantic parameters: FastAPI's
+# default 422 echoes the offending `input`, which for a missing field is the whole body —
+# key included. No response or error below ever contains a key value.
+
+_STORED_KEY_BODY_SCHEMA = {
+    "requestBody": {
+        "required": True,
+        "content": {"application/json": {"schema": {
+            "type": "object",
+            "required": ["provider", "api_key"],
+            "properties": {
+                "provider": {"type": "string", "description": "Executable provider name or slug, e.g. 'OpenAI'"},
+                "api_key": {"type": "string", "description": "Your provider key (write-only, never returned)"},
+            },
+        }}},
+    },
+}
+
+_ROTATE_KEY_BODY_SCHEMA = {
+    "requestBody": {
+        "required": True,
+        "content": {"application/json": {"schema": {
+            "type": "object",
+            "required": ["api_key"],
+            "properties": {"api_key": {"type": "string", "description": "The replacement key (write-only)"}},
+        }}},
+    },
+}
+
+
+def _stored_keys_context(request: Request):
+    """(customer, store) or the JSONResponse refusing the call: 403 without a customer key
+    (anonymous or the global operator key), 503 when stored keys are not configured."""
+    customer = getattr(request.state, "customer", None)
+    if customer is None:
+        return None, JSONResponse(status_code=403, content={
+            "error": "customer_key_required",
+            "message": "Stored provider keys require a customer API key (keys are scoped to its org).",
+        })
+    try:
+        store = get_provider_key_store()
+    except RuntimeError:
+        store = None
+    if store is None or not store.available:
+        return None, _stored_keys_unavailable_response()
+    return (customer, store), None
+
+
+def _stored_keys_unavailable_response() -> JSONResponse:
+    """Names the operator setting, never its value."""
+    return JSONResponse(status_code=503, content={
+        "error": "stored_keys_unavailable",
+        "message": (
+            f"Stored provider keys are not enabled on this server (operator setting {_PROVIDER_KEY_SECRET_ENV}). "
+            "Send X-Provider-Key-<Provider> headers instead."
+        ),
+    })
+
+
+def _unsupported_provider_response() -> JSONResponse:
+    accepted = _accepted_key_providers()
+    return JSONResponse(status_code=422, content={
+        "error": "unsupported_provider",
+        "message": (
+            "Stored keys are accepted only for providers dispatch can execute: "
+            + ", ".join(a["provider"] for a in accepted) + "."
+        ),
+        "accepted_providers": accepted,
+    })
+
+
+def _invalid_provider_key_response(exc: InvalidProviderKey) -> JSONResponse:
+    return JSONResponse(status_code=422, content={"error": "invalid_provider_key", "message": str(exc)})
+
+
+async def _read_json_object(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = None
+    if not isinstance(body, dict):
+        return None, JSONResponse(status_code=400, content={
+            "error": "invalid_json", "message": "Request body must be a JSON object.",
+        })
+    return body, None
+
+
+@app.post("/dispatch/keys", tags=["Dispatch"], status_code=201, openapi_extra=_STORED_KEY_BODY_SCHEMA)
+async def stored_provider_key_register(request: Request):
+    """
+    Store a provider key for your org (v1.79.0).
+
+    Body `{"provider": "OpenAI", "api_key": "..."}`. Requires a customer API key in
+    `x-api-key`; the global operator key is refused. One key per provider per org (409 if one
+    exists — rotate it with `PUT /dispatch/keys/{provider}`). The key is encrypted at rest and
+    never returned: the response carries provider, slug, a last-4 fingerprint and timestamps.
+    No provider call is made; a bad key surfaces as `auth_error` on first use.
+    """
+    ctx, refusal = _stored_keys_context(request)
+    if refusal is not None:
+        return refusal
+    customer, store = ctx
+    body, refusal = await _read_json_object(request)
+    if refusal is not None:
+        return refusal
+    try:
+        provider = _canonical_key_provider(body.get("provider"))
+    except UnsupportedProvider:
+        return _unsupported_provider_response()
+    try:
+        # The store validates the key (single validation layer); its errors are mapped here.
+        info = await store.register(customer.org_id, provider, body.get("api_key"))
+    except UnsupportedProvider:
+        return _unsupported_provider_response()
+    except InvalidProviderKey as exc:
+        return _invalid_provider_key_response(exc)
+    except ProviderKeyExists:
+        return JSONResponse(status_code=409, content={
+            "error": "provider_key_exists",
+            "message": f"A key for {provider} is already stored for this org; use PUT to rotate it.",
+            "provider": provider,
+        })
+    except StoredKeysUnavailable:
+        return _stored_keys_unavailable_response()
+    return JSONResponse(status_code=201, content=info.as_dict())
+
+
+@app.get("/dispatch/keys", tags=["Dispatch"])
+async def stored_provider_key_list(request: Request):
+    """
+    List your org's stored provider keys (v1.79.0) — metadata only.
+
+    Each entry: provider, slug, fingerprint (last 4 characters), created_at, rotated_at,
+    last_used_at (null until dispatch first uses it) and status (`active`, or
+    `needs_reregistration` when the key can no longer be decrypted — rotate it with PUT).
+    """
+    ctx, refusal = _stored_keys_context(request)
+    if refusal is not None:
+        return refusal
+    customer, store = ctx
+    keys = [k.as_dict() for k in await store.list(customer.org_id)]
+    return {"keys": keys, "count": len(keys)}
+
+
+@app.put("/dispatch/keys/{provider}", tags=["Dispatch"], openapi_extra=_ROTATE_KEY_BODY_SCHEMA)
+async def stored_provider_key_rotate(provider: str, request: Request):
+    """
+    Rotate your org's stored key for one provider (v1.79.0). Body `{"api_key": "..."}`.
+
+    `provider` is the slug from `GET /dispatch/providers` (e.g. `openai`, `together`) or the
+    display name. 404 when your org stores no key for it. The old value is never used again.
+    """
+    ctx, refusal = _stored_keys_context(request)
+    if refusal is not None:
+        return refusal
+    customer, store = ctx
+    try:
+        name = _canonical_key_provider(provider)
+    except UnsupportedProvider:
+        return _unsupported_provider_response()
+    body, refusal = await _read_json_object(request)
+    if refusal is not None:
+        return refusal
+    try:
+        info = await store.rotate(customer.org_id, name, body.get("api_key"))
+    except UnsupportedProvider:
+        return _unsupported_provider_response()
+    except InvalidProviderKey as exc:
+        return _invalid_provider_key_response(exc)
+    except ProviderKeyNotFound:
+        return JSONResponse(status_code=404, content={
+            "error": "provider_key_not_found",
+            "message": f"No key for {name} is stored for this org.",
+            "provider": name,
+        })
+    except StoredKeysUnavailable:
+        return _stored_keys_unavailable_response()
+    return info.as_dict()
+
+
+@app.delete("/dispatch/keys/{provider}", tags=["Dispatch"], status_code=204)
+async def stored_provider_key_delete(provider: str, request: Request):
+    """
+    Delete your org's stored key for one provider (v1.79.0). 204 on success, 404 when your org
+    stores no key for it. Dispatch stops using it immediately.
+    """
+    ctx, refusal = _stored_keys_context(request)
+    if refusal is not None:
+        return refusal
+    customer, store = ctx
+    try:
+        name = _canonical_key_provider(provider)
+    except UnsupportedProvider:
+        return _unsupported_provider_response()
+    try:
+        deleted = await store.delete(customer.org_id, name)
+    except UnsupportedProvider:
+        return _unsupported_provider_response()
+    except StoredKeysUnavailable:
+        return _stored_keys_unavailable_response()
+    if not deleted:
+        return JSONResponse(status_code=404, content={
+            "error": "provider_key_not_found",
+            "message": f"No key for {name} is stored for this org.",
+            "provider": name,
+        })
+    return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------------
