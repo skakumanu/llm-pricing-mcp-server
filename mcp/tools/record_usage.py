@@ -6,15 +6,25 @@ from src.services.cost_calculator import compute_token_cost
 from src.services.pricing_aggregator import PricingAggregatorService
 from src.services.usage_tracker import get_usage_tracker
 from src.services.budget_alerts import get_budget_alert_service
+from mcp.caller import ORG_SCOPED, McpCaller, authorize, effective_org_id
 
 
 class RecordUsageTool:
     """Record actual token usage for a completed LLM call and compute its cost server-side."""
 
+    # v1.79.1: per-org data — ToolManager refuses anonymous callers and binds a
+    # customer key to its own org. caller=None (direct construction) is unrestricted.
+    caller_access = ORG_SCOPED
+
     def __init__(self, aggregator: Optional[PricingAggregatorService] = None):
         self.service = aggregator or PricingAggregatorService()
 
-    async def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(
+        self, arguments: Dict[str, Any], caller: Optional[McpCaller] = None
+    ) -> Dict[str, Any]:
+        refusal = authorize(caller, self.caller_access, arguments) if caller is not None else None
+        if refusal is not None:
+            return refusal
         model_name = arguments.get("model_name")
         input_tokens = arguments.get("input_tokens")
         output_tokens = arguments.get("output_tokens")
@@ -43,7 +53,7 @@ class RecordUsageTool:
         except RuntimeError as exc:
             return {"success": False, "error": str(exc)}
 
-        org_id = arguments.get("org_id")
+        org_id = effective_org_id(caller, arguments)
         session_id = arguments.get("session_id")
         try:
             result = await tracker.record_event(

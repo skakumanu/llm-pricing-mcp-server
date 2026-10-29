@@ -27,16 +27,33 @@ Claude Desktop: add the block above to `claude_desktop_config.json` (Settings �
 
 ## Configuration
 
-Both are optional — the defaults work out of the box.
+All are optional — the defaults work out of the box.
 
 | Env var | Default | Purpose |
 |---|---|---|
 | `LLM_PRICING_MCP_URL` | `https://llm-pricing-api.fly.dev/mcp` | Point at a self-hosted or local instance instead |
 | `LLM_PRICING_MCP_TIMEOUT_MS` | `30000` | Per-request timeout to the upstream server |
+| `LLM_PRICING_API_KEY` | _(unset)_ | Your service API key (free at `POST /billing/signup`), forwarded as the `x-api-key` header. Never logged. |
+
+### Service API key (optional, v1.1.0)
+
+22 of the 29 tools (pricing, routing, cost estimates, data quality) work with no key. The 7 per-org usage and budget tools — `record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert` — need your service API key and act only on that key's own org. Without a key they return `error_code: "customer_key_required"`; passing another org's `org_id` returns `error_code: "org_mismatch"`.
+
+```json
+{
+  "mcpServers": {
+    "llm-pricing": {
+      "command": "npx",
+      "args": ["-y", "llm-pricing-mcp"],
+      "env": { "LLM_PRICING_API_KEY": "<your-service-key>" }
+    }
+  }
+}
+```
 
 ## Why a bridge instead of a bundled server?
 
-The actual tool logic and pricing data live server-side and change independently of this package's release cycle — drift corrections, new providers, and new tools ship immediately to every client without anyone needing to update or republish this wrapper. The tradeoff is a network dependency on the hosted endpoint; if you need a fully offline server, clone [the main repo](https://github.com/skakumanu/llm-pricing-mcp-server) and run `mcp/server.py` directly instead.
+The actual tool logic and pricing data live server-side and change independently of this package's release cycle — drift corrections, new providers, and new tools ship immediately to every client without anyone needing to update or republish this wrapper. The tradeoff is a network dependency on the hosted endpoint; if you need a fully offline server, clone [the main repo](https://github.com/skakumanu/llm-pricing-mcp-server) and run `mcp/server.py` directly instead (the local STDIO server is anonymous, so the 7 per-org usage/budget tools refuse there).
 
 ## License
 

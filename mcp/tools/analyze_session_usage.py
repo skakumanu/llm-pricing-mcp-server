@@ -1,6 +1,7 @@
 """MCP Tool: Analyze one session's actual recorded usage and recommend a model."""
 from typing import Any, Dict, Optional
 
+from mcp.caller import ORG_SCOPED, McpCaller, authorize, effective_org_id
 from src.services.pricing_aggregator import PricingAggregatorService
 from src.services.router import ModelRouter
 from src.services.session_recommendation import compute_session_recommendation
@@ -18,21 +19,31 @@ class AnalyzeSessionUsageTool:
     history or switches anything. No task_type is inferred or passed — there is no
     free-text description here, only observed numbers.
 
-    `org_id` is optional and self-reported, matching get_usage_summary's/record_usage's
-    existing trust model for this MCP tool layer (no authenticated-identity context is
-    plumbed into tool execution here) — pass it to scope the lookup to usage events that
-    were themselves recorded with that org_id.
+    Org scoping (v1.79.1): the caller's identity comes from the MCP connection, not
+    from the arguments. A customer key always reads only its own org's rows (another
+    org's session reads as "No usage recorded"), and an org_id naming a different org
+    is refused by ToolManager with org_mismatch. The operator may pass any org_id (or
+    none). Anonymous callers are refused before this tool runs.
     """
+
+    # v1.79.1: per-org data — ToolManager refuses anonymous callers and binds a
+    # customer key to its own org. caller=None (direct construction) is unrestricted.
+    caller_access = ORG_SCOPED
 
     def __init__(self, aggregator: Optional[PricingAggregatorService] = None):
         self.service = aggregator or PricingAggregatorService()
         self.router = ModelRouter(self.service)
 
-    async def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(
+        self, arguments: Dict[str, Any], caller: Optional[McpCaller] = None
+    ) -> Dict[str, Any]:
+        refusal = authorize(caller, self.caller_access, arguments) if caller is not None else None
+        if refusal is not None:
+            return refusal
         session_id = arguments.get("session_id")
         if not session_id or not isinstance(session_id, str) or not session_id.strip():
             return {"success": False, "error": "session_id is required and must be a non-empty string"}
-        org_id = arguments.get("org_id")
+        org_id = effective_org_id(caller, arguments)
 
         try:
             tracker = get_usage_tracker()
