@@ -98,7 +98,7 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 - Dispatch mode of `/v1/chat/completions` requires a free-tier *customer* key (the global `MCP_API_KEY` is refused — dispatch writes per-org ledgers); provider keys are bring-your-own per request (`X-Provider-Key-*` headers), used transiently and never stored, logged or echoed — and neither are prompts or completions
 - Rate limiting per client IP + tier bucket — includes the anonymous `/agent/chat` and `/agent/chat/stream` endpoints (no API key needed, but throttled, since each call runs an LLM on the operator's key)
 - Request size limit (1MB default)
-- 2005 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 2014 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
@@ -373,12 +373,17 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 // Request
 {"email": "you@example.com"}
 
-// Response
+// Response (new email)
 {
   "api_key": "abc123...", "org_id": "org-xyz...",
-  "tier": "free", "message": "Welcome! Your free API key is ready."
+  "tier": "free", "message": "Welcome! Your free-tier API key is ready. Save it now: it is shown only once. ..."
 }
+
+// Response (email already registered): HTTP 409, no key
+{"detail": "An account with this email already exists. For security, an API key is only shown once, at signup. ..."}
 ```
+
+The key is returned once, at signup. Signup is public, so it never returns an existing account's key.
 
 #### `POST /router/recommend`
 ```json

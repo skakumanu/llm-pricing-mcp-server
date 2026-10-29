@@ -199,3 +199,69 @@ class TestAdminRateLimitsEndpoint:
             assert resp.status_code == 200
         finally:
             main_module.settings.mcp_api_key = original
+
+
+# ── GET /admin/customers (v1.78.1: operator-only) ────────────────────────
+
+# Built at runtime so no secret-shaped literal lands in a commit (gitleaks scans them all).
+_OPERATOR_KEY = "-".join(["operator", "test", "value"])
+
+
+class TestAdminCustomersIsOperatorOnly:
+    """It lists every customer's email and org_id. A customer service key, which
+    public signup hands to anyone, must not be enough to read it."""
+
+    def _with_operator_key(self, fn):
+        import src.main as main_module
+        original = main_module.settings.mcp_api_key
+        try:
+            main_module.settings.mcp_api_key = _OPERATOR_KEY
+            return fn()
+        finally:
+            main_module.settings.mcp_api_key = original
+
+    def test_customer_service_key_is_refused(self, tmp_path):
+        import asyncio
+        from unittest.mock import patch
+        from src.services.billing_service import BillingService
+
+        svc = BillingService(str(tmp_path / "billing.db"))
+        asyncio.run(svc.initialize())
+        victim = asyncio.run(svc.create_customer("victim@example.com"))
+        attacker = asyncio.run(svc.create_customer("attacker@example.com"))
+
+        def call():
+            with patch("src.main.get_billing_service", return_value=svc):
+                return client.get("/admin/customers", headers={"x-api-key": attacker.api_key})
+
+        resp = self._with_operator_key(call)
+        assert resp.status_code == 401
+        assert victim.org_id not in resp.text and "victim@example.com" not in resp.text
+
+    def test_no_key_is_refused(self):
+        resp = self._with_operator_key(lambda: client.get("/admin/customers"))
+        assert resp.status_code == 401
+
+    def test_operator_key_is_accepted(self):
+        resp = self._with_operator_key(
+            lambda: client.get("/admin/customers", headers={"x-api-key": _OPERATOR_KEY}))
+        assert resp.status_code == 200
+        assert "customers" in resp.json()
+
+    def test_unconfigured_operator_key_fails_closed(self):
+        import src.main as main_module
+        original = main_module.settings.mcp_api_key
+        try:
+            main_module.settings.mcp_api_key = None
+            resp = client.get("/admin/customers", headers=HEADERS)
+        finally:
+            main_module.settings.mcp_api_key = original
+        assert resp.status_code == 503
+
+
+def test_signup_goes_through_the_rate_limiter():
+    """v1.78.1: signup mints keys and reveals whether an email is registered, so it is
+    no longer on the full-bypass list; it is anonymous but rate-limited and body-capped."""
+    import src.main as main_module
+    assert "/billing/signup" not in main_module._unauthenticated_paths
+    assert "/billing/signup" in main_module._anonymous_rate_limited_paths

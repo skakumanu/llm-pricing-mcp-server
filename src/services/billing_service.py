@@ -78,40 +78,42 @@ class BillingService:
             await db.execute(_CREATE_TABLE)
             await db.commit()
 
-    async def get_or_create_customer(self, email: str) -> CustomerRecord:
-        """Idempotent free-tier signup — returns existing customer if email already registered."""
-        async with _open_db(self._db_path) as db:
-            async with db.execute(
-                "SELECT id, email, stripe_customer_id, stripe_subscription_id, "
-                "api_key, tier, org_id, created_at, updated_at FROM customers WHERE email = ?",
-                (email,),
-            ) as cur:
-                row = await cur.fetchone()
-            if row:
-                return _row_to_customer(row)
+    async def create_customer(self, email: str) -> Optional[CustomerRecord]:
+        """Create a free-tier customer for a new email, or return None if it is taken.
 
-            now = time.time()
-            customer_id = str(uuid.uuid4())
-            api_key = secrets.token_urlsafe(32)
-            org_id = str(uuid.uuid4())
-            await db.execute(
-                "INSERT INTO customers "
-                "(id, email, stripe_customer_id, stripe_subscription_id, api_key, tier, org_id, created_at, updated_at) "
-                "VALUES (?, ?, NULL, NULL, ?, 'free', ?, ?, ?)",
-                (customer_id, email, api_key, org_id, now, now),
-            )
-            await db.commit()
-            return CustomerRecord(
-                id=customer_id,
-                email=email,
-                stripe_customer_id=None,
-                stripe_subscription_id=None,
-                api_key=api_key,
-                tier="free",
-                org_id=org_id,
-                created_at=now,
-                updated_at=now,
-            )
+        Public signup uses this. There is deliberately no "get or create": an
+        existing customer's record carries its service key and signup is
+        unauthenticated, so handing it back would give anyone who knows an email
+        address that org's key (the pre-v1.78.1 behaviour). A concurrent signup
+        that loses the UNIQUE(email) race also yields None.
+        """
+        now = time.time()
+        customer_id = str(uuid.uuid4())
+        api_key = secrets.token_urlsafe(32)
+        org_id = str(uuid.uuid4())
+        async with _open_db(self._db_path) as db:
+            try:
+                await db.execute(
+                    "INSERT INTO customers "
+                    "(id, email, stripe_customer_id, stripe_subscription_id, api_key, tier, org_id, "
+                    "created_at, updated_at) "
+                    "VALUES (?, ?, NULL, NULL, ?, 'free', ?, ?, ?)",
+                    (customer_id, email, api_key, org_id, now, now),
+                )
+                await db.commit()
+            except aiosqlite.IntegrityError:
+                return None
+        return CustomerRecord(
+            id=customer_id,
+            email=email,
+            stripe_customer_id=None,
+            stripe_subscription_id=None,
+            api_key=api_key,
+            tier="free",
+            org_id=org_id,
+            created_at=now,
+            updated_at=now,
+        )
 
     async def get_customer_by_api_key(self, api_key: str) -> Optional[CustomerRecord]:
         async with _open_db(self._db_path) as db:

@@ -41,7 +41,7 @@ def _client():
 def test_signup_success():
     customer = _make_customer(email="user@example.com")
     mock_svc = MagicMock()
-    mock_svc.get_or_create_customer = AsyncMock(return_value=customer)
+    mock_svc.create_customer = AsyncMock(return_value=customer)
 
     with patch("src.main.get_billing_service", return_value=mock_svc):
         client = _client()
@@ -52,6 +52,39 @@ def test_signup_success():
     assert data["tier"] == "free"
     assert "org_id" in data
     assert "message" in data
+    assert "only once" in data["message"]
+
+
+def test_signup_existing_email_returns_409_without_a_key():
+    """Signup is public: an already-registered email must never get its key back,
+    or anyone who knows a customer's email could take over that org's service key."""
+    mock_svc = MagicMock()
+    mock_svc.create_customer = AsyncMock(return_value=None)
+
+    with patch("src.main.get_billing_service", return_value=mock_svc):
+        client = _client()
+        resp = client.post("/billing/signup", json={"email": "user@example.com"})
+    assert resp.status_code == 409
+    body = resp.json()
+    assert "api_key" not in body and "org_id" not in body
+    assert "already exists" in body["detail"]
+
+
+def test_signup_never_discloses_an_existing_key_end_to_end(tmp_path):
+    """Against a real BillingService: the first signup gets a key, a repeat signup
+    for the same email gets 409, and the first key appears nowhere in that reply."""
+    import asyncio
+
+    svc = BillingService(str(tmp_path / "billing.db"))
+    asyncio.run(svc.initialize())
+    with patch("src.main.get_billing_service", return_value=svc):
+        client = _client()
+        first = client.post("/billing/signup", json={"email": "victim@example.com"})
+        again = client.post("/billing/signup", json={"email": "victim@example.com"})
+    assert first.status_code == 200
+    key = first.json()["api_key"]
+    assert again.status_code == 409
+    assert key not in again.text
 
 
 def test_signup_invalid_email():
