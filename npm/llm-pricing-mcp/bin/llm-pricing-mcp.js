@@ -17,6 +17,14 @@ const readline = require('readline');
 
 const ENDPOINT = process.env.LLM_PRICING_MCP_URL || 'https://llm-pricing-api.fly.dev/mcp';
 const REQUEST_TIMEOUT_MS = Number(process.env.LLM_PRICING_MCP_TIMEOUT_MS) || 30000;
+// Optional service API key (v1.1.0). Only the 7 org-scoped usage/budget tools need
+// it; the pricing tools work without it. Forwarded as the x-api-key header and
+// NEVER written to stdout, stderr or any error message.
+const API_KEY = (process.env.LLM_PRICING_API_KEY || '').trim();
+const REQUEST_HEADERS = {
+  'content-type': 'application/json',
+  ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
+};
 
 function writeResponse(obj) {
   process.stdout.write(JSON.stringify(obj) + '\n');
@@ -41,7 +49,7 @@ async function forward(line) {
   try {
     const res = await fetch(ENDPOINT, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: REQUEST_HEADERS,
       body: JSON.stringify(request),
       signal: controller.signal,
     });

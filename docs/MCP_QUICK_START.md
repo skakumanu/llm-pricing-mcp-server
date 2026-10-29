@@ -65,6 +65,18 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
   }'
 ```
 
+### Optional service key (v1.79.1)
+
+The 22 public tools need no credential. The 7 org-scoped usage/budget tools (`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`) need your service API key (`POST /billing/signup`) on the connection, as `x-api-key` or `Authorization: Bearer`, and act only on that key's org:
+
+```bash
+curl -X POST https://llm-pricing-api.fly.dev/mcp \
+  -H "Content-Type: application/json" -H "x-api-key: $LLM_PRICING_API_KEY" \
+  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"list_budget_alerts","arguments":{}}}'
+```
+
+Without a key → `error_code: "customer_key_required"`; another org's `org_id` → `error_code: "org_mismatch"` (both are `success: false` tool results, not JSON-RPC errors). The local STDIO server below is always anonymous, so these tools refuse there.
+
 ---
 
 ## STDIO Transport (npx, no clone)
@@ -79,7 +91,7 @@ Add to any STDIO-only MCP client config:
 }
 ```
 
-This is a zero-dependency bridge ([`npm/llm-pricing-mcp`](../npm/llm-pricing-mcp)) that forwards stdin/stdout to the HTTP endpoint above — no Python, clone, or local pricing data involved.
+This is a zero-dependency bridge ([`npm/llm-pricing-mcp`](../npm/llm-pricing-mcp)) that forwards stdin/stdout to the HTTP endpoint above — no Python, clone, or local pricing data involved. Set `"env": { "LLM_PRICING_API_KEY": "<your-service-key>" }` (bridge 1.1.0+) to forward your service key as `x-api-key` for the usage/budget tools; it is never logged.
 
 ---
 

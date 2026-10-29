@@ -155,8 +155,28 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.79.0 -->
+  <!-- v1.79.1 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.79.1</span>
+      <span class="release-date">Oct 29, 2026</span>
+      <span class="release-tag tag-security">Security</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">MCP usage and budget tools now act only on your own org</div>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li><strong>Send your service key on the MCP connection.</strong> <code>record_usage</code>, <code>import_session_usage</code>, <code>get_usage_summary</code>, <code>analyze_session_usage</code>, <code>register_budget_alert</code>, <code>list_budget_alerts</code> and <code>delete_budget_alert</code> read or write per-org data, so over MCP they now need your service API key as an <code>x-api-key</code> or <code>Authorization: Bearer</code> header. Until now they trusted whatever <code>org_id</code> was typed into the arguments, so anyone could list, delete or add to another org's budget alerts and usage</li>
+        <li><strong>Your key, your org.</strong> With a key, these tools act only on that key's org: <code>org_id</code> defaults to it, another org's is refused with <code>org_mismatch</code>, and another org's budget alert reads as not found. Without a key they return <code>customer_key_required</code> with setup hints. The local STDIO server and the chat agent are always anonymous, so these tools refuse there</li>
+        <li><strong>Pricing tools unchanged.</strong> The other 22 public tools still need no key, and sending one changes nothing about their results</li>
+        <li><strong>npx bridge 1.1.0.</strong> <code>npx -y llm-pricing-mcp</code> forwards an optional <code>LLM_PRICING_API_KEY</code> env var as <code>x-api-key</code> and never logs it. The local STDIO server no longer logs full request and response bodies at debug level</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.79.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.79.0</span>

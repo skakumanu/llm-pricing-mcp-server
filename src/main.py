@@ -91,6 +91,7 @@ from src.services.deployment import get_deployment_manager  # noqa: E402
 from src.services.geolocation import GeolocationService  # noqa: E402
 from agent.pricing_agent import PricingAgent  # noqa: E402
 from mcp.tools.tool_manager import ToolManager  # noqa: E402
+from mcp.caller import ANONYMOUS, PUBLIC, McpCaller  # noqa: E402
 
 # Configure logging after settings are available
 logging.basicConfig(
@@ -4287,8 +4288,43 @@ def _mcp_err(request_id, code: int, message: str) -> dict:
     return resp
 
 
-async def _handle_mcp_request(body: dict) -> Optional[dict]:
-    """Dispatch a JSON-RPC 2.0 MCP request; returns None for notifications."""
+async def _resolve_mcp_caller(request: Optional[Request]) -> McpCaller:
+    """Who is calling POST /mcp (v1.79.1), from the connection's headers.
+
+    Same credential rule as dispatch (_dispatch_service_key: x-api-key, else
+    Authorization: Bearer). The global MCP_API_KEY is the operator; a key matching a
+    billing customer is that customer; no key, an unknown key, or an uninitialised
+    billing service is anonymous. Never raises, never logs, and never puts the key
+    in any message — an unknown key is indistinguishable from no key.
+    """
+    if request is None:
+        return ANONYMOUS
+    key = _dispatch_service_key(request)
+    if not key:
+        return ANONYMOUS
+    # Compare as UTF-8 bytes: str compare_digest raises TypeError on non-ASCII input
+    # (headers are latin-1 decoded), which would turn /mcp into a 500.
+    if settings.mcp_api_key and secrets.compare_digest(
+        key.encode("utf-8"), settings.mcp_api_key.encode("utf-8")
+    ):
+        return McpCaller.operator()
+    try:
+        customer = await get_billing_service().get_customer_by_api_key(key)
+    except Exception:
+        customer = None  # billing not initialised or lookup failed: anonymous, silently
+    if customer is None:
+        return ANONYMOUS
+    return McpCaller.from_customer(customer)
+
+
+async def _handle_mcp_request(body: dict, request: Optional[Request] = None) -> Optional[dict]:
+    """Dispatch a JSON-RPC 2.0 MCP request; returns None for notifications.
+
+    ``request`` (v1.79.1) carries the connection headers used to resolve the caller.
+    Resolution is lazy: only a tools/call of a non-PUBLIC tool looks the key up, so
+    public tools, initialize and tools/list never touch the billing service. Callers
+    passing only ``body`` are anonymous.
+    """
     import json as _json
 
     if body.get("jsonrpc") != "2.0":
@@ -4319,7 +4355,12 @@ async def _handle_mcp_request(body: dict) -> Optional[dict]:
         if not isinstance(params, dict) or "name" not in params:
             return _mcp_err(request_id, -32602, "Invalid params: name is required")
         tm = await _get_http_mcp_tool_manager()
-        result = await tm.execute_tool(params["name"], params.get("arguments", {}))
+        name = params["name"]
+        if tm.caller_access(name) == PUBLIC:
+            result = await tm.execute_tool(name, params.get("arguments", {}))
+        else:
+            caller = await _resolve_mcp_caller(request)
+            result = await tm.execute_tool(name, params.get("arguments", {}), caller=caller)
         return _mcp_ok(request_id, {
             "content": [{"type": "text", "text": _json.dumps(result, indent=2)}],
         })
@@ -4358,6 +4399,10 @@ async def mcp_http(request: Request):
             "llm-pricing": { "url": "https://llm-pricing-api.fly.dev/mcp" }
           }
         }
+
+    Optional service key (v1.79.1): send it as x-api-key or Authorization: Bearer on
+    the connection. Only the 7 org-scoped usage/budget tools need it (they act on
+    the key's own org); the other 22 tools stay anonymous. Headers are never logged.
     """
     try:
         body = await request.json()
@@ -4367,7 +4412,7 @@ async def mcp_http(request: Request):
             content=_mcp_err(None, -32700, "Parse error: invalid JSON"),
         )
 
-    response = await _handle_mcp_request(body)
+    response = await _handle_mcp_request(body, request)
 
     if response is None:
         return Response(status_code=204)
