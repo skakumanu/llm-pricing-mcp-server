@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.79.0 | **Last updated**: 2026-10-29
+**Version**: v1.79.1 | **Last updated**: 2026-10-29
 
 ---
 
@@ -17,6 +17,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 31 
 - **Local currency (v1.76.0)**: a presentation-layer service, `src/services/currency.py`, owns the 13 supported currencies, the deterministic country→currency map, the vendored rate table `data/exchange_rates.json` (7-day staleness; never fetched per request; refreshed by a fourth weekly PR from `price-audit.yml` via `scripts/refresh_exchange_rates.py`) and one precedence function `resolve_locale()`. Six REST endpoints reach it through a single FastAPI dependency (`resolve_request_locale`: currency/country query or header → platform geo header → best-effort IP lookup → USD), five MCP tools through explicit arguments only (MCP never detects), and the browser pages through `GET /locale` + `GET /currency/rates` with client-side conversion. Converted figures are additive `local_*` fields omitted entirely when nothing is stated or detected, so the no-input path is byte-identical to before; pricing data, the oracle, the aggregator and data-quality are untouched (conversion happens on per-request `model_copy()`s). Privacy rule: the IP is used transiently to resolve a country — never stored, never logged by this feature, never echoed
 - **Dispatch gateway (v1.77.0)**: the service can now *act* on its recommendation. `POST /v1/chat/completions` gains an opt-in mode — a `dispatch` policy object in the body (OpenAI SDK `extra_body`) — that picks the best eligible model under the caller's policy (objective preset, the router's hard constraints, allow/deny lists, a per-request USD cap), executes it with the caller's own provider key (BYOK via `X-Provider-Key-<Provider>` headers; nine executable providers, everything else recommend-only), fails over on timeout / 5xx / 429 / context-too-long / model-not-found while never dropping below the quality floor (401/403 on the caller's key is terminal), and returns a normal `chat.completion` with real `usage` plus an additive `dispatch_receipt` (chosen model, reason, ranked candidates, exclusions with reasons, actual cost from provider token counts × catalogue price, savings vs the most expensive eligible and vs the requested/pinned model, attempts, latency, optional shadow A/B result, local-currency figures when a locale is stated). Three flat services: `dispatch_executors.py` (one httpx path per wire family — OpenAI-compatible, Anthropic Messages, Gemini — with one error-classification table and no vendor SDK, so the SDKs' built-in retries cannot fight the failover loop), `dispatch_service.py` (eligibility stages → `ModelRouter.rank_models()` → objective ordering → cap → failover/shadow → ledgers → receipt) and `dispatch_receipts.py` (metadata-only `dispatch_receipts` table, org-scoped export via `GET /dispatch/receipts`). Eligibility is a hard rule: only models with a provider-confirmed price (`price_confirmed`, so drift-withheld, never-priced and retired models are never dispatched) under an executable provider for which the caller supplied a key. Every successful dispatch writes exactly one exact usage event, one routing decision marked used, fires budget alerts, and a budget alert flagged `hard_stop` (new column) refuses further dispatch for its org with 402 once reached. Dispatch requires a free-tier customer key (`x-api-key` or `Authorization: Bearer`); anonymous callers and the global `MCP_API_KEY` are refused with 401 — the plain proxy stays public and byte-identical. Privacy rule (same as the IP rule above): provider keys and prompt/completion text are transient — never persisted (until v1.79.0's opt-in, encrypted stored keys below), never logged at any level, never echoed in a receipt or error; provider error bodies are classified into an outcome and dropped. No new MCP tool (count stays 29); no pricing data touched
 - **Stored per-org provider keys (v1.79.0)**: a customer can register each executable provider's key once (`POST /dispatch/keys`; list/rotate/delete under `/dispatch/keys[/{slug}]`, customer key only, any tier) and dispatch uses it whenever a request carries no `X-Provider-Key-<Provider>` header — so a stock chat UI or OpenAI SDK needs only the service key and a `dispatch` object. One new service, `provider_key_store.py`: a `provider_keys` table in `billing.db` (one row per org × provider), values AES-256-GCM-encrypted under an HKDF-SHA256 key derived from `PROVIDER_KEY_ENCRYPTION_KEY` (org and provider bound in as AAD), a last-4 fingerprint, created/rotated/last-used times; and `CompositeKeyResolver`, the per-request `ProviderKeyResolver` that puts the stored keys behind the header keys (header always wins; an `auth_error` on the winning key is never retried with the other). Every receipt attempt now records `key_source` (`header` | `stored`), never any part of a key. Without the secret the endpoints answer 503 and dispatch stays header-only; keys that no longer decrypt (secret changed, row tampered) count as absent and are listed `needs_reregistration`. New dependency: `cryptography`
+- **MCP caller identity (v1.79.1)**: the seven per-org MCP tools (`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`) no longer trust an `org_id` typed into the arguments. `POST /mcp` resolves an optional caller from the connection's `x-api-key` / `Authorization: Bearer` header (same rule as dispatch); a customer key acts only on its own org (another org's `org_id` → `org_mismatch`, another org's alert reads as not found), the global `MCP_API_KEY` keeps all-org behaviour, and anonymous callers — including unknown keys, all of STDIO and the PricingAgent — are refused with `customer_key_required`. The other 22 public tools are unchanged and stay anonymous. New module `mcp/caller.py`; no new tool (count stays 29)
 - **Clean cross-branch promotion**: `scripts/promote_branch_content.sh` mirrors one branch's tree onto another (additions, updates, AND deletions) to work around develop/master squash-merge divergence, verifying the result matches exactly before returning
 - **Repo cost auditor**: `scripts/audit_repo.py` statically scans an arbitrary codebase (customer-run, not deployed) for LLM SDK call sites and reuses `predict_cost`'s token/pricing math to recommend cheaper models, prompt caching, Batch API, task-based right-sizing, and duplicate-prompt consolidation — runs locally only, since the hosted `/mcp` HTTP transport has no access to a caller's filesystem
 - **AI-native SDLC pipeline** (dev tooling, not deployed): `/release-feature` runs a feature through dedicated Spec, Design, Code, Review (parallel correctness/security/simplification), and Test & Release phase agents (`.claude/agents/phase-*.md`) orchestrated by `.claude/workflows/release-feature.js`, ending at an open PR against `develop` — Spec fixes *what*/acceptance criteria, Design fixes *how* (approach, version, branch name), so neither phase re-derives the other's decision; see `CLAUDE.md`'s "AI-Native SDLC Pipeline" section
@@ -197,9 +198,10 @@ llm-pricing-mcp-server/
 │   └── tools.py                     # 26 of 29 MCP tool bindings for agent use (+ RAG search)
 │
 ├── mcp/
-│   ├── server.py                    # MCP STDIO transport (Claude Desktop)
+│   ├── server.py                    # MCP STDIO transport (Claude Desktop) — always an anonymous caller; DEBUG logs method/id only (v1.79.1)
+│   ├── caller.py                    # v1.79.1: McpCaller (anonymous | customer | operator; id/org/tier only, never a key), access levels PUBLIC / ORG_SCOPED / CUSTOMER_ONLY (reserved for v1.80.0), authorize(), effective_org_id()
 │   ├── schema_generator.py          # Generates mcp/schemas/ from the Pydantic models
-│   ├── tools/                       # Per-tool MCP handler modules
+│   ├── tools/                       # Per-tool MCP handler modules (tool_manager.py: execute_tool(name, args, caller=ANONYMOUS); the seven usage/budget tools declare caller_access = ORG_SCOPED)
 │   └── schemas/                     # Generated MCP JSON-RPC schema definitions
 │
 ├── static/
@@ -317,6 +319,18 @@ public (allow-listed); `GET /dispatch/receipts` is not allow-listed, so the midd
 the handler additionally requires `request.state.customer` (global-key callers get 403) and always scopes to
 that customer's `org_id`.
 
+**`/mcp` caller identity (v1.79.1).** `/mcp` stays a full-bypass path (the 22 public tools need no key), so
+the handler resolves the caller itself, and only when it has to: `_handle_mcp_request(body, request)` calls
+`_resolve_mcp_caller(request)` for a `tools/call` whose tool declares a non-PUBLIC `caller_access`, never for
+`initialize`, `tools/list` or a public tool (no billing lookup on the public path). The key comes from
+`_dispatch_service_key()` (`x-api-key`, else `Authorization: Bearer`): equal to `MCP_API_KEY`
+(`secrets.compare_digest`) → operator; a billing customer → `McpCaller.from_customer()` (id, org_id, tier — never
+the key or email); no key, an unknown key, or billing not initialised → anonymous, silently. Nothing on this
+path logs headers or the key, and no refusal echoes it. Refusals are normal tool results (`success: false`,
+HTTP 200), not JSON-RPC errors: `customer_key_required` (with `signup`, header and npx-env guidance) or
+`org_mismatch` (echoes neither org_id). Unlike `/usage` (HTTP), there is no anonymous `org_id` NULL pool over
+MCP: an anonymous caller cannot read or write any org's data at all.
+
 ### 3. Provider Pattern
 Each of 31 LLM providers implements `BasePricingProvider`:
 - `fetch_pricing_data() -> list[PricingMetrics]` — returns static pricing (with live data fallback where available)
@@ -339,7 +353,8 @@ Enabled for: OpenAI, Anthropic, Groq, Mistral AI, Together AI, Fireworks AI, xAI
 - Protocol version: `2024-11-05`; 29 tools exposed
 - Both transports' `ToolManager` is built with the same process-wide `get_pricing_aggregator()` singleton the REST API uses (see "Singleton Services" above) — one pricing cache per process shared by every surface, not one per transport. Cross-process sharing (STDIO process vs. the HTTP/REST process) is out of scope; each process still gets its own aggregator.
 - The 3 confirmed duplicate cost-math pairs (`/cost-estimate` ↔ `estimate_cost`, `/cost-estimate/batch` ↔ `compare_costs`, `/usage` ↔ `record_usage`) now call the same `cost_calculator.compute_token_cost()` instead of each re-implementing the arithmetic inline.
-- **Third access path** (`npm/llm-pricing-mcp`, published to npm as `llm-pricing-mcp`): a zero-dependency Node.js STDIO<->HTTP bridge for clients that only support `command`-based STDIO servers but not a direct remote/HTTP `url` config. It holds no tool logic or pricing data of its own — it forwards each stdin line to `POST /mcp` and writes the JSON-RPC response back to stdout — so it has nothing to keep in sync as tools or pricing change server-side. `tests/test_npm_wrapper.py` exercises it against `npm/llm-pricing-mcp/test/mock-server.js`, never the live server, so these tests need no network access.
+- **Caller plumbing (v1.79.1)**: `ToolManager.execute_tool(name, arguments, caller=ANONYMOUS)`. A tool without a `caller_access` attribute is `PUBLIC` and is called exactly as before (`execute(arguments)`, never sees the caller). The seven usage/budget tools set `caller_access = ORG_SCOPED`; `ToolManager` runs `mcp.caller.authorize()` first (anonymous → `customer_key_required`; customer naming another org → `org_mismatch`; operator → unrestricted) and then calls `execute(arguments, caller=caller)`, where `effective_org_id()` forces a customer onto its own org (list/delete budget alerts pass `org_id` to the existing service-layer filters). `CUSTOMER_ONLY` (customer only; operator refused) is reserved for the v1.80.0 MCP dispatch tool. Only HTTP `/mcp` ever passes a caller; STDIO and the PricingAgent use the two-argument form and are anonymous. `tool.execute(arguments)` with no caller remains unrestricted for in-process unit tests, and a guard test asserts nothing outside `mcp/tools/` constructs those seven classes.
+- **Third access path** (`npm/llm-pricing-mcp`, published to npm as `llm-pricing-mcp`): a zero-dependency Node.js STDIO<->HTTP bridge for clients that only support `command`-based STDIO servers but not a direct remote/HTTP `url` config. It holds no tool logic or pricing data of its own — it forwards each stdin line to `POST /mcp` and writes the JSON-RPC response back to stdout — so it has nothing to keep in sync as tools or pricing change server-side. `tests/test_npm_wrapper.py` exercises it against `npm/llm-pricing-mcp/test/mock-server.js`, never the live server, so these tests need no network access. Since npm 1.1.0 (v1.79.1) it forwards the optional `LLM_PRICING_API_KEY` env var as the `x-api-key` header (omitted when unset) and never writes it to stdout/stderr.
 
 ### 5. Agent Architecture (ReAct Loop)
 ```
@@ -351,6 +366,10 @@ User message
   → conversation.py: persist turns to SQLite, enforce max_turns limit
   → SSE stream: events [start, thinking, tool_call, tool_result, …, answer, done]
 ```
+
+The agent is an anonymous MCP caller (v1.79.1): its bindings call `ToolManager.execute_tool(name, args)` with
+no caller, so the seven org-scoped usage/budget tools stay bound (26 of the 29 MCP tools) but refuse at runtime
+with `customer_key_required` — `/agent/chat` and `ask_agent` can never read, write or delete any org's data.
 
 ### 6. Stripe Billing (optional)
 If `STRIPE_SECRET_KEY` is not set, checkout/portal/webhook endpoints return `503`. Free-tier signup and API key issuance always work without Stripe:
@@ -568,7 +587,7 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | PUT | `/dispatch/keys/{provider}` | Required customer key | v1.79.0: rotate (`{api_key}`; provider = slug or display name); 404 if the org stores none |
 | DELETE | `/dispatch/keys/{provider}` | Required customer key | v1.79.0: delete (204); 404 if the org stores none |
 | GET | `/mcp` | None | MCP server info |
-| POST | `/mcp` | None | MCP HTTP transport (JSON-RPC 2.0) |
+| POST | `/mcp` | None; optional service key (`x-api-key` / `Bearer`) for the 7 org-scoped tools | MCP HTTP transport (JSON-RPC 2.0). v1.79.1: a customer key scopes the usage/budget tools to its own org; the global key is the operator; anonymous calls to those tools are refused (`customer_key_required`); the 22 public tools never need a key |
 | POST | `/billing/signup` | None | Free-tier signup |
 | GET | `/billing/me` | Required | Customer dashboard |
 | POST | `/billing/checkout` | Required | Stripe checkout |

@@ -31,6 +31,7 @@ from mcp.tools.register_budget_alert import RegisterBudgetAlertTool
 from mcp.tools.list_budget_alerts import ListBudgetAlertsTool
 from mcp.tools.delete_budget_alert import DeleteBudgetAlertTool
 from src.services.currency import SUPPORTED_CURRENCIES
+from mcp.caller import ANONYMOUS, PUBLIC, McpCaller, authorize
 
 # v1.76.0 — optional on the five pricing-output tools. MCP never detects a
 # location (no visitor IP on STDIO); omitting both yields exactly the USD output.
@@ -804,9 +805,11 @@ class ToolManager:
                     "Record actual token usage for a completed LLM call. Cost is computed "
                     "server-side from current pricing, never trusted from the caller — this is "
                     "the 'actual spend' counterpart to estimate_cost's hypothetical numbers. "
-                    "Optionally scope to an org_id for per-org spend tracking. Resubmitting the "
-                    "same request_id for the same org is a no-op. Use when the user wants to log "
-                    "or track real LLM spend, not just estimate it."
+                    "Usage is attributed to your org. Resubmitting the same request_id for the "
+                    "same org is a no-op. Use when the user wants to log or track real LLM spend, "
+                    "not just estimate it. "
+                    "Requires your service API key on the MCP connection (x-api-key or Authorization: Bearer); "
+                    "org_id defaults to, and must match, that key's org."
                 ),
                 "input_schema": {
                     "type": "object",
@@ -827,7 +830,10 @@ class ToolManager:
                         },
                         "org_id": {
                             "type": "string",
-                            "description": "Optional organisation ID to attribute this usage to",
+                            "description": (
+                                "Optional organisation ID to attribute this usage to. Defaults to, "
+                                "and must match, the org of the service key on the MCP connection"
+                            ),
                         },
                         "occurred_at": {
                             "type": "number",
@@ -856,14 +862,19 @@ class ToolManager:
                     "Get a summary of actual recorded LLM spend: total cost, request count, and "
                     "breakdowns by model and provider, from usage events previously logged via "
                     "record_usage. Use when the user asks what they've actually spent, as opposed "
-                    "to a hypothetical cost estimate."
+                    "to a hypothetical cost estimate. "
+                    "Requires your service API key on the MCP connection (x-api-key or Authorization: Bearer); "
+                    "org_id defaults to, and must match, that key's org."
                 ),
                 "input_schema": {
                     "type": "object",
                     "properties": {
                         "org_id": {
                             "type": "string",
-                            "description": "Optional organisation ID filter",
+                            "description": (
+                                "Optional organisation ID filter. Defaults to, and must match, the "
+                                "org of the service key on the MCP connection"
+                            ),
                         },
                         "days": {
                             "type": "integer",
@@ -889,7 +900,9 @@ class ToolManager:
                     "optimal — with the estimated dollar savings or increase versus this "
                     "session's actual cost. Returns has_data: false with no recommendation if "
                     "the session_id has no recorded usage. Advisory only — never switches or "
-                    "reroutes anything."
+                    "reroutes anything. "
+                    "Requires your service API key on the MCP connection (x-api-key or Authorization: Bearer); "
+                    "org_id defaults to, and must match, that key's org."
                 ),
                 "input_schema": {
                     "type": "object",
@@ -902,7 +915,8 @@ class ToolManager:
                             "type": "string",
                             "description": (
                                 "Optional organisation ID filter — scopes the lookup to usage events "
-                                "recorded under that org_id, same as get_usage_summary's org_id"
+                                "recorded under that org_id. Defaults to, and must match, the org of "
+                                "the service key on the MCP connection"
                             ),
                         },
                     },
@@ -927,7 +941,9 @@ class ToolManager:
                     "Idempotent like record_usage — resubmitting the same entries (same request_id, "
                     "or the same session_id/model/occurred_at/token-or-text when request_id is "
                     "omitted) is a no-op. Recorded usage is then readable via analyze_session_usage "
-                    "and GET /usage/session/{session_id}."
+                    "and GET /usage/session/{session_id}. "
+                    "Requires your service API key on the MCP connection (x-api-key or Authorization: Bearer); "
+                    "org_id defaults to, and must match, that key's org."
                 ),
                 "input_schema": {
                     "type": "object",
@@ -938,7 +954,10 @@ class ToolManager:
                         },
                         "org_id": {
                             "type": "string",
-                            "description": "Optional organisation ID to attribute this usage to",
+                            "description": (
+                                "Optional organisation ID to attribute this usage to. Defaults to, "
+                                "and must match, the org of the service key on the MCP connection"
+                            ),
                         },
                         "entries": {
                             "type": "array",
@@ -1002,9 +1021,10 @@ class ToolManager:
                 "description": (
                     "Register a webhook URL to receive notifications when actual recorded spend "
                     "(from record_usage) crosses a USD threshold within a rolling window. "
-                    "Optionally scope to a specific org_id (omit for total spend across all "
-                    "orgs). Fires at most once per period_days while spend stays over threshold. "
-                    "Returns the alert ID."
+                    "The alert monitors your org's spend. Fires at most once per period_days while "
+                    "spend stays over threshold. Returns the alert ID. "
+                    "Requires your service API key on the MCP connection (x-api-key or Authorization: Bearer); "
+                    "org_id defaults to, and must match, that key's org."
                 ),
                 "input_schema": {
                     "type": "object",
@@ -1019,7 +1039,10 @@ class ToolManager:
                         },
                         "org_id": {
                             "type": "string",
-                            "description": "Organisation to monitor. Omit for total spend across all orgs.",
+                            "description": (
+                                "Organisation to monitor. Defaults to, and must match, the org of the "
+                                "service key on the MCP connection"
+                            ),
                         },
                         "period_days": {
                             "type": "integer",
@@ -1033,7 +1056,11 @@ class ToolManager:
             "list_budget_alerts": {
                 "instance": ListBudgetAlertsTool(),
                 "name": "list_budget_alerts",
-                "description": "List all registered budget-spend webhook alerts with their IDs and settings.",
+                "description": (
+                    "List your org's registered budget-spend webhook alerts with their IDs and "
+                    "settings. Requires your service API key on the MCP connection (x-api-key or "
+                    "Authorization: Bearer); only alerts for that key's org are returned."
+                ),
                 "input_schema": {
                     "type": "object",
                     "properties": {},
@@ -1043,7 +1070,11 @@ class ToolManager:
             "delete_budget_alert": {
                 "instance": DeleteBudgetAlertTool(),
                 "name": "delete_budget_alert",
-                "description": "Delete a registered budget-spend alert by its ID.",
+                "description": (
+                    "Delete one of your org's registered budget-spend alerts by its ID. Requires "
+                    "your service API key on the MCP connection (x-api-key or Authorization: "
+                    "Bearer); another org's alert ID reads as not found."
+                ),
                 "input_schema": {
                     "type": "object",
                     "properties": {
@@ -1100,8 +1131,30 @@ class ToolManager:
             for tool in self.tools.values()
         ]
 
-    async def execute_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a tool by name with given arguments."""
+    def caller_access(self, name: str) -> str:
+        """Access level a tool declares via its ``caller_access`` attribute (PUBLIC if absent).
+
+        Unknown tool names are PUBLIC so callers never resolve an identity for them.
+        """
+        tool = self.tools.get(name)
+        if not tool:
+            return PUBLIC
+        return getattr(tool["instance"], "caller_access", PUBLIC)
+
+    async def execute_tool(
+        self,
+        name: str,
+        arguments: Dict[str, Any],
+        caller: McpCaller = ANONYMOUS,
+    ) -> Dict[str, Any]:
+        """Execute a tool by name with given arguments.
+
+        ``caller`` (v1.79.1) is who is calling. It defaults to ANONYMOUS, so every
+        existing two-argument caller (STDIO, the PricingAgent) is anonymous. PUBLIC
+        tools never see the caller and behave exactly as before; non-public tools are
+        authorised first, and a refusal comes back as a normal ``success: false``
+        tool result rather than an exception.
+        """
         tool = self.tools.get(name)
         if not tool:
             return {
@@ -1110,7 +1163,13 @@ class ToolManager:
             }
 
         try:
-            result = await tool["instance"].execute(arguments)
+            access = self.caller_access(name)
+            if access == PUBLIC:
+                return await tool["instance"].execute(arguments)
+            refusal = authorize(caller, access, arguments)
+            if refusal is not None:
+                return refusal
+            result = await tool["instance"].execute(arguments, caller=caller)
             return result
         except Exception as e:
             return {

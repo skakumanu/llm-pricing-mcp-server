@@ -7,7 +7,7 @@
     "url": "https://github.com/skakumanu/llm-pricing-mcp-server",
     "source": "github"
   },
-  "version": "1.73.10",
+  "version": "1.79.1",
   "remotes": [
     {
       "type": "streamable-http",
@@ -19,7 +19,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "llm-pricing-mcp",
-      "version": "1.0.2",
+      "version": "1.1.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
@@ -38,6 +38,12 @@
           "isRequired": false,
           "isSecret": false,
           "default": "30000"
+        },
+        {
+          "name": "LLM_PRICING_API_KEY",
+          "description": "Optional service API key (POST /billing/signup), sent as x-api-key. Only the usage and budget tools need it; they then act on your own org.",
+          "isRequired": false,
+          "isSecret": true
         }
       ]
     }

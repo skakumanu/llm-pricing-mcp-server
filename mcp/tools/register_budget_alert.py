@@ -1,13 +1,27 @@
 """MCP Tool: Register a budget-spend alert webhook."""
 from typing import Any, Dict, Optional
 
+from mcp.caller import ORG_SCOPED, McpCaller, authorize, effective_org_id
 from src.services.budget_alerts import get_budget_alert_service
 
 
 class RegisterBudgetAlertTool:
-    """Register a webhook URL to be called when actual recorded spend crosses a threshold."""
+    """Register a webhook URL to be called when actual recorded spend crosses a threshold.
 
-    async def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    Never sets hard_stop (that stays HTTP-only, POST /usage/alerts with a customer key);
+    a customer caller registers only under its own org.
+    """
+
+    # v1.79.1: per-org data — ToolManager refuses anonymous callers and binds a
+    # customer key to its own org. caller=None (direct construction) is unrestricted.
+    caller_access = ORG_SCOPED
+
+    async def execute(
+        self, arguments: Dict[str, Any], caller: Optional[McpCaller] = None
+    ) -> Dict[str, Any]:
+        refusal = authorize(caller, self.caller_access, arguments) if caller is not None else None
+        if refusal is not None:
+            return refusal
         url: Optional[str] = arguments.get("url")
         if not url:
             return {"success": False, "error": "url is required"}
@@ -23,7 +37,7 @@ class RegisterBudgetAlertTool:
         if period_days <= 0:
             return {"success": False, "error": "period_days must be greater than 0"}
 
-        org_id: Optional[str] = arguments.get("org_id") or None
+        org_id: Optional[str] = effective_org_id(caller, arguments) or None
 
         try:
             svc = get_budget_alert_service()

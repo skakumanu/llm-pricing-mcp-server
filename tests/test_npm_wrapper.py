@@ -54,16 +54,24 @@ def mock_server():
         proc.wait(timeout=5)
 
 
-def run_bridge(url: str, lines: list[str], timeout: float = 10) -> list[dict]:
+def run_bridge_raw(url: str, lines: list[str], timeout: float = 10, extra_env=None):
+    env = {**os.environ, "LLM_PRICING_MCP_URL": url}
+    env.pop("LLM_PRICING_API_KEY", None)
+    env.update(extra_env or {})
     result = subprocess.run(
         ["node", str(BRIDGE)],
         input="\n".join(lines) + "\n",
         capture_output=True,
         text=True,
         timeout=timeout,
-        env={**os.environ, "LLM_PRICING_MCP_URL": url},
+        env=env,
     )
     assert result.returncode == 0, f"bridge exited {result.returncode}: {result.stderr}"
+    return result
+
+
+def run_bridge(url: str, lines: list[str], timeout: float = 10, extra_env=None) -> list[dict]:
+    result = run_bridge_raw(url, lines, timeout=timeout, extra_env=extra_env)
     return [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
 
 
@@ -120,3 +128,33 @@ class TestStdioBridge:
         responses = run_bridge(mock_server, [json.dumps({"jsonrpc": "2.0", "id": 1, "method": "slow_call"})])
         assert len(responses) == 1
         assert responses[0]["result"] == {"slept": True}
+
+
+class TestApiKeyForwarding:
+    """v1.79.1 / npm 1.1.0 (AC12): LLM_PRICING_API_KEY is forwarded as x-api-key only when set."""
+
+    ECHO = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "echo_headers", "params": {}})
+
+    def test_sends_x_api_key_when_env_var_is_set(self, mock_server):
+        # Built at runtime so no secret-shaped literal lands in the repo.
+        key = "-".join(["test", "bridge", "key", "0001"])
+        result = run_bridge_raw(mock_server, [self.ECHO], extra_env={"LLM_PRICING_API_KEY": f"  {key}  "})
+        responses = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+        assert responses[0]["result"] == {"has_api_key": True, "api_key": key}
+        # The bridge itself never writes the key anywhere (stdout carries only the
+        # upstream's echo, which this test-only mock method deliberately returns).
+        assert key not in result.stderr
+
+    def test_omits_x_api_key_when_env_var_is_unset_or_blank(self, mock_server):
+        for extra in ({}, {"LLM_PRICING_API_KEY": "   "}):
+            responses = run_bridge(mock_server, [self.ECHO], extra_env=extra)
+            assert responses[0]["result"] == {"has_api_key": False, "api_key": None}
+
+    def test_key_not_echoed_in_upstream_error(self, mock_server):
+        key = "-".join(["test", "bridge", "key", "0002"])
+        result = run_bridge_raw(
+            mock_server,
+            [json.dumps({"jsonrpc": "2.0", "id": 3, "method": "no_such_method", "params": {}})],
+            extra_env={"LLM_PRICING_API_KEY": key},
+        )
+        assert key not in result.stdout and key not in result.stderr

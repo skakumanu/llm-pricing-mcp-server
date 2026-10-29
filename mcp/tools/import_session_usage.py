@@ -3,6 +3,7 @@ import hashlib
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+from mcp.caller import ORG_SCOPED, McpCaller, authorize, effective_org_id
 from src.config.settings import settings
 from src.services.budget_alerts import get_budget_alert_service
 from src.services.pricing_aggregator import PricingAggregatorService
@@ -36,12 +37,24 @@ class ImportSessionUsageTool:
     derived from session_id/model_name/occurred_at/token-or-text source, so
     resubmitting an identical batch is safely a no-op via the existing
     (org_id, request_id) UNIQUE index.
+
+    v1.79.1: the effective org (a customer key's own org) is applied once, before the
+    entry loop, so every entry in the batch lands in — and dedupes within — that org.
     """
+
+    # v1.79.1: per-org data — ToolManager refuses anonymous callers and binds a
+    # customer key to its own org. caller=None (direct construction) is unrestricted.
+    caller_access = ORG_SCOPED
 
     def __init__(self, aggregator: Optional[PricingAggregatorService] = None):
         self.service = aggregator or PricingAggregatorService()
 
-    async def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(
+        self, arguments: Dict[str, Any], caller: Optional[McpCaller] = None
+    ) -> Dict[str, Any]:
+        refusal = authorize(caller, self.caller_access, arguments) if caller is not None else None
+        if refusal is not None:
+            return refusal
         session_id = arguments.get("session_id")
         if not session_id or not isinstance(session_id, str) or not session_id.strip():
             return {"success": False, "error": "session_id is required and must be a non-empty string"}
@@ -52,7 +65,7 @@ class ImportSessionUsageTool:
         if len(entries) > MAX_ENTRIES:
             return {"success": False, "error": f"entries exceeds the maximum batch size of {MAX_ENTRIES}"}
 
-        org_id = arguments.get("org_id")
+        org_id = effective_org_id(caller, arguments)
 
         try:
             tracker = get_usage_tracker()

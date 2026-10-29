@@ -25,6 +25,7 @@ Most LLM pricing tools are a static lookup table. This one checks its own number
 - `get_all_pricing`, `estimate_cost`, `compare_costs`, `get_use_cases` and `recommend_model` take optional `currency` / `country` arguments (v1.76.0) and add converted `local_*` figures plus a `currency_conversion` block; omit both and the output is unchanged
 - **STDIO transport** — JSON-RPC 2.0 over STDIO for local Claude Desktop integration
 - **HTTP transport** — `POST /mcp` (JSON-RPC 2.0 over HTTP) for remote MCP clients — no local install needed
+- **Optional service key on the MCP connection (v1.79.1)** — the 22 public pricing/routing tools need no key; the 7 org-scoped usage/budget tools (`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`) need your service API key and act only on that key's own org. See [HTTP MCP Transport](#http-mcp-transport)
 - MCP Protocol version: `2024-11-05`
 
 ### RESTful API
@@ -98,7 +99,7 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 - Dispatch mode of `/v1/chat/completions` requires a free-tier *customer* key (the global `MCP_API_KEY` is refused — dispatch writes per-org ledgers); provider keys are bring-your-own — per request (`X-Provider-Key-*` headers, used transiently) or, since v1.79.0, stored once per org with `POST /dispatch/keys` (AES-256-GCM-encrypted at rest under the operator's `PROVIDER_KEY_ENCRYPTION_KEY`, scoped to your org, never returned after registration — only a last-4 fingerprint is shown); provider keys are never logged or echoed — and neither are prompts or completions
 - Rate limiting per client IP + tier bucket — includes the anonymous `/agent/chat` and `/agent/chat/stream` endpoints (no API key needed, but throttled, since each call runs an LLM on the operator's key)
 - Request size limit (1MB default)
-- 2126 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 2229 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
@@ -144,7 +145,7 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
-Restart Claude Desktop. All 29 pricing tools are immediately available.
+Restart Claude Desktop. All 29 tools are immediately available; the 22 public ones need no key (the 7 usage/budget tools need your service key on the connection — see [HTTP MCP Transport](#http-mcp-transport)).
 
 ### Option B — STDIO via npx (no clone, no Python)
 
@@ -161,7 +162,7 @@ For clients that only support `command`-based STDIO servers (no direct remote/HT
 }
 ```
 
-Restart Claude Desktop. See [npm/llm-pricing-mcp/README.md](npm/llm-pricing-mcp/README.md) for configuration options (self-hosting, timeouts).
+Restart Claude Desktop. See [npm/llm-pricing-mcp/README.md](npm/llm-pricing-mcp/README.md) for configuration options (self-hosting, timeouts, and `LLM_PRICING_API_KEY` — your optional service key, forwarded as `x-api-key`, needed only by the 7 usage/budget tools).
 
 ### Option C — Local STDIO, fully offline
 
@@ -288,6 +289,26 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 ```
 
 `GET /mcp` returns server info and a config snippet. Full interactive docs at `/docs` (Swagger UI) and `/redoc`.
+
+### Optional service key (v1.79.1)
+
+The 22 public tools (pricing, routing, cost estimates, data quality, history, price alerts, the agent) need no credential, and sending one never changes their results. The 7 org-scoped tools read or write per-org usage data and need your service API key (free: `POST /billing/signup`) on the MCP connection:
+
+`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`
+
+Send the key as `x-api-key: <key>` or `Authorization: Bearer <key>`:
+
+```bash
+curl -X POST https://llm-pricing-api.fly.dev/mcp \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $LLM_PRICING_API_KEY" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_usage_summary","arguments":{"days":30}}}'
+```
+
+- With a key, these tools act on, and only on, the key's own org. `org_id` defaults to it; passing a different org returns `error_code: "org_mismatch"`; another org's budget alert reads as not found.
+- Without a key (or with an unknown one) they return `error_code: "customer_key_required"` with signup and header-setup hints. The local STDIO server (`mcp/server.py`) and the `/agent/chat` agent are always anonymous, so these tools refuse there too.
+- The npx bridge forwards `LLM_PRICING_API_KEY` as `x-api-key` (npm `llm-pricing-mcp` 1.1.0+). Claude Code: `claude mcp add --transport http llm-pricing https://llm-pricing-api.fly.dev/mcp --header 'x-api-key: <key>'`.
+- Refusals are normal tool results (`success: false`), not JSON-RPC errors. Keys are never logged or echoed.
 
 ---
 
@@ -719,6 +740,7 @@ pytest tests/test_router.py -v
 | `test_billing_endpoints.py` | Signup, checkout, webhook, me |
 | `test_billing_service.py` | BillingService unit tests |
 | `test_mcp_http.py` | HTTP MCP transport |
+| `test_mcp_org_scoping.py` | v1.79.1 org-scoped MCP tools: anonymous / customer (x-api-key, Bearer) / operator / unknown-key callers over `POST /mcp`, STDIO and the agent; public-tool parity; no key in logs or responses |
 | `test_router.py` | Router recommendation + feedback |
 | `test_security.py` | Auth middleware |
 | `test_admin_dashboard.py` | Admin endpoints |

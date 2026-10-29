@@ -41,6 +41,23 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    // Test-only: echo whether the bridge sent x-api-key (and its value) so the
+    // Python tests can assert the header is forwarded only when configured.
+    if (msg.method === 'echo_headers') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: msg.id,
+          result: {
+            has_api_key: Object.prototype.hasOwnProperty.call(req.headers, 'x-api-key'),
+            api_key: req.headers['x-api-key'] || null,
+          },
+        })
+      );
+      return;
+    }
+
     if (msg.method === 'slow_call') {
       setTimeout(() => {
         res.writeHead(200, { 'content-type': 'application/json' });
