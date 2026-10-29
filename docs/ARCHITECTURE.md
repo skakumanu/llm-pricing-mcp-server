@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.78.1 | **Last updated**: 2026-10-28
+**Version**: v1.79.0 | **Last updated**: 2026-10-29
 
 ---
 
@@ -15,7 +15,8 @@ A production FastAPI service that aggregates real-time LLM pricing data from 31 
 - **Pricing integrity loops (v1.74.0)**: three guards in `tests/test_pricing_integrity.py` (registry-coverage floor, per-1M plausibility band, no confirmed price for a model past its registry deprecation date) plus two weekly, human-merged PRs from `price-audit.yml` — `scripts/reconfirm_stale_prices.py` re-dates stale prices that still match the registry on input *and* output, and `scripts/retire_models.py` deletes entries whose same-provider registry deprecation date is ≥30 days old (the oracle withholds them from cost math the day the date passes and sets `retired_on`). `get_data_quality` reports `registry_coverage_pct`, `unmatched_confirmed`, `retired_listed` so the gaps are visible, not inferred. Each guard maps to a failure the Oct 2026 reconfirmation pass found live: ~40% of the catalogue invisible to drift checks, Cloudflare served 1000x too low, 55 retired models still priced
 - **Registry-sourced entries + weekly pickup (v1.75.0)**: five registry-backed hosts joined the catalogue (DeepInfra, Novita, Vercel AI Gateway, Nebius, Databricks). Beyond a small hand-maintained core, their models are *registry-sourced*: `data/registry_models/<slug>.json` holds the registry's price, key and date per model, `BasePricingProvider._merge_registry_models()` appends them at fetch time (a curated STATIC_PRICING name always wins a collision), and every `PricingMetrics` now carries `price_source_kind` (`provider` | `registry`) plus `registry_key` so the distinction is machine-readable. `price_confirmed` still means "has a usable price", so registry-sourced models flow into every estimate, comparison and route — but `get_data_quality` splits `confirmed_models` into `provider_confirmed` + `registry_sourced`, and a registry-sourced price is never counted as provider-confirmed. `scripts/pickup_registry_models.py` (a third weekly PR from `price-audit.yml`, staged via `--providers`) adds any chat model the registry prices under a covered provider that the catalogue lacks, re-syncs/re-dates existing entries while the registry still backs them, leaves dropped ones to age into stale, and never edits a `*_pricing.py`. Between runs, a stored registry-sourced price the live registry has moved >5% is withheld like any other drift (`find_drift` no longer skips registry sources). Databricks (OWNER DECISION) has no provider-confirmed core — all entries are registry-sourced with a DBU note
 - **Local currency (v1.76.0)**: a presentation-layer service, `src/services/currency.py`, owns the 13 supported currencies, the deterministic country→currency map, the vendored rate table `data/exchange_rates.json` (7-day staleness; never fetched per request; refreshed by a fourth weekly PR from `price-audit.yml` via `scripts/refresh_exchange_rates.py`) and one precedence function `resolve_locale()`. Six REST endpoints reach it through a single FastAPI dependency (`resolve_request_locale`: currency/country query or header → platform geo header → best-effort IP lookup → USD), five MCP tools through explicit arguments only (MCP never detects), and the browser pages through `GET /locale` + `GET /currency/rates` with client-side conversion. Converted figures are additive `local_*` fields omitted entirely when nothing is stated or detected, so the no-input path is byte-identical to before; pricing data, the oracle, the aggregator and data-quality are untouched (conversion happens on per-request `model_copy()`s). Privacy rule: the IP is used transiently to resolve a country — never stored, never logged by this feature, never echoed
-- **Dispatch gateway (v1.77.0)**: the service can now *act* on its recommendation. `POST /v1/chat/completions` gains an opt-in mode — a `dispatch` policy object in the body (OpenAI SDK `extra_body`) — that picks the best eligible model under the caller's policy (objective preset, the router's hard constraints, allow/deny lists, a per-request USD cap), executes it with the caller's own provider key (BYOK via `X-Provider-Key-<Provider>` headers; nine executable providers, everything else recommend-only), fails over on timeout / 5xx / 429 / context-too-long / model-not-found while never dropping below the quality floor (401/403 on the caller's key is terminal), and returns a normal `chat.completion` with real `usage` plus an additive `dispatch_receipt` (chosen model, reason, ranked candidates, exclusions with reasons, actual cost from provider token counts × catalogue price, savings vs the most expensive eligible and vs the requested/pinned model, attempts, latency, optional shadow A/B result, local-currency figures when a locale is stated). Three flat services: `dispatch_executors.py` (one httpx path per wire family — OpenAI-compatible, Anthropic Messages, Gemini — with one error-classification table and no vendor SDK, so the SDKs' built-in retries cannot fight the failover loop), `dispatch_service.py` (eligibility stages → `ModelRouter.rank_models()` → objective ordering → cap → failover/shadow → ledgers → receipt) and `dispatch_receipts.py` (metadata-only `dispatch_receipts` table, org-scoped export via `GET /dispatch/receipts`). Eligibility is a hard rule: only models with a provider-confirmed price (`price_confirmed`, so drift-withheld, never-priced and retired models are never dispatched) under an executable provider for which the caller supplied a key. Every successful dispatch writes exactly one exact usage event, one routing decision marked used, fires budget alerts, and a budget alert flagged `hard_stop` (new column) refuses further dispatch for its org with 402 once reached. Dispatch requires a free-tier customer key (`x-api-key` or `Authorization: Bearer`); anonymous callers and the global `MCP_API_KEY` are refused with 401 — the plain proxy stays public and byte-identical. Privacy rule (same as the IP rule above): provider keys and prompt/completion text are transient — never persisted, never logged at any level, never echoed in a receipt or error; provider error bodies are classified into an outcome and dropped. No new MCP tool (count stays 29); no pricing data touched
+- **Dispatch gateway (v1.77.0)**: the service can now *act* on its recommendation. `POST /v1/chat/completions` gains an opt-in mode — a `dispatch` policy object in the body (OpenAI SDK `extra_body`) — that picks the best eligible model under the caller's policy (objective preset, the router's hard constraints, allow/deny lists, a per-request USD cap), executes it with the caller's own provider key (BYOK via `X-Provider-Key-<Provider>` headers; nine executable providers, everything else recommend-only), fails over on timeout / 5xx / 429 / context-too-long / model-not-found while never dropping below the quality floor (401/403 on the caller's key is terminal), and returns a normal `chat.completion` with real `usage` plus an additive `dispatch_receipt` (chosen model, reason, ranked candidates, exclusions with reasons, actual cost from provider token counts × catalogue price, savings vs the most expensive eligible and vs the requested/pinned model, attempts, latency, optional shadow A/B result, local-currency figures when a locale is stated). Three flat services: `dispatch_executors.py` (one httpx path per wire family — OpenAI-compatible, Anthropic Messages, Gemini — with one error-classification table and no vendor SDK, so the SDKs' built-in retries cannot fight the failover loop), `dispatch_service.py` (eligibility stages → `ModelRouter.rank_models()` → objective ordering → cap → failover/shadow → ledgers → receipt) and `dispatch_receipts.py` (metadata-only `dispatch_receipts` table, org-scoped export via `GET /dispatch/receipts`). Eligibility is a hard rule: only models with a provider-confirmed price (`price_confirmed`, so drift-withheld, never-priced and retired models are never dispatched) under an executable provider for which the caller supplied a key. Every successful dispatch writes exactly one exact usage event, one routing decision marked used, fires budget alerts, and a budget alert flagged `hard_stop` (new column) refuses further dispatch for its org with 402 once reached. Dispatch requires a free-tier customer key (`x-api-key` or `Authorization: Bearer`); anonymous callers and the global `MCP_API_KEY` are refused with 401 — the plain proxy stays public and byte-identical. Privacy rule (same as the IP rule above): provider keys and prompt/completion text are transient — never persisted (until v1.79.0's opt-in, encrypted stored keys below), never logged at any level, never echoed in a receipt or error; provider error bodies are classified into an outcome and dropped. No new MCP tool (count stays 29); no pricing data touched
+- **Stored per-org provider keys (v1.79.0)**: a customer can register each executable provider's key once (`POST /dispatch/keys`; list/rotate/delete under `/dispatch/keys[/{slug}]`, customer key only, any tier) and dispatch uses it whenever a request carries no `X-Provider-Key-<Provider>` header — so a stock chat UI or OpenAI SDK needs only the service key and a `dispatch` object. One new service, `provider_key_store.py`: a `provider_keys` table in `billing.db` (one row per org × provider), values AES-256-GCM-encrypted under an HKDF-SHA256 key derived from `PROVIDER_KEY_ENCRYPTION_KEY` (org and provider bound in as AAD), a last-4 fingerprint, created/rotated/last-used times; and `CompositeKeyResolver`, the per-request `ProviderKeyResolver` that puts the stored keys behind the header keys (header always wins; an `auth_error` on the winning key is never retried with the other). Every receipt attempt now records `key_source` (`header` | `stored`), never any part of a key. Without the secret the endpoints answer 503 and dispatch stays header-only; keys that no longer decrypt (secret changed, row tampered) count as absent and are listed `needs_reregistration`. New dependency: `cryptography`
 - **Clean cross-branch promotion**: `scripts/promote_branch_content.sh` mirrors one branch's tree onto another (additions, updates, AND deletions) to work around develop/master squash-merge divergence, verifying the result matches exactly before returning
 - **Repo cost auditor**: `scripts/audit_repo.py` statically scans an arbitrary codebase (customer-run, not deployed) for LLM SDK call sites and reuses `predict_cost`'s token/pricing math to recommend cheaper models, prompt caching, Batch API, task-based right-sizing, and duplicate-prompt consolidation — runs locally only, since the hosted `/mcp` HTTP transport has no access to a caller's filesystem
 - **AI-native SDLC pipeline** (dev tooling, not deployed): `/release-feature` runs a feature through dedicated Spec, Design, Code, Review (parallel correctness/security/simplification), and Test & Release phase agents (`.claude/agents/phase-*.md`) orchestrated by `.claude/workflows/release-feature.js`, ending at an open PR against `develop` — Spec fixes *what*/acceptance criteria, Design fixes *how* (approach, version, branch name), so neither phase re-derives the other's decision; see `CLAUDE.md`'s "AI-Native SDLC Pipeline" section
@@ -42,6 +43,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 31 
 │  /v1/chat/completions                           /whats-new                   │
 │    (+ dispatch mode, v1.77.0)                                               │
 │  /dispatch/providers  /dispatch/receipts                                    │
+│  /dispatch/keys[/{provider}]  (stored provider keys, v1.79.0)               │
 │  /locale  /currency/rates  (+ currency/country on 6 pricing endpoints)      │
 │                                                                             │
 │  Security middleware: billing DB key → global MCP_API_KEY fallback          │
@@ -66,6 +68,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 31 
 │  DispatchService    │          │
 │  DispatchExecutors  │          │
 │  DispatchReceipts   │          │
+│  ProviderKeyStore   │          │
 └──────────┬──────────┘          │
            │                     │
 ┌──────────▼─────────────────────▼────────────────────────────────────────────┐
@@ -76,14 +79,16 @@ A production FastAPI service that aggregates real-time LLM pricing data from 31 
 │  routing_feedback       (api_key, tier,     Savings per org_id             │
 │  usage_events table     org_id, stripe_id)  Alert callbacks                │
 │  budget_alerts (+hard_stop)                 Recommendation cache (5min TTL)│
-│  dispatch_receipts (metadata only)                                         │
+│  dispatch_receipts (metadata only)          provider_keys (v1.79.0,        │
+│                                             AES-GCM, org-scoped)           │
 └──────────┬──────────────────────────────────────────────────────────────────┘
            │
 ┌──────────▼──────────────────────────────────────────────────────────────────┐
 │  External Services                                                          │
 │  12 LLM provider APIs (pricing)   Stripe (checkout, webhooks, portal)      │
 │  OpenAI GPT-4o-mini (agent LLM)   Hugging Face API (benchmark fallback)    │
-│  9 provider inference APIs, caller-keyed (dispatch gateway, v1.77.0):      │
+│  9 provider inference APIs, caller-keyed (dispatch gateway, v1.77.0;       │
+│    header or stored per-org key, v1.79.0):                                 │
 │    OpenAI · Anthropic · Google Gemini · Groq · Together · Fireworks ·       │
 │    DeepSeek · Mistral · xAI — via httpx, never a vendor SDK                 │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -115,6 +120,7 @@ llm-pricing-mcp-server/
 │       ├── router.py                # LLM routing recommendation engine; v1.77.0 exposes rank_models() + hard_filter_reason() (same filters/scoring get_optimal_model always ran) for the dispatch gateway
 │       ├── dispatch_executors.py    # v1.77.0: EXECUTABLE_PROVIDERS registry (9, keyed by catalogue display names), HeaderKeyResolver (BYOK seam; repr redacted), OpenAIWire/Anthropic/Gemini executors over httpx.AsyncClient, one error-classification table (timeout/rate_limited/server_error/context_too_long/auth_error/model_not_found/provider_rejected); error bodies classified, never copied. v1.78.0: BaseExecutor.stream() (client.stream + _iter_sse + per-family build_stream/parse_stream_event → StreamEvent delta|finish|usage; non-2xx classified before the first yield), OUTCOME_CLIENT_DISCONNECTED (receipt-only)
 │       ├── dispatch_service.py      # v1.77.0: DispatchService — _prepare(): budget hard stop → catalogue (unconfirmed included so they can be reported excluded) → eligibility stages (first failing reason per model; emptying stage = eliminating_constraint) → rank_models + objective ordering → per-request cap; dispatch(): failover loop / concurrent shadow → _finish(): ledgers (usage event, routing + feedback, budget alerts, receipt) → chat.completion + dispatch_receipt. v1.78.0: dispatch_stream() async generator (DispatchStreamEvent delta|end|error; failover only before first content; idle timeout per event; shielded settlement on client disconnect; partial estimated spend)
+│       ├── provider_key_store.py    # v1.79.0: ProviderKeyStore — provider_keys table in billing.db (org_id, provider PK; AES-256-GCM ciphertext, AAD = org + provider, HKDF-SHA256 working key from PROVIDER_KEY_ENCRYPTION_KEY; last-4 fingerprint; key_version; created/rotated/last_used); register/rotate/delete/list (metadata only, status active|needs_reregistration) / load_for_dispatch / touch_last_used (monotonic, key_version-guarded); CompositeKeyResolver (header first, stored second; source/note_used/flush_usage); redacted reprs everywhere
 │       ├── dispatch_receipts.py     # v1.77.0: dispatch_receipts table (metadata only, (org_id, created_at) index, retention purge) + org-scoped list/CSV for GET /dispatch/receipts. v1.78.0: streamed + usage_estimated columns (appended; ALTER TABLE migration on initialize)
 │       ├── recommendation_cache.py  # ~5min TTL cache for recommend_model / POST /router/recommend decisions + process-lifetime hit/miss stats (get_cache_stats)
 │       ├── task_profiles.py         # 12 task I/O-ratio profiles + keyword task inference
@@ -255,7 +261,7 @@ def get_x_service() -> XService:
         raise RuntimeError("XService not initialized")
     return _service
 ```
-All `init_*` calls live in the `startup_pricing_history()` FastAPI lifespan handler. Services: `PricingAggregator`, `PricingHistory`, `BenchmarkService`, `SavingsTracker`, `UsageTracker`, `BudgetAlertService`, `BillingService`, `DispatchReceiptStore`, `DispatchService` (v1.77.0; built from the router and the ledgers above; its default executor factory is `get_executor`, and tests inject a fake through the `executor_factory` parameter).
+All `init_*` calls live in the `startup_pricing_history()` FastAPI lifespan handler. Services: `PricingAggregator`, `PricingHistory`, `BenchmarkService`, `SavingsTracker`, `UsageTracker`, `BudgetAlertService`, `BillingService`, `ProviderKeyStore` (v1.79.0; `billing.db`, initialized right after billing), `DispatchReceiptStore`, `DispatchService` (v1.77.0; built from the router and the ledgers above; its default executor factory is `get_executor`, and tests inject a fake through the `executor_factory` parameter).
 
 `PricingAggregatorService`'s singleton (`get_pricing_aggregator()`, lazy + `asyncio.Lock`-guarded, defined in `pricing_aggregator.py` itself) is the one exception reused across *both* the REST API and every MCP tool in-process: `ToolManager` takes an optional `aggregator` param forwarded to all 13 pricing-dependent tools, and both MCP transports (`mcp/server.py`'s STDIO `main()`, `src/main.py`'s HTTP `/mcp` `_get_http_mcp_tool_manager()`) resolve `get_pricing_aggregator()` once and hand it to their `ToolManager`. This means one warm pricing cache per process, not one per surface — a REST call and an MCP tool call for the same model agree within the cache's TTL. Each tool's constructor still falls back to building its own instance when `aggregator` is omitted (e.g. direct instantiation in tests), so no existing call site broke.
 
@@ -299,7 +305,14 @@ parses the body (an in-handler check would run after the whole body is in memory
 bounds `allow`/`deny` (100 entries x 200 chars) because they are persisted per receipt row. Provider keys
 travel in `X-Provider-Key-<Provider>`
 headers (never the body: pydantic 422s echo the body, the body is buffered on `request._body`) and are read
-once into a request-scoped `HeaderKeyResolver`, the only object that holds them. `GET /dispatch/providers` is
+once into a request-scoped `HeaderKeyResolver`. Since v1.79.0 the handler wraps it, when the org has stored keys
+for providers the headers do not cover, in a request-scoped `CompositeKeyResolver` holding those decrypted
+stored keys (header first); the two resolvers are the only objects that hold provider keys in memory, and
+only for the request. `/dispatch/keys` and `/dispatch/keys/{provider}` (v1.79.0) are not allow-listed (and
+deliberately not under `/providers`, whose prefix is a full bypass): the middleware authenticates them from
+`x-api-key`, and the handlers require `request.state.customer` (anonymous / global key → 403
+`customer_key_required`) before checking the store is available (503 `stored_keys_unavailable`). Their JSON
+bodies are parsed by hand, not as pydantic parameters, so no validation error can echo a submitted key. `GET /dispatch/providers` is
 public (allow-listed); `GET /dispatch/receipts` is not allow-listed, so the middleware authenticates it, and
 the handler additionally requires `request.state.customer` (global-key callers get 403) and always scopes to
 that customer's `org_id`.
@@ -438,10 +451,39 @@ catalogue `model_name` sent verbatim as the provider model id, `httpx.MockTransp
 `httpx.Response` with an SSE byte body streams through `client.stream()` / `aiter_lines()` unchanged). Why not the
 pinned SDKs: both auto-retry 429/5xx and would fight the failover loop and its timeout budget, and no Gemini SDK is
 pinned. Settings: `DISPATCH_ENABLED` (kill switch → 503), `DISPATCH_DEFAULT_MAX_TOKENS`, `DISPATCH_ATTEMPT_TIMEOUT_MS`,
-`DISPATCH_MAX_ATTEMPTS`, `DISPATCH_RECEIPT_RETENTION_DAYS`. Non-goals held: no pooled/service-paid keys, no stored
-per-account keys (the `ProviderKeyResolver` protocol is the seam), no mid-stream failover or resume, the shadow and
-non-text (reasoning / tool-call) deltas are never streamed, the plain proxy keeps ignoring `stream`, no tool-calling
-translation, no MCP tool.
+`DISPATCH_MAX_ATTEMPTS`, `DISPATCH_RECEIPT_RETENTION_DAYS`. Non-goals held: no pooled/service-paid keys, no
+mid-stream failover or resume, the shadow and non-text (reasoning / tool-call) deltas are never streamed, the plain
+proxy keeps ignoring `stream`, no tool-calling translation, no MCP tool.
+
+#### Stored provider keys (v1.79.0)
+
+```
+POST   /dispatch/keys {provider, api_key}  -> 201 {provider, slug, fingerprint, created_at, rotated_at, last_used_at, status}
+                                              409 provider_key_exists · 422 unsupported_provider (+accepted_providers)
+                                              422 invalid_provider_key (empty / >512 / non-printable-ASCII) · 400 invalid_json
+GET    /dispatch/keys                      -> 200 {keys: [...], count}   (metadata only; status active | needs_reregistration)
+PUT    /dispatch/keys/{slug} {api_key}     -> 200 info (new fingerprint, rotated_at; last_used reset) · 404
+DELETE /dispatch/keys/{slug}               -> 204 · 404       (another org's key = a missing key = 404)
+  every call: no customer -> 403 customer_key_required; no usable secret -> 503 stored_keys_unavailable
+dispatch handler (_dispatch_key_resolver):
+  HeaderKeyResolver(headers) -> store initialized + available + some provider not header-keyed?
+    -> store.load_for_dispatch(org_id, exclude=header providers)   (a losing stored key is never decrypted;
+       undecryptable rows skipped with a warning naming org + provider only)
+    -> CompositeKeyResolver(header, stored)   — any store error falls back to header-only, never fails dispatch
+  no_provider_key stage: keyed = header OR stored;  every Attempt carries key_source = resolver.source(provider)
+  note_used(provider) before each provider call (primary, failover, streaming, shadow); flush_usage() after the
+  receipt row is written (_finish, _fail, mid-stream failure / disconnect settlement) ->
+    UPDATE provider_keys SET last_used_at = MAX(COALESCE(last_used_at,0), ?) WHERE org_id=? AND provider=? AND key_version=?
+```
+Crypto: working key = HKDF-SHA256(length 32, salt None, info `llm-pricing/provider-keys/v1`) over the base64url-decoded
+`PROVIDER_KEY_ENCRYPTION_KEY` (>= 32 bytes, else the store is unavailable and one startup ERROR names the setting);
+blob = `0x01` ‖ 12-byte random nonce ‖ AES-GCM(ciphertext ‖ tag), AAD = `provider-key:v1\0` ‖ org_id ‖ `\0` ‖ provider,
+so a row copied to another org or provider fails authentication. Decryption is all-or-nothing (`None` on a wrong
+version byte, short blob, `InvalidTag` or bad UTF-8). No server-secret rotation: changing the secret makes every stored
+key `needs_reregistration` (rotate = re-register). `key_source` rides inside `attempts_json`, so the receipts table,
+its CSV column order and the export endpoints are unchanged. Plain proxy and router endpoints never read stored keys.
+Non-goals: pooled keys, more than one key per provider per org, per-user permissions, stored keys for recommend-only
+providers, provider calls at registration, operator access to a stored key, browser UI, MCP tool.
 
 ### 9. UI Design System
 All 13 browser UIs share the same CSS custom properties (defined in each page's `:root`):
@@ -473,7 +515,7 @@ All use `'Segoe UI', system-ui, sans-serif`, `font-size: 14px`, sticky `.main-na
 | Database | File | Tables | Purpose |
 |----------|------|--------|---------|
 | Pricing history | `pricing_history.db` | `price_history`, `routing_feedback`, `usage_events` (nullable `session_id`, `is_estimated` flag), `budget_alerts` (`hard_stop` flag, v1.77.0), `dispatch_receipts` (v1.77.0) | Price snapshots, router feedback, actual usage/spend (optionally session-scoped, exact or text-estimated), spend-threshold webhooks (optionally a dispatch hard stop), dispatch receipt metadata — ids, model/provider, outcome, attempts, tokens, costs, savings, latencies, shadow summary; never messages, completions, provider error bodies, keys, IPs or headers; purged after `DISPATCH_RECEIPT_RETENTION_DAYS` (90) |
-| Billing | `billing.db` | `customers` | API keys, tiers, Stripe IDs |
+| Billing | `billing.db` | `customers`, `provider_keys` (v1.79.0) | API keys, tiers, Stripe IDs; per-org stored provider keys — AES-256-GCM ciphertext (never plaintext), last-4 fingerprint, key_version, created/rotated/last-used times; one row per (org_id, provider). On the Fly volume via `BILLING_DB_PATH`; encrypted under `PROVIDER_KEY_ENCRYPTION_KEY` |
 | Conversations | per-session SQLite | `messages` | Agent conversation memory |
 
 Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/data`, 1 GB).
@@ -519,8 +561,12 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | GET | `/agent/conversations` | None | List agent conversations |
 | DELETE | `/agent/conversations/{id}` | Required | Delete a conversation |
 | POST | `/v1/chat/completions` | None (plain) / customer key in-handler (dispatch mode) | OpenAI-compatible proxy; with a `dispatch` body object (v1.77.0) executes the best eligible model with the caller's `X-Provider-Key-*` and returns real `usage` + `dispatch_receipt`; with `stream: true` as well (v1.78.0) the completion is OpenAI `chat.completion.chunk` SSE with usage + receipt in a trailing chunk before `[DONE]` |
-| GET | `/dispatch/providers` | None | Executable providers (key header each), which catalogue models are dispatchable and why not (`?provider=`, `?dispatchable_only=`) |
+| GET | `/dispatch/providers` | None | Executable providers (key header and, v1.79.0, slug + `stored_key_path` each; nothing per-org), which catalogue models are dispatchable and why not (`?provider=`, `?dispatchable_only=`) |
 | GET | `/dispatch/receipts` | Required customer key | Metadata-only JSON/CSV export of the caller's org's dispatch receipts (`format`, `since`, `until`, `outcome`, `limit`); global key → 403 |
+| POST | `/dispatch/keys` | Required customer key | v1.79.0: store a provider key for the caller's org (`{provider, api_key}`; 201 metadata only, 409 exists, 422 unsupported provider / invalid key); global key → 403; 503 without `PROVIDER_KEY_ENCRYPTION_KEY` |
+| GET | `/dispatch/keys` | Required customer key | v1.79.0: the org's stored keys — provider, slug, fingerprint (last 4), created/rotated/last-used, status; never a key value |
+| PUT | `/dispatch/keys/{provider}` | Required customer key | v1.79.0: rotate (`{api_key}`; provider = slug or display name); 404 if the org stores none |
+| DELETE | `/dispatch/keys/{provider}` | Required customer key | v1.79.0: delete (204); 404 if the org stores none |
 | GET | `/mcp` | None | MCP server info |
 | POST | `/mcp` | None | MCP HTTP transport (JSON-RPC 2.0) |
 | POST | `/billing/signup` | None | Free-tier signup |

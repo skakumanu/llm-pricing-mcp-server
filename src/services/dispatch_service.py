@@ -22,6 +22,13 @@ Privacy: this module logs ids, model/provider names, outcomes, status codes,
 latencies, token counts and costs — never message or completion text, never a
 provider key, never a provider error body. Keys are read only through the
 ProviderKeyResolver passed per request and handed straight to the executor.
+
+Stored provider keys (v1.79.0): the resolver may also hold the org's stored keys
+(header wins). Every attempt records the resolver's ``source()`` for its provider
+(``header`` | ``stored``) as ``key_source`` — never any part of the key — and the
+resolver is told ``note_used()`` right before each provider call and
+``flush_usage()`` once the receipt is written, so a stored key's ``last_used`` is
+stamped whether the attempt succeeded or failed.
 """
 import asyncio
 import json
@@ -39,8 +46,9 @@ from src.services.currency import LocaleContext, conversion_metadata, convert
 from src.services.dispatch_executors import (
     EVENT_DELTA, EVENT_FINISH, EVENT_USAGE, EXECUTABLE_PROVIDERS, OUTCOME_AUTH_ERROR,
     OUTCOME_CLIENT_DISCONNECTED, OUTCOME_CONTEXT_TOO_LONG, OUTCOME_OK, OUTCOME_PROVIDER_REJECTED,
-    OUTCOME_SERVER_ERROR, OUTCOME_TIMEOUT, ChatRequest, ChatResult, ExecutorError, ExecutorSpec,
-    ProviderKeyResolver, StreamEvent, executor_spec_for, get_executor, is_executable_provider,
+    OUTCOME_SERVER_ERROR, OUTCOME_TIMEOUT, KEY_SOURCE_STORED, ChatRequest, ChatResult,
+    ExecutorError, ExecutorSpec, ProviderKeyResolver, StreamEvent, executor_spec_for, get_executor,
+    is_executable_provider,
 )
 from src.services.router import ModelRouter, RouterConstraints
 from src.services.token_counter import count_tokens
@@ -66,7 +74,7 @@ REASON_TEXT: Dict[str, str] = {
     "subscription_pricing": "subscription pricing, not per-token",
     "price_unconfirmed": "price not confirmed",
     "provider_not_executable": "provider is recommend-only (not executable)",
-    "no_provider_key": "no key supplied for provider",
+    "no_provider_key": "no key supplied for provider",  # neither a header nor a stored key
     "denied_by_policy": "denied by policy",
     "not_in_allow_list": "not in allow list",
     "below_quality_floor": "below quality floor",
@@ -124,11 +132,14 @@ class Attempt:
     outcome: str
     http_status: Optional[int]
     latency_ms: float
+    # v1.79.0: where the provider key came from — 'header' | 'stored'. Never any part of the key.
+    key_source: Optional[str] = None
 
     def as_dict(self) -> Dict[str, Any]:
         return {
             "n": self.n, "model": self.model, "provider": self.provider, "outcome": self.outcome,
             "http_status": self.http_status, "latency_ms": round(self.latency_ms, 1),
+            "key_source": self.key_source,
         }
 
 
@@ -283,6 +294,8 @@ class DispatchService:
                 "family": spec.family,
                 "base_url": spec.base_url,
                 "key_header": spec.key_header,
+                "slug": spec.slug,
+                "stored_key_path": f"/dispatch/keys/{spec.slug}",
                 "dispatchable_models": per_provider.get(spec.provider, 0),
             }
             for spec in EXECUTABLE_PROVIDERS.values()
@@ -296,8 +309,10 @@ class DispatchService:
             "total_dispatchable": sum(per_provider.values()),
             "note": (
                 "Dispatch is an opt-in mode of POST /v1/chat/completions: send a `dispatch` policy, a free-tier "
-                "service API key (x-api-key or Authorization: Bearer) and your own provider key in the listed "
-                "key_header. Only models with a confirmed price under an executable provider are ever dispatched; "
+                "service API key (x-api-key or Authorization: Bearer) and your own provider key, either per "
+                "request in the listed key_header or stored once for your org with POST /dispatch/keys "
+                "(managed under stored_key_path; a header key always wins over a stored one). Only models "
+                "with a confirmed price under an executable provider are ever dispatched; "
                 "everything else is recommend-only. `stream: true` is supported: the completion arrives as "
                 "OpenAI-format chat.completion.chunk events with the receipt in a trailing chunk before [DONE]."
             ),
@@ -489,13 +504,15 @@ class DispatchService:
                     continue  # context_too_long: only a larger window can help
             started = time.perf_counter()
             api_key = key_resolver.resolve(cand.model.provider) or ""
+            key_source = key_resolver.source(cand.model.provider)
+            key_resolver.note_used(cand.model.provider)
             try:
                 result = await self._run_attempt(cand, chat_req, api_key, timeout_s)
             except ExecutorError as err:
                 elapsed = (time.perf_counter() - started) * 1000.0
                 attempts.append(Attempt(
                     len(attempts) + 1, cand.model.model_name, cand.model.provider,
-                    err.outcome, err.http_status, elapsed,
+                    err.outcome, err.http_status, elapsed, key_source,
                 ))
                 if err.outcome in (OUTCOME_AUTH_ERROR, OUTCOME_PROVIDER_REJECTED):
                     return None, None, attempts, err, len(ordered) - idx
@@ -504,7 +521,7 @@ class DispatchService:
                 continue
             attempts.append(Attempt(
                 len(attempts) + 1, cand.model.model_name, cand.model.provider, OUTCOME_OK,
-                result.http_status, result.provider_latency_ms,
+                result.http_status, result.provider_latency_ms, key_source,
             ))
             return cand, result, attempts, None, len(ordered) - idx
         return None, None, attempts, None, max(0, len(ordered) - idx)
@@ -514,13 +531,15 @@ class DispatchService:
     ) -> Dict[str, Any]:
         started = time.perf_counter()
         api_key = key_resolver.resolve(cand.model.provider) or ""
+        key_source = key_resolver.source(cand.model.provider)
+        key_resolver.note_used(cand.model.provider)
         try:
             res = await self._run_attempt(cand, chat_req, api_key, timeout_s)
         except ExecutorError as err:
-            return self._shadow_failure(cand, err.outcome, err.http_status, started)
+            return self._shadow_failure(cand, err.outcome, err.http_status, started, key_source)
         except Exception:  # a shadow failure never fails the request
             logger.debug("dispatch shadow %s/%s raised unexpectedly", cand.model.provider, cand.model.model_name)
-            return self._shadow_failure(cand, "error", None, started)
+            return self._shadow_failure(cand, "error", None, started, key_source)
         cost = compute_token_cost(
             cand.model.cost_per_input_token, cand.model.cost_per_output_token, res.input_tokens, res.output_tokens,
         ).total_cost
@@ -529,17 +548,19 @@ class DispatchService:
             "outcome": "success", "http_status": res.http_status,
             "input_tokens": res.input_tokens, "output_tokens": res.output_tokens, "cost_usd": _usd(cost),
             "provider_latency_ms": round(res.provider_latency_ms, 1),
+            "key_source": key_source,
         }
 
     @staticmethod
     def _shadow_failure(cand: Candidate, outcome: str, http_status: Optional[int],
-                        started: Optional[float]) -> Dict[str, Any]:
+                        started: Optional[float], key_source: Optional[str] = None) -> Dict[str, Any]:
         """The one shape every non-success shadow report has (ExecutorError, unexpected exception)."""
         return {
             "model": cand.model.model_name, "provider": cand.model.provider,
             "outcome": outcome, "http_status": http_status,
             "input_tokens": None, "output_tokens": None, "cost_usd": None,
             "provider_latency_ms": round((time.perf_counter() - started) * 1000.0, 1) if started else None,
+            "key_source": key_source,
         }
 
     # ------------------------------------------------------------------
@@ -667,7 +688,7 @@ class DispatchService:
         if policy.shadow is not None and shadow_cand is None:
             shadow_report = {"model": policy.shadow.model, "provider": None, "outcome": "skipped",
                              "skip_reason": shadow_skip, "input_tokens": None, "output_tokens": None,
-                             "cost_usd": None, "provider_latency_ms": None}
+                             "cost_usd": None, "provider_latency_ms": None, "key_source": None}
 
         return _Plan(
             dispatch_id=dispatch_id, org_id=org_id, t_start=t_start, customer=customer,
@@ -704,7 +725,10 @@ class DispatchService:
             # CancelledError/KeyboardInterrupt escape.
             primary_out, shadow_out = await asyncio.gather(primary_task, shadow_task, return_exceptions=True)
             shadow_report = (
-                self._shadow_failure(plan.shadow_cand, "error", None, None)
+                self._shadow_failure(
+                    plan.shadow_cand, "error", None, None,
+                    key_resolver.source(plan.shadow_cand.model.provider),
+                )
                 if isinstance(shadow_out, BaseException) else shadow_out
             )
             if isinstance(primary_out, BaseException):
@@ -763,18 +787,29 @@ class DispatchService:
                 total_ms, shadow_report, streamed=streamed,
             )
             logger.info("dispatch %s: outcome=failed attempts=%d org=%s", dispatch_id, len(attempts), org_id)
+        await plan.key_resolver.flush_usage()  # never raises: resolvers log and swallow
         if terminal is not None and terminal.outcome == OUTCOME_AUTH_ERROR:
             failed = attempts[-1]
+            spec = executor_spec_for(failed.provider)
+            if failed.key_source == KEY_SOURCE_STORED:
+                message = (
+                    f"{failed.provider} rejected the stored provider key for this org (HTTP {failed.http_status}). "
+                    f"Rotate it with PUT /dispatch/keys/{spec.slug} or send {spec.key_header}; "
+                    "dispatch does not route around it."
+                )
+            else:
+                message = (
+                    f"{failed.provider} rejected the provider key supplied in "
+                    f"{spec.key_header} (HTTP {failed.http_status}). "
+                    "The key is the caller's; dispatch does not route around it."
+                )
             raise DispatchError(400, {
                 "error": "provider_auth_failed",
-                "message": (
-                    f"{failed.provider} rejected the provider key supplied in "
-                    f"{executor_spec_for(failed.provider).key_header} (HTTP {failed.http_status}). "
-                    "The key is the caller's; dispatch does not route around it."
-                ),
+                "message": message,
                 "provider": failed.provider,
                 "model": failed.model,
                 "http_status": failed.http_status,
+                "key_source": failed.key_source,
                 "attempts": attempts_dicts,
                 "dispatch_id": dispatch_id,
             })
@@ -949,6 +984,7 @@ class DispatchService:
             total_ms, shadow_report, chosen=chosen, result=result, actual=actual, savings_me=savings_me,
             vs_requested=vs_requested, streamed=streamed, usage_estimated=usage_estimated,
         )
+        await plan.key_resolver.flush_usage()  # never raises: resolvers log and swallow
 
         logger.info(
             "dispatch %s: %s/%s outcome=ok attempts=%d tokens=%d/%d%s cost_usd=%.8f streamed=%s org=%s",
@@ -1074,6 +1110,7 @@ class DispatchService:
             started = time.perf_counter()
             deadline = started + plan.timeout_s
             api_key = plan.key_resolver.resolve(cand.model.provider) or ""
+            plan.key_resolver.note_used(cand.model.provider)
             executor = self._executor_factory(cand.spec, plan.timeout_s)
             agen = executor.stream(self._candidate_request(cand, plan.chat_req), api_key)
             state.cand, state.agen, state.started = cand, agen, started
@@ -1110,7 +1147,7 @@ class DispatchService:
             elapsed = (time.perf_counter() - started) * 1000.0
             state.attempts.append(Attempt(
                 len(state.attempts) + 1, cand.model.model_name, cand.model.provider, err.outcome, err.http_status,
-                elapsed,
+                elapsed, plan.key_resolver.source(cand.model.provider),
             ))
             if err.outcome in (OUTCOME_AUTH_ERROR, OUTCOME_PROVIDER_REJECTED):
                 state.terminal = err
@@ -1133,7 +1170,7 @@ class DispatchService:
         if failure is not None:
             state.attempts.append(Attempt(
                 len(state.attempts) + 1, cand.model.model_name, cand.model.provider, failure.outcome,
-                failure.http_status, elapsed_ms,
+                failure.http_status, elapsed_ms, plan.key_resolver.source(cand.model.provider),
             ))
             attempts_dicts = [a.as_dict() for a in state.attempts]
             partial = await self._record_partial_spend(plan, cand, state)
@@ -1142,6 +1179,7 @@ class DispatchService:
                 attempts_dicts, (time.perf_counter() - plan.t_start) * 1000.0, shadow_report,
                 streamed=True, usage_estimated=True, partial=partial,
             )
+            await plan.key_resolver.flush_usage()  # never raises: resolvers log and swallow
             logger.info(
                 "dispatch %s: %s/%s outcome=failed_mid_stream (%s) attempts=%d tokens~%d/%d org=%s",
                 plan.dispatch_id, cand.model.provider, cand.model.model_name, failure.outcome, len(state.attempts),
@@ -1173,6 +1211,7 @@ class DispatchService:
         )
         state.attempts.append(Attempt(
             len(state.attempts) + 1, cand.model.model_name, cand.model.provider, OUTCOME_OK, 200, elapsed_ms,
+            plan.key_resolver.source(cand.model.provider),
         ))
         envelope = await self._finish(
             plan, cand, result, state.attempts, shadow_report, streamed=True,
@@ -1195,7 +1234,10 @@ class DispatchService:
         except asyncio.CancelledError:
             raise  # the *awaiting* task is being cancelled (nothing cancels the shadow itself): let it
         except BaseException:  # _shadow_run only lets KeyboardInterrupt-class exceptions escape
-            return self._shadow_failure(plan.shadow_cand, "error", None, None)
+            return self._shadow_failure(
+                plan.shadow_cand, "error", None, None,
+                plan.key_resolver.source(plan.shadow_cand.model.provider),
+            )
 
     @staticmethod
     async def _close_quietly(agen: Optional[AsyncIterator[StreamEvent]]) -> None:
@@ -1357,11 +1399,12 @@ class DispatchService:
         phrase = REASON_TEXT.get(reason or "", reason or "unknown")
         constraint = REASON_TO_CONSTRAINT.get(reason or "", reason)
         if reason == "no_provider_key":
-            have = key_resolver.providers_with_keys()
+            have = key_resolver.providers_with_keys()  # header and stored keys alike
             return (
-                "No eligible candidate: no provider key supplied for any executable provider"
+                "No eligible candidate: no provider key supplied or stored for any executable provider"
                 + (f" (keys present for: {', '.join(have)})" if have else "")
-                + ". Send X-Provider-Key-<Provider> headers; see GET /dispatch/providers."
+                + ". Send X-Provider-Key-<Provider> headers or register a stored key with POST /dispatch/keys; "
+                "see GET /dispatch/providers."
             )
         value = DispatchService._constraint_value(reason, policy, task_type)
         if reason == "below_quality_floor":
