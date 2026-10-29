@@ -155,8 +155,28 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.78.0 -->
+  <!-- v1.78.1 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.78.1</span>
+      <span class="release-date">Oct 28, 2026</span>
+      <span class="release-tag tag-security">Security</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Signup no longer returns an existing account's API key</div>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li><strong>Your API key is shown once, at signup.</strong> <code>POST /billing/signup</code> is public, and until now signing up again with a registered email returned that account's key. Anyone who knew your email could get your key and read your dispatch receipts or change your budget alerts. A repeat signup now returns <code>409</code> with no key. Keep your key safe, and use it on the Dashboard tab to sign in</li>
+        <li><strong>The admin customer list is operator-only.</strong> <code>GET /admin/customers</code> lists every account's email and org ID. It used to accept any customer key, so any free account could read it. It now needs the operator key</li>
+        <li><strong>Signup is rate-limited.</strong> <code>POST /billing/signup</code> now goes through the same per-IP rate limit and request-size cap as other public endpoints</li>
+        <li><strong>Accounts survive redeploys.</strong> The billing database is now explicitly placed on the persistent volume, alongside the pricing history</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.78.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.78.0</span>

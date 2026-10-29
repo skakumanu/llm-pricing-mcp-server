@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.78.0 | **Last updated**: 2026-10-28
+**Version**: v1.78.1 | **Last updated**: 2026-10-28
 
 ---
 
@@ -264,13 +264,20 @@ Layered auth — billing DB first, global key fallback — so existing deploymen
 ```
 Incoming request
   └─ Full-bypass path? (static UIs, /pricing, /mcp, and every `_unauthenticated_paths`
-     entry such as /health, /docs, /billing/signup) → skips auth, rate limit AND body cap —
+     entry such as /health, /docs, /billing/webhook) → skips auth, rate limit AND body cap —
      except `_public_body_capped_paths` (/v1/chat/completions, v1.77.0), which stay public but still
      go through `_body_too_large()` (header + actual bytes) before the body is ever parsed
+  └─ Operator-only path? (`_sensitive_paths`: /deployment/shutdown*, /admin/customers) →
+     only the global MCP_API_KEY is accepted, a customer key is not; 503 if it is unset.
+     /admin/customers joined in v1.78.1: it lists every customer's email and org_id and had
+     accepted any customer key, which public signup hands to anyone.
   └─ Anonymous-but-throttled path? (`_anonymous_rate_limited_paths`: /agent/chat,
-     /agent/chat/stream) → skips auth only; still rate-limited per IP and body-size-capped.
-     Added in v1.73.3 — before it, no such tier existed: anonymous meant unthrottled, and
-     these endpoints run an LLM on the operator's key.
+     /agent/chat/stream, /billing/signup) → skips auth only; still rate-limited per IP and
+     body-size-capped. Added in v1.73.3 — before it, no such tier existed: anonymous meant
+     unthrottled, and the agent endpoints run an LLM on the operator's key. Signup moved here
+     from the full bypass in v1.78.1: it mints a service key per call, and its 200-vs-409
+     reply says whether an email is registered. Since v1.78.1 signup returns a key only for a
+     new email (the key is shown once); it never returns an existing account's key.
   └─ Extract x-api-key header
        └─ BillingService.get_customer_by_api_key(key) → found?
             YES → request.state.customer = customer; tier from DB; bucket = customer.id

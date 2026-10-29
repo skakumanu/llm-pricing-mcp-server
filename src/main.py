@@ -400,6 +400,10 @@ async def _body_too_large(request: Request) -> Optional[JSONResponse]:
 _anonymous_rate_limited_paths = {
     "/agent/chat",
     "/agent/chat/stream",
+    # v1.78.1: public, but each call can mint a service key and the 200-vs-409
+    # reply says whether an email is registered, so it goes through the limiter
+    # and body cap instead of the full bypass.
+    "/billing/signup",
 }
 
 # Public (no auth, no limiter) but still body-capped: /v1/chat/completions must stay
@@ -428,7 +432,6 @@ _unauthenticated_paths = {
     "/dispatch/providers",
     "/rate-limits/tiers",
     "/billing",
-    "/billing/signup",
     "/billing/webhook",
     # HTTP MCP transport — public so remote MCP clients (Claude Desktop, Cursor) can connect
     "/mcp",
@@ -456,6 +459,11 @@ _unauthenticated_paths = {
 _sensitive_paths = {
     "/deployment/shutdown",
     "/deployment/shutdown/status",
+    # v1.78.1: operator-only. It lists every customer (email, org_id, Stripe id).
+    # Before this it accepted any valid customer key, and public signup hands those
+    # out, so any free account could read it and use the org_ids against endpoints
+    # that take an org_id parameter.
+    "/admin/customers",
 }
 
 # Add deployment middleware for request tracking (needed for graceful shutdown)
@@ -2663,18 +2671,29 @@ async def billing_index():
 @app.post("/billing/signup", response_model=SignupResponse, tags=["Billing"])
 async def billing_signup(req: SignupRequest):
     """
-    Free-tier signup — create (or retrieve) a customer record and return an API key.
+    Free-tier signup — create a customer record for a new email and return its API key.
 
-    Idempotent: the same email always returns the same API key.
+    The key is shown once, here. Signing up again with an email that is already
+    registered returns 409 and no key: this endpoint is public, so returning the
+    existing key would hand any org's service key to whoever knows its email.
     """
     billing = get_billing_service()
-    customer = await billing.get_or_create_customer(req.email)
+    customer = await billing.create_customer(req.email)
+    if customer is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "An account with this email already exists. For security, an API key is "
+                "only shown once, at signup. Use your saved key (Dashboard tab, or the "
+                "x-api-key header)."
+            ),
+        )
     return SignupResponse(
         api_key=customer.api_key,
         org_id=customer.org_id,
         tier=customer.tier,
         message=(
-            "Welcome! Your free-tier API key is ready. "
+            "Welcome! Your free-tier API key is ready. Save it now: it is shown only once. "
             "Upgrade anytime via POST /billing/checkout."
         ),
     )
