@@ -70,6 +70,28 @@ Non-secret settings (`SERVER_PORT`, `RATE_LIMIT_PER_MINUTE`, `AGENT_LLM_PROVIDER
 etc.) can be set the same way, or via the `[env]` block in `fly.toml` for values
 that aren't sensitive.
 
+### Stored provider keys (`PROVIDER_KEY_ENCRYPTION_KEY`, v1.79.0)
+
+Customers' stored dispatch provider keys (`/dispatch/keys`) are kept in `billing.db`
+(on the volume via `BILLING_DB_PATH`), AES-256-GCM-encrypted under a key derived from
+this secret. Without it, `/dispatch/keys` answers 503 and dispatch works with
+`X-Provider-Key-*` headers only. Generate 32 random bytes, base64url-encoded, and set
+it as a Fly secret — never in `fly.toml`, never committed:
+
+```bash
+python -c "import secrets,base64;print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
+flyctl secrets set PROVIDER_KEY_ENCRYPTION_KEY="<the value printed above>"
+```
+
+- **Back it up** somewhere outside Fly (a password manager / vault). The database
+  alone cannot be decrypted without it.
+- **Changing or losing it forces every customer to re-register their stored keys**:
+  existing rows stop decrypting, are listed as `needs_reregistration`, and are never
+  sent to a provider until the customer rotates them. There is no in-place secret
+  rotation.
+- The startup log says `Stored provider keys enabled` / `disabled`; a missing or
+  too-short value logs one error naming the variable (never its value).
+
 ## Manual Deploy (rare — normally CI/CD does this)
 
 Only needed for local testing of a Fly.io-specific change, or as a break-glass path
