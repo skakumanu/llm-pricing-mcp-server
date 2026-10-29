@@ -7,10 +7,12 @@ and its timeout budget, no Gemini SDK is pinned at all, and one HTTP path gives
 one test seam (``httpx.MockTransport``).
 
 Privacy by construction:
-  * The caller's provider key enters this module through ``HeaderKeyResolver``
-    and leaves only as the outgoing auth header of the provider call. It is never
-    stored on an object that is logged, never part of an exception, never in a
-    receipt.
+  * The caller's provider key enters this module through a ``ProviderKeyResolver``
+    (``HeaderKeyResolver`` for ``X-Provider-Key-<Provider>`` headers; since v1.79.0
+    ``provider_key_store.CompositeKeyResolver`` adds the org's stored keys behind
+    it) and leaves only as the outgoing auth header of the provider call. It is
+    never stored on an object that is logged, never part of an exception, never
+    in a receipt.
   * Provider error bodies are *classified* into an ``ExecutorError.outcome`` and
     then dropped — never copied into an exception message, a log line or a
     response.
@@ -136,6 +138,17 @@ class ExecutorSpec:
     base_url: str
     key_header: str        # request header the caller supplies the provider key in
 
+    @property
+    def slug(self) -> str:
+        """URL-safe lower-case id (v1.79.0): ``key_header`` minus ``X-Provider-Key-``.
+
+        Used as the path parameter of ``/dispatch/keys/{provider}`` because some display
+        names ('Together AI', 'Fireworks AI') contain spaces.
+        """
+        return self.key_header[len(_KEY_HEADER_PREFIX):].lower()
+
+
+_KEY_HEADER_PREFIX = "X-Provider-Key-"
 
 # Keyed by the catalogue's provider display names (see each *_pricing.py constructor).
 EXECUTABLE_PROVIDERS: Dict[str, ExecutorSpec] = {
@@ -160,6 +173,7 @@ EXECUTABLE_PROVIDERS: Dict[str, ExecutorSpec] = {
 
 # Lower-cased lookup so a provider string from any source resolves to the canonical spec.
 _PROVIDER_BY_LOWER = {name.lower(): spec for name, spec in EXECUTABLE_PROVIDERS.items()}
+_PROVIDER_BY_SLUG = {spec.slug: spec for spec in EXECUTABLE_PROVIDERS.values()}
 
 
 def executor_spec_for(provider: Optional[str]) -> Optional[ExecutorSpec]:
@@ -167,6 +181,17 @@ def executor_spec_for(provider: Optional[str]) -> Optional[ExecutorSpec]:
     if not provider:
         return None
     return _PROVIDER_BY_LOWER.get(provider.strip().lower())
+
+
+def executor_spec_for_ref(ref: Optional[str]) -> Optional[ExecutorSpec]:
+    """Resolve a provider *reference* — a slug (``together``) or a display name (``Together AI``),
+    case-insensitively — to its ExecutorSpec, or None when it is not executable."""
+    if not ref:
+        return None
+    spec = executor_spec_for(ref)
+    if spec is not None:
+        return spec
+    return _PROVIDER_BY_SLUG.get(ref.strip().lower())
 
 
 def is_executable_provider(provider: Optional[str]) -> bool:
@@ -177,19 +202,40 @@ def is_executable_provider(provider: Optional[str]) -> bool:
 # Key resolution — the BYOK seam
 # ---------------------------------------------------------------------------
 
+KEY_SOURCE_HEADER = "header"
+KEY_SOURCE_STORED = "stored"
+
+
 class ProviderKeyResolver(Protocol):
-    """Where a provider key for this request comes from. v1 ships the header resolver only;
-    a stored-per-account resolver would implement the same one method later."""
+    """Where a provider key for this request comes from.
+
+    ``HeaderKeyResolver`` reads the request's headers; since v1.79.0
+    ``provider_key_store.CompositeKeyResolver`` puts the org's stored keys behind it
+    (header wins). ``source()`` names where a provider's key came from (``header`` |
+    ``stored`` | None) for the receipt; ``note_used()`` is called right before every
+    provider call and ``flush_usage()`` once the receipt is written, so a stored key's
+    ``last_used`` can be stamped. Neither ever sees or returns a key value.
+    """
 
     def resolve(self, provider: str) -> Optional[str]: ...
 
     def providers_with_keys(self) -> List[str]: ...
 
+    def source(self, provider: str) -> Optional[str]: ...
+
+    def note_used(self, provider: str) -> None: ...
+
+    async def flush_usage(self) -> None:
+        """Persist usage recorded by note_used(). Must never raise: it runs after the
+        receipt is written and a failure here must not fail the dispatch."""
+
 
 class HeaderKeyResolver:
     """Reads ``X-Provider-Key-<Provider>`` headers once; holds them only for this request.
 
-    ``repr()``/``str()`` never show a key — only which providers have one.
+    On its own it is the header-only dispatch path (an org with no stored keys, or a
+    server without PROVIDER_KEY_ENCRYPTION_KEY). ``repr()``/``str()`` never show a key —
+    only which providers have one.
     """
 
     def __init__(self, headers: Mapping[str, str]) -> None:
@@ -210,6 +256,15 @@ class HeaderKeyResolver:
 
     def providers_with_keys(self) -> List[str]:
         return sorted(self._keys.keys())
+
+    def source(self, provider: str) -> Optional[str]:
+        return KEY_SOURCE_HEADER if self.resolve(provider) else None
+
+    def note_used(self, provider: str) -> None:
+        """Header keys have no usage record to keep."""
+
+    async def flush_usage(self) -> None:
+        """Header keys have no usage record to keep."""
 
     def __repr__(self) -> str:  # redacted on purpose
         return f"HeaderKeyResolver(providers={self.providers_with_keys()})"

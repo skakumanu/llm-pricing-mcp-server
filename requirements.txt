@@ -6,6 +6,8 @@ starlette==1.3.1
 pydantic-settings==2.14.2
 python-dotenv==1.2.2
 httpx==0.28.1
+# v1.79.0: AES-256-GCM + HKDF for stored per-org provider keys (src/services/provider_key_store.py)
+cryptography==50.0.2
 beautifulsoup4==4.14.3
 user-agents==2.2.0
 pytest==9.0.3

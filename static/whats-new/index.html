@@ -155,8 +155,28 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.78.1 -->
+  <!-- v1.79.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.79.0</span>
+      <span class="release-date">Oct 29, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Store your provider keys once — dispatch with just your service key</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong>Register each provider key once.</strong> <code>POST /dispatch/keys</code> with <code>{"provider": "OpenAI", "api_key": "..."}</code> and your service key in <code>x-api-key</code> stores the key for your org. After that a stock chat UI or the plain OpenAI SDK can call <code>/v1/chat/completions</code> with only your service key and a <code>dispatch</code> object — no per-provider headers. Works for all nine executable providers, on every tier including free</li>
+        <li><strong>Manage them like any credential.</strong> <code>GET /dispatch/keys</code> lists provider, a last-4 fingerprint, when each key was stored or rotated and when dispatch last used it; <code>PUT /dispatch/keys/{provider}</code> rotates and <code>DELETE</code> removes. The key itself is never returned by any endpoint, including the one that stored it</li>
+        <li><strong>Headers still win.</strong> A request's <code>X-Provider-Key-&lt;Provider&gt;</code> header is used ahead of the stored key, and a rejected key is never retried with the other one. Every receipt attempt — inline, in the streamed trailing chunk and in the <code>GET /dispatch/receipts</code> JSON/CSV export — now says <code>key_source: "header"</code> or <code>"stored"</code></li>
+        <li><strong>Encrypted and org-scoped.</strong> Stored keys are AES-256-GCM-encrypted at rest and bound to your org and provider; another org cannot see, use, rotate or delete them, and they never appear in logs, receipts or exports</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.78.1 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.78.1</span>
