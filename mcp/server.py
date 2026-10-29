@@ -64,7 +64,13 @@ class MCPServer:
 
                     # Parse JSON-RPC request
                     request = json.loads(line)
-                    logger.debug(f"Received request: {request}")
+                    # Method and id only (v1.79.1): request bodies can carry tool
+                    # arguments and must never be logged in full.
+                    logger.debug(
+                        "Received request: method=%s id=%s",
+                        request.get("method") if isinstance(request, dict) else None,
+                        request.get("id") if isinstance(request, dict) else None,
+                    )
 
                     # Track timing
                     start_time = time.time()
@@ -94,7 +100,7 @@ class MCPServer:
 
                     # Send response (skip for notifications)
                     if response is not None:
-                        logger.debug(f"Sending response: {response}")
+                        logger.debug("Sending response: id=%s", response.get("id"))
                         print(json.dumps(response), flush=True)
 
                 except json.JSONDecodeError as e:
@@ -170,6 +176,8 @@ class MCPServer:
             tool_name = params["name"]
             tool_arguments = params.get("arguments", {})
 
+            # STDIO never resolves a caller (v1.79.1): it is always anonymous, so
+            # org-scoped tools refuse with customer_key_required.
             result = await self.tool_manager.execute_tool(tool_name, tool_arguments)
 
             # Wrap result in MCP content format

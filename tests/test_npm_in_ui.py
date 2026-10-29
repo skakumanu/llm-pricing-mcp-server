@@ -84,3 +84,12 @@ def test_landing_configs_and_copy_button_use_npx_not_python(landing):
     config = json.loads(m.group(1).encode().decode("unicode_escape"))
     assert config["mcpServers"]["llm-pricing"] == {"command": "npx", "args": ["-y", "llm-pricing-mcp"]}
     assert "git clone" not in mcp_section, "the landing no longer tells visitors to clone the repo"
+
+
+def test_mcp_page_documents_the_optional_api_key(mcp_page):
+    """v1.79.1: the bridge forwards LLM_PRICING_API_KEY as x-api-key; the MCP page must say so."""
+    bridge = (NPM_DIR / "bin" / "llm-pricing-mcp.js").read_text(encoding="utf-8")
+    assert "process.env.LLM_PRICING_API_KEY" in bridge
+    assert "LLM_PRICING_API_KEY" in mcp_page
+    assert "x-api-key" in mcp_page
+    assert "No auth required" not in mcp_page
