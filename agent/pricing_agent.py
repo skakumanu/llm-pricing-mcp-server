@@ -13,6 +13,7 @@ from agent.conversation import (
 )
 from agent.react_loop import ReActLoop
 from rag.pipeline import RAGPipeline
+from src.services.pricing_alerts import redact_alert_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +120,18 @@ class PricingAgent:
         return sanitized
 
     @staticmethod
+    def _messages_for_turn(history, raw_message: str) -> List[Dict[str, Any]]:
+        """History for the LLM, with this turn's user message unredacted.
+
+        v1.81.0 (Q6): history stores the user turn with alert_tokens redacted, but the
+        model must see the real token for this turn only (e.g. "delete my alert, token ...").
+        """
+        messages = history.to_messages()
+        if messages and messages[-1].get("role") == "user":
+            messages[-1] = {"role": "user", "content": raw_message}
+        return messages
+
+    @staticmethod
     def _get_api_key(settings) -> str:
         provider = settings.agent_llm_provider
         key = (
@@ -146,7 +159,7 @@ class PricingAgent:
 
         message = self._sanitize_input(message)
         conv_id, history = await self._conversation_store.get_or_create(conversation_id)
-        history.add("user", message)
+        history.add("user", redact_alert_tokens(message))
 
         from src.config.settings import settings
         loop = ReActLoop(
@@ -154,9 +167,10 @@ class PricingAgent:
             tools=self._tools,
             max_iterations=settings.agent_max_iterations,
         )
-        result = await loop.run(history.to_messages())
+        result = await loop.run(self._messages_for_turn(history, message))
 
-        history.add("assistant", result.final_answer)
+        # v1.81.0 (Q6): the live reply keeps any alert_token; the stored turn never does.
+        history.add("assistant", redact_alert_tokens(result.final_answer))
         await self._conversation_store.save(conv_id, history)
 
         return AgentResponse(
@@ -174,7 +188,7 @@ class PricingAgent:
 
         message = self._sanitize_input(message)
         conv_id, history = await self._conversation_store.get_or_create(conversation_id)
-        history.add("user", message)
+        history.add("user", redact_alert_tokens(message))
 
         from src.config.settings import settings
         loop = ReActLoop(
@@ -185,7 +199,7 @@ class PricingAgent:
 
         final_answer = ""
         all_tool_calls: List[Dict[str, Any]] = []
-        async for event in loop.stream(history.to_messages()):
+        async for event in loop.stream(self._messages_for_turn(history, message)):
             if event["type"] == "answer":
                 final_answer = event["text"]
                 all_tool_calls = event.get("tool_calls", [])
@@ -198,7 +212,8 @@ class PricingAgent:
                 yield event
 
         if final_answer:
-            history.add("assistant", final_answer)
+            # v1.81.0 (Q6): streamed events keep any alert_token; the stored turn never does.
+            history.add("assistant", redact_alert_tokens(final_answer))
             await self._conversation_store.save(conv_id, history)
 
     async def run_task(self, task: str) -> AgentResponse:

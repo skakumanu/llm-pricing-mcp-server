@@ -9,9 +9,10 @@ These tests drive the real POST /mcp handler with real temp-file
 BudgetAlertService / UsageTrackerService instances and a fake billing service that
 maps keyA -> org-a and keyB -> org-b, and check the rule from every direction:
 anonymous (no key, unknown key, STDIO, the anonymous agent), customer (x-api-key and
-Authorization: Bearer), and operator (the global MCP_API_KEY). The 18 public tools
+Authorization: Bearer), and operator (the global MCP_API_KEY). The 19 public tools
 must behave exactly as before, with or without a credential (v1.79.2 moved four
-alert/conversation tools to OPERATOR_ONLY; see tests/test_mcp_operator_only.py).
+alert/conversation tools to OPERATOR_ONLY; see tests/test_mcp_operator_only.py;
+v1.81.0 added the public manage_price_alert, 18 -> 19).
 
 Keys are assembled at runtime so no secret-shaped literal lands in a commit.
 """
@@ -424,7 +425,7 @@ class TestUnknownKey:
 
 
 # ---------------------------------------------------------------------------
-# AC9: the 18 public tools are unchanged, with or without a credential
+# AC9: the 19 public tools are unchanged, with or without a credential
 # ---------------------------------------------------------------------------
 
 def _strip_timestamps(obj):
@@ -439,21 +440,21 @@ def _strip_timestamps(obj):
 
 
 class TestPublicToolParity:
-    def test_ac9_tools_list_has_30_entries_and_public_entries_identical(self, env):
+    def test_ac9_tools_list_has_31_entries_and_public_entries_identical(self, env):
         anon = _rpc("tools/list").json()["result"]["tools"]
         keyed = _rpc("tools/list", headers=_headers("x-api-key", KEY_A)).json()["result"]["tools"]
         op = _rpc("tools/list", headers=_headers("bearer", OPERATOR_KEY)).json()["result"]["tools"]
-        assert len(anon) == 30
+        assert len(anon) == 31
         assert anon == keyed == op
         public = [t for t in anon if t["name"] not in RESTRICTED_TOOLS]
-        assert len(public) == 18
+        assert len(public) == 19
         env.billing.get_customer_by_api_key.assert_not_awaited()
 
     def test_ac9_every_public_tool_gets_identical_input_and_no_caller(self, env):
         """Each public tool's execute() sees exactly the arguments, never a caller, with or without a key."""
         tm = env.tm
         public = [n for n in tm.tools if tm.caller_access(n) == PUBLIC]
-        assert len(public) == 18 and not set(public) & RESTRICTED_TOOLS
+        assert len(public) == 19 and not set(public) & RESTRICTED_TOOLS
         seen = {}
 
         def _recorder(name):
@@ -576,7 +577,7 @@ class TestNoKeyInLogs:
 
 
 # ---------------------------------------------------------------------------
-# AC14: the anonymous agent path is refused; the agent still binds 26 tools
+# AC14: the anonymous agent path is refused; the agent binds 27 tools (v1.81.0)
 # ---------------------------------------------------------------------------
 
 class TestAgentPath:
@@ -585,7 +586,7 @@ class TestAgentPath:
         tm = ToolManager()
         agent_tools = {t.name: t for t in build_agent_tools(tm, rag_pipeline=None)}
         mcp_bound = set(agent_tools) & set(tm.tools)
-        assert len(mcp_bound) == 26
+        assert len(mcp_bound) == 27
         assert ORG_SCOPED_TOOLS <= mcp_bound
         for tool in sorted(ORG_SCOPED_TOOLS):
             result = env.loop.run_until_complete(agent_tools[tool].execute(ORG_TOOL_ARGS[tool]))

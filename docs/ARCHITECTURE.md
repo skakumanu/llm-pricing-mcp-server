@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.80.1 | **Last updated**: 2026-10-30
+**Version**: v1.81.0 | **Last updated**: 2026-10-30
 
 ---
 
@@ -21,6 +21,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 31 
 - **Operator-only alerts and conversations (v1.79.2)**: the four MCP tools that list or delete every subscriber's price-alert webhooks and every visitor's chat conversations (`list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation`) moved to a new `OPERATOR_ONLY` access level in `mcp/caller.py`: only the global `MCP_API_KEY` (as `x-api-key` or `Bearer` on `POST /mcp`) may run them; anonymous, customer and unknown-key callers — and therefore the PricingAgent and STDIO — get one constant `operator_key_required` refusal that reveals no existence, counts or id validity. 18 public tools remain anonymous; all 29 stay registered and the agent still binds 26. Over HTTP, `security_middleware` checks a small method-aware table (`_is_operator_only_request`: GET/HEAD `/pricing/alerts`, GET/HEAD `/agent/conversations`, DELETE `/pricing/alerts/{id}` and `/agent/conversations/{id}`) *before* the full bypass and sends matches through the `_sensitive_paths` operator branch (x-api-key only, UTF-8 byte compare so a non-ASCII key is 401 not 500). Creating stays public: `POST /pricing/alerts` is now anonymous-throttled and body-capped, and `/mcp` joined `_public_body_capped_paths` (1 MB cap before parsing, 413). `/conversations` became an operator-key management page; the landing page no longer links it or the four tools
 - **`dispatch` MCP tool (v1.80.0)**: MCP clients can now run a request through the dispatch gateway. The 30th tool, `dispatch` (`mcp/tools/dispatch.py`), is the first `CUSTOMER_ONLY` tool: it acts only for the customer whose service key is on the `/mcp` connection (anonymous and operator callers get HTTP's `dispatch_requires_api_key`; a foreign `org_id` gets `org_mismatch`), uses only that org's stored provider keys (an empty header resolver; provider keys are never tool arguments), and returns `completion`, `usage`, `routing_metadata` and the full `dispatch_receipt`. There is no second dispatch implementation: the steps between a validated body and `DispatchService.dispatch()` (enabled → unsupported feature → customer → per-customer rate limit → locale → service → key resolver) moved out of `src/main.py` into `src/services/dispatch_entry.py::prepare_and_dispatch()`, which both the HTTP handler and the tool call, raising the existing `DispatchError` payloads; the request model moved to `src/models/dispatch.py::ChatCompletionsRequest` (`_ProxyRequest` subclasses it) so validation is identical, and the limiter store moved to `src/services/rate_limiter.py` so HTTP and MCP dispatch share one per-customer bucket. HTTP responses are byte-identical. On MCP every refusal is a `success: false` result with HTTP's error code and payload; validation errors keep HTTP's `type`/`loc`/`msg` but never `input`/`ctx`; unexpected exceptions are redacted to their type name. `ToolManager` gained a `transport` (`http` / `stdio`): STDIO returns a structured `dispatch_requires_hosted_mcp` refusal. The agent never binds it (still 26 of 30); 18 public tools unchanged. Non-streaming, text-only; no npx bridge change (dispatch users set `LLM_PRICING_MCP_TIMEOUT_MS=120000`)
 - **Webhook SSRF guard (v1.80.1)**: price-change and budget-spend alert webhooks are the only feature that POSTs to a caller-chosen URL. New module `src/services/webhook_guard.py` applies one rule set at registration (first line of both services' `register()`, so `POST /pricing/alerts`, `POST /usage/alerts`, the MCP register tools over `/mcp` and STDIO, and the PricingAgent all share it) and again at every delivery: https only; no IP literal in any spelling (decimal/octal/hex/short IPv4, IPv4-mapped/compatible/6to4/Teredo/NAT64 IPv6) or resolved address that is loopback, private, link-local (incl. `169.254.169.254`), CGNAT, ULA (incl. Fly 6PN `fdaa::/16`), multicast or reserved; no `localhost`/`*.localhost`/`*.internal`/`*.flycast`; refused if ANY resolved address is blocked or the host does not resolve (2s timeout). Rejections are `422 invalid_webhook_url` (HTTP) / `error_code: invalid_webhook_url` (MCP) with a fixed reason category, never IPs or DNS detail. Delivery uses `PinnedWebhookTransport`: resolve + check, then connect to the checked IP (rebinding-safe) with `sni_hostname` keeping TLS verification on the original name; no redirects, `trust_env=False` (env `HTTPS_PROXY` no longer applies to webhooks). Legacy non-compliant rows are kept but skipped at delivery (logged, not retried, not counted). `WEBHOOK_ALLOW_PRIVATE_TARGETS` (local dev only, never on Fly) relaxes the scheme/destination rules with a startup WARNING
+- **Price-alert self-service (v1.81.0)**: registering a price alert (`POST /pricing/alerts`, the public `register_price_alert` MCP tool, the chat agent) now also returns a one-time `alert_token` (`lpa_` + `secrets.token_urlsafe(32)`, 256 bits) and an `alert_token_notice`. Only its SHA-256 hash is stored, in a new nullable, unique-indexed `pricing_alerts.token_hash` column (migration-on-open in `PricingAlertService.initialize()`; pre-v1.81.0 rows stay NULL, never matchable, operator-managed). `get_by_token()` / `delete_by_token()` look an alert up by hash only — no request on any surface carries an alert id, so there is no id oracle — and every failure (wrong, malformed, missing, deleted, unknown, legacy) gets one identical refusal: HTTP 404 `{"error": "invalid_alert_token"}` from the anonymous, per-IP rate-limited, body-capped `POST /pricing/alerts/self/view` and `/self/delete` (token in the JSON body, never the URL, so telemetry never sees it), MCP `error_code: invalid_alert_token` from the new PUBLIC 31st tool `manage_price_alert` (`action: view|delete`, `redact_errors`; no per-IP limiter on `/mcp`, matching `register_price_alert`). The operator listing, `check_and_fire` and webhook payloads never select the hash; operator list/delete is unchanged. The agent binds `manage_price_alert` (27 of 31); `PricingAgent.chat()`/`chat_stream()` persist user and assistant turns through `redact_alert_tokens()` (live reply keeps the token, the stored turn shows `[redacted alert token]`), and agent log lines that can carry model/tool text are redacted the same way
 - **Clean cross-branch promotion**: `scripts/promote_branch_content.sh` mirrors one branch's tree onto another (additions, updates, AND deletions) to work around develop/master squash-merge divergence, verifying the result matches exactly before returning
 - **Repo cost auditor**: `scripts/audit_repo.py` statically scans an arbitrary codebase (customer-run, not deployed) for LLM SDK call sites and reuses `predict_cost`'s token/pricing math to recommend cheaper models, prompt caching, Batch API, task-based right-sizing, and duplicate-prompt consolidation — runs locally only, since the hosted `/mcp` HTTP transport has no access to a caller's filesystem
 - **AI-native SDLC pipeline** (dev tooling, not deployed): `/release-feature` runs a feature through dedicated Spec, Design, Code, Review (parallel correctness/security/simplification), and Test & Release phase agents (`.claude/agents/phase-*.md`) orchestrated by `.claude/workflows/release-feature.js`, ending at an open PR against `develop` — Spec fixes *what*/acceptance criteria, Design fixes *how* (approach, version, branch name), so neither phase re-derives the other's decision; see `CLAUDE.md`'s "AI-Native SDLC Pipeline" section
@@ -38,7 +39,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 31 
 ┌─────────────────────────────────▼───────────────────────────────────────────┐
 │  Presentation Layer (src/main.py + mcp/)                                    │
 │                                                                             │
-│  REST API              MCP (30 tools)          Browser UIs (13 pages)       │
+│  REST API              MCP (31 tools)          Browser UIs (13 pages)       │
 │  /pricing              STDIO transport          /  /chat  /calculator        │
 │  /router/recommend     HTTP POST /mcp           /compare  /history           │
 │  /cache-stats          JSON-RPC 2.0             /trends   /widget            │
@@ -143,7 +144,7 @@ llm-pricing-mcp-server/
 │       ├── quality_tradeoff_caveat.py # Shared quality_tradeoff caveat (threshold + builder) used by recommend_model.py and session_recommendation.py
 │       ├── budget_alerts.py         # Webhook alerts on actual spend crossing a USD threshold; v1.77.0 hard_stop flag + find_hard_stop() (org-scoped alerts only) for the dispatch gateway
 │       ├── billing_service.py       # BillingService: customers table, Stripe sync
-│       ├── pricing_alerts.py        # Webhook alert registration + delivery
+│       ├── pricing_alerts.py        # Webhook alert registration + delivery; v1.81.0 one-time alert_token (SHA-256 token_hash at rest), get_by_token/delete_by_token, redact_alert_tokens()
 │       ├── webhook_guard.py         # v1.80.1 SSRF guard for alert webhooks: URL rules at registration + PinnedWebhookTransport (checked-IP delivery, no redirects)
 │       ├── telemetry.py             # Request telemetry aggregation
 │       ├── data_fetcher.py          # Async HTTP fetching helpers
@@ -203,13 +204,13 @@ llm-pricing-mcp-server/
 │   ├── react_loop.py                # ReAct (Reason + Act) loop implementation
 │   ├── llm_backend.py               # AnthropicBackend + OpenAIBackend (switch via env)
 │   ├── conversation.py              # SQLite conversation memory, turn limit
-│   └── tools.py                     # 26 of 30 MCP tool bindings for agent use (+ RAG search)
+│   └── tools.py                     # 27 of 31 MCP tool bindings for agent use (+ RAG search)
 │
 ├── mcp/
 │   ├── server.py                    # MCP STDIO transport (Claude Desktop) — always an anonymous caller; DEBUG logs method/id only (v1.79.1); ToolManager(transport='stdio') so dispatch refuses (v1.80.0)
 │   ├── caller.py                    # v1.79.1: McpCaller (anonymous | customer | operator; id/org/tier only, never a key), access levels PUBLIC / ORG_SCOPED / OPERATOR_ONLY (v1.79.2) / CUSTOMER_ONLY (v1.80.0: dispatch), authorize(), effective_org_id(), operator_key_required()
 │   ├── schema_generator.py          # Generates mcp/schemas/ from the Pydantic models
-│   ├── tools/                       # Per-tool MCP handler modules (tool_manager.py: execute_tool(name, args, caller=ANONYMOUS); the seven usage/budget tools declare caller_access = ORG_SCOPED; list/delete_price_alert and list/delete_conversation declare OPERATOR_ONLY, v1.79.2; dispatch.py declares CUSTOMER_ONLY with access_refusal()/stdio_refusal() and redact_errors, v1.80.0; ToolManager(transport='http'|'stdio'))
+│   ├── tools/                       # Per-tool MCP handler modules (tool_manager.py: execute_tool(name, args, caller=ANONYMOUS); the seven usage/budget tools declare caller_access = ORG_SCOPED; list/delete_price_alert and list/delete_conversation declare OPERATOR_ONLY, v1.79.2; dispatch.py declares CUSTOMER_ONLY with access_refusal()/stdio_refusal() and redact_errors, v1.80.0; manage_price_alert.py is PUBLIC with redact_errors — alert_token view/delete, v1.81.0; ToolManager(transport='http'|'stdio'))
 │   └── schemas/                     # Generated MCP JSON-RPC schema definitions
 │
 ├── static/
@@ -223,7 +224,7 @@ llm-pricing-mcp-server/
 │   ├── trends/index.html            # /trends — price-change leaderboard
 │   ├── widget/index.html            # /widget — embeddable pricing table
 │   ├── conversations/index.html     # /conversations — operator-only conversation management (operator key in localStorage, shared with /admin; operator-key-required state otherwise; v1.79.2)
-│   ├── mcp-setup/index.html         # /mcp-setup — MCP integration hub (5 client tabs, live test, all 30 tools)
+│   ├── mcp-setup/index.html         # /mcp-setup — MCP integration hub (5 client tabs, live test, all 31 tools)
 │   ├── api-docs/index.html          # /api-docs — API reference (Swagger/ReDoc iframe + endpoint table)
 │   └── whats-new/index.html         # /whats-new — release notes timeline (v1.35.0 → current)
 │
@@ -294,7 +295,8 @@ Incoming request
      /admin/customers joined in v1.78.1: it lists every customer's email and org_id and had
      accepted any customer key, which public signup hands to anyone.
   └─ Anonymous-but-throttled path? (`_anonymous_rate_limited_paths`: /agent/chat,
-     /agent/chat/stream, /billing/signup, POST /pricing/alerts since v1.79.2) → skips auth only; still rate-limited per IP and
+     /agent/chat/stream, /billing/signup, POST /pricing/alerts since v1.79.2, POST /pricing/alerts/self/view
+     and /self/delete since v1.81.0 (alert_token in the body)) → skips auth only; still rate-limited per IP and
      body-size-capped. Added in v1.73.3 — before it, no such tier existed: anonymous meant
      unthrottled, and the agent endpoints run an LLM on the operator's key. Signup moved here
      from the full bypass in v1.78.1: it mints a service key per call, and its 200-vs-409
@@ -337,7 +339,7 @@ public (allow-listed); `GET /dispatch/receipts` is not allow-listed, so the midd
 the handler additionally requires `request.state.customer` (global-key callers get 403) and always scopes to
 that customer's `org_id`.
 
-**`/mcp` caller identity (v1.79.1).** `/mcp` stays a full-bypass path (the 18 public tools need no key; since v1.79.2 it is body-capped), so
+**`/mcp` caller identity (v1.79.1).** `/mcp` stays a full-bypass path (the 19 public tools need no key; since v1.79.2 it is body-capped), so
 the handler resolves the caller itself, and only when it has to: `_handle_mcp_request(body, request)` calls
 `_resolve_mcp_caller(request)` for a `tools/call` whose tool declares a non-PUBLIC `caller_access`, never for
 `initialize`, `tools/list` or a public tool (no billing lookup on the public path). The key comes from
@@ -369,7 +371,7 @@ Enabled for: OpenAI, Anthropic, Groq, Mistral AI, Together AI, Fireworks AI, xAI
 ### 4. MCP Dual Transport
 - **STDIO** (`mcp/server.py`): JSON-RPC 2.0 over stdin/stdout for Claude Desktop local integration
 - **HTTP** (`POST /mcp`): Same JSON-RPC 2.0 payload over HTTP for remote MCP clients — no local install needed
-- Protocol version: `2024-11-05`; 30 tools exposed
+- Protocol version: `2024-11-05`; 31 tools exposed
 - Both transports' `ToolManager` is built with the same process-wide `get_pricing_aggregator()` singleton the REST API uses (see "Singleton Services" above) — one pricing cache per process shared by every surface, not one per transport. Cross-process sharing (STDIO process vs. the HTTP/REST process) is out of scope; each process still gets its own aggregator.
 - The 3 confirmed duplicate cost-math pairs (`/cost-estimate` ↔ `estimate_cost`, `/cost-estimate/batch` ↔ `compare_costs`, `/usage` ↔ `record_usage`) now call the same `cost_calculator.compute_token_cost()` instead of each re-implementing the arithmetic inline.
 - **Caller plumbing (v1.79.1)**: `ToolManager.execute_tool(name, arguments, caller=ANONYMOUS)`. A tool without a `caller_access` attribute is `PUBLIC` and is called exactly as before (`execute(arguments)`, never sees the caller). The seven usage/budget tools set `caller_access = ORG_SCOPED`; `ToolManager` runs `mcp.caller.authorize()` first (anonymous → `customer_key_required`; customer naming another org → `org_mismatch`; operator → unrestricted) and then calls `execute(arguments, caller=caller)`, where `effective_org_id()` forces a customer onto its own org (list/delete budget alerts pass `org_id` to the existing service-layer filters). `OPERATOR_ONLY` (v1.79.2; `list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation`) admits only the operator and refuses everyone else with a constant `operator_key_required`. `CUSTOMER_ONLY` (customer only; operator refused) is used by the v1.80.0 `dispatch` tool, which also declares `access_refusal()` — `ToolManager` substitutes it for the generic `customer_key_required` so anonymous and operator callers get HTTP's `dispatch_requires_api_key` (`org_mismatch` passes through) — and `redact_errors` (an unexpected exception's text is never echoed). Only HTTP `/mcp` ever passes a caller; STDIO and the PricingAgent use the two-argument form and are anonymous. `tool.execute(arguments)` with no caller remains unrestricted for in-process unit tests, and a guard test asserts nothing outside `mcp/tools/` constructs those seven classes.
@@ -380,19 +382,21 @@ Enabled for: OpenAI, Anthropic, Groq, Mistral AI, Together AI, Fireworks AI, xAI
 ```
 User message
   → react_loop.py: think → select tool → execute → observe → repeat
-  → tools.py: wraps 26 of the 30 MCP tools as callable Python functions
+  → tools.py: wraps 27 of the 31 MCP tools as callable Python functions
       (excludes ask_agent to prevent recursion, get_telemetry/get_cache_stats as server-ops only, and
        dispatch (v1.80.0) — a real, paid model call on a customer's keys)
   → llm_backend.py: AnthropicBackend | OpenAIBackend (switch via AGENT_LLM_PROVIDER env)
-  → conversation.py: persist turns to SQLite, enforce max_turns limit
+  → conversation.py: persist turns to SQLite, enforce max_turns limit (v1.81.0: alert_tokens redacted
+      from stored user/assistant turns; the live reply keeps them)
   → SSE stream: events [start, thinking, tool_call, tool_result, …, answer, done]
 ```
 
 The agent is an anonymous MCP caller (v1.79.1): its bindings call `ToolManager.execute_tool(name, args)` with
-no caller, so the seven org-scoped usage/budget tools stay bound (26 of the 30 MCP tools) but refuse at runtime
+no caller, so the seven org-scoped usage/budget tools stay bound (27 of the 31 MCP tools) but refuse at runtime
 with `customer_key_required` — `/agent/chat` and `ask_agent` can never read, write or delete any org's data.
 Likewise the four operator-only tools (v1.79.2) stay bound but refuse with `operator_key_required`, so the agent
-can never list or delete price alerts or conversations.
+can never list or delete price alerts or conversations. It can view or delete one price alert through the
+public `manage_price_alert` (v1.81.0) when the user supplies that alert's `alert_token`.
 
 ### 6. Stripe Billing (optional)
 If `STRIPE_SECRET_KEY` is not set, checkout/portal/webhook endpoints return `503`. Free-tier signup and API key issuance always work without Stripe:
@@ -622,7 +626,7 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | PUT | `/dispatch/keys/{provider}` | Required customer key | v1.79.0: rotate (`{api_key}`; provider = slug or display name); 404 if the org stores none |
 | DELETE | `/dispatch/keys/{provider}` | Required customer key | v1.79.0: delete (204); 404 if the org stores none |
 | GET | `/mcp` | None | MCP server info |
-| POST | `/mcp` | None; optional service key (`x-api-key` / `Bearer`) for the 7 org-scoped tools and `dispatch`; operator key for the four operator-only tools | MCP HTTP transport (JSON-RPC 2.0). v1.79.1: a customer key scopes the usage/budget tools to its own org; the global key is the operator; anonymous calls to those tools are refused (`customer_key_required`); v1.79.2: alert/conversation list/delete need the operator key (`operator_key_required` otherwise); body capped at 1 MB before parsing (413); v1.80.0: `dispatch` runs a real gateway call for the key's customer on its stored provider keys (`dispatch_requires_api_key` for anonymous/operator; shares the per-customer dispatch rate-limit bucket); the 18 public tools never need a key |
+| POST | `/mcp` | None; optional service key (`x-api-key` / `Bearer`) for the 7 org-scoped tools and `dispatch`; operator key for the four operator-only tools | MCP HTTP transport (JSON-RPC 2.0). v1.79.1: a customer key scopes the usage/budget tools to its own org; the global key is the operator; anonymous calls to those tools are refused (`customer_key_required`); v1.79.2: alert/conversation list/delete need the operator key (`operator_key_required` otherwise); body capped at 1 MB before parsing (413); v1.80.0: `dispatch` runs a real gateway call for the key's customer on its stored provider keys (`dispatch_requires_api_key` for anonymous/operator; shares the per-customer dispatch rate-limit bucket); the 19 public tools never need a key |
 | POST | `/billing/signup` | None | Free-tier signup |
 | GET | `/billing/me` | Required | Customer dashboard |
 | POST | `/billing/checkout` | Required | Stripe checkout |
@@ -631,6 +635,8 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | POST | `/pricing/alerts` | None (rate-limited) | Register price-change webhook (v1.79.2: per-IP anonymous throttle + body cap; v1.80.1: public https URL only, else 422 `invalid_webhook_url` with a `reason`) |
 | GET | `/pricing/alerts` | Operator key (`MCP_API_KEY`, x-api-key) | List alerts (v1.79.2: operator only) |
 | DELETE | `/pricing/alerts/{id}` | Operator key (`MCP_API_KEY`, x-api-key) | Delete alert (v1.79.2: operator only; 404 unknown id) |
+| POST | `/pricing/alerts/self/view` | None (rate-limited; `alert_token` in body) | v1.81.0: view the one alert the token manages; any non-match → 404 `invalid_alert_token` (identical body) |
+| POST | `/pricing/alerts/self/delete` | None (rate-limited; `alert_token` in body) | v1.81.0: delete the one alert the token manages; any non-match → 404 `invalid_alert_token` (identical body) |
 | GET | `/docs` | None | Swagger UI (OpenAPI) |
 | GET | `/redoc` | None | ReDoc (OpenAPI) |
 | GET | `/openapi.json` | None | OpenAPI spec (JSON) |

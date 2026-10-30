@@ -36,6 +36,7 @@ EXPECTED_TOOLS = {
     "register_price_alert",
     "list_price_alerts",
     "delete_price_alert",
+    "manage_price_alert",  # v1.81.0 — public alert_token self-service
     "get_pricing_export_url",
     "list_conversations",
     "delete_conversation",
@@ -69,7 +70,7 @@ class TestToolRegistry:
         assert set(registry.tools.keys()) == EXPECTED_TOOLS
 
     def test_registry_count(self, registry):
-        assert len(registry.tools) == 30
+        assert len(registry.tools) == 31
 
     def test_every_tool_has_instance_and_schema(self, registry):
         for name, meta in registry.tools.items():
