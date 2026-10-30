@@ -48,13 +48,15 @@ EXPECTED_TOOLS = {
     "get_cache_stats",
     "analyze_session_usage",
     "import_session_usage",
+    "dispatch",
 }
 
 # Tools intentionally NOT exposed to the ReAct agent.
 #   ask_agent       — would let the agent recurse into itself
 #   get_telemetry   — server operations, not a pricing question
 #   get_cache_stats — server-ops cache introspection, not a pricing question
-AGENT_EXCLUDED = {"ask_agent", "get_telemetry", "get_cache_stats"}
+#   dispatch        — a real, paid model call on a customer's stored provider keys (v1.80.0)
+AGENT_EXCLUDED = {"ask_agent", "get_telemetry", "get_cache_stats", "dispatch"}
 
 
 @pytest.fixture(scope="module")
@@ -67,7 +69,7 @@ class TestToolRegistry:
         assert set(registry.tools.keys()) == EXPECTED_TOOLS
 
     def test_registry_count(self, registry):
-        assert len(registry.tools) == 29
+        assert len(registry.tools) == 30
 
     def test_every_tool_has_instance_and_schema(self, registry):
         for name, meta in registry.tools.items():

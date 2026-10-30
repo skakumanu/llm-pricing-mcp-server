@@ -37,7 +37,10 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
     """
     tools: List[AgentTool] = []
 
-    # Wrap existing MCP tools
+    # Wrap existing MCP tools. This is an explicit allow-list: anything not named here is
+    # never bound. Deliberately absent: ask_agent (self-recursion), get_telemetry and
+    # get_cache_stats (server ops), and dispatch (v1.80.0 — a real, paid model call on a
+    # customer's stored provider keys; the anonymous agent must never be able to make one).
     _mcp_tool_specs = [
         (
             "get_all_pricing",

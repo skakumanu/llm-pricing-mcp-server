@@ -3,7 +3,7 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Most LLM pricing tools are a static lookup table. This one checks its own numbers against a live, independently-maintained price registry and tells you when they disagree, routes to a model by cost *and* quality instead of just quoting a price, and tracks what you actually spent — not just what you might. All of that is backed by a RESTful API (FastAPI), **29 MCP tools** over STDIO and HTTP, a conversational Agent + RAG pipeline, browser-based UIs, and a self-serve billing dashboard, for pricing data from **31 major LLM providers**.
+Most LLM pricing tools are a static lookup table. This one checks its own numbers against a live, independently-maintained price registry and tells you when they disagree, routes to a model by cost *and* quality instead of just quoting a price, and tracks what you actually spent — not just what you might. All of that is backed by a RESTful API (FastAPI), **30 MCP tools** over STDIO and HTTP, a conversational Agent + RAG pipeline, browser-based UIs, and a self-serve billing dashboard, for pricing data from **31 major LLM providers**.
 
 **Live at**: https://llm-pricing-api.fly.dev
 
@@ -21,11 +21,11 @@ Most LLM pricing tools are a static lookup table. This one checks its own number
 ## Features
 
 ### MCP Interface (STDIO + HTTP)
-- **29 MCP Tools**: `get_all_pricing`, `estimate_cost`, `compare_costs`, **`predict_cost`**, **`optimize_workload`**, **`recommend_model`**, **`check_price_drift`**, **`get_data_quality`**, `get_performance_metrics`, `get_use_cases`, `get_ide_pricing`, `get_telemetry`, `get_pricing_history`, `get_pricing_trends`, `register_price_alert`, `list_price_alerts`, `delete_price_alert`, `get_pricing_export_url`, `list_conversations`, `delete_conversation`, `ask_agent`, **`record_usage`**, **`get_usage_summary`**, **`register_budget_alert`**, **`list_budget_alerts`**, **`delete_budget_alert`**, **`get_cache_stats`**, **`analyze_session_usage`**, **`import_session_usage`**
+- **30 MCP Tools**: `get_all_pricing`, `estimate_cost`, `compare_costs`, **`predict_cost`**, **`optimize_workload`**, **`recommend_model`**, **`check_price_drift`**, **`get_data_quality`**, `get_performance_metrics`, `get_use_cases`, `get_ide_pricing`, `get_telemetry`, `get_pricing_history`, `get_pricing_trends`, `register_price_alert`, `list_price_alerts`, `delete_price_alert`, `get_pricing_export_url`, `list_conversations`, `delete_conversation`, `ask_agent`, **`record_usage`**, **`get_usage_summary`**, **`register_budget_alert`**, **`list_budget_alerts`**, **`delete_budget_alert`**, **`get_cache_stats`**, **`analyze_session_usage`**, **`import_session_usage`**, **`dispatch`**
 - `get_all_pricing`, `estimate_cost`, `compare_costs`, `get_use_cases` and `recommend_model` take optional `currency` / `country` arguments (v1.76.0) and add converted `local_*` figures plus a `currency_conversion` block; omit both and the output is unchanged
 - **STDIO transport** — JSON-RPC 2.0 over STDIO for local Claude Desktop integration
 - **HTTP transport** — `POST /mcp` (JSON-RPC 2.0 over HTTP) for remote MCP clients — no local install needed
-- **Optional service key on the MCP connection (v1.79.1)** — the 18 public pricing/routing tools need no key; the four operator-only tools (`list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation`, v1.79.2) need the operator key (`MCP_API_KEY`) and refuse everyone else with `operator_key_required`; the 7 org-scoped usage/budget tools (`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`) need your service API key and act only on that key's own org. See [HTTP MCP Transport](#http-mcp-transport)
+- **Optional service key on the MCP connection (v1.79.1)** — the 18 public pricing/routing tools need no key; the four operator-only tools (`list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation`, v1.79.2) need the operator key (`MCP_API_KEY`) and refuse everyone else with `operator_key_required`; the 7 org-scoped usage/budget tools (`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`) need your service API key and act only on that key's own org; `dispatch` (v1.80.0) needs your service key and at least one provider key stored for your org (`POST /dispatch/keys`), and makes a real model call billed to those keys. See [HTTP MCP Transport](#http-mcp-transport)
 - MCP Protocol version: `2024-11-05`
 
 ### RESTful API
@@ -55,7 +55,7 @@ Most LLM pricing tools are a static lookup table. This one checks its own number
 
 ### Agent + RAG Pipeline
 - **Configurable LLM backend**: OpenAI GPT-4o-mini (default) or Anthropic Claude via env vars
-- **ReAct loop agent** with access to 26 of the 29 MCP tools (excludes `ask_agent`, `get_telemetry`, and `get_cache_stats`)
+- **ReAct loop agent** with access to 26 of the 30 MCP tools (excludes `ask_agent`, `get_telemetry`, `get_cache_stats`, and `dispatch`)
 - **TF-IDF RAG** over pricing docs with top-k retrieval
 - **Conversation memory**: per-session SQLite persistence, configurable turn limit
 - **Chat UI** at `/chat` — streams ReAct progress in real time
@@ -100,7 +100,7 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 - Rate limiting per client IP + tier bucket — includes the anonymous `/agent/chat` and `/agent/chat/stream` endpoints (no API key needed, but throttled, since each call runs an LLM on the operator's key) and, since v1.79.2, anonymous `POST /pricing/alerts` registration
 - Operator-only data (v1.79.2): listing or deleting price-alert webhooks and chat conversations needs the operator key (`MCP_API_KEY`) on every surface — `x-api-key` over HTTP (`GET`/`DELETE /pricing/alerts`, `GET`/`DELETE /agent/conversations`), `x-api-key` or `Bearer` over MCP; anyone else gets 401 over HTTP or `operator_key_required` over MCP, with nothing revealed about stored records
 - Request size limit (1MB default), enforced before parsing on `POST /mcp` too (413 above it)
-- 2412 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 2497 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
@@ -146,7 +146,7 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
-Restart Claude Desktop. All 29 tools are immediately available; the 18 public ones need no key (the 7 usage/budget tools need your service key on the connection, and the four alert/conversation management tools are operator-only — see [HTTP MCP Transport](#http-mcp-transport)).
+Restart Claude Desktop. All 30 tools are immediately available; the 18 public ones need no key (the 7 usage/budget tools and `dispatch` need your service key on the connection, and the four alert/conversation management tools are operator-only — see [HTTP MCP Transport](#http-mcp-transport)).
 
 ### Option B — STDIO via npx (no clone, no Python)
 
@@ -163,7 +163,7 @@ For clients that only support `command`-based STDIO servers (no direct remote/HT
 }
 ```
 
-Restart Claude Desktop. See [npm/llm-pricing-mcp/README.md](npm/llm-pricing-mcp/README.md) for configuration options (self-hosting, timeouts, and `LLM_PRICING_API_KEY` — your optional service key, forwarded as `x-api-key`, needed only by the 7 usage/budget tools).
+Restart Claude Desktop. See [npm/llm-pricing-mcp/README.md](npm/llm-pricing-mcp/README.md) for configuration options (self-hosting, timeouts, and `LLM_PRICING_API_KEY` — your optional service key, forwarded as `x-api-key`, needed only by the 7 usage/budget tools and `dispatch`).
 
 ### Option C — Local STDIO, fully offline
 
@@ -266,7 +266,7 @@ The server exposes a JSON-RPC 2.0 endpoint at `POST /mcp` supporting the MCP pro
 |--------|-------------|
 | `initialize` | Handshake — returns server info and capabilities |
 | `initialized` | Notification — returns 204 |
-| `tools/list` | List all 29 tools with input schemas |
+| `tools/list` | List all 30 tools with input schemas |
 | `tools/call` | Execute a tool |
 
 ### Example
@@ -312,6 +312,23 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 - Operator-only tools (v1.79.2): `list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation` need the server operator's key (`MCP_API_KEY`) on the connection; every other caller gets `error_code: "operator_key_required"` — the same response whether or not an id exists.
 - Refusals are normal tool results (`success: false`), not JSON-RPC errors. Keys are never logged or echoed.
 - `POST /mcp` request bodies are capped at 1,000,000 bytes (v1.79.2; 413 JSON above that, checked before parsing). A 500-entry exact-count `import_session_usage` call fits comfortably; split larger text-mode imports across calls with the same `session_id` (imports are idempotent).
+
+### `dispatch` over MCP (v1.80.0)
+
+`dispatch` runs a text chat request through the dispatch gateway from inside your MCP client — the same pipeline as `POST /v1/chat/completions` with a `dispatch` object: it applies your policy, runs the best eligible model, and returns `completion`, `usage`, `routing_metadata` and the full `dispatch_receipt` (chosen model, reason, cost, savings, attempts). **It makes a real model call billed to your own provider keys**, and the spend is recorded against your org exactly as for HTTP (one receipt, one usage event, budget alerts, `hard_stop`).
+
+- Needs your service key on the connection (`x-api-key` / `Authorization: Bearer`) and at least one provider key stored for your org with `POST /dispatch/keys` (v1.79.0). Provider keys are never tool arguments; every attempt reports `key_source: "stored"`.
+- Arguments: `prompt` (+ optional `system`) **or** `messages`; optional `model`, `max_tokens`, `temperature`, `top_p`, `stop`, and a `dispatch` policy object identical to the HTTP one (`objective`, `min_quality_score`, `allow`/`deny`, `max_request_cost_usd`, `failover`, `shadow`, `currency`, ...).
+- Text-only, single-choice, non-streaming; no tools/functions. Refusals are `success: false` results with HTTP's error codes and payloads (`dispatch_requires_api_key`, `no_eligible_candidate`, `budget_hard_stop`, `unsupported_feature`, `rate_limit_exceeded`, ...); validation errors list `type`/`loc`/`msg` only. MCP and HTTP dispatch share one per-customer rate-limit bucket.
+- The operator key and anonymous callers get `dispatch_requires_api_key`; the local STDIO server returns `dispatch_requires_hosted_mcp` (use the hosted `/mcp` or the npx bridge with `LLM_PRICING_API_KEY`). The chat agent cannot call it.
+- A dispatch with failover can outlast the npx bridge's default 30 s timeout: set `LLM_PRICING_MCP_TIMEOUT_MS=120000`, and bound the call with `dispatch.failover.timeout_ms` / `dispatch.failover.max_attempts`.
+
+```bash
+curl -X POST https://llm-pricing-api.fly.dev/mcp \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $LLM_PRICING_API_KEY" \
+  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"dispatch","arguments":{"prompt":"Summarize MCP in one line","dispatch":{"objective":"cheapest","min_quality_score":70}}}}'
+```
 
 ---
 
@@ -690,7 +707,7 @@ llm-pricing-mcp-server/
 │       └── …
 ├── mcp/
 │   ├── server.py                    # STDIO JSON-RPC 2.0 server
-│   └── tools/                       # 29 MCP tool implementations
+│   └── tools/                       # 30 MCP tool implementations
 │       ├── tool_manager.py
 │       ├── get_all_pricing.py
 │       ├── estimate_cost.py
@@ -754,6 +771,8 @@ pytest tests/test_router.py -v
 | `test_mcp_org_scoping.py` | v1.79.1 org-scoped MCP tools: anonymous / customer (x-api-key, Bearer) / operator / unknown-key callers over `POST /mcp`, STDIO and the agent; public-tool parity; no key in logs or responses |
 | `test_mcp_operator_only.py` | v1.79.2 operator-only MCP tools (price alerts, conversations): anonymous / customer / unknown / operator callers over `POST /mcp`, the agent and STDIO; constant refusals; no key, URL or preview leaks |
 | `test_operator_only_http.py` | v1.79.2 operator-only HTTP routes for alerts and conversations, anonymous throttling of `POST /pricing/alerts`, non-ASCII keys → 401 |
+| `test_mcp_dispatch.py` | v1.80.0 `dispatch` MCP tool: auth (anonymous / operator / foreign org), stored-key-only execution, ledger rows, HTTP receipt and refusal parity, failover, shared rate limit, body cap, validation without input, STDIO refusal, agent exclusion, privacy sentinels |
+| `test_dispatch_entry.py` | v1.80.0 shared pre-dispatch pipeline (`dispatch_entry.py`) step order and payloads, `rate_limiter.py` shared store, import boundaries |
 | `test_mcp_body_cap.py` | v1.79.2 `POST /mcp` body cap (Content-Length and chunked → 413) and the 500-entry import fitting under it |
 | `test_landing_ui.py` | Landing page no longer links operator-only tools or the conversations page |
 | `test_router.py` | Router recommendation + feedback |

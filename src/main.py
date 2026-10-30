@@ -5,7 +5,6 @@ import signal
 import secrets
 from pathlib import Path
 from datetime import datetime, timezone
-from collections import defaultdict, deque
 
 UTC = timezone.utc
 
@@ -21,7 +20,7 @@ from io import StringIO  # noqa: E402
 from fastapi.responses import JSONResponse, Response, StreamingResponse, FileResponse  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
-from typing import Any, Optional, Deque, Dict, List  # noqa: E402
+from typing import Any, Optional, Dict, List  # noqa: E402
 import asyncio  # noqa: E402
 import time  # noqa: E402
 import uuid  # noqa: E402
@@ -58,16 +57,21 @@ from src.services.usage_tracker import init_usage_tracker, get_usage_tracker  # 
 from src.services.session_recommendation import compute_session_recommendation  # noqa: E402
 from src.services.budget_alerts import init_budget_alert_service, get_budget_alert_service  # noqa: E402
 from src.services.billing_service import init_billing_service, get_billing_service  # noqa: E402
-from src.models.dispatch import DispatchPolicy  # noqa: E402
-from src.services.dispatch_executors import EXECUTABLE_PROVIDERS, HeaderKeyResolver  # noqa: E402
+from src.models.dispatch import ChatCompletionsRequest  # noqa: E402
+from src.services.dispatch_executors import HeaderKeyResolver  # noqa: E402
 from src.services.dispatch_receipts import init_dispatch_receipt_store, get_dispatch_receipt_store  # noqa: E402
 from src.services.provider_key_store import (  # noqa: E402
-    SECRET_ENV_VAR as _PROVIDER_KEY_SECRET_ENV, CompositeKeyResolver, InvalidProviderKey, ProviderKeyExists,
+    SECRET_ENV_VAR as _PROVIDER_KEY_SECRET_ENV, InvalidProviderKey, ProviderKeyExists,
     ProviderKeyNotFound, StoredKeysUnavailable, UnsupportedProvider, accepted_providers as _accepted_key_providers,
     canonical_provider as _canonical_key_provider, get_provider_key_store, init_provider_key_store,
 )
 from src.services.dispatch_service import (  # noqa: E402
     DispatchError, DispatchService, init_dispatch_service, get_dispatch_service,
+)
+from src.services import dispatch_entry as _dispatch_entry  # noqa: E402
+from src.services import rate_limiter as _rate_limiter  # noqa: E402
+from src.services.rate_limiter import (  # noqa: E402
+    _rate_limit_lock, _rate_limit_store, cleanup_stale_rate_limit_entries,
 )
 from src.models.billing import (  # noqa: E402
     SignupRequest, SignupResponse, CheckoutRequest, CheckoutResponse,
@@ -327,54 +331,20 @@ deployment_manager = get_deployment_manager(version=settings.app_version)
 logger.info("Deployment manager initialized")
 
 # Security controls
-_rate_limit_store: Dict[str, Deque[float]] = defaultdict(deque)
-_rate_limit_lock = asyncio.Lock()
+# v1.80.0 — the limiter store, lock and cleanup live in src/services/rate_limiter.py so the
+# MCP dispatch tool shares the same per-customer bucket; these names are the SAME objects.
 _auth_warning_logged = False
-_last_rate_limit_cleanup = time.time()
-
-
-async def cleanup_stale_rate_limit_entries():
-    """Periodically remove IP entries with no recent requests to prevent memory leak."""
-    global _last_rate_limit_cleanup
-    now = time.time()
-    if now - _last_rate_limit_cleanup > 3600:  # Cleanup every hour
-        async with _rate_limit_lock:
-            stale_threshold = now - 3600
-            to_remove = [
-                ip for ip, bucket in _rate_limit_store.items()
-                if not bucket or bucket[-1] < stale_threshold
-            ]
-            for ip in to_remove:
-                del _rate_limit_store[ip]
-            if to_remove:
-                logger.debug("Rate limit cleanup: removed %d stale IP entries", len(to_remove))
-        _last_rate_limit_cleanup = now
 
 
 async def _rate_limit_allow(bucket_key: str, tier: str) -> bool:
     """Consume one request from `bucket_key`'s per-minute token bucket; False when exhausted.
 
-    The one limiter implementation: the security middleware calls it for every
-    non-bypassed path, and the dispatch branch of /v1/chat/completions (which sits
-    in _unauthenticated_paths so the plain proxy stays public) calls it directly
-    with the authenticated customer's id and tier. Same store, same lock.
+    Thin wrapper over src.services.rate_limiter.rate_limit_allow that reads this module's
+    own ``settings`` at call time (tests replace src.main.settings wholesale). The security
+    middleware calls it for every non-bypassed path, and the dispatch branch of
+    /v1/chat/completions calls it (via dispatch_entry) with the customer's id and tier.
     """
-    _tier_limits = {
-        "free": settings.rate_limit_free,
-        "pro": settings.rate_limit_pro,
-        "enterprise": settings.rate_limit_enterprise,
-    }
-    tier_limit = _tier_limits.get(tier, settings.rate_limit_per_minute)
-    now = time.time()
-    window_start = now - 60
-    async with _rate_limit_lock:
-        bucket = _rate_limit_store[bucket_key]
-        while bucket and bucket[0] < window_start:
-            bucket.popleft()
-        if len(bucket) >= tier_limit:
-            return False
-        bucket.append(now)
-    return True
+    return await _rate_limiter.rate_limit_allow(bucket_key, tier, settings)
 
 
 async def _body_too_large(request: Request) -> Optional[JSONResponse]:
@@ -3635,44 +3605,15 @@ async def admin_customers():
 # OpenAI-compatible proxy endpoint
 # ---------------------------------------------------------------------------
 
-class _ProxyRequest(BaseModel):
-    model: str
-    messages: List[dict]
-    max_tokens: Optional[int] = None
-    # v1.77.0 — standard OpenAI fields. In dispatch mode: temperature/top_p/stop are forwarded;
-    # tools/functions/tool_choice/n>1/response_format are rejected up front (FR16,
-    # _unsupported_dispatch_feature); `user` (OpenAI's end-user abuse-tracking id) is accepted
-    # and deliberately not forwarded to the provider. Plain mode ignores every one of them.
-    # v1.78.0 — `stream: true` in dispatch mode streams the completion as OpenAI chunk SSE;
-    # `stream_options` (OpenAI's include_usage switch) is accepted and has no effect — the
-    # trailing chunk always carries usage. Plain mode still ignores both.
-    temperature: Optional[float] = None
-    top_p: Optional[float] = None
-    stop: Optional[Any] = None
-    n: Optional[int] = None
-    user: Optional[str] = None
-    stream: Optional[bool] = None
-    stream_options: Optional[Any] = None
-    tools: Optional[Any] = None
-    functions: Optional[Any] = None
-    tool_choice: Optional[Any] = None
-    response_format: Optional[Any] = None
-    # The opt-in: present -> dispatch mode (real provider call); absent -> today's proxy.
-    dispatch: Optional[DispatchPolicy] = None
+class _ProxyRequest(ChatCompletionsRequest):
+    """POST /v1/chat/completions body. Fields live in src.models.dispatch.ChatCompletionsRequest
+    (v1.80.0) so the MCP dispatch tool validates through the same model; this subclass keeps the
+    FastAPI/OpenAPI component name."""
 
 
-def _infer_task_from_messages(messages: List[dict]) -> Optional[str]:
-    """Heuristically infer a task_type from the message content."""
-    text = " ".join(
-        (m.get("content", "") if isinstance(m.get("content", ""), str) else "") or "" for m in messages
-    ).lower()
-    if any(kw in text for kw in ("function", "code", "class", "def ", "import", "debug", "script")):
-        return "code"
-    if any(kw in text for kw in ("summarize", "summary", "tldr", "shorten", "abstract")):
-        return "summarization"
-    if any(kw in text for kw in ("analyze", "analyse", "research", "reason", "explain", "compare")):
-        return "analysis"
-    return "chat"
+# Single source in src/services/dispatch_entry.py (v1.80.0); kept here as an alias because the
+# plain proxy uses it and tests import it from src.main.
+_infer_task_from_messages = _dispatch_entry.infer_task_from_messages
 
 
 def _format_routing_recommendation(requested_model: str, result) -> str:
@@ -3697,30 +3638,6 @@ def _format_routing_recommendation(requested_model: str, result) -> str:
     return "\n".join(lines)
 
 
-def _unsupported_dispatch_feature(req: _ProxyRequest) -> Optional[str]:
-    """FR16: name the first unsupported feature in a dispatch-mode request, or None.
-
-    `stream` is supported since v1.78.0 and is deliberately not checked here.
-    """
-    if req.tools is not None:
-        return "tools"
-    if req.functions is not None:
-        return "functions"
-    if req.tool_choice is not None:
-        return "tool_choice"
-    if req.n is not None and req.n != 1:
-        return "n"
-    if req.response_format is not None and not (
-        isinstance(req.response_format, dict) and req.response_format.get("type") == "text"
-    ):
-        return "response_format"  # json_object / json_schema would be silently ignored otherwise
-    for m in req.messages:
-        content = m.get("content")
-        if content is not None and not isinstance(content, str):
-            return "multimodal_content"
-    return None
-
-
 def _dispatch_service_key(request: Request) -> Optional[str]:
     """Service API key from x-api-key or Authorization: Bearer (the OpenAI SDK default)."""
     key = request.headers.get(settings.mcp_api_key_header)
@@ -3732,6 +3649,20 @@ def _dispatch_service_key(request: Request) -> Optional[str]:
     return None
 
 
+def _http_dispatch_deps() -> _dispatch_entry.DispatchDeps:
+    """Dispatch collaborators from this module's globals, read at call time so existing
+    patch("src.main.get_dispatch_service") / patch.object(main_module.settings, ...) tests
+    keep steering the HTTP path."""
+    return _dispatch_entry.DispatchDeps(
+        settings=settings,
+        get_service=get_dispatch_service,
+        get_key_store=get_provider_key_store,
+        rate_limit_allow=_rate_limit_allow,
+        cleanup_rate_limits=cleanup_stale_rate_limit_entries,
+        get_telemetry=get_telemetry_service,
+    )
+
+
 async def _dispatch_chat_completion(req: _ProxyRequest, request: Request):
     """Dispatch mode of POST /v1/chat/completions (v1.77.0): a real provider call + receipt.
 
@@ -3739,138 +3670,43 @@ async def _dispatch_chat_completion(req: _ProxyRequest, request: Request):
     _unauthenticated_paths so the plain proxy remains public, which is why this
     branch authenticates and rate-limits in-handler. The body-size cap is applied by
     the security middleware (via _public_body_capped_paths) before the body is parsed.
+
+    v1.80.0 — every step between the body and DispatchService lives in
+    src/services/dispatch_entry.prepare_and_dispatch, shared with the MCP `dispatch` tool;
+    status codes, bodies and their order are unchanged.
     """
-    if not settings.dispatch_enabled:
-        return JSONResponse(status_code=503, content={
-            "error": "dispatch_disabled",
-            "message": "Dispatch mode is disabled on this server (DISPATCH_ENABLED=false).",
-        })
 
-    feature = _unsupported_dispatch_feature(req)
-    if feature:
-        return JSONResponse(status_code=400, content={
-            "error": "unsupported_feature",
-            "feature": feature,
-            "message": (
-                f"Dispatch does not support '{feature}' in this release: text-only, single-choice chat "
-                "completions without tools/functions (streaming is supported). Omit the field or drop the "
-                "`dispatch` object to get a routing recommendation instead."
-            ),
-        })
-
-    # Service key -> customer (org scope). The global MCP_API_KEY is deliberately not
-    # consulted: dispatch writes per-org ledgers and needs an org to write them to.
-    customer = None
-    service_key = _dispatch_service_key(request)
-    if service_key:
+    async def _resolve_customer():
+        # Service key -> customer (org scope). The global MCP_API_KEY is deliberately not
+        # consulted: dispatch writes per-org ledgers and needs an org to write them to.
+        service_key = _dispatch_service_key(request)
+        if not service_key:
+            return None
         try:
-            customer = await get_billing_service().get_customer_by_api_key(service_key)
+            return await get_billing_service().get_customer_by_api_key(service_key)
         except RuntimeError:
-            customer = None
-    if customer is None:
-        return JSONResponse(status_code=401, content={
-            "error": "dispatch_requires_api_key",
-            "message": (
-                "Dispatch requires a free-tier API key. Sign up at POST /billing/signup and send the key "
-                "as x-api-key or Authorization: Bearer. The global operator key is not accepted for dispatch."
-            ),
-            "signup": "/billing/signup",
-        })
+            return None
 
-    if settings.rate_limit_per_minute > 0:
-        await cleanup_stale_rate_limit_entries()
-        if not await _rate_limit_allow(customer.id, customer.tier):
-            return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
-
-    # Locale: explicit statements only — no IP detection on this endpoint.
-    policy = req.dispatch
     try:
-        locale = resolve_locale(
-            currency=policy.currency or request.headers.get("X-Currency"),
-            country=policy.country or request.headers.get("X-Country"),
-            table=load_rate_table(settings.exchange_rates_path),
-            currency_source="query" if policy.currency else "header",
-            country_source="query" if policy.country else "header",
+        out = await _dispatch_entry.prepare_and_dispatch(
+            req,
+            resolve_customer=_resolve_customer,
+            header_resolver=HeaderKeyResolver(request.headers),
+            header_currency=request.headers.get("X-Currency"),
+            header_country=request.headers.get("X-Country"),
+            deps=_http_dispatch_deps(),
+            stream=bool(req.stream),
         )
-    except UnsupportedCurrencyError as exc:
-        return JSONResponse(status_code=400, content={
-            "error": "unsupported_currency",
-            "currency": exc.code,
-            "supported_currencies": exc.supported,
-            "message": str(exc),
-        })
-
-    try:
-        svc = get_dispatch_service()
-    except RuntimeError:
-        return JSONResponse(status_code=503, content={
-            "error": "dispatch_unavailable", "message": "Dispatch service is not initialized.",
-        })
-
-    key_resolver = await _dispatch_key_resolver(request, customer)
-    stop = req.stop
-    if isinstance(stop, str):
-        stop = [stop]
-    elif stop is not None and not isinstance(stop, list):
-        stop = None
-    kwargs = dict(
-        customer=customer,
-        requested_model=req.model,
-        messages=req.messages,
-        policy=policy,
-        key_resolver=key_resolver,
-        locale=locale,
-        inferred_task_type=_infer_task_from_messages(req.messages),
-        max_tokens=req.max_tokens,
-        temperature=req.temperature,
-        top_p=req.top_p,
-        stop=stop,
-        webhook_secret=settings.webhook_secret,
-    )
+    except DispatchError as exc:
+        return JSONResponse(status_code=exc.status_code, content=exc.payload)
     if req.stream:
-        # v1.78.0 — pull the first event *before* building the response: every pre-content
-        # refusal or exhausted failover is then the same JSON error as the non-streaming path,
-        # with no SSE bytes sent.
-        agen = svc.dispatch_stream(**kwargs)
-        try:
-            first = await agen.__anext__()
-        except DispatchError as exc:
-            return JSONResponse(status_code=exc.status_code, content=exc.payload)
-        get_telemetry_service().track_feature_usage("dispatch")
+        first, agen = out
         return StreamingResponse(
             _relay_dispatch_stream(first, agen, request),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
-    try:
-        body = await svc.dispatch(**kwargs)
-    except DispatchError as exc:
-        return JSONResponse(status_code=exc.status_code, content=exc.payload)
-    get_telemetry_service().track_feature_usage("dispatch")
-    return body
-
-
-async def _dispatch_key_resolver(request: Request, customer):
-    """Header keys first, then the org's stored keys (v1.79.0). Never fails the dispatch: an
-    uninitialized/unavailable store or a DB error falls back to header-only."""
-    header = HeaderKeyResolver(request.headers)
-    try:
-        store = get_provider_key_store()
-    except RuntimeError:
-        return header
-    if not store.available:
-        return header
-    covered = header.providers_with_keys()
-    if len(covered) >= len(EXECUTABLE_PROVIDERS):
-        return header  # every provider already keyed by a header: no stored key could win
-    try:
-        stored = await store.load_for_dispatch(customer.org_id, exclude=covered)
-    except Exception as exc:
-        logger.warning("stored provider keys unavailable for this dispatch (%s); header-only", type(exc).__name__)
-        return header
-    if not stored:
-        return header
-    return CompositeKeyResolver(header, stored, store, customer.org_id)
+    return out
 
 
 def _sse_data(payload: dict) -> str:
@@ -4466,7 +4302,9 @@ async def mcp_http(request: Request):
     Optional service key (v1.79.1): send it as x-api-key or Authorization: Bearer on
     the connection. The 7 org-scoped usage/budget tools need it (they act on the
     key's own org); the four operator-only tools (v1.79.2: list/delete_price_alert,
-    list/delete_conversation) need the operator key (MCP_API_KEY); the other 18
+    list/delete_conversation) need the operator key (MCP_API_KEY); the v1.80.0
+    `dispatch` tool needs a customer key (a real gateway call on the org's stored
+    provider keys, sharing the per-customer dispatch rate-limit bucket); the other 18
     stay anonymous. Headers are never logged. Bodies over settings.max_body_bytes
     are refused with 413 by the security middleware before this handler runs.
     """

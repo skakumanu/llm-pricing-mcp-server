@@ -155,8 +155,32 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.79.2 -->
+  <!-- v1.80.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.80.0</span>
+      <span class="release-date">Oct 30, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Dispatch from your MCP client: the new <code>dispatch</code> tool</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong>Run a request through the gateway from Claude, Cursor or Claude Code.</strong> The new <code>dispatch</code> MCP tool sends a text chat request through the dispatch gateway: your policy picks the best eligible model, and you get the completion, usage and the same <code>dispatch_receipt</code> as <code>POST /v1/chat/completions</code> (chosen model, reason, cost, savings, attempts)</li>
+        <li><strong>A real model call on your own keys.</strong> It runs on the provider keys you stored for your org with <code>POST /dispatch/keys</code> and needs your service key on the MCP connection; spend lands on your org exactly as over HTTP — receipts, usage, budget alerts and <code>hard_stop</code> included. Provider keys are never tool arguments</li>
+        <li><strong>Same rules as HTTP.</strong> Same policy object, same refusals and error codes (<code>dispatch_requires_api_key</code>, <code>no_eligible_candidate</code>, <code>budget_hard_stop</code>, <code>unsupported_feature</code>, ...), and one shared per-customer rate limit across HTTP and MCP. Text-only and non-streaming</li>
+        <li><strong>Where it runs.</strong> Hosted <code>/mcp</code> and the npx bridge (set <code>LLM_PRICING_MCP_TIMEOUT_MS=120000</code>; no bridge upgrade needed). The local STDIO server returns <code>dispatch_requires_hosted_mcp</code>, and the chat agent cannot call it</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">MCP tools <strong>29 → 30</strong></div>
+        <div class="stat-chip">Agent-bound tools <strong>26 (unchanged)</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.79.2 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.79.2</span>
