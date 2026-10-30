@@ -12,7 +12,9 @@ sys.path.insert(0, str(project_root))
 
 from fastapi.testclient import TestClient  # noqa: E402
 from src.main import app  # noqa: E402
-from src.services.pricing_alerts import PricingAlertService  # noqa: E402
+from src.services.pricing_alerts import (  # noqa: E402
+    ALERT_TOKEN_NOTICE, ALERT_TOKEN_PREFIX, PricingAlertService,
+)
 
 client = TestClient(app)
 
@@ -197,6 +199,9 @@ def _patch_alert_service(alerts=None):
         "id": 1, "url": "https://example.com/hook",
         "threshold_pct": 5.0, "provider": None, "model_name": None,
         "created_at": 1700000000.0,
+        # v1.81.0: registration also returns the one-time alert_token (placeholder built at runtime).
+        "alert_token": ALERT_TOKEN_PREFIX + "x" * 43,
+        "alert_token_notice": ALERT_TOKEN_NOTICE,
     })
     mock_svc.list_alerts = AsyncMock(return_value=_alerts)
     mock_svc.delete = AsyncMock(return_value=True)

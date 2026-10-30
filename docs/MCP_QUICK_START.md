@@ -8,7 +8,7 @@
 
 ## What's Available
 
-30 MCP tools across two transports:
+31 MCP tools across two transports:
 
 | Transport | Endpoint | Use case |
 |-----------|----------|----------|
@@ -43,7 +43,7 @@ Expected response:
 }
 ```
 
-### List all 30 tools
+### List all 31 tools
 
 ```bash
 curl -X POST https://llm-pricing-api.fly.dev/mcp \
@@ -67,7 +67,7 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 
 ### Optional service key (v1.79.1)
 
-The 18 public tools need no credential. The four operator-only tools (`list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation`) need the server operator's key (`MCP_API_KEY`) on the connection; every other caller, including the chat agent and the local STDIO server, gets `error_code: "operator_key_required"` (v1.79.2). The 7 org-scoped usage/budget tools (`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`) need your service API key (`POST /billing/signup`) on the connection, as `x-api-key` or `Authorization: Bearer`, and act only on that key's org:
+The 19 public tools need no credential. The four operator-only tools (`list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation`) need the server operator's key (`MCP_API_KEY`) on the connection; every other caller, including the chat agent and the local STDIO server, gets `error_code: "operator_key_required"` (v1.79.2). To view or delete a price alert you registered yourself, use the public `manage_price_alert` with the one-time `alert_token` that `register_price_alert` returned (v1.81.0). The 7 org-scoped usage/budget tools (`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`) need your service API key (`POST /billing/signup`) on the connection, as `x-api-key` or `Authorization: Bearer`, and act only on that key's org:
 
 ```bash
 curl -X POST https://llm-pricing-api.fly.dev/mcp \
@@ -133,7 +133,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 
 ---
 
-## All 30 Tools
+## All 31 Tools
 
 | Tool | Required args | Optional args |
 |------|--------------|---------------|
@@ -154,6 +154,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 | `register_price_alert` | `url` | `threshold_pct`, `provider`, `model_name` |
 | `list_price_alerts` | — | — |
 | `delete_price_alert` | `alert_id` | — |
+| `manage_price_alert` | `action` (`view`/`delete`), `alert_token` | — |
 | `get_pricing_export_url` | — | `format`, `model_name`, `provider`, `days`, `limit` |
 | `list_conversations` | — | `limit` |
 | `delete_conversation` | `conversation_id` | — |

@@ -5,6 +5,7 @@ from typing import Any, AsyncIterator, Dict, List
 
 from agent.llm_backend import LLMBackend
 from agent.tools import AgentTool
+from src.services.pricing_alerts import redact_alert_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +125,7 @@ class ReActLoop:
                     try:
                         result = await tool.execute(tool_args)
                     except Exception as exc:
-                        logger.warning("Tool '%s' raised: %s", tool_name, exc)
+                        logger.warning("Tool '%s' raised: %s", tool_name, redact_alert_tokens(str(exc)))
                         result = {"success": False, "error": "Tool execution failed"}
                 else:
                     result = {"success": False, "error": f"Unknown tool: {tool_name}"}
@@ -205,7 +206,7 @@ class ReActLoop:
                     try:
                         result = await tool.execute(tool_args)
                     except Exception as exc:
-                        logger.warning("Tool '%s' raised: %s", tool_name, exc)
+                        logger.warning("Tool '%s' raised: %s", tool_name, redact_alert_tokens(str(exc)))
                         result = {"success": False, "error": "Tool execution failed"}
                 else:
                     result = {"success": False, "error": f"Unknown tool: {tool_name}"}

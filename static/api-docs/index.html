@@ -238,9 +238,11 @@
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/trends</span><span class="ep-desc">Price-change leaderboard</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/history/export</span><span class="ep-desc">CSV or JSON export of pricing history</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/alerts/signing-info</span><span class="ep-desc">Webhook HMAC signing key info</span></div>
-        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/pricing/alerts</span><span class="ep-desc">Register a price-change webhook. The URL must be public <code>https</code>: private, loopback, internal or unresolvable hosts are refused with 422 <code>invalid_webhook_url</code>; redirects are not followed</span><span class="ep-auth">None (rate-limited)</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/pricing/alerts</span><span class="ep-desc">Register a price-change webhook. The URL must be public <code>https</code>: private, loopback, internal or unresolvable hosts are refused with 422 <code>invalid_webhook_url</code>; redirects are not followed. The response includes a one-time <code>alert_token</code>: save it, it is shown only once and is the only way to view or delete the alert yourself</span><span class="ep-auth">None (rate-limited)</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/pricing/alerts/self/view</span><span class="ep-desc">View the alert you registered: send <code>{"alert_token": "lpa_..."}</code> in the JSON body (never in the URL). Any token that matches nothing gets 404 <code>invalid_alert_token</code></span><span class="ep-auth">No key (alert_token in body; rate-limited)</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/pricing/alerts/self/delete</span><span class="ep-desc">Delete the alert you registered with its <code>alert_token</code> in the JSON body; it stops firing. Alerts registered before v1.81.0 have no token and are removed via the operator</span><span class="ep-auth">No key (alert_token in body; rate-limited)</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/pricing/alerts</span><span class="ep-desc">List registered webhooks</span><span class="ep-auth">Operator key</span></div>
-        <div class="endpoint-row"><span class="method DELETE">DELETE</span><span class="ep-path">/pricing/alerts/{id}</span><span class="ep-desc">Delete a webhook</span><span class="ep-auth">Operator key</span></div>
+        <div class="endpoint-row"><span class="method DELETE">DELETE</span><span class="ep-path">/pricing/alerts/{id}</span><span class="ep-desc">Delete any webhook by id (to delete your own, use /pricing/alerts/self/delete)</span><span class="ep-auth">Operator key</span></div>
       </div>
 
       <div class="endpoint-group">
@@ -285,7 +287,7 @@
       <div class="endpoint-group">
         <h3>MCP (Model Context Protocol)</h3>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/mcp</span><span class="ep-desc">MCP server info and config snippet</span></div>
-        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/mcp</span><span class="ep-desc">MCP JSON-RPC 2.0 endpoint — all 30 tools</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/mcp</span><span class="ep-desc">MCP JSON-RPC 2.0 endpoint — all 31 tools</span></div>
       </div>
 
       <div class="endpoint-group">

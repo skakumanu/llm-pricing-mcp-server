@@ -191,7 +191,7 @@
       </div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.75rem 1.1rem;font-size:.82rem;">
         <div style="color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">Tools</div>
-        <span style="color:var(--success);font-weight:600">30 tools · No key needed for pricing tools</span>
+        <span style="color:var(--success);font-weight:600">31 tools · No key needed for pricing tools</span>
       </div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.75rem 1.1rem;font-size:.82rem;" id="npm-package-card">
         <div style="color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">npm package</div>
@@ -254,7 +254,7 @@
           <div class="step-num">3</div>
           <div class="step-body">
             <h4>Restart your client</h4>
-            <p>After saving the config, restart Claude Desktop / VS Code / Cursor. The 30 tools will appear automatically.</p>
+            <p>After saving the config, restart Claude Desktop / VS Code / Cursor. The 31 tools will appear automatically.</p>
           </div>
         </div>
         <div class="step">
@@ -303,7 +303,7 @@ LLM_PRICING_API_KEY=&lt;your-service-key&gt;                  <span class="cmt">
           <div class="step-num">3</div>
           <div class="step-body">
             <h4>Restart your client</h4>
-            <p>The 30 tools appear automatically. Package: <a href="https://www.npmjs.com/package/llm-pricing-mcp" style="color:var(--accent)">npmjs.com/package/llm-pricing-mcp</a> (MIT), listed in the MCP Registry as <code>io.github.skakumanu/llm-pricing-mcp-server</code>.</p>
+            <p>The 31 tools appear automatically. Package: <a href="https://www.npmjs.com/package/llm-pricing-mcp" style="color:var(--accent)">npmjs.com/package/llm-pricing-mcp</a> (MIT), listed in the MCP Registry as <code>io.github.skakumanu/llm-pricing-mcp-server</code>.</p>
           </div>
         </div>
       </div>
@@ -404,7 +404,7 @@ pip install -r requirements.txt</div>
             <div class="step-num">4</div>
             <div class="step-body">
               <h4>Enable the tools in Agent mode</h4>
-              <p>Open the Copilot Chat panel, switch to <em>Agent</em> mode, then click the tools icon and enable <strong>llm-pricing</strong>. All 30 tools become available to the agent.</p>
+              <p>Open the Copilot Chat panel, switch to <em>Agent</em> mode, then click the tools icon and enable <strong>llm-pricing</strong>. All 31 tools become available to the agent.</p>
             </div>
           </div>
         </div>
@@ -517,14 +517,14 @@ pip install -r requirements.txt</div>
           <div class="step-num">2</div>
           <div class="step-body">
             <h4>Restart Perplexity</h4>
-            <p>After saving, restart the desktop app. All 30 pricing tools will be available in your conversations.</p>
+            <p>After saving, restart the desktop app. All 31 pricing tools will be available in your conversations.</p>
           </div>
         </div>
         <div class="step">
           <div class="step-num">3</div>
           <div class="step-body">
             <h4>Verify</h4>
-            <p>Ask: <em>"What LLM pricing tools do you have available?"</em> — Perplexity should list all 30 tools.</p>
+            <p>Ask: <em>"What LLM pricing tools do you have available?"</em> — Perplexity should list all 31 tools.</p>
           </div>
         </div>
       </div>
@@ -532,10 +532,10 @@ pip install -r requirements.txt</div>
 
   </div><!-- /section -->
 
-  <!-- All 30 tools -->
+  <!-- All 31 tools -->
   <div class="section">
     <div class="section-label">Available Tools</div>
-    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">All 30 tools are accessible via MCP. <span style="color:var(--accent)">Purple</span> = required arg · <span style="color:var(--muted)">Grey</span> = optional · <span style="color:var(--warn)">needs key</span> = send your service key on the connection (<a href="#mcp-service-key">how</a>); these act only on your own org. <code>import_session_usage</code> needs the key too, and <code>dispatch</code> spends on your own stored provider keys.</p>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">All 31 tools are accessible via MCP. <span style="color:var(--accent)">Purple</span> = required arg · <span style="color:var(--muted)">Grey</span> = optional · <span style="color:var(--warn)">needs key</span> = send your service key on the connection (<a href="#mcp-service-key">how</a>); these act only on your own org. <code>import_session_usage</code> needs the key too, and <code>dispatch</code> spends on your own stored provider keys.</p>
     <div class="tool-grid">
       <div class="tool-card">
         <div class="tool-name">get_all_pricing</div>
@@ -609,7 +609,7 @@ pip install -r requirements.txt</div>
       </div>
       <div class="tool-card">
         <div class="tool-name">register_price_alert</div>
-        <div class="tool-desc">Webhook alert when a model price changes by threshold%. The URL must be public https (no private, internal or loopback hosts).</div>
+        <div class="tool-desc">Webhook alert when a model price changes by threshold%. The URL must be public https (no private, internal or loopback hosts). Returns a one-time <code>alert_token</code> — save it, it is shown only once.</div>
         <div class="tool-args"><span class="req">url</span><span>threshold_pct</span><span>provider</span><span>model_name</span></div>
       </div>
       <div class="tool-card">
@@ -621,6 +621,11 @@ pip install -r requirements.txt</div>
         <div class="tool-name">delete_price_alert<span class="needs-key" title="Needs the server operator's key; other callers get operator_key_required">operator only</span></div>
         <div class="tool-desc">Remove a registered webhook by ID.</div>
         <div class="tool-args"><span class="req">alert_id</span></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">manage_price_alert</div>
+        <div class="tool-desc">View or delete the one price alert you registered, using the <code>alert_token</code> from <code>register_price_alert</code>. No key needed; the token is the credential.</div>
+        <div class="tool-args"><span class="req">action</span><span class="req">alert_token</span></div>
       </div>
       <div class="tool-card">
         <div class="tool-name">get_pricing_export_url</div>
@@ -706,9 +711,10 @@ pip install -r requirements.txt</div>
         <tr><td>Connection refused / timeout</td><td>Run <code>curl https://llm-pricing-api.fly.dev/health</code> to verify the server is up. If using local STDIO, ensure the server process is running.</td></tr>
         <tr><td><code>401 Unauthorized</code> on MCP endpoint</td><td>The <code>/mcp</code> endpoint itself never returns 401 — no key is needed to connect or to use the pricing tools. If you see 401, check for a proxy or misconfigured auth header in your client.</td></tr>
         <tr><td><code>customer_key_required</code> from a usage or budget tool</td><td>The 7 usage and budget tools need your service API key on the MCP connection: <code>x-api-key</code> or <code>Authorization: Bearer</code> header, or <code>LLM_PRICING_API_KEY</code> for the npx bridge. Get a free key at <a href="/billing">/billing</a>. The local STDIO server and the chat agent are always anonymous, so these tools refuse there.</td></tr>
-        <tr><td><code>operator_key_required</code></td><td><code>list_price_alerts</code>, <code>delete_price_alert</code>, <code>list_conversations</code> and <code>delete_conversation</code> are restricted to the server operator: they need <code>MCP_API_KEY</code> on the connection. A service key from <a href="/billing">/billing</a> does not unlock them. To remove a price alert you registered, contact the operator.</td></tr>
+        <tr><td><code>operator_key_required</code></td><td><code>list_price_alerts</code>, <code>delete_price_alert</code>, <code>list_conversations</code> and <code>delete_conversation</code> are restricted to the server operator: they need <code>MCP_API_KEY</code> on the connection. A service key from <a href="/billing">/billing</a> does not unlock them. To view or delete a price alert you registered yourself, use <code>manage_price_alert</code> with the <code>alert_token</code> returned at registration (alerts registered before v1.81.0 have no token and are removed via the operator).</td></tr>
         <tr><td><code>413 Request body too large</code></td><td><code>POST /mcp</code> bodies are capped at 1,000,000 bytes. Split a large <code>import_session_usage</code> batch across several calls with the same <code>session_id</code> — imports are idempotent.</td></tr>
         <tr><td><code>invalid_webhook_url</code></td><td><code>register_price_alert</code> and <code>register_budget_alert</code> only accept a public <code>https</code> webhook URL. Plain <code>http</code>, private, loopback, link-local, cloud-metadata or internal hosts (including hostnames that resolve to one) and hosts that do not resolve are refused, and nothing is stored. The <code>reason</code> field names the category. Redirects from your endpoint are never followed. Alerts registered before v1.80.1 that break these rules are kept but are not delivered.</td></tr>
+        <tr><td><code>invalid_alert_token</code></td><td><code>manage_price_alert</code> found no alert for that <code>alert_token</code>. The response is the same whether the token is mistyped, already used to delete its alert, or never existed. Tokens are shown only once and cannot be recovered or re-issued; if you lost yours, register a new alert (alerts registered before v1.81.0 have no token and are removed via the operator).</td></tr>
         <tr><td><code>org_mismatch</code></td><td>A service key only acts on its own org. Omit <code>org_id</code> (it defaults to your key's org) or pass your own.</td></tr>
       </tbody>
     </table>

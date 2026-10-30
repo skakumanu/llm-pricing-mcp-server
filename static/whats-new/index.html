@@ -155,8 +155,33 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.80.1 -->
+  <!-- v1.81.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.81.0</span>
+      <span class="release-date">Oct 30, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Manage your own price alert with a one-time <code>alert_token</code></div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong>A token at registration.</strong> Registering a price alert (<code>POST /pricing/alerts</code>, <code>register_price_alert</code> or the chat agent) now also returns an <code>alert_token</code>. It is shown only once and cannot be recovered later, not even by the operator, so save it</li>
+        <li><strong>View or delete it yourself, no account needed.</strong> Send <code>{"alert_token": "lpa_..."}</code> in the JSON body of <code>POST /pricing/alerts/self/view</code> or <code>/pricing/alerts/self/delete</code>, use the new public <code>manage_price_alert</code> MCP tool (<code>action</code>: <code>view</code> or <code>delete</code>), or give the token to the chat agent. A token covers exactly one alert, and never goes in a URL</li>
+        <li><strong>Hashed at rest, never echoed.</strong> Only a SHA-256 hash of the token is stored. It never appears in logs, telemetry, the operator's alert listing or later responses, and the chat agent shows it to you live but redacts it from the saved conversation</li>
+        <li><strong>One answer for every miss.</strong> A wrong, mistyped, already-used or unknown token always gets the same <code>invalid_alert_token</code> refusal (404 over HTTP), so it reveals nothing about which alerts exist. The self-service routes share the per-IP rate limit of registration</li>
+        <li><strong>Earlier alerts.</strong> Alerts registered before v1.81.0 have no token; they keep firing and are removed via the operator. Webhook URL rules, payloads and HMAC signing are unchanged</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">MCP tools <strong>30 → 31</strong></div>
+        <div class="stat-chip">Agent-bound tools <strong>26 → 27</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.80.1 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.80.1</span>
