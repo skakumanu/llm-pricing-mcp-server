@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional
 
 from mcp.caller import ORG_SCOPED, McpCaller, authorize, effective_org_id
 from src.services.budget_alerts import get_budget_alert_service
+from src.services.webhook_guard import WebhookURLRejected
 
 
 class RegisterBudgetAlertTool:
@@ -52,5 +53,13 @@ class RegisterBudgetAlertTool:
                 period_days=period_days,
             )
             return {"success": True, **record}
+        except WebhookURLRejected as exc:
+            # v1.80.1: fixed, non-revealing message; nothing was stored.
+            return {
+                "success": False,
+                "error": exc.message,
+                "error_code": "invalid_webhook_url",
+                "reason": exc.reason,
+            }
         except Exception as exc:
             return {"success": False, "error": str(exc), "error_type": type(exc).__name__}

@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.80.0 | **Last updated**: 2026-10-30
+**Version**: v1.80.1 | **Last updated**: 2026-10-30
 
 ---
 
@@ -20,6 +20,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 31 
 - **MCP caller identity (v1.79.1)**: the seven per-org MCP tools (`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`) no longer trust an `org_id` typed into the arguments. `POST /mcp` resolves an optional caller from the connection's `x-api-key` / `Authorization: Bearer` header (same rule as dispatch); a customer key acts only on its own org (another org's `org_id` → `org_mismatch`, another org's alert reads as not found), the global `MCP_API_KEY` keeps all-org behaviour, and anonymous callers — including unknown keys, all of STDIO and the PricingAgent — are refused with `customer_key_required`. The other public tools are unchanged and stay anonymous. New module `mcp/caller.py`; no new tool (count stays 29)
 - **Operator-only alerts and conversations (v1.79.2)**: the four MCP tools that list or delete every subscriber's price-alert webhooks and every visitor's chat conversations (`list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation`) moved to a new `OPERATOR_ONLY` access level in `mcp/caller.py`: only the global `MCP_API_KEY` (as `x-api-key` or `Bearer` on `POST /mcp`) may run them; anonymous, customer and unknown-key callers — and therefore the PricingAgent and STDIO — get one constant `operator_key_required` refusal that reveals no existence, counts or id validity. 18 public tools remain anonymous; all 29 stay registered and the agent still binds 26. Over HTTP, `security_middleware` checks a small method-aware table (`_is_operator_only_request`: GET/HEAD `/pricing/alerts`, GET/HEAD `/agent/conversations`, DELETE `/pricing/alerts/{id}` and `/agent/conversations/{id}`) *before* the full bypass and sends matches through the `_sensitive_paths` operator branch (x-api-key only, UTF-8 byte compare so a non-ASCII key is 401 not 500). Creating stays public: `POST /pricing/alerts` is now anonymous-throttled and body-capped, and `/mcp` joined `_public_body_capped_paths` (1 MB cap before parsing, 413). `/conversations` became an operator-key management page; the landing page no longer links it or the four tools
 - **`dispatch` MCP tool (v1.80.0)**: MCP clients can now run a request through the dispatch gateway. The 30th tool, `dispatch` (`mcp/tools/dispatch.py`), is the first `CUSTOMER_ONLY` tool: it acts only for the customer whose service key is on the `/mcp` connection (anonymous and operator callers get HTTP's `dispatch_requires_api_key`; a foreign `org_id` gets `org_mismatch`), uses only that org's stored provider keys (an empty header resolver; provider keys are never tool arguments), and returns `completion`, `usage`, `routing_metadata` and the full `dispatch_receipt`. There is no second dispatch implementation: the steps between a validated body and `DispatchService.dispatch()` (enabled → unsupported feature → customer → per-customer rate limit → locale → service → key resolver) moved out of `src/main.py` into `src/services/dispatch_entry.py::prepare_and_dispatch()`, which both the HTTP handler and the tool call, raising the existing `DispatchError` payloads; the request model moved to `src/models/dispatch.py::ChatCompletionsRequest` (`_ProxyRequest` subclasses it) so validation is identical, and the limiter store moved to `src/services/rate_limiter.py` so HTTP and MCP dispatch share one per-customer bucket. HTTP responses are byte-identical. On MCP every refusal is a `success: false` result with HTTP's error code and payload; validation errors keep HTTP's `type`/`loc`/`msg` but never `input`/`ctx`; unexpected exceptions are redacted to their type name. `ToolManager` gained a `transport` (`http` / `stdio`): STDIO returns a structured `dispatch_requires_hosted_mcp` refusal. The agent never binds it (still 26 of 30); 18 public tools unchanged. Non-streaming, text-only; no npx bridge change (dispatch users set `LLM_PRICING_MCP_TIMEOUT_MS=120000`)
+- **Webhook SSRF guard (v1.80.1)**: price-change and budget-spend alert webhooks are the only feature that POSTs to a caller-chosen URL. New module `src/services/webhook_guard.py` applies one rule set at registration (first line of both services' `register()`, so `POST /pricing/alerts`, `POST /usage/alerts`, the MCP register tools over `/mcp` and STDIO, and the PricingAgent all share it) and again at every delivery: https only; no IP literal in any spelling (decimal/octal/hex/short IPv4, IPv4-mapped/compatible/6to4/Teredo/NAT64 IPv6) or resolved address that is loopback, private, link-local (incl. `169.254.169.254`), CGNAT, ULA (incl. Fly 6PN `fdaa::/16`), multicast or reserved; no `localhost`/`*.localhost`/`*.internal`/`*.flycast`; refused if ANY resolved address is blocked or the host does not resolve (2s timeout). Rejections are `422 invalid_webhook_url` (HTTP) / `error_code: invalid_webhook_url` (MCP) with a fixed reason category, never IPs or DNS detail. Delivery uses `PinnedWebhookTransport`: resolve + check, then connect to the checked IP (rebinding-safe) with `sni_hostname` keeping TLS verification on the original name; no redirects, `trust_env=False` (env `HTTPS_PROXY` no longer applies to webhooks). Legacy non-compliant rows are kept but skipped at delivery (logged, not retried, not counted). `WEBHOOK_ALLOW_PRIVATE_TARGETS` (local dev only, never on Fly) relaxes the scheme/destination rules with a startup WARNING
 - **Clean cross-branch promotion**: `scripts/promote_branch_content.sh` mirrors one branch's tree onto another (additions, updates, AND deletions) to work around develop/master squash-merge divergence, verifying the result matches exactly before returning
 - **Repo cost auditor**: `scripts/audit_repo.py` statically scans an arbitrary codebase (customer-run, not deployed) for LLM SDK call sites and reuses `predict_cost`'s token/pricing math to recommend cheaper models, prompt caching, Batch API, task-based right-sizing, and duplicate-prompt consolidation — runs locally only, since the hosted `/mcp` HTTP transport has no access to a caller's filesystem
 - **AI-native SDLC pipeline** (dev tooling, not deployed): `/release-feature` runs a feature through dedicated Spec, Design, Code, Review (parallel correctness/security/simplification), and Test & Release phase agents (`.claude/agents/phase-*.md`) orchestrated by `.claude/workflows/release-feature.js`, ending at an open PR against `develop` — Spec fixes *what*/acceptance criteria, Design fixes *how* (approach, version, branch name), so neither phase re-derives the other's decision; see `CLAUDE.md`'s "AI-Native SDLC Pipeline" section
@@ -68,6 +69,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 31 
 │  UsageTracker       │          │
 │  BudgetAlerts       │          │
 │  PricingAlerts      │          │
+│  WebhookGuard (SSRF)│          │
 │  Currency (locale)  │          │
 │  DispatchService    │          │
 │  DispatchExecutors  │          │
@@ -142,6 +144,7 @@ llm-pricing-mcp-server/
 │       ├── budget_alerts.py         # Webhook alerts on actual spend crossing a USD threshold; v1.77.0 hard_stop flag + find_hard_stop() (org-scoped alerts only) for the dispatch gateway
 │       ├── billing_service.py       # BillingService: customers table, Stripe sync
 │       ├── pricing_alerts.py        # Webhook alert registration + delivery
+│       ├── webhook_guard.py         # v1.80.1 SSRF guard for alert webhooks: URL rules at registration + PinnedWebhookTransport (checked-IP delivery, no redirects)
 │       ├── telemetry.py             # Request telemetry aggregation
 │       ├── data_fetcher.py          # Async HTTP fetching helpers
 │       ├── data_sources.py          # Static provider data fallbacks
@@ -526,6 +529,16 @@ its CSV column order and the export endpoints are unchanged. Plain proxy and rou
 Non-goals: pooled keys, more than one key per provider per org, per-user permissions, stored keys for recommend-only
 providers, provider calls at registration, operator access to a stored key, browser UI, MCP tool.
 
+**Webhook delivery path (v1.80.1).** Price alerts fire from the background snapshot loop; budget alerts fire inline
+from `POST /usage`, `POST /usage/batch`, `record_usage`, `import_session_usage` and dispatch settlement — every site
+already wraps `check_and_fire` in `try/except`. Each `_fire` first runs `webhook_guard.check_url_static(stored_url)`
+(a legacy row that breaks the rules is logged as `delivery blocked (<reason>)` and returns 0), then posts through
+`httpx.AsyncClient(timeout=10.0, follow_redirects=False, trust_env=False, transport=PinnedWebhookTransport())`.
+The transport resolves the host, refuses if any address is blocked, rewrites the request URL to the first checked
+IP and sets the `sni_hostname` extension (Host header and TLS certificate check stay on the original hostname), so
+DNS rebinding between check and connect cannot reach a private address. A 3xx counts as delivered and is never
+followed. Payload bytes and the `X-LLM-Pricing-Signature` HMAC are unchanged.
+
 ### 9. UI Design System
 All 13 browser UIs share the same CSS custom properties (defined in each page's `:root`):
 
@@ -594,7 +607,7 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | POST | `/usage/batch` | Required | Record multiple usage events at once |
 | GET | `/usage/summary` | Required | Actual spend summary by model/provider, per-org, plus an org-wide exact-vs-estimated breakdown (`estimated_request_count`, `has_estimated_usage`) |
 | GET | `/usage/session/{session_id}` | Required | On-demand analysis of one session's actual usage: totals (with an exact-vs-estimated breakdown), per-model breakdown, and a grounded model recommendation with estimated savings |
-| POST | `/usage/alerts` | Required | Register a webhook for spend crossing a USD threshold; `hard_stop: true` (v1.77.0) also refuses dispatch for `org_id` once reached. A customer key's alert is bound to its own org (another org -> 403 `org_mismatch`); `hard_stop` requires a customer key (403 `customer_key_required` otherwise) |
+| POST | `/usage/alerts` | Required | Register a webhook for spend crossing a USD threshold; `hard_stop: true` (v1.77.0) also refuses dispatch for `org_id` once reached. A customer key's alert is bound to its own org (another org -> 403 `org_mismatch`); `hard_stop` requires a customer key (403 `customer_key_required` otherwise). v1.80.1: the URL must be public https — otherwise 422 `invalid_webhook_url` with a `reason` |
 | GET | `/usage/alerts` | Required | List registered budget alerts (a customer key sees only its own org's) |
 | DELETE | `/usage/alerts/{id}` | Required | Delete a budget alert (a customer key can only delete its own org's) |
 | POST | `/agent/chat` | None | Blocking agent response |
@@ -615,7 +628,7 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | POST | `/billing/checkout` | Required | Stripe checkout |
 | GET | `/billing/portal` | Required | Stripe billing portal |
 | POST | `/billing/webhook` | Stripe sig | Subscription sync |
-| POST | `/pricing/alerts` | None (rate-limited) | Register price-change webhook (v1.79.2: per-IP anonymous throttle + body cap) |
+| POST | `/pricing/alerts` | None (rate-limited) | Register price-change webhook (v1.79.2: per-IP anonymous throttle + body cap; v1.80.1: public https URL only, else 422 `invalid_webhook_url` with a `reason`) |
 | GET | `/pricing/alerts` | Operator key (`MCP_API_KEY`, x-api-key) | List alerts (v1.79.2: operator only) |
 | DELETE | `/pricing/alerts/{id}` | Operator key (`MCP_API_KEY`, x-api-key) | Delete alert (v1.79.2: operator only; 404 unknown id) |
 | GET | `/docs` | None | Swagger UI (OpenAPI) |

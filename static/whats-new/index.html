@@ -155,8 +155,28 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.80.0 -->
+  <!-- v1.80.1 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.80.1</span>
+      <span class="release-date">Oct 30, 2026</span>
+      <span class="release-tag tag-security">Security</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Webhook alerts now only deliver to public HTTPS URLs</div>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li><strong>Public https only.</strong> Price-change and budget-spend alerts (<code>POST /pricing/alerts</code>, <code>POST /usage/alerts</code>, <code>register_price_alert</code>, <code>register_budget_alert</code> and the chat agent) now refuse webhook URLs that use plain <code>http</code>, point at a private, loopback, link-local, cloud-metadata or internal host (in any IP spelling, or via a hostname that resolves to one), or do not resolve. Nothing is stored; you get 422 <code>invalid_webhook_url</code> over HTTP or <code>error_code: invalid_webhook_url</code> over MCP, with a <code>reason</code> category</li>
+        <li><strong>Checked again at every delivery.</strong> Each delivery re-checks the destination and connects only to the address it checked, so a hostname that later starts resolving to a private address is not reached. Redirects from your endpoint are never followed</li>
+        <li><strong>Public webhooks work as before.</strong> Slack, Zapier and your own APIs keep the same payload, the same <code>X-LLM-Pricing-Signature</code> HMAC and the same 10s timeout; custom ports, paths and query strings still work</li>
+        <li><strong>Older alerts.</strong> Alerts registered earlier whose URL breaks these rules are kept but no longer delivered. Re-register them with a public https URL</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.80.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.80.0</span>

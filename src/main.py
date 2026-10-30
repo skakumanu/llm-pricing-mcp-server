@@ -56,6 +56,7 @@ from src.services.savings_tracker import init_savings_tracker, get_savings_track
 from src.services.usage_tracker import init_usage_tracker, get_usage_tracker  # noqa: E402
 from src.services.session_recommendation import compute_session_recommendation  # noqa: E402
 from src.services.budget_alerts import init_budget_alert_service, get_budget_alert_service  # noqa: E402
+from src.services.webhook_guard import WebhookURLRejected, warn_if_private_targets_allowed  # noqa: E402
 from src.services.billing_service import init_billing_service, get_billing_service  # noqa: E402
 from src.models.dispatch import ChatCompletionsRequest  # noqa: E402
 from src.services.dispatch_executors import HeaderKeyResolver  # noqa: E402
@@ -997,6 +998,8 @@ async def _pricing_snapshot_loop() -> None:
 @app.on_event("startup")
 async def startup_pricing_history() -> None:
     """Initialize the pricing history/alerts/conversation DBs and launch the background snapshot loop."""
+    # v1.80.1: loud WARNING when the local-dev webhook opt-out is on (never on Fly).
+    warn_if_private_targets_allowed(logger)
     try:
         await init_billing_service(settings.billing_db_path)
         logger.info("Billing service initialized at %s", settings.billing_db_path)
@@ -2402,7 +2405,30 @@ async def usage_session_analysis(session_id: str, request: Request):
     return SessionUsageAnalysisResponse(**response_data)
 
 
-@app.post("/usage/alerts", response_model=BudgetAlertRecord, status_code=201, tags=["Usage"])
+# v1.80.1 — webhook URL rejected by src/services/webhook_guard.py (SSRF guard). The
+# reason is a fixed category; the message never contains resolved IPs or DNS detail.
+_INVALID_WEBHOOK_URL_RESPONSE = {
+    422: {
+        "description": (
+            "invalid_webhook_url — the webhook URL must be a public https URL "
+            "(reason: scheme_not_allowed, malformed_url, private_destination or unresolvable_host)"
+        ),
+    },
+}
+
+
+def _invalid_webhook_url_response(exc: WebhookURLRejected) -> JSONResponse:
+    return JSONResponse(status_code=422, content={
+        "error": "invalid_webhook_url",
+        "reason": exc.reason,
+        "message": exc.message,
+    })
+
+
+@app.post(
+    "/usage/alerts", response_model=BudgetAlertRecord, status_code=201, tags=["Usage"],
+    responses=_INVALID_WEBHOOK_URL_RESPONSE,
+)
 async def create_budget_alert(body: BudgetAlertRequest, request: Request):
     """
     Register a webhook alert for actual spend crossing a USD threshold.
@@ -2438,13 +2464,16 @@ async def create_budget_alert(body: BudgetAlertRequest, request: Request):
             ),
         })
     svc = get_budget_alert_service()
-    record = await svc.register(
-        url=body.url,
-        threshold_usd=body.threshold_usd,
-        org_id=org_id,
-        period_days=body.period_days,
-        hard_stop=body.hard_stop,
-    )
+    try:
+        record = await svc.register(
+            url=body.url,
+            threshold_usd=body.threshold_usd,
+            org_id=org_id,
+            period_days=body.period_days,
+            hard_stop=body.hard_stop,
+        )
+    except WebhookURLRejected as exc:
+        return _invalid_webhook_url_response(exc)
     return BudgetAlertRecord(**record)
 
 
@@ -3226,7 +3255,10 @@ async def pricing_history_export(
 # Pricing alert endpoints
 # ---------------------------------------------------------------------------
 
-@app.post("/pricing/alerts", response_model=PricingAlertRecord, status_code=201, tags=["Pricing Alerts"])
+@app.post(
+    "/pricing/alerts", response_model=PricingAlertRecord, status_code=201, tags=["Pricing Alerts"],
+    responses=_INVALID_WEBHOOK_URL_RESPONSE,
+)
 async def create_pricing_alert(request: PricingAlertRequest):
     """
     Register a webhook alert for price changes.
@@ -3240,12 +3272,15 @@ async def create_pricing_alert(request: PricingAlertRequest):
     Public (no key), but per-IP rate-limited and body-capped (v1.79.2).
     """
     svc = get_pricing_alert_service()
-    record = await svc.register(
-        url=request.url,
-        threshold_pct=request.threshold_pct,
-        provider=request.provider,
-        model_name=request.model_name,
-    )
+    try:
+        record = await svc.register(
+            url=request.url,
+            threshold_pct=request.threshold_pct,
+            provider=request.provider,
+            model_name=request.model_name,
+        )
+    except WebhookURLRejected as exc:
+        return _invalid_webhook_url_response(exc)
     return PricingAlertRecord(**record)
 
 

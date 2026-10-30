@@ -92,6 +92,28 @@ flyctl secrets set PROVIDER_KEY_ENCRYPTION_KEY="<the value printed above>"
 - The startup log says `Stored provider keys enabled` / `disabled`; a missing or
   too-short value logs one error naming the variable (never its value).
 
+### Webhook alert destinations (`WEBHOOK_ALLOW_PRIVATE_TARGETS`, v1.80.1)
+
+Price-change and budget-spend alert webhooks only deliver to **public https URLs**
+(`src/services/webhook_guard.py`). Registration refuses http, private/loopback/
+link-local/metadata/CGNAT/ULA (incl. Fly 6PN `fdaa::/16`) addresses in any spelling,
+`localhost`/`*.localhost`/`*.internal`/`*.flycast`, hosts where any resolved address
+is private, and hosts that do not resolve (422 `invalid_webhook_url`). Every delivery
+re-checks the stored URL, connects only to the checked IP, and never follows redirects.
+Alerts stored before v1.80.1 that break the rules are kept but skipped at delivery
+(logged as `delivery blocked (<reason>)`); remove them with the operator-only list/delete
+(`GET`/`DELETE /pricing/alerts`, `/usage/alerts`).
+
+- **`WEBHOOK_ALLOW_PRIVATE_TARGETS` must stay unset on Fly.** It exists only for local
+  development (e.g. a webhook receiver on `http://127.0.0.1:PORT`). When it is on, the
+  server logs a `WARNING` at startup: `WEBHOOK_ALLOW_PRIVATE_TARGETS is ON ...`. If you
+  ever see that line in `flyctl logs`, unset it (`flyctl secrets unset
+  WEBHOOK_ALLOW_PRIVATE_TARGETS` / remove it from `fly.toml`). No request can turn it on.
+- **Webhook delivery ignores `HTTPS_PROXY` / `HTTP_PROXY`.** The webhook client uses
+  `trust_env=False` and a pinned transport so the destination check cannot be bypassed
+  by a proxy; webhooks always connect directly. Other outbound calls (pricing fetchers,
+  provider executors) are unchanged.
+
 ## Manual Deploy (rare — normally CI/CD does this)
 
 Only needed for local testing of a Fly.io-specific change, or as a break-glass path
