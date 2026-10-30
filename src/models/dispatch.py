@@ -9,7 +9,7 @@ Provider keys are deliberately NOT modelled here: they travel in
 request-scoped key resolver (see dispatch_executors.HeaderKeyResolver), so a
 validation error can never echo one back and no pydantic dump can contain one.
 """
-from typing import Annotated, List, Literal, Optional
+from typing import Annotated, Any, List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -111,3 +111,37 @@ class DispatchPolicy(BaseModel):
             if self.shadow.model.strip().lower() == self.pinned_model.strip().lower():
                 raise ValueError("shadow.model must differ from pinned_model")
         return self
+
+
+class ChatCompletionsRequest(BaseModel):
+    """OpenAI-compatible chat completions body (POST /v1/chat/completions), shared since v1.80.0.
+
+    src/main.py's ``_ProxyRequest`` subclasses it unchanged (keeping the OpenAPI component
+    name), and the MCP ``dispatch`` tool validates its HTTP-equivalent body through this same
+    class, so every limit and every DispatchPolicy/FailoverPolicy/ShadowPolicy validator is
+    identical across both transports.
+    """
+
+    model: str
+    messages: List[dict]
+    max_tokens: Optional[int] = None
+    # v1.77.0 — standard OpenAI fields. In dispatch mode: temperature/top_p/stop are forwarded;
+    # tools/functions/tool_choice/n>1/response_format are rejected up front (FR16,
+    # dispatch_entry.unsupported_dispatch_feature); `user` (OpenAI's end-user abuse-tracking id)
+    # is accepted and deliberately not forwarded to the provider. Plain mode ignores every one.
+    # v1.78.0 — `stream: true` in dispatch mode streams the completion as OpenAI chunk SSE;
+    # `stream_options` (OpenAI's include_usage switch) is accepted and has no effect — the
+    # trailing chunk always carries usage. Plain mode still ignores both.
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    stop: Optional[Any] = None
+    n: Optional[int] = None
+    user: Optional[str] = None
+    stream: Optional[bool] = None
+    stream_options: Optional[Any] = None
+    tools: Optional[Any] = None
+    functions: Optional[Any] = None
+    tool_choice: Optional[Any] = None
+    response_format: Optional[Any] = None
+    # The opt-in: present -> dispatch mode (real provider call); absent -> today's proxy.
+    dispatch: Optional[DispatchPolicy] = None

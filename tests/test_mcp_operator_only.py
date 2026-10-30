@@ -335,11 +335,11 @@ class TestRestOfMcpUnchanged:
         assert resp.status_code == 200
         assert resp.json()["result"]["serverInfo"]["name"]
 
-    def test_tools_list_has_29_including_the_four_identical_for_every_caller(self, env):
+    def test_tools_list_has_30_including_the_four_identical_for_every_caller(self, env):
         anon = _rpc("tools/list").json()["result"]["tools"]
         cust = _rpc("tools/list", headers=_headers("x-api-key", CUSTOMER_KEY)).json()["result"]["tools"]
         op = _rpc("tools/list", headers=_headers("bearer", OPERATOR_KEY)).json()["result"]["tools"]
-        assert len(anon) == 29
+        assert len(anon) == 30
         assert anon == cust == op
         names = {t["name"] for t in anon}
         assert set(OPERATOR_ONLY_TOOLS) <= names
