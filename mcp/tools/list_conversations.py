@@ -1,7 +1,8 @@
 """MCP Tool: List stored chat conversation sessions."""
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from agent.conversation import get_conversation_store
+from mcp.caller import OPERATOR_ONLY, McpCaller, authorize
 
 
 class ListConversationsTool:
@@ -11,7 +12,16 @@ class ListConversationsTool:
     turn count, and a 120-character preview of the most recent user message.
     """
 
-    async def execute(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    # v1.79.2: every subscriber's / visitor's data — ToolManager refuses any caller
+    # but the operator (MCP_API_KEY). caller=None (direct construction) is unrestricted.
+    caller_access = OPERATOR_ONLY
+
+    async def execute(
+        self, arguments: Dict[str, Any], caller: Optional[McpCaller] = None
+    ) -> Dict[str, Any]:
+        refusal = authorize(caller, self.caller_access, arguments) if caller is not None else None
+        if refusal is not None:
+            return refusal
         limit: int = max(1, min(int(arguments.get("limit", 20)), 100))
         try:
             store = get_conversation_store()

@@ -16,6 +16,15 @@ from src.services.pricing_alerts import PricingAlertService  # noqa: E402
 
 client = TestClient(app)
 
+# v1.79.2: GET /pricing/alerts and DELETE /pricing/alerts/{id} are operator-only.
+# Fake operator key built at runtime so no literal key sits in the source.
+OP_KEY = "-".join(["op", "alerts", "test", "key"])
+OP_HEADERS = {"x-api-key": OP_KEY}
+
+
+def _operator_key():
+    return patch("src.main.settings.mcp_api_key", OP_KEY)
+
 
 # ---------------------------------------------------------------------------
 # PricingAlertService unit tests
@@ -230,16 +239,16 @@ class TestCreatePricingAlert:
 
 class TestListPricingAlerts:
     def test_returns_200_empty(self):
-        with _patch_alert_service():
-            resp = client.get("/pricing/alerts")
+        with _patch_alert_service(), _operator_key():
+            resp = client.get("/pricing/alerts", headers=OP_HEADERS)
         assert resp.status_code == 200
         assert resp.json() == {"alerts": [], "total": 0}
 
     def test_returns_all_alerts(self):
         stored = [{"id": 1, "url": "https://a.com", "threshold_pct": 5.0,
                    "provider": None, "model_name": None, "created_at": 1700000000.0}]
-        with _patch_alert_service(alerts=stored):
-            resp = client.get("/pricing/alerts")
+        with _patch_alert_service(alerts=stored), _operator_key():
+            resp = client.get("/pricing/alerts", headers=OP_HEADERS)
         data = resp.json()
         assert data["total"] == 1
         assert data["alerts"][0]["url"] == "https://a.com"
@@ -247,12 +256,12 @@ class TestListPricingAlerts:
 
 class TestDeletePricingAlert:
     def test_returns_204_on_success(self):
-        with _patch_alert_service():
-            resp = client.delete("/pricing/alerts/1")
+        with _patch_alert_service(), _operator_key():
+            resp = client.delete("/pricing/alerts/1", headers=OP_HEADERS)
         assert resp.status_code == 204
 
     def test_returns_404_when_not_found(self):
-        with _patch_alert_service() as mock_patch:
+        with _patch_alert_service() as mock_patch, _operator_key():
             mock_patch.return_value.delete = AsyncMock(return_value=False)
-            resp = client.delete("/pricing/alerts/999")
+            resp = client.delete("/pricing/alerts/999", headers=OP_HEADERS)
         assert resp.status_code == 404

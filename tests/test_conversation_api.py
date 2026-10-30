@@ -13,8 +13,16 @@ from src.main import app  # noqa: E402
 
 client = TestClient(app)
 
-API_KEY = "test-key"
+# v1.79.2: GET/DELETE /agent/conversations are operator-only, so every request in this
+# module runs with MCP_API_KEY set to a fake key built at runtime.
+API_KEY = "-".join(["op", "conv", "test", "key"])
 HEADERS = {"x-api-key": API_KEY}
+
+
+@pytest.fixture(autouse=True)
+def _operator_key_configured():
+    with patch("src.main.settings.mcp_api_key", API_KEY):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -73,15 +81,13 @@ class TestListConversations:
         assert "turn_count" in conv
         assert "preview" in conv
 
-    def test_returns_200_without_api_key(self):
-        """/agent/conversations is in the public bypass list — no auth required."""
-        with patch("src.main.settings") as mock_settings:
-            mock_settings.mcp_api_key = "secret"
-            mock_settings.mcp_api_key_header = "x-api-key"
-            mock_settings.rate_limit_per_minute = 0
-            mock_settings.max_body_bytes = 1_000_000
-            resp = client.get("/agent/conversations")  # no key needed
-        assert resp.status_code == 200
+    def test_returns_401_without_api_key(self):
+        """v1.79.2: /agent/conversations is operator-only — no key is refused."""
+        store = _mock_store(conversations=[_sample_conv()])
+        with patch("src.main.get_conversation_store", return_value=store):
+            resp = client.get("/agent/conversations")
+        assert resp.status_code == 401
+        store.list_conversations.assert_not_called()
 
     def test_null_preview_allowed(self):
         """Conversations with no user messages have preview=None."""

@@ -265,3 +265,13 @@ def test_signup_goes_through_the_rate_limiter():
     import src.main as main_module
     assert "/billing/signup" not in main_module._unauthenticated_paths
     assert "/billing/signup" in main_module._anonymous_rate_limited_paths
+
+
+def test_pricing_alert_registration_goes_through_the_rate_limiter():
+    """v1.79.2: anonymous POST /pricing/alerts stores a row per call, so it is throttled
+    and body-capped; GET/DELETE on the same path are operator-only, and the conversation
+    list left the full bypass."""
+    import src.main as main_module
+    assert "/pricing/alerts" in main_module._anonymous_rate_limited_paths
+    assert "/agent/conversations" not in main_module._unauthenticated_paths
+    assert "/mcp" in main_module._public_body_capped_paths
