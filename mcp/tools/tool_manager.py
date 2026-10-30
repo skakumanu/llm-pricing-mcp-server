@@ -12,6 +12,7 @@ from mcp.tools.get_pricing_trends import GetPricingTrendsTool
 from mcp.tools.register_price_alert import RegisterPriceAlertTool
 from mcp.tools.list_price_alerts import ListPriceAlertsTool
 from mcp.tools.delete_price_alert import DeletePriceAlertTool
+from mcp.tools.manage_price_alert import ManagePriceAlertTool
 from mcp.tools.get_pricing_export_url import GetPricingExportUrlTool
 from mcp.tools.list_conversations import ListConversationsTool
 from mcp.tools.delete_conversation import DeleteConversationTool
@@ -358,7 +359,8 @@ class ToolManager:
                 "description": (
                     "Register a webhook URL to receive notifications when a model's price "
                     "changes by more than a specified percentage. Optionally scope the alert "
-                    "to a specific provider or model. Returns the alert ID."
+                    "to a specific provider or model. Returns the alert ID and a one-time "
+                    "alert_token needed to view or delete it via manage_price_alert."
                 ),
                 "input_schema": {
                     "type": "object",
@@ -406,7 +408,8 @@ class ToolManager:
                 "description": (
                     "Delete a registered price-change alert by its ID. "
                     f"{OPERATOR_ONLY_NOTE}"
-                    " To remove an alert you registered, contact the operator."
+                    " To view or delete an alert you registered yourself, use manage_price_alert"
+                    " with the alert_token from registration."
                 ),
                 "input_schema": {
                     "type": "object",
@@ -417,6 +420,37 @@ class ToolManager:
                         },
                     },
                     "required": ["alert_id"],
+                },
+            },
+            "manage_price_alert": {
+                "instance": ManagePriceAlertTool(),
+                "name": "manage_price_alert",
+                "description": (
+                    "View or delete the one price-change alert you registered, using the "
+                    "alert_token that register_price_alert returned once. No API key needed: "
+                    "the alert_token is the credential and is scoped to exactly that alert. "
+                    "action 'view' returns its id, url, threshold_pct, provider, model_name and "
+                    "created_at; action 'delete' stops it. A token that matches nothing gets "
+                    "the same invalid_alert_token refusal whether or not any alert exists. "
+                    "Alerts registered before v1.81.0 have no token and are removed via the operator."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["view", "delete"],
+                            "description": "'view' to see the alert, 'delete' to stop it",
+                        },
+                        "alert_token": {
+                            "type": "string",
+                            "description": (
+                                "the alert_token returned once by register_price_alert; "
+                                "never put it in a URL"
+                            ),
+                        },
+                    },
+                    "required": ["action", "alert_token"],
                 },
             },
             "get_pricing_export_url": {

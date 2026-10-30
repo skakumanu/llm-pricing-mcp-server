@@ -337,6 +337,11 @@ class TestOperatorOnlyTable:
         ("GET", "/pricing", False),
         ("GET", "/conversations", False),
         ("DELETE", "/usage/alerts/1", False),
+        # v1.81.0: alert_token self-service is anonymous POST; DELETE stays operator-only.
+        ("POST", "/pricing/alerts/self/view", False),
+        ("POST", "/pricing/alerts/self/delete", False),
+        ("DELETE", "/pricing/alerts/self", True),
+        ("DELETE", "/pricing/alerts/self/delete", True),
     ])
     def test_is_operator_only_request(self, method, path, expected):
         assert main_module._is_operator_only_request(method, path) is expected
@@ -361,3 +366,25 @@ class TestOperatorOnlyTable:
                     assert main_module._is_operator_only_request(method, concrete), (method, route.path)
         assert ("GET", "/pricing/alerts") in seen
         assert ("DELETE", "/agent/conversations/{conversation_id}") in seen
+        # v1.81.0: the alert_token self-service routes are seen by the loop above.
+        assert ("POST", "/pricing/alerts/self/view") in seen
+        assert ("POST", "/pricing/alerts/self/delete") in seen
+
+    def test_every_anonymous_alert_route_is_throttled(self):
+        """v1.81.0 guard: a non-operator-only route under /pricing/alerts (except the public
+        signing-info read) must be in _anonymous_rate_limited_paths, or the "/pricing" prefix
+        bypass would skip the per-IP limiter and the body cap."""
+        from fastapi.routing import APIRoute
+        checked = 0
+        for route in app.routes:
+            if not isinstance(route, APIRoute) or not route.path.startswith("/pricing/alerts"):
+                continue
+            if route.path == "/pricing/alerts/signing-info":
+                continue
+            for method in route.methods:
+                concrete = route.path.replace("{alert_id}", "1")
+                if main_module._is_operator_only_request(method, concrete):
+                    continue
+                assert concrete in main_module._anonymous_rate_limited_paths, (method, route.path)
+                checked += 1
+        assert checked >= 3

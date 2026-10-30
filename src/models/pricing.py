@@ -675,6 +675,38 @@ class PricingAlertRecord(BaseModel):
     created_at: float = Field(..., description="Unix timestamp when the alert was registered")
 
 
+class PricingAlertRegistration(PricingAlertRecord):
+    """Response for POST /pricing/alerts (v1.81.0): the record plus its one-time alert_token."""
+
+    alert_token: str = Field(
+        ...,
+        description=(
+            "Secret credential for viewing or deleting this one alert. Shown only once; "
+            "stored only as a hash, so it cannot be recovered later, not even by the operator."
+        ),
+    )
+    alert_token_notice: str = Field(..., description="Once-only save instructions for alert_token")
+
+
+class PricingAlertTokenRequest(BaseModel):
+    """Request body for POST /pricing/alerts/self/view and /self/delete (v1.81.0).
+
+    No length or pattern constraint on purpose: every string (or a missing field)
+    reaches the same 404 invalid_alert_token refusal. No alert id is accepted.
+    """
+
+    alert_token: Optional[str] = Field(
+        None, description="the alert_token returned once at registration"
+    )
+
+
+class PricingAlertSelfDeleteResponse(BaseModel):
+    """Response for POST /pricing/alerts/self/delete (v1.81.0)."""
+
+    deleted: bool = Field(True, description="Always true on success")
+    id: int = Field(..., description="ID of the alert that was deleted")
+
+
 class PricingAlertListResponse(BaseModel):
     """Response for GET /pricing/alerts."""
 

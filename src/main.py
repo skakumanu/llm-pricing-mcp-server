@@ -34,6 +34,7 @@ from src.models.pricing import (  # noqa: E402
     ClientLocationStats, BrowserStats,
     PricingHistoryResponse, PricingTrendsResponse, SubscriptionTrendsResponse, SubscriptionTrendRecord,
     PricingAlertRequest, PricingAlertRecord, PricingAlertListResponse,
+    PricingAlertRegistration, PricingAlertTokenRequest, PricingAlertSelfDeleteResponse,
     ConversationSummary, ConversationListResponse,
     RouterRequest, RouterResponse, RouterFeedbackRequest, RouterFeedbackResponse,
     SavingsResponse, SavingsRecord,
@@ -49,7 +50,9 @@ from src.services.currency import (  # noqa: E402
     localize_cost, localize_metrics, localize_use_case_cost, resolve_locale,
 )
 from src.services.pricing_history import init_pricing_history_service, get_pricing_history_service  # noqa: E402
-from src.services.pricing_alerts import init_pricing_alert_service, get_pricing_alert_service  # noqa: E402
+from src.services.pricing_alerts import (  # noqa: E402
+    ALERT_TOKEN_REFUSAL_MESSAGE, get_pricing_alert_service, init_pricing_alert_service, redact_alert_tokens,
+)
 from src.services.router import init_router, get_router  # noqa: E402
 from src.services.recommendation_cache import RecommendationCache, get_cache_stats  # noqa: E402
 from src.services.savings_tracker import init_savings_tracker, get_savings_tracker  # noqa: E402
@@ -388,6 +391,10 @@ _anonymous_rate_limited_paths = {
     # is throttled and body-capped. GET on this path is operator-only (see
     # _is_operator_only_request), so it never reaches the anonymous branch.
     "/pricing/alerts",
+    # v1.81.0: alert_token self-service (token in the JSON body, never the URL). Must be
+    # listed here, or the "/pricing" prefix bypass would skip the limiter and body cap.
+    "/pricing/alerts/self/view",
+    "/pricing/alerts/self/delete",
 }
 
 # Public (no auth, no limiter) but still body-capped: /v1/chat/completions must stay
@@ -3062,7 +3069,9 @@ async def agent_chat(request: AgentChatRequest):
             detail="The agent request timed out. Please try a simpler query or try again later.",
         )
     except Exception as exc:
-        logger.exception("PricingAgent error")
+        # v1.81.0: no traceback — provider/tool text can quote a user's alert_token,
+        # and exc_info would log str(exc) unredacted. Matches /agent/chat/stream.
+        logger.error("PricingAgent error (%s): %s", type(exc).__name__, redact_alert_tokens(str(exc)))
         raise HTTPException(
             status_code=500,
             detail="The agent encountered an internal error. Check server logs for details.",
@@ -3094,7 +3103,8 @@ async def agent_chat_stream(request: AgentChatRequest):
         except asyncio.TimeoutError:
             yield f"data: {json.dumps({'type': 'error', 'detail': 'Request timed out after 120s'})}\n\n"
         except Exception as exc:
-            logger.error("Stream error: %s", exc, exc_info=True)
+            # v1.81.0: provider/tool text can quote a user's alert_token; redact it.
+            logger.error("Stream error (%s): %s", type(exc).__name__, redact_alert_tokens(str(exc)))
             exc_type = type(exc).__name__
             if any(k in exc_type for k in ("ConnectionError", "ConnectError", "TimeoutError")):
                 detail = "Could not reach the AI provider — please try again"
@@ -3108,7 +3118,7 @@ async def agent_chat_stream(request: AgentChatRequest):
                     detail = "AI provider account has insufficient credits — please contact the server administrator"
                 else:
                     # Include the Anthropic message for other 400 errors (useful for debugging)
-                    detail = f"Bad request to AI provider: {exc_str[:300]}"
+                    detail = f"Bad request to AI provider: {redact_alert_tokens(exc_str)[:300]}"
             else:
                 detail = f"Internal server error ({exc_type})"
             yield f"data: {json.dumps({'type': 'error', 'detail': detail})}\n\n"
@@ -3256,7 +3266,7 @@ async def pricing_history_export(
 # ---------------------------------------------------------------------------
 
 @app.post(
-    "/pricing/alerts", response_model=PricingAlertRecord, status_code=201, tags=["Pricing Alerts"],
+    "/pricing/alerts", response_model=PricingAlertRegistration, status_code=201, tags=["Pricing Alerts"],
     responses=_INVALID_WEBHOOK_URL_RESPONSE,
 )
 async def create_pricing_alert(request: PricingAlertRequest):
@@ -3270,6 +3280,10 @@ async def create_pricing_alert(request: PricingAlertRequest):
     models.
 
     Public (no key), but per-IP rate-limited and body-capped (v1.79.2).
+
+    v1.81.0: the response adds a one-time ``alert_token`` (and ``alert_token_notice``).
+    Save it: it is shown only once, stored only as a hash, and is the only way to view
+    or delete this alert yourself, via POST /pricing/alerts/self/view or /self/delete.
     """
     svc = get_pricing_alert_service()
     try:
@@ -3281,7 +3295,83 @@ async def create_pricing_alert(request: PricingAlertRequest):
         )
     except WebhookURLRejected as exc:
         return _invalid_webhook_url_response(exc)
+    return PricingAlertRegistration(**record)
+
+
+# v1.81.0: one refusal, byte-identical for wrong, malformed, missing, deleted, unknown
+# and legacy (tokenless) alerts, on both self routes. Never echoes the token.
+_ALERT_TOKEN_REFUSAL_BODY = {"error": "invalid_alert_token", "message": ALERT_TOKEN_REFUSAL_MESSAGE}
+_ALERT_TOKEN_REFUSAL_RESPONSE = {
+    404: {
+        "description": "No alert matches this alert_token (identical whether or not any alert exists)",
+        "content": {"application/json": {"example": _ALERT_TOKEN_REFUSAL_BODY}},
+    },
+}
+
+
+def _alert_token_refusal() -> JSONResponse:
+    return JSONResponse(status_code=404, content=dict(_ALERT_TOKEN_REFUSAL_BODY))
+
+
+# The body is parsed by hand rather than via a Pydantic parameter so that every
+# malformed input — a non-string alert_token, a body that is not a JSON object, or
+# invalid JSON — reaches the same 404 refusal instead of a 422 that echoes the input.
+# PricingAlertTokenRequest still documents the body in OpenAPI.
+_ALERT_TOKEN_OPENAPI_BODY = {
+    "requestBody": {
+        "required": True,
+        "content": {"application/json": {"schema": PricingAlertTokenRequest.model_json_schema()}},
+    },
+}
+
+
+async def _alert_token_from_body(request: Request) -> Any:
+    """The raw ``alert_token`` value from a JSON object body, else None. Never raises."""
+    try:
+        payload = await request.json()
+    except Exception:  # any unparseable body is just "no token"
+        return None
+    if isinstance(payload, dict):
+        return payload.get("alert_token")
+    return None
+
+
+@app.post(
+    "/pricing/alerts/self/view", response_model=PricingAlertRecord, tags=["Pricing Alerts"],
+    responses=_ALERT_TOKEN_REFUSAL_RESPONSE, openapi_extra=_ALERT_TOKEN_OPENAPI_BODY,
+)
+async def view_own_pricing_alert(request: Request):
+    """View the one alert your ``alert_token`` manages (v1.81.0).
+
+    No API key: send ``{"alert_token": "lpa_..."}`` in the JSON body (never in the URL).
+    Returns that alert's id, url, threshold_pct, provider, model_name and created_at.
+    Any token that does not match gets the same 404 ``invalid_alert_token``. Per-IP
+    rate-limited and body-capped like registration.
+    """
+    svc = get_pricing_alert_service()
+    record = await svc.get_by_token(await _alert_token_from_body(request))
+    if record is None:
+        return _alert_token_refusal()
     return PricingAlertRecord(**record)
+
+
+@app.post(
+    "/pricing/alerts/self/delete", response_model=PricingAlertSelfDeleteResponse, tags=["Pricing Alerts"],
+    responses=_ALERT_TOKEN_REFUSAL_RESPONSE, openapi_extra=_ALERT_TOKEN_OPENAPI_BODY,
+)
+async def delete_own_pricing_alert(request: Request):
+    """Delete the one alert your ``alert_token`` manages (v1.81.0).
+
+    No API key: send ``{"alert_token": "lpa_..."}`` in the JSON body (never in the URL).
+    The alert stops firing and leaves the operator listing. Any token that does not
+    match gets the same 404 ``invalid_alert_token``. Per-IP rate-limited and body-capped.
+    Alerts registered before v1.81.0 have no token and are removed via the operator.
+    """
+    svc = get_pricing_alert_service()
+    alert_id = await svc.delete_by_token(await _alert_token_from_body(request))
+    if alert_id is None:
+        return _alert_token_refusal()
+    return PricingAlertSelfDeleteResponse(deleted=True, id=alert_id)
 
 
 @app.get("/pricing/alerts", response_model=PricingAlertListResponse, tags=["Pricing Alerts"])
@@ -3289,7 +3379,8 @@ async def list_pricing_alerts():
     """Return all registered price-change alert webhooks.
 
     Operator only (v1.79.2): needs the operator key (MCP_API_KEY) in x-api-key;
-    any other caller gets 401 (503 when MCP_API_KEY is unset).
+    any other caller gets 401 (503 when MCP_API_KEY is unset). Records never include
+    an alert_token or its hash.
     """
     svc = get_pricing_alert_service()
     alerts = await svc.list_alerts()
@@ -3301,7 +3392,8 @@ async def delete_pricing_alert(alert_id: int):
     """Delete a registered alert by ID.
 
     Operator only (v1.79.2): needs the operator key (MCP_API_KEY) in x-api-key;
-    any other caller gets 401 and the alert stays.
+    any other caller gets 401 and the alert stays. To delete an alert you registered
+    yourself, use POST /pricing/alerts/self/delete with its alert_token (v1.81.0).
     """
     svc = get_pricing_alert_service()
     deleted = await svc.delete(alert_id)
@@ -4339,7 +4431,7 @@ async def mcp_http(request: Request):
     key's own org); the four operator-only tools (v1.79.2: list/delete_price_alert,
     list/delete_conversation) need the operator key (MCP_API_KEY); the v1.80.0
     `dispatch` tool needs a customer key (a real gateway call on the org's stored
-    provider keys, sharing the per-customer dispatch rate-limit bucket); the other 18
+    provider keys, sharing the per-customer dispatch rate-limit bucket); the other 19
     stay anonymous. Headers are never logged. Bodies over settings.max_body_bytes
     are refused with 413 by the security middleware before this handler runs.
     """

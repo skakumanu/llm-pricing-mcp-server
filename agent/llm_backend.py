@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Dict, List, Optional
 
+from src.services.pricing_alerts import redact_alert_tokens
+
 logger = logging.getLogger(__name__)
 
 
@@ -240,7 +242,7 @@ class OpenAIBackend(LLMBackend):
                     logger.warning(
                         "OpenAI returned malformed JSON for tool '%s' args: %r",
                         tc.function.name,
-                        tc.function.arguments,
+                        redact_alert_tokens(tc.function.arguments),  # v1.81.0
                     )
                     args = {}
                 tool_calls.append({
@@ -326,7 +328,7 @@ class OpenAIBackend(LLMBackend):
             except json.JSONDecodeError:
                 logger.warning(
                     "OpenAI streaming: malformed tool args for '%s': %r",
-                    tc["name"], tc["args"],
+                    tc["name"], redact_alert_tokens(tc["args"]),  # v1.81.0
                 )
                 args = {}
             tool_calls.append({"id": tc["id"], "tool": tc["name"], "args": args})

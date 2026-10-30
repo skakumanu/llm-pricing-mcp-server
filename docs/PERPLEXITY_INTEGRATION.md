@@ -64,7 +64,7 @@ No cloning or Python required. Add the following to your config file:
 }
 ```
 
-Restart Perplexity. All 30 pricing tools are immediately available.
+Restart Perplexity. All 31 pricing tools are immediately available.
 
 ### Option B — Local STDIO
 
@@ -133,13 +133,13 @@ After restarting Perplexity, confirm tools loaded by asking it:
 What LLM pricing tools do you have available?
 ```
 
-Perplexity should list all 30 tools. You can also verify directly via curl:
+Perplexity should list all 31 tools. You can also verify directly via curl:
 
 ```bash
 # Check server is up
 curl https://llm-pricing-api.fly.dev/health
 
-# List all 30 tools via MCP protocol
+# List all 31 tools via MCP protocol
 curl -X POST https://llm-pricing-api.fly.dev/mcp \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
@@ -147,7 +147,7 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 
 ---
 
-## All 30 MCP Tools
+## All 31 MCP Tools
 
 These tools are available inside Perplexity once connected. You can invoke them naturally in conversation or call them programmatically via the HTTP MCP endpoint.
 
@@ -171,7 +171,8 @@ These tools are available inside Perplexity once connected. You can invoke them 
 | `get_pricing_trends` | — | `days`, `limit` | Price-change leaderboard |
 | `register_price_alert` | `url` | `threshold_pct`, `provider`, `model_name` | Register a webhook for price changes |
 | `list_price_alerts` | — | — | List all registered webhooks |
-| `delete_price_alert` | `alert_id` | — | Remove a webhook |
+| `delete_price_alert` | `alert_id` | — | Remove a webhook (operator only) |
+| `manage_price_alert` | `action`, `alert_token` | — | View or delete the alert you registered, using its one-time `alert_token` (no key) |
 | `get_pricing_export_url` | — | `format`, `model_name`, `provider`, `days`, `limit` | Generate CSV/JSON export URL |
 | `list_conversations` | — | `limit` | List agent conversation history |
 | `delete_conversation` | `conversation_id` | — | Delete a conversation |

@@ -136,7 +136,10 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
             "register_price_alert",
             (
                 "Register a webhook URL to be notified when a model's price changes beyond "
-                "a threshold. Use when the user asks to set up a price alert or notification."
+                "a threshold. Use when the user asks to set up a price alert or notification. "
+                "The result contains an alert_token shown only once: always give it to the user "
+                "verbatim and tell them to save it; it is the only way to view or delete the "
+                "alert later."
             ),
         ),
         (
@@ -151,7 +154,16 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
             (
                 "Delete a registered price-change alert by its ID. "
                 f"{OPERATOR_ONLY_NOTE}"
-                " To remove an alert you registered, contact the operator."
+                " To view or delete an alert you registered yourself, use manage_price_alert"
+                " with the alert_token from registration."
+            ),
+        ),
+        (
+            "manage_price_alert",
+            (
+                "View or delete ONE price alert the user registered, using the alert_token the "
+                "user supplies. Never invent or guess a token. On refusal, say no alert matched "
+                "that token; never speculate about alert ids or other alerts."
             ),
         ),
         (

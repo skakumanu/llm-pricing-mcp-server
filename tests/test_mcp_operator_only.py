@@ -267,7 +267,7 @@ class TestAgentPath:
         from agent.tools import build_agent_tools
         tm = ToolManager()
         agent_tools = {t.name: t for t in build_agent_tools(tm, rag_pipeline=None)}
-        assert len(set(agent_tools) & set(tm.tools)) == 26
+        assert len(set(agent_tools) & set(tm.tools)) == 27  # v1.81.0: + manage_price_alert
         args = {
             "list_price_alerts": {},
             "delete_price_alert": {"alert_id": env.alert_id},
@@ -335,11 +335,11 @@ class TestRestOfMcpUnchanged:
         assert resp.status_code == 200
         assert resp.json()["result"]["serverInfo"]["name"]
 
-    def test_tools_list_has_30_including_the_four_identical_for_every_caller(self, env):
+    def test_tools_list_has_31_including_the_four_identical_for_every_caller(self, env):
         anon = _rpc("tools/list").json()["result"]["tools"]
         cust = _rpc("tools/list", headers=_headers("x-api-key", CUSTOMER_KEY)).json()["result"]["tools"]
         op = _rpc("tools/list", headers=_headers("bearer", OPERATOR_KEY)).json()["result"]["tools"]
-        assert len(anon) == 30
+        assert len(anon) == 31  # v1.81.0: + manage_price_alert
         assert anon == cust == op
         names = {t["name"] for t in anon}
         assert set(OPERATOR_ONLY_TOOLS) <= names
@@ -351,9 +351,12 @@ class TestRestOfMcpUnchanged:
         desc = tools[tool]["description"]
         assert "Operator only" in desc and "MCP_API_KEY" in desc and "operator_key_required" in desc
 
-    def test_delete_price_alert_description_points_to_the_operator(self, env):
+    def test_delete_price_alert_description_points_to_self_service(self, env):
+        # v1.81.0: "contact the operator" became self-service via manage_price_alert.
         tools = {t["name"]: t for t in _rpc("tools/list").json()["result"]["tools"]}
-        assert "contact the operator" in tools["delete_price_alert"]["description"]
+        desc = tools["delete_price_alert"]["description"]
+        assert "manage_price_alert" in desc and "alert_token" in desc
+        assert "contact the operator" not in desc
 
     def test_input_schemas_unchanged(self, env):
         tools = {t["name"]: t for t in _rpc("tools/list").json()["result"]["tools"]}
