@@ -21,19 +21,19 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Returned once at registration; only its SHA-256 hash is stored. The "lpa_" prefix
 # is not secret — it lets redact_alert_tokens() and secret scanners recognise it.
-ALERT_TOKEN_PREFIX = "lpa_"
+ALERT_TOKEN_PREFIX = "lpa_"  # nosec B105 — constant name contains TOKEN; not a credential
 _TOKEN_BODY_LEN = 43  # secrets.token_urlsafe(32) -> 43 url-safe chars, 256 bits
 ALERT_TOKEN_RE = re.compile(r"^lpa_[A-Za-z0-9_-]{%d}$" % _TOKEN_BODY_LEN)
 _REDACT_RE = re.compile(r"(?<![A-Za-z0-9_-])lpa_[A-Za-z0-9_-]{16,}")
-ALERT_TOKEN_REDACTED = "[redacted alert token]"
+ALERT_TOKEN_REDACTED = "[redacted alert token]"  # nosec B105 — constant name contains TOKEN; not a credential
 ALERT_TOKEN_NOTICE = (
-    "Save this alert_token now. It is shown only once and cannot be recovered later, "
+    "Save this alert_token now. It is shown only once and cannot be recovered later, "  # nosec B105 — constant name contains TOKEN; not a credential
     "not even by the operator. You need it to view or delete this alert: "
     "POST /pricing/alerts/self/view or /pricing/alerts/self/delete with "
     '{"alert_token": ...}, or the manage_price_alert MCP tool. Never put it in a URL.'
 )
 # One refusal for wrong, malformed, deleted, unknown and legacy-row tokens.
-ALERT_TOKEN_REFUSAL_MESSAGE = "No alert matches this alert_token."
+ALERT_TOKEN_REFUSAL_MESSAGE = "No alert matches this alert_token."  # nosec B105 — constant name contains TOKEN; not a credential
 
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS pricing_alerts (
@@ -48,9 +48,9 @@ CREATE TABLE IF NOT EXISTS pricing_alerts (
 """
 
 # v1.81.0: migration-on-open for tables created before token_hash existed.
-_ADD_TOKEN_HASH = "ALTER TABLE pricing_alerts ADD COLUMN token_hash TEXT"
+_ADD_TOKEN_HASH = "ALTER TABLE pricing_alerts ADD COLUMN token_hash TEXT"  # nosec B105 — constant name contains TOKEN; not a credential
 _CREATE_TOKEN_INDEX = (
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_pricing_alerts_token_hash "
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_pricing_alerts_token_hash "  # nosec B105 — constant name contains TOKEN; not a credential
     "ON pricing_alerts(token_hash)"
 )
 
@@ -61,13 +61,12 @@ VALUES (?, ?, ?, ?, ?, ?)
 
 # The six public columns, matched by hash only (never by id). The unique index on
 # token_hash is what makes this an exact lookup; the hash itself is never returned.
-_SELECT_BY_TOKEN_HASH = """
-SELECT id, url, threshold_pct, provider, model_name, created_at
-FROM pricing_alerts
-WHERE token_hash = ?
-"""
+_SELECT_BY_TOKEN_HASH = (  # nosec B105 — constant name contains TOKEN; not a credential
+    "SELECT id, url, threshold_pct, provider, model_name, created_at "
+    "FROM pricing_alerts WHERE token_hash = ?"
+)
 
-_DELETE_BY_TOKEN_HASH = "DELETE FROM pricing_alerts WHERE id = ? AND token_hash = ?"
+_DELETE_BY_TOKEN_HASH = "DELETE FROM pricing_alerts WHERE id = ? AND token_hash = ?"  # nosec B105 — constant name contains TOKEN; not a credential
 
 _SELECT_ALL = """
 SELECT id, url, threshold_pct, provider, model_name, created_at
