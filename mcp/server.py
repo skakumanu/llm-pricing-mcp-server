@@ -266,6 +266,12 @@ async def main():
     await init_pricing_history_service(db_path)
     await init_pricing_alert_service(db_path)
 
+    # v1.80.1: loud warning when the local-dev webhook opt-out is on. STDIO logging is
+    # silenced above (stdout carries the protocol), so also echo it to stderr.
+    from src.services.webhook_guard import _PRIVATE_WARNING, warn_if_private_targets_allowed
+    if warn_if_private_targets_allowed(logger):
+        print(f"WARNING: {_PRIVATE_WARNING}", file=sys.stderr)
+
     await init_conversation_store(
         db_path=os.environ.get("CONVERSATION_DB_PATH", None),
         max_turns=50,

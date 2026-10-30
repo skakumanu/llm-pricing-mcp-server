@@ -609,7 +609,7 @@ pip install -r requirements.txt</div>
       </div>
       <div class="tool-card">
         <div class="tool-name">register_price_alert</div>
-        <div class="tool-desc">Webhook alert when a model price changes by threshold%.</div>
+        <div class="tool-desc">Webhook alert when a model price changes by threshold%. The URL must be public https (no private, internal or loopback hosts).</div>
         <div class="tool-args"><span class="req">url</span><span>threshold_pct</span><span>provider</span><span>model_name</span></div>
       </div>
       <div class="tool-card">
@@ -659,7 +659,7 @@ pip install -r requirements.txt</div>
       </div>
       <div class="tool-card">
         <div class="tool-name">register_budget_alert<span class="needs-key" title="Needs your service API key on the MCP connection; acts only on your own org">needs key</span></div>
-        <div class="tool-desc">Register a webhook to be notified when actual recorded spend crosses a USD threshold within a rolling window. Fires at most once per period_days while spend stays over threshold.</div>
+        <div class="tool-desc">Register a webhook to be notified when actual recorded spend crosses a USD threshold within a rolling window. Fires at most once per period_days while spend stays over threshold. The URL must be public https.</div>
         <div class="tool-args"><span class="req">url</span><span class="req">threshold_usd</span><span>org_id</span><span>period_days</span></div>
       </div>
       <div class="tool-card">
@@ -708,6 +708,7 @@ pip install -r requirements.txt</div>
         <tr><td><code>customer_key_required</code> from a usage or budget tool</td><td>The 7 usage and budget tools need your service API key on the MCP connection: <code>x-api-key</code> or <code>Authorization: Bearer</code> header, or <code>LLM_PRICING_API_KEY</code> for the npx bridge. Get a free key at <a href="/billing">/billing</a>. The local STDIO server and the chat agent are always anonymous, so these tools refuse there.</td></tr>
         <tr><td><code>operator_key_required</code></td><td><code>list_price_alerts</code>, <code>delete_price_alert</code>, <code>list_conversations</code> and <code>delete_conversation</code> are restricted to the server operator: they need <code>MCP_API_KEY</code> on the connection. A service key from <a href="/billing">/billing</a> does not unlock them. To remove a price alert you registered, contact the operator.</td></tr>
         <tr><td><code>413 Request body too large</code></td><td><code>POST /mcp</code> bodies are capped at 1,000,000 bytes. Split a large <code>import_session_usage</code> batch across several calls with the same <code>session_id</code> — imports are idempotent.</td></tr>
+        <tr><td><code>invalid_webhook_url</code></td><td><code>register_price_alert</code> and <code>register_budget_alert</code> only accept a public <code>https</code> webhook URL. Plain <code>http</code>, private, loopback, link-local, cloud-metadata or internal hosts (including hostnames that resolve to one) and hosts that do not resolve are refused, and nothing is stored. The <code>reason</code> field names the category. Redirects from your endpoint are never followed. Alerts registered before v1.80.1 that break these rules are kept but are not delivered.</td></tr>
         <tr><td><code>org_mismatch</code></td><td>A service key only acts on its own org. Omit <code>org_id</code> (it defaults to your key's org) or pass your own.</td></tr>
       </tbody>
     </table>
