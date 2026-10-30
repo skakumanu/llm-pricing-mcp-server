@@ -10,7 +10,7 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from mcp.tools.tool_manager import ToolManager  # noqa: E402
+from mcp.tools.tool_manager import TRANSPORT_STDIO, ToolManager  # noqa: E402
 from src import __version__  # noqa: E402
 from src.services.pricing_aggregator import PricingAggregatorService, get_pricing_aggregator  # noqa: E402
 from src.services.telemetry import get_telemetry_service  # noqa: E402
@@ -37,10 +37,13 @@ class MCPServer:
                 of each constructing its own. Defaults to None (each tool
                 builds its own instance), preserving prior behavior for
                 direct no-arg construction (e.g. in tests).
+
+        The ToolManager is built with transport='stdio' (v1.80.0), so tools that need a
+        connection credential (dispatch) return a structured hosted-only refusal here.
         """
         self.version = __version__
         self.name = "LLM Pricing MCP Server"
-        self.tool_manager = ToolManager(aggregator=aggregator)
+        self.tool_manager = ToolManager(aggregator=aggregator, transport=TRANSPORT_STDIO)
         self.telemetry = get_telemetry_service()
         self.request_id_counter = 0
         logger.info(f"Initializing {self.name} v{self.version}")
@@ -177,8 +180,9 @@ class MCPServer:
             tool_arguments = params.get("arguments", {})
 
             # STDIO never resolves a caller (v1.79.1): it is always anonymous, so
-            # org-scoped tools refuse with customer_key_required and the four
-            # operator-only tools (v1.79.2) with operator_key_required.
+            # org-scoped tools refuse with customer_key_required, the four
+            # operator-only tools (v1.79.2) with operator_key_required, and dispatch
+            # (v1.80.0) with dispatch_requires_hosted_mcp.
             result = await self.tool_manager.execute_tool(tool_name, tool_arguments)
 
             # Wrap result in MCP content format

@@ -100,7 +100,7 @@ def test_tool_manager_input_schemas_unchanged_shape():
     """Sanity check that adding the aggregator param didn't touch any input_schema."""
     tm = ToolManager()
     tools = tm.list_tools()
-    assert len(tools) == 29
+    assert len(tools) == 30
     for tool in tools:
         assert set(tool.keys()) == {"name", "description", "inputSchema"}
 

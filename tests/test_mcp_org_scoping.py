@@ -63,6 +63,10 @@ OPERATOR_ONLY_TOOLS = {"list_price_alerts", "delete_price_alert", "list_conversa
 OPERATOR_TOOL_CLASSES = {
     "ListPriceAlertsTool", "DeletePriceAlertTool", "ListConversationsTool", "DeleteConversationTool",
 }
+# v1.80.0: customer-only tools (dispatch) — excluded from the public set, and guarded like the above.
+CUSTOMER_ONLY_TOOLS = {"dispatch"}
+CUSTOMER_ONLY_TOOL_CLASSES = {"DispatchTool"}
+RESTRICTED_TOOLS = ORG_SCOPED_TOOLS | OPERATOR_ONLY_TOOLS | CUSTOMER_ONLY_TOOLS
 _TOOL_MODULES = {
     "record_usage": ("get_usage_tracker", "get_budget_alert_service"),
     "import_session_usage": ("get_usage_tracker", "get_budget_alert_service"),
@@ -435,13 +439,13 @@ def _strip_timestamps(obj):
 
 
 class TestPublicToolParity:
-    def test_ac9_tools_list_has_29_entries_and_public_entries_identical(self, env):
+    def test_ac9_tools_list_has_30_entries_and_public_entries_identical(self, env):
         anon = _rpc("tools/list").json()["result"]["tools"]
         keyed = _rpc("tools/list", headers=_headers("x-api-key", KEY_A)).json()["result"]["tools"]
         op = _rpc("tools/list", headers=_headers("bearer", OPERATOR_KEY)).json()["result"]["tools"]
-        assert len(anon) == 29
+        assert len(anon) == 30
         assert anon == keyed == op
-        public = [t for t in anon if t["name"] not in ORG_SCOPED_TOOLS | OPERATOR_ONLY_TOOLS]
+        public = [t for t in anon if t["name"] not in RESTRICTED_TOOLS]
         assert len(public) == 18
         env.billing.get_customer_by_api_key.assert_not_awaited()
 
@@ -449,7 +453,7 @@ class TestPublicToolParity:
         """Each public tool's execute() sees exactly the arguments, never a caller, with or without a key."""
         tm = env.tm
         public = [n for n in tm.tools if tm.caller_access(n) == PUBLIC]
-        assert len(public) == 18 and not set(public) & (ORG_SCOPED_TOOLS | OPERATOR_ONLY_TOOLS)
+        assert len(public) == 18 and not set(public) & RESTRICTED_TOOLS
         seen = {}
 
         def _recorder(name):
@@ -597,13 +601,13 @@ class TestAgentPath:
 
     def test_nothing_outside_mcp_tools_imports_org_scoped_tool_classes(self):
         """Only ToolManager (which defaults to ANONYMOUS) may construct the 7 org-scoped
-        tools or (v1.79.2) the four operator-only tools."""
+        tools, (v1.79.2) the four operator-only tools, or (v1.80.0) the dispatch tool."""
         offenders = []
         paths = list((project_root / "src").rglob("*.py")) + list((project_root / "agent").rglob("*.py"))
         paths.append(project_root / "mcp" / "server.py")
         for path in paths:
             text = path.read_text(encoding="utf-8")
-            for cls in ORG_TOOL_CLASSES | OPERATOR_TOOL_CLASSES:
+            for cls in ORG_TOOL_CLASSES | OPERATOR_TOOL_CLASSES | CUSTOMER_ONLY_TOOL_CLASSES:
                 if re.search(rf"\b{cls}\b", text):
                     offenders.append(f"{path.relative_to(project_root)}: {cls}")
         assert not offenders, offenders

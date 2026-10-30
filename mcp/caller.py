@@ -14,8 +14,11 @@ through a ``caller_access`` class attribute:
 - ``OPERATOR_ONLY`` (v1.79.2): only the operator; anonymous and customer callers
   (and therefore the chat agent and STDIO) get a constant ``operator_key_required``
   refusal that reveals nothing about stored records, counts or id validity.
-- ``CUSTOMER_ONLY``: reserved for the v1.80.0 MCP dispatch tool (needs a real org
-  ledger); only customers allowed. Unused in this release.
+- ``CUSTOMER_ONLY`` (used since v1.80.0 by the MCP ``dispatch`` tool, which needs a
+  real org ledger and the org's stored provider keys): only customers allowed;
+  anonymous and operator callers are refused (dispatch substitutes HTTP's
+  ``dispatch_requires_api_key`` via its ``access_refusal()``), and on STDIO the
+  ToolManager returns the tool's ``stdio_refusal()`` before authorising.
 
 This module deliberately imports nothing from ``src.main`` so other transports and
 tools can reuse it. A caller never holds a credential: ``from_customer`` copies only
