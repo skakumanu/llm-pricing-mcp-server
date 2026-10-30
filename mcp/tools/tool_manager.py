@@ -31,7 +31,7 @@ from mcp.tools.register_budget_alert import RegisterBudgetAlertTool
 from mcp.tools.list_budget_alerts import ListBudgetAlertsTool
 from mcp.tools.delete_budget_alert import DeleteBudgetAlertTool
 from src.services.currency import SUPPORTED_CURRENCIES
-from mcp.caller import ANONYMOUS, PUBLIC, McpCaller, authorize
+from mcp.caller import ANONYMOUS, OPERATOR_ONLY_NOTE, PUBLIC, McpCaller, authorize
 
 # v1.76.0 — optional on the five pricing-output tools. MCP never detects a
 # location (no visitor IP on STDIO); omitting both yields exactly the USD output.
@@ -306,7 +306,10 @@ class ToolManager:
             "list_price_alerts": {
                 "instance": ListPriceAlertsTool(),
                 "name": "list_price_alerts",
-                "description": "List all registered price-change webhook alerts with their IDs and settings.",
+                "description": (
+                    "List all registered price-change webhook alerts with their IDs and settings. "
+                    f"{OPERATOR_ONLY_NOTE}"
+                ),
                 "input_schema": {
                     "type": "object",
                     "properties": {},
@@ -316,7 +319,11 @@ class ToolManager:
             "delete_price_alert": {
                 "instance": DeletePriceAlertTool(),
                 "name": "delete_price_alert",
-                "description": "Delete a registered price-change alert by its ID.",
+                "description": (
+                    "Delete a registered price-change alert by its ID. "
+                    f"{OPERATOR_ONLY_NOTE}"
+                    " To remove an alert you registered, contact the operator."
+                ),
                 "input_schema": {
                     "type": "object",
                     "properties": {
@@ -378,7 +385,8 @@ class ToolManager:
                 "description": (
                     "List stored chat conversation sessions with their IDs, last-updated "
                     "timestamp, turn count, and a preview of the most recent user message. "
-                    "Use this when the user asks to see their past conversations or chat history."
+                    "Use this when the user asks to see their past conversations or chat history. "
+                    f"{OPERATOR_ONLY_NOTE}"
                 ),
                 "input_schema": {
                     "type": "object",
@@ -400,7 +408,8 @@ class ToolManager:
                 "description": (
                     "Delete a specific chat conversation by its ID. "
                     "Use when the user asks to delete, clear, or remove a past conversation. "
-                    "Use list_conversations first to find the conversation ID."
+                    "Use list_conversations first to find the conversation ID. "
+                    f"{OPERATOR_ONLY_NOTE}"
                 ),
                 "input_schema": {
                     "type": "object",
@@ -943,7 +952,12 @@ class ToolManager:
                     "omitted) is a no-op. Recorded usage is then readable via analyze_session_usage "
                     "and GET /usage/session/{session_id}. "
                     "Requires your service API key on the MCP connection (x-api-key or Authorization: Bearer); "
-                    "org_id defaults to, and must match, that key's org."
+                    "org_id defaults to, and must match, that key's org. "
+                    "POST /mcp request bodies are capped at 1,000,000 bytes (413 above that). "
+                    "500 exact-count entries fit comfortably (~150 KB); text-mode imports of long "
+                    "sessions can exceed it, so split the entries across several calls under the "
+                    "same session_id — imports are idempotent, so overlapping or retried batches "
+                    "are safe."
                 ),
                 "input_schema": {
                     "type": "object",

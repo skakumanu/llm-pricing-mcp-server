@@ -155,8 +155,28 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.79.1 -->
+  <!-- v1.79.2 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.79.2</span>
+      <span class="release-date">Oct 29, 2026</span>
+      <span class="release-tag tag-security">Security</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Price-alert webhooks and chat conversations are now operator-only</div>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li><strong>Listing and deleting price alerts is operator-only.</strong> <code>list_price_alerts</code> and <code>delete_price_alert</code> over MCP, and <code>GET /pricing/alerts</code> / <code>DELETE /pricing/alerts/{id}</code> over HTTP, now need the server operator's key. Until now anyone could read every subscriber's webhook URL and delete any alert. Other MCP callers get <code>operator_key_required</code>; other HTTP callers get 401</li>
+        <li><strong>Chat conversations are no longer public.</strong> <code>list_conversations</code>, <code>delete_conversation</code>, <code>GET /agent/conversations</code> and <code>DELETE /agent/conversations/{id}</code> need the operator key too — a free-tier service key no longer deletes conversations. The <code>/conversations</code> page is now an operator management page and asks for the key; the landing page no longer links to it</li>
+        <li><strong>Creating stays open.</strong> <code>register_price_alert</code>, <code>POST /pricing/alerts</code> and <code>/agent/chat</code> still need no key. <code>POST /pricing/alerts</code> is now rate-limited per IP and body-capped</li>
+        <li><strong><code>POST /mcp</code> body cap.</strong> Requests over 1,000,000 bytes get 413 before anything runs. A 500-entry <code>import_session_usage</code> batch fits comfortably; split larger text-mode imports across calls with the same <code>session_id</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.79.1 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.79.1</span>
