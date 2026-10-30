@@ -37,7 +37,7 @@ Most LLM pricing tools are a static lookup table. This one checks its own number
 - Actual usage/spend tracking (`POST /usage`, `GET /usage/summary`) — the real-cost counterpart to `/cost-estimate`; tag events with `session_id` and analyze one session on demand (`GET /usage/session/{session_id}`) for a grounded recommendation with estimated savings
 - OpenAI-compatible proxy (`POST /v1/chat/completions`) for drop-in SDK integration
 - Dispatch gateway (v1.77.0): add a `dispatch` policy and your own provider keys to that same endpoint and the best eligible model is executed for real — failover that never drops below your quality floor, a receipt with the chosen model, reason, actual cost and savings, budget hard stops, shadow A/B and an org-scoped audit export; since v1.79.0 provider keys can be stored once per org (`/dispatch/keys`, encrypted at rest) so callers need only their service key — see [Dispatch gateway](#dispatch-gateway)
-- Webhook alerts for price changes and budget-spend thresholds (`POST /usage/alerts`, HMAC-SHA256 signed; `hard_stop: true` also blocks dispatch for the org once reached)
+- Webhook alerts for price changes and budget-spend thresholds (`POST /usage/alerts`, HMAC-SHA256 signed; `hard_stop: true` also blocks dispatch for the org once reached). Since v1.80.1 the webhook URL must be a **public https URL**: http, private/loopback/link-local/cloud-metadata/internal hosts (in any IP spelling, or via a hostname resolving to one) and unresolvable hosts are refused with 422 `invalid_webhook_url` (MCP: `error_code: invalid_webhook_url`); redirects are never followed
 - Interactive docs: `/docs` (Swagger) and `/redoc`
 
 ### Repo Cost Auditor (`scripts/audit_repo.py`)
@@ -100,7 +100,8 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 - Rate limiting per client IP + tier bucket — includes the anonymous `/agent/chat` and `/agent/chat/stream` endpoints (no API key needed, but throttled, since each call runs an LLM on the operator's key) and, since v1.79.2, anonymous `POST /pricing/alerts` registration
 - Operator-only data (v1.79.2): listing or deleting price-alert webhooks and chat conversations needs the operator key (`MCP_API_KEY`) on every surface — `x-api-key` over HTTP (`GET`/`DELETE /pricing/alerts`, `GET`/`DELETE /agent/conversations`), `x-api-key` or `Bearer` over MCP; anyone else gets 401 over HTTP or `operator_key_required` over MCP, with nothing revealed about stored records
 - Request size limit (1MB default), enforced before parsing on `POST /mcp` too (413 above it)
-- 2497 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- Webhook SSRF guard (v1.80.1): alert webhooks only reach public https destinations — checked at registration and again at every delivery, connecting only to the checked IP (DNS-rebinding safe), never following redirects, and ignoring `HTTPS_PROXY`. Alerts stored earlier that break these rules are kept but skipped at delivery (logged, not retried); the operator removes them via the operator-only list/delete
+- 2944 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
@@ -673,6 +674,9 @@ STRIPE_PRICE_ID_PRO=price_...
 STRIPE_PRICE_ID_ENTERPRISE=price_...
 BILLING_DB_PATH=/app/data/billing.db
 BILLING_BASE_URL=https://llm-pricing-api.fly.dev
+
+# Webhook alerts (v1.80.1)
+WEBHOOK_ALLOW_PRIVATE_TARGETS=false # LOCAL DEV ONLY: allows http:// and private/loopback webhook targets; never set on Fly (startup WARNING when on)
 ```
 
 **Switching LLM providers** requires only env var changes — no code modifications:

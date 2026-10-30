@@ -20,6 +20,9 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 import httpx
 
+from src.services import webhook_guard
+from src.services.webhook_guard import PinnedWebhookTransport, WebhookURLRejected
+
 if TYPE_CHECKING:
     from src.services.usage_tracker import UsageTrackerService
 
@@ -95,7 +98,11 @@ class BudgetAlertService:
         period_days: int = 30,
         hard_stop: bool = False,
     ) -> Dict[str, Any]:
-        """Persist a new budget alert and return the stored record."""
+        """Persist a new budget alert and return the stored record.
+
+        Raises WebhookURLRejected (nothing stored) when ``url`` breaks the webhook rules.
+        """
+        await webhook_guard.validate_webhook_url(url)
         import aiosqlite
         now = time.time()
         async with aiosqlite.connect(self._db_path) as db:
@@ -204,7 +211,13 @@ class BudgetAlertService:
 
         now = time.time()
         fired = 0
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        # v1.80.1: never follow redirects, ignore env proxies, connect only to a checked IP.
+        async with httpx.AsyncClient(
+            timeout=10.0,
+            follow_redirects=False,
+            trust_env=False,
+            transport=PinnedWebhookTransport(),
+        ) as client:
             for alert in alerts:
                 if alert["last_fired_at"] is not None:
                     cooldown_until = alert["last_fired_at"] + alert["period_days"] * 86400
@@ -249,12 +262,17 @@ class BudgetAlertService:
             sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
             headers["X-LLM-Pricing-Signature"] = f"sha256={sig}"
         try:
+            # v1.80.1: skip stored URLs that break the rules (legacy rows) before any I/O.
+            webhook_guard.check_url_static(alert["url"])
             resp = await client.post(alert["url"], content=body, headers=headers)
             logger.info(
                 "Budget alert %d fired to %s — $%.2f spent (HTTP %d)",
                 alert["id"], alert["url"], summary["total_cost_usd"], resp.status_code,
             )
             return 1
+        except WebhookURLRejected as exc:
+            logger.warning("Budget alert %d delivery blocked (%s) for %s", alert["id"], exc.reason, alert["url"])
+            return 0
         except Exception as exc:
             logger.warning("Budget alert %d delivery failed to %s: %s", alert["id"], alert["url"], exc)
             return 0

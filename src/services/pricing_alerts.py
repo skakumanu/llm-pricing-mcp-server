@@ -9,6 +9,9 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from src.services import webhook_guard
+from src.services.webhook_guard import PinnedWebhookTransport, WebhookURLRejected
+
 logger = logging.getLogger(__name__)
 
 _CREATE_TABLE = """
@@ -59,7 +62,11 @@ class PricingAlertService:
         provider: Optional[str] = None,
         model_name: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Persist a new alert and return the stored record."""
+        """Persist a new alert and return the stored record.
+
+        Raises WebhookURLRejected (nothing stored) when ``url`` breaks the webhook rules.
+        """
+        await webhook_guard.validate_webhook_url(url)
         import aiosqlite
         now = time.time()
         async with aiosqlite.connect(self._db_path) as db:
@@ -116,7 +123,13 @@ class PricingAlertService:
             return 0
 
         fired = 0
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        # v1.80.1: never follow redirects, ignore env proxies, connect only to a checked IP.
+        async with httpx.AsyncClient(
+            timeout=10.0,
+            follow_redirects=False,
+            trust_env=False,
+            transport=PinnedWebhookTransport(),
+        ) as client:
             for trend in trends:
                 max_change = max(
                     abs(trend.get("input_change_pct", 0.0)),
@@ -163,12 +176,17 @@ class PricingAlertService:
             sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
             headers["X-LLM-Pricing-Signature"] = f"sha256={sig}"
         try:
+            # v1.80.1: skip stored URLs that break the rules (legacy rows) before any I/O.
+            webhook_guard.check_url_static(alert["url"])
             resp = await client.post(alert["url"], content=body, headers=headers)
             logger.info(
                 "Alert %d fired to %s — %s (HTTP %d)",
                 alert["id"], alert["url"], trend["model_name"], resp.status_code,
             )
             return 1
+        except WebhookURLRejected as exc:
+            logger.warning("Alert %d delivery blocked (%s) for %s", alert["id"], exc.reason, alert["url"])
+            return 0
         except Exception as exc:
             logger.warning("Alert %d delivery failed to %s: %s", alert["id"], alert["url"], exc)
             return 0

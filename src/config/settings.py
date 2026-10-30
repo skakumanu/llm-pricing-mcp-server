@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     # Webhook signing secret (None = unsigned; set to a long random string in production)
     webhook_secret: Optional[str] = None
 
+    # v1.80.1 — env WEBHOOK_ALLOW_PRIVATE_TARGETS. LOCAL DEVELOPMENT ONLY, never set on Fly.
+    # When on, webhook alerts may target http:// and private/loopback/internal hosts
+    # (src/services/webhook_guard.py); a WARNING is logged at startup. No request can change it.
+    webhook_allow_private_targets: bool = False
+
     # Stripe / Billing
     stripe_secret_key: Optional[str] = None
     stripe_webhook_secret: Optional[str] = None

@@ -365,7 +365,10 @@ class ToolManager:
                     "properties": {
                         "url": {
                             "type": "string",
-                            "description": "Webhook URL to POST when the alert fires",
+                            "description": (
+                                "Public https webhook URL to POST when the alert fires "
+                                "(no private, internal or loopback hosts; redirects are not followed)"
+                            ),
                         },
                         "threshold_pct": {
                             "type": "number",
@@ -1126,7 +1129,10 @@ class ToolManager:
                     "properties": {
                         "url": {
                             "type": "string",
-                            "description": "Webhook URL to POST when the alert fires",
+                            "description": (
+                                "Public https webhook URL to POST when the alert fires "
+                                "(no private, internal or loopback hosts; redirects are not followed)"
+                            ),
                         },
                         "threshold_usd": {
                             "type": "number",

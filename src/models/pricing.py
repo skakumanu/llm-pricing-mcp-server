@@ -646,7 +646,13 @@ class SubscriptionTrendsResponse(BaseModel):
 class PricingAlertRequest(BaseModel):
     """Request body for POST /pricing/alerts."""
 
-    url: str = Field(..., description="Webhook URL to POST when the alert fires")
+    url: str = Field(
+        ...,
+        description=(
+            "Public https webhook URL to POST when the alert fires "
+            "(no private, internal or loopback hosts; redirects are not followed)"
+        ),
+    )
     threshold_pct: float = Field(
         5.0, gt=0, description="Minimum absolute % price change that triggers the alert"
     )
@@ -679,7 +685,13 @@ class PricingAlertListResponse(BaseModel):
 class BudgetAlertRequest(BaseModel):
     """Request body for POST /usage/alerts."""
 
-    url: str = Field(..., description="Webhook URL to POST when spend crosses threshold_usd")
+    url: str = Field(
+        ...,
+        description=(
+            "Public https webhook URL to POST when spend crosses threshold_usd "
+            "(no private, internal or loopback hosts; redirects are not followed)"
+        ),
+    )
     threshold_usd: float = Field(..., gt=0, description="Spend level in USD that triggers the alert")
     org_id: Optional[str] = Field(
         None, description="Organisation to monitor (None = total spend across all orgs)"
