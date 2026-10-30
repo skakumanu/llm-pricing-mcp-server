@@ -2,6 +2,8 @@
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List
 
+from mcp.caller import OPERATOR_ONLY_NOTE
+
 
 @dataclass
 class AgentTool:
@@ -136,11 +138,18 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
         ),
         (
             "list_price_alerts",
-            "List all registered price-change webhook alerts with their IDs and settings.",
+            (
+                "List all registered price-change webhook alerts with their IDs and settings. "
+                f"{OPERATOR_ONLY_NOTE}"
+            ),
         ),
         (
             "delete_price_alert",
-            "Delete a registered price-change alert by its ID.",
+            (
+                "Delete a registered price-change alert by its ID. "
+                f"{OPERATOR_ONLY_NOTE}"
+                " To remove an alert you registered, contact the operator."
+            ),
         ),
         (
             "get_pricing_export_url",
@@ -154,14 +163,16 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
             (
                 "List stored chat conversation sessions with IDs, timestamps, turn counts, "
                 "and message previews. Use when the user asks to see their chat history or "
-                "past conversations."
+                "past conversations. "
+                f"{OPERATOR_ONLY_NOTE}"
             ),
         ),
         (
             "delete_conversation",
             (
                 "Delete a specific past conversation by its ID. Use list_conversations first "
-                "to find the ID. Use when the user asks to delete or clear a past conversation."
+                "to find the ID. Use when the user asks to delete or clear a past conversation. "
+                f"{OPERATOR_ONLY_NOTE}"
             ),
         ),
         (

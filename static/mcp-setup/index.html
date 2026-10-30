@@ -237,7 +237,7 @@
           <div class="step-num">2</div>
           <div class="step-body" id="mcp-service-key">
             <h4>Optional: add your service key</h4>
-            <p>The 22 pricing and routing tools need no key. The 7 usage and budget tools marked <span style="color:var(--warn);font-weight:600">needs key</span> below read or write your org's data, so they need your service API key (free at <a href="/billing">/billing</a>, <code>POST /billing/signup</code>) sent on the MCP connection as <code>x-api-key</code> or <code>Authorization: Bearer</code>. They then act only on that key's org: <code>org_id</code> defaults to it, and another org's is refused (<code>org_mismatch</code>). Without a key they return <code>customer_key_required</code>.</p>
+            <p>The 18 pricing and routing tools need no key. The four alert and conversation management tools marked <span style="color:var(--warn);font-weight:600">operator only</span> list or delete every subscriber's and visitor's data, so they need the server operator's key (<code>MCP_API_KEY</code>); anyone else gets <code>operator_key_required</code>. The 7 usage and budget tools marked <span style="color:var(--warn);font-weight:600">needs key</span> below read or write your org's data, so they need your service API key (free at <a href="/billing">/billing</a>, <code>POST /billing/signup</code>) sent on the MCP connection as <code>x-api-key</code> or <code>Authorization: Bearer</code>. They then act only on that key's org: <code>org_id</code> defaults to it, and another org's is refused (<code>org_mismatch</code>). Without a key they return <code>customer_key_required</code>.</p>
             <div class="code-block solo">{
   <span class="key">"mcpServers"</span>: {
     <span class="key">"llm-pricing"</span>: {
@@ -613,12 +613,12 @@ pip install -r requirements.txt</div>
         <div class="tool-args"><span class="req">url</span><span>threshold_pct</span><span>provider</span><span>model_name</span></div>
       </div>
       <div class="tool-card">
-        <div class="tool-name">list_price_alerts</div>
+        <div class="tool-name">list_price_alerts<span class="needs-key" title="Needs the server operator's key; other callers get operator_key_required">operator only</span></div>
         <div class="tool-desc">List all registered price-change webhooks.</div>
         <div class="tool-args">No arguments required</div>
       </div>
       <div class="tool-card">
-        <div class="tool-name">delete_price_alert</div>
+        <div class="tool-name">delete_price_alert<span class="needs-key" title="Needs the server operator's key; other callers get operator_key_required">operator only</span></div>
         <div class="tool-desc">Remove a registered webhook by ID.</div>
         <div class="tool-args"><span class="req">alert_id</span></div>
       </div>
@@ -628,12 +628,12 @@ pip install -r requirements.txt</div>
         <div class="tool-args"><span>format</span><span>model_name</span><span>provider</span><span>days</span></div>
       </div>
       <div class="tool-card">
-        <div class="tool-name">list_conversations</div>
+        <div class="tool-name">list_conversations<span class="needs-key" title="Needs the server operator's key; other callers get operator_key_required">operator only</span></div>
         <div class="tool-desc">List recent agent conversation sessions.</div>
         <div class="tool-args"><span>limit</span></div>
       </div>
       <div class="tool-card">
-        <div class="tool-name">delete_conversation</div>
+        <div class="tool-name">delete_conversation<span class="needs-key" title="Needs the server operator's key; other callers get operator_key_required">operator only</span></div>
         <div class="tool-desc">Delete a conversation by session ID.</div>
         <div class="tool-args"><span class="req">conversation_id</span></div>
       </div>
@@ -701,6 +701,8 @@ pip install -r requirements.txt</div>
         <tr><td>Connection refused / timeout</td><td>Run <code>curl https://llm-pricing-api.fly.dev/health</code> to verify the server is up. If using local STDIO, ensure the server process is running.</td></tr>
         <tr><td><code>401 Unauthorized</code> on MCP endpoint</td><td>The <code>/mcp</code> endpoint itself never returns 401 — no key is needed to connect or to use the pricing tools. If you see 401, check for a proxy or misconfigured auth header in your client.</td></tr>
         <tr><td><code>customer_key_required</code> from a usage or budget tool</td><td>The 7 usage and budget tools need your service API key on the MCP connection: <code>x-api-key</code> or <code>Authorization: Bearer</code> header, or <code>LLM_PRICING_API_KEY</code> for the npx bridge. Get a free key at <a href="/billing">/billing</a>. The local STDIO server and the chat agent are always anonymous, so these tools refuse there.</td></tr>
+        <tr><td><code>operator_key_required</code></td><td><code>list_price_alerts</code>, <code>delete_price_alert</code>, <code>list_conversations</code> and <code>delete_conversation</code> are restricted to the server operator: they need <code>MCP_API_KEY</code> on the connection. A service key from <a href="/billing">/billing</a> does not unlock them. To remove a price alert you registered, contact the operator.</td></tr>
+        <tr><td><code>413 Request body too large</code></td><td><code>POST /mcp</code> bodies are capped at 1,000,000 bytes. Split a large <code>import_session_usage</code> batch across several calls with the same <code>session_id</code> — imports are idempotent.</td></tr>
         <tr><td><code>org_mismatch</code></td><td>A service key only acts on its own org. Omit <code>org_id</code> (it defaults to your key's org) or pass your own.</td></tr>
       </tbody>
     </table>

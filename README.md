@@ -25,7 +25,7 @@ Most LLM pricing tools are a static lookup table. This one checks its own number
 - `get_all_pricing`, `estimate_cost`, `compare_costs`, `get_use_cases` and `recommend_model` take optional `currency` / `country` arguments (v1.76.0) and add converted `local_*` figures plus a `currency_conversion` block; omit both and the output is unchanged
 - **STDIO transport** — JSON-RPC 2.0 over STDIO for local Claude Desktop integration
 - **HTTP transport** — `POST /mcp` (JSON-RPC 2.0 over HTTP) for remote MCP clients — no local install needed
-- **Optional service key on the MCP connection (v1.79.1)** — the 22 public pricing/routing tools need no key; the 7 org-scoped usage/budget tools (`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`) need your service API key and act only on that key's own org. See [HTTP MCP Transport](#http-mcp-transport)
+- **Optional service key on the MCP connection (v1.79.1)** — the 18 public pricing/routing tools need no key; the four operator-only tools (`list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation`, v1.79.2) need the operator key (`MCP_API_KEY`) and refuse everyone else with `operator_key_required`; the 7 org-scoped usage/budget tools (`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`) need your service API key and act only on that key's own org. See [HTTP MCP Transport](#http-mcp-transport)
 - MCP Protocol version: `2024-11-05`
 
 ### RESTful API
@@ -73,7 +73,7 @@ Most LLM pricing tools are a static lookup table. This one checks its own number
 | `/trends` | Price-change leaderboard |
 | `/widget` | Embeddable pricing table |
 | `/billing` | Self-serve signup + upgrade dashboard |
-| `/conversations` | Conversation history viewer |
+| `/conversations` | Operator-only conversation management (needs the operator key, `MCP_API_KEY`; shows an operator-key-required state otherwise) |
 | `/admin` | Server stats, rate limits, customers |
 | `/mcp-setup` | MCP integration hub |
 | `/api-docs` | API reference (Swagger/ReDoc) |
@@ -97,9 +97,10 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 - Most endpoints are public (read-only pricing data, UIs, MCP tools)
 - Protected endpoints (`/billing/me`, `/router/recommend`, `/router/feedback`, `/billing/portal`) require a billing API key or the global `MCP_API_KEY`
 - Dispatch mode of `/v1/chat/completions` requires a free-tier *customer* key (the global `MCP_API_KEY` is refused — dispatch writes per-org ledgers); provider keys are bring-your-own — per request (`X-Provider-Key-*` headers, used transiently) or, since v1.79.0, stored once per org with `POST /dispatch/keys` (AES-256-GCM-encrypted at rest under the operator's `PROVIDER_KEY_ENCRYPTION_KEY`, scoped to your org, never returned after registration — only a last-4 fingerprint is shown); provider keys are never logged or echoed — and neither are prompts or completions
-- Rate limiting per client IP + tier bucket — includes the anonymous `/agent/chat` and `/agent/chat/stream` endpoints (no API key needed, but throttled, since each call runs an LLM on the operator's key)
-- Request size limit (1MB default)
-- 2229 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- Rate limiting per client IP + tier bucket — includes the anonymous `/agent/chat` and `/agent/chat/stream` endpoints (no API key needed, but throttled, since each call runs an LLM on the operator's key) and, since v1.79.2, anonymous `POST /pricing/alerts` registration
+- Operator-only data (v1.79.2): listing or deleting price-alert webhooks and chat conversations needs the operator key (`MCP_API_KEY`) on every surface — `x-api-key` over HTTP (`GET`/`DELETE /pricing/alerts`, `GET`/`DELETE /agent/conversations`), `x-api-key` or `Bearer` over MCP; anyone else gets 401 over HTTP or `operator_key_required` over MCP, with nothing revealed about stored records
+- Request size limit (1MB default), enforced before parsing on `POST /mcp` too (413 above it)
+- 2412 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
@@ -145,7 +146,7 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
-Restart Claude Desktop. All 29 tools are immediately available; the 22 public ones need no key (the 7 usage/budget tools need your service key on the connection — see [HTTP MCP Transport](#http-mcp-transport)).
+Restart Claude Desktop. All 29 tools are immediately available; the 18 public ones need no key (the 7 usage/budget tools need your service key on the connection, and the four alert/conversation management tools are operator-only — see [HTTP MCP Transport](#http-mcp-transport)).
 
 ### Option B — STDIO via npx (no clone, no Python)
 
@@ -292,7 +293,7 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 
 ### Optional service key (v1.79.1)
 
-The 22 public tools (pricing, routing, cost estimates, data quality, history, price alerts, the agent) need no credential, and sending one never changes their results. The 7 org-scoped tools read or write per-org usage data and need your service API key (free: `POST /billing/signup`) on the MCP connection:
+The 18 public tools (pricing, routing, cost estimates, data quality, history, registering a price alert, the agent) need no credential, and sending one never changes their results. The 7 org-scoped tools read or write per-org usage data and need your service API key (free: `POST /billing/signup`) on the MCP connection:
 
 `record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`
 
@@ -308,7 +309,9 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 - With a key, these tools act on, and only on, the key's own org. `org_id` defaults to it; passing a different org returns `error_code: "org_mismatch"`; another org's budget alert reads as not found.
 - Without a key (or with an unknown one) they return `error_code: "customer_key_required"` with signup and header-setup hints. The local STDIO server (`mcp/server.py`) and the `/agent/chat` agent are always anonymous, so these tools refuse there too.
 - The npx bridge forwards `LLM_PRICING_API_KEY` as `x-api-key` (npm `llm-pricing-mcp` 1.1.0+). Claude Code: `claude mcp add --transport http llm-pricing https://llm-pricing-api.fly.dev/mcp --header 'x-api-key: <key>'`.
+- Operator-only tools (v1.79.2): `list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation` need the server operator's key (`MCP_API_KEY`) on the connection; every other caller gets `error_code: "operator_key_required"` — the same response whether or not an id exists.
 - Refusals are normal tool results (`success: false`), not JSON-RPC errors. Keys are never logged or echoed.
+- `POST /mcp` request bodies are capped at 1,000,000 bytes (v1.79.2; 413 JSON above that, checked before parsing). A 500-entry exact-count `import_session_usage` call fits comfortably; split larger text-mode imports across calls with the same `session_id` (imports are idempotent).
 
 ---
 
@@ -337,10 +340,9 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 | POST | `/cost-estimate/batch` | Multi-model cost comparison |
 | POST | `/agent/chat` | Blocking agent chat |
 | POST | `/agent/chat/stream` | Streaming agent chat (SSE) |
-| GET | `/agent/conversations` | List conversations |
-| DELETE | `/agent/conversations/{id}` | Delete a conversation |
 | GET | `/api/versions` | API version info |
 | GET | `/pricing/alerts/signing-info` | Webhook signing key info |
+| POST | `/pricing/alerts` | Register price-change webhook (no key; per-IP rate-limited and body-capped since v1.79.2) |
 | POST | `/v1/chat/completions` | OpenAI-compatible routing proxy (recommendation only; dispatch mode below needs a customer key) |
 | GET | `/dispatch/providers` | Executable providers, their key headers and stored-key paths, and which models are dispatchable (and why not) |
 | GET | `/mcp` | HTTP MCP server info |
@@ -373,9 +375,18 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 | POST | `/billing/checkout` | Stripe Checkout session |
 | GET | `/billing/portal` | Stripe billing portal |
 | GET | `/billing/me` | Usage dashboard |
-| POST | `/pricing/alerts` | Register price-change webhook |
-| GET | `/pricing/alerts` | List alerts |
-| DELETE | `/pricing/alerts/{id}` | Delete alert |
+
+### Operator-only (MCP_API_KEY)
+
+Send the global `MCP_API_KEY` as `x-api-key` (Bearer is not accepted on these routes). Any other caller — no key, a customer key, a wrong key — gets 401 with no data; 503 if `MCP_API_KEY` is unset.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/pricing/alerts` | List every registered price-change webhook (v1.79.2) |
+| DELETE | `/pricing/alerts/{id}` | Delete a price-change webhook (404 for an unknown id) |
+| GET | `/agent/conversations` | List every stored chat conversation (v1.79.2) |
+| DELETE | `/agent/conversations/{id}` | Delete a conversation (customer keys no longer suffice; 404 for an unknown id) |
+| GET | `/admin/customers` | List billing customers |
 
 ### Key Request/Response Examples
 
@@ -741,6 +752,10 @@ pytest tests/test_router.py -v
 | `test_billing_service.py` | BillingService unit tests |
 | `test_mcp_http.py` | HTTP MCP transport |
 | `test_mcp_org_scoping.py` | v1.79.1 org-scoped MCP tools: anonymous / customer (x-api-key, Bearer) / operator / unknown-key callers over `POST /mcp`, STDIO and the agent; public-tool parity; no key in logs or responses |
+| `test_mcp_operator_only.py` | v1.79.2 operator-only MCP tools (price alerts, conversations): anonymous / customer / unknown / operator callers over `POST /mcp`, the agent and STDIO; constant refusals; no key, URL or preview leaks |
+| `test_operator_only_http.py` | v1.79.2 operator-only HTTP routes for alerts and conversations, anonymous throttling of `POST /pricing/alerts`, non-ASCII keys → 401 |
+| `test_mcp_body_cap.py` | v1.79.2 `POST /mcp` body cap (Content-Length and chunked → 413) and the 500-entry import fitting under it |
+| `test_landing_ui.py` | Landing page no longer links operator-only tools or the conversations page |
 | `test_router.py` | Router recommendation + feedback |
 | `test_security.py` | Auth middleware |
 | `test_admin_dashboard.py` | Admin endpoints |

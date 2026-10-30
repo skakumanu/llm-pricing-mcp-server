@@ -177,7 +177,8 @@ class MCPServer:
             tool_arguments = params.get("arguments", {})
 
             # STDIO never resolves a caller (v1.79.1): it is always anonymous, so
-            # org-scoped tools refuse with customer_key_required.
+            # org-scoped tools refuse with customer_key_required and the four
+            # operator-only tools (v1.79.2) with operator_key_required.
             result = await self.tool_manager.execute_tool(tool_name, tool_arguments)
 
             # Wrap result in MCP content format

@@ -37,7 +37,7 @@ All are optional — the defaults work out of the box.
 
 ### Service API key (optional, v1.1.0)
 
-22 of the 29 tools (pricing, routing, cost estimates, data quality) work with no key. The 7 per-org usage and budget tools — `record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert` — need your service API key and act only on that key's own org. Without a key they return `error_code: "customer_key_required"`; passing another org's `org_id` returns `error_code: "org_mismatch"`.
+18 of the 29 tools (pricing, routing, cost estimates, data quality) work with no key. Four more — `list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation` — are operator-only (v1.79.2): they need the server operator's key (`MCP_API_KEY`) and return `error_code: "operator_key_required"` to anyone else. The 7 per-org usage and budget tools — `record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert` — need your service API key and act only on that key's own org. Without a key they return `error_code: "customer_key_required"`; passing another org's `org_id` returns `error_code: "org_mismatch"`.
 
 ```json
 {

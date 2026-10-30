@@ -30,7 +30,7 @@ Add to `claude_desktop_config.json`:
 
 Restart Claude Desktop. All 29 tools are available immediately.
 
-**Service key (optional, v1.79.1).** The pricing tools need no key. The 7 usage/budget tools (`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`) need your service API key on the connection — add `"headers": { "x-api-key": "<your-service-key>" }` next to `"url"` (or, with the npx bridge, `"env": { "LLM_PRICING_API_KEY": "<your-service-key>" }`). They then act only on that key's org; without a key they return `customer_key_required`. The local STDIO server (Option B) is always anonymous, so those tools refuse there.
+**Service key (optional, v1.79.1).** The pricing tools need no key. The 7 usage/budget tools (`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`) need your service API key on the connection — add `"headers": { "x-api-key": "<your-service-key>" }` next to `"url"` (or, with the npx bridge, `"env": { "LLM_PRICING_API_KEY": "<your-service-key>" }`). They then act only on that key's org; without a key they return `customer_key_required`. The local STDIO server (Option B) is always anonymous, so those tools refuse there. The four operator-only tools (`list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation`, v1.79.2) need the server operator's key (`MCP_API_KEY`); any other caller gets `operator_key_required`.
 
 **Config file locations:**
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`

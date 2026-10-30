@@ -404,7 +404,8 @@ async def _body_too_large(request: Request) -> Optional[JSONResponse]:
 # Anonymous but throttled: no API key required, yet still subject to the per-IP
 # rate limiter and the body-size cap. Distinct from _unauthenticated_paths, whose
 # members the security middleware bypasses entirely (no limiter either). Every
-# path here runs an LLM on the operator's key, so unthrottled = unbounded spend.
+# path here either runs an LLM on the operator's key or writes a stored record,
+# so unthrottled = unbounded spend or unbounded storage.
 _anonymous_rate_limited_paths = {
     "/agent/chat",
     "/agent/chat/stream",
@@ -412,14 +413,21 @@ _anonymous_rate_limited_paths = {
     # reply says whether an email is registered, so it goes through the limiter
     # and body cap instead of the full bypass.
     "/billing/signup",
+    # v1.79.2: anonymous price-alert registration (POST) stores a webhook row, so it
+    # is throttled and body-capped. GET on this path is operator-only (see
+    # _is_operator_only_request), so it never reaches the anonymous branch.
+    "/pricing/alerts",
 }
 
 # Public (no auth, no limiter) but still body-capped: /v1/chat/completions must stay
 # anonymous for the plain OpenAI-SDK proxy, yet its dispatch branch parses a policy
 # object and persists parts of it per receipt, so the cap has to run *before* FastAPI
 # reads the body — an in-handler check would run after the whole body is in memory.
+# v1.79.2: /mcp too — tools/call bodies (e.g. import_session_usage batches) are parsed
+# and persisted, so the 1 MB cap runs before mcp_http reads the JSON.
 _public_body_capped_paths = {
     "/v1/chat/completions",
+    "/mcp",
 }
 
 _unauthenticated_paths = {
@@ -454,7 +462,6 @@ _unauthenticated_paths = {
     # v1.76.0 — locale preset + vendored rate table for the browser currency selector
     "/locale",
     "/currency/rates",
-    "/agent/conversations",
     # Public read-only dashboard endpoints (non-sensitive aggregate stats)
     "/telemetry",
     "/admin/stats",
@@ -473,6 +480,30 @@ _sensitive_paths = {
     # that take an org_id parameter.
     "/admin/customers",
 }
+
+# v1.79.2: operator-only HTTP routes that live under otherwise-public prefixes
+# ("/pricing", "/agent"). Method-aware, so POST /pricing/alerts stays anonymous and
+# GET /pricing/alerts/signing-info stays public. Checked before the full bypass.
+_OPERATOR_ONLY_EXACT = {
+    ("GET", "/pricing/alerts"),
+    ("HEAD", "/pricing/alerts"),
+    ("GET", "/agent/conversations"),
+    ("HEAD", "/agent/conversations"),
+}
+_OPERATOR_ONLY_DELETE_PREFIXES = ("/pricing/alerts/", "/agent/conversations/")
+
+
+def _is_operator_only_request(method: str, path: str) -> bool:
+    """True when (method, path) must carry the operator key (MCP_API_KEY).
+
+    Lists every subscriber's alert webhooks / every visitor's conversations, or
+    deletes one of them. OPTIONS (CORS preflight) is never matched.
+    """
+    method = (method or "").upper()
+    if method == "DELETE" and path.startswith(_OPERATOR_ONLY_DELETE_PREFIXES):
+        return True
+    return (method, path.rstrip("/") or "/") in _OPERATOR_ONLY_EXACT
+
 
 # Add deployment middleware for request tracking (needed for graceful shutdown)
 
@@ -513,36 +544,49 @@ async def security_middleware(request: Request, call_next):
     global _auth_warning_logged
 
     path = request.url.path
+    # v1.79.2: operator-only routes under public prefixes are decided first, so the
+    # "/pricing" prefix bypass below can no longer expose them.
+    operator_only = _is_operator_only_request(request.method, path)
     # Full bypass: skips auth, rate limiting AND the body-size cap. Keep this to
     # static UIs and read-only data. /agent/chat is deliberately NOT here — it
     # runs an LLM on the operator's key, so it stays anonymous via
     # _anonymous_rate_limited_paths but still falls through to the rate limiter.
-    if (
-        path.startswith("/chat")
-        or path.startswith("/history") or path.startswith("/trends")
-        or path.startswith("/conversations") or path.startswith("/calculator")
-        or path.startswith("/compare") or path.startswith("/widget")
-        or path.startswith("/pricing") or path.startswith("/models")
-        or path.startswith("/providers") or path.startswith("/landing")
-        or path.startswith("/mcp")
-        or path.startswith("/mcp-setup") or path.startswith("/api-docs")
-        or path.startswith("/whats-new")
-        or path == "/admin" or path in _unauthenticated_paths
-        or request.method == "OPTIONS"
+    # OPTIONS (CORS preflight) is always bypassed; _is_operator_only_request never
+    # matches it, and anonymous-throttled paths keep an unthrottled preflight.
+    if request.method == "OPTIONS" or (
+        not operator_only
+        and path not in _anonymous_rate_limited_paths
+        and (
+            path.startswith("/chat")
+            or path.startswith("/history") or path.startswith("/trends")
+            or path.startswith("/conversations") or path.startswith("/calculator")
+            or path.startswith("/compare") or path.startswith("/widget")
+            or path.startswith("/pricing") or path.startswith("/models")
+            or path.startswith("/providers") or path.startswith("/landing")
+            or path.startswith("/mcp")
+            or path.startswith("/mcp-setup") or path.startswith("/api-docs")
+            or path.startswith("/whats-new")
+            or path == "/admin" or path in _unauthenticated_paths
+        )
     ):
         if path in _public_body_capped_paths:
             rejected = await _body_too_large(request)
             if rejected is not None:
                 return rejected
         return await call_next(request)
-    if path in _sensitive_paths:
+    if operator_only or path in _sensitive_paths:
         if not settings.mcp_api_key:
             return JSONResponse(
                 status_code=503,
                 content={"detail": "Authentication not configured"},
             )
         provided_key = request.headers.get(settings.mcp_api_key_header)
-        if not provided_key or not secrets.compare_digest(provided_key, settings.mcp_api_key):
+        # Compare as UTF-8 bytes: str compare_digest raises TypeError on non-ASCII
+        # input (headers are latin-1 decoded), which would turn a bad key into a 500.
+        # The key itself is never logged.
+        if not provided_key or not secrets.compare_digest(
+            provided_key.encode("utf-8"), settings.mcp_api_key.encode("utf-8")
+        ):
             client_ip = (
                 request.headers.get("x-forwarded-for", "").split(",")[0].strip()
                 or request.headers.get("x-real-ip")
@@ -569,7 +613,10 @@ async def security_middleware(request: Request, call_next):
         request.state.customer = customer
 
         if settings.mcp_api_key and not customer:
-            if not provided_key or not secrets.compare_digest(provided_key, settings.mcp_api_key):
+            # Bytes compare: str compare_digest raises TypeError on non-ASCII keys (500 not 401).
+            if not provided_key or not secrets.compare_digest(
+                provided_key.encode("utf-8"), settings.mcp_api_key.encode("utf-8")
+            ):
                 client_ip = (
                     request.headers.get("x-forwarded-for", "").split(",")[0].strip()
                     or request.headers.get("x-real-ip")
@@ -609,7 +656,7 @@ async def security_middleware(request: Request, call_next):
             provided = request.headers.get(settings.mcp_api_key_header)
             holds_global_key = bool(
                 settings.mcp_api_key and provided
-                and secrets.compare_digest(provided, settings.mcp_api_key)
+                and secrets.compare_digest(provided.encode("utf-8"), settings.mcp_api_key.encode("utf-8"))
             )
             tier = request.headers.get("X-Api-Key-Tier", "").lower() if holds_global_key else ""
             bucket_key = f"{client_ip}:{tier}"
@@ -3219,6 +3266,8 @@ async def create_pricing_alert(request: PricingAlertRequest):
     more than `threshold_pct` percent since the previous snapshot taken on the
     same day.  Use `provider` and `model_name` to limit the alert to specific
     models.
+
+    Public (no key), but per-IP rate-limited and body-capped (v1.79.2).
     """
     svc = get_pricing_alert_service()
     record = await svc.register(
@@ -3232,7 +3281,11 @@ async def create_pricing_alert(request: PricingAlertRequest):
 
 @app.get("/pricing/alerts", response_model=PricingAlertListResponse, tags=["Pricing Alerts"])
 async def list_pricing_alerts():
-    """Return all registered price-change alert webhooks."""
+    """Return all registered price-change alert webhooks.
+
+    Operator only (v1.79.2): needs the operator key (MCP_API_KEY) in x-api-key;
+    any other caller gets 401 (503 when MCP_API_KEY is unset).
+    """
     svc = get_pricing_alert_service()
     alerts = await svc.list_alerts()
     return PricingAlertListResponse(alerts=alerts, total=len(alerts))
@@ -3240,7 +3293,11 @@ async def list_pricing_alerts():
 
 @app.delete("/pricing/alerts/{alert_id}", status_code=204, tags=["Pricing Alerts"])
 async def delete_pricing_alert(alert_id: int):
-    """Delete a registered alert by ID."""
+    """Delete a registered alert by ID.
+
+    Operator only (v1.79.2): needs the operator key (MCP_API_KEY) in x-api-key;
+    any other caller gets 401 and the alert stays.
+    """
     svc = get_pricing_alert_service()
     deleted = await svc.delete(alert_id)
     if not deleted:
@@ -3262,6 +3319,9 @@ async def list_conversations():
     newest first.  When the conversation store is in-memory (no
     ``CONVERSATION_DB_PATH`` configured) the list reflects only conversations
     created since the server started.
+
+    Operator only (v1.79.2): needs the operator key (MCP_API_KEY) in x-api-key;
+    any other caller (including a customer key) gets 401.
     """
     store = get_conversation_store()
     conversations = await store.list_conversations()
@@ -3277,6 +3337,9 @@ async def delete_conversation(conversation_id: str):
     Removes the conversation from both the in-process cache and the persistent
     SQLite database (if configured).  Returns **204 No Content** on success and
     **404 Not Found** if the conversation does not exist.
+
+    Operator only (v1.79.2): needs the operator key (MCP_API_KEY) in x-api-key;
+    a customer key no longer suffices (401, the conversation stays).
     """
     store = get_conversation_store()
     deleted = await store.delete(conversation_id)
@@ -4401,8 +4464,11 @@ async def mcp_http(request: Request):
         }
 
     Optional service key (v1.79.1): send it as x-api-key or Authorization: Bearer on
-    the connection. Only the 7 org-scoped usage/budget tools need it (they act on
-    the key's own org); the other 22 tools stay anonymous. Headers are never logged.
+    the connection. The 7 org-scoped usage/budget tools need it (they act on the
+    key's own org); the four operator-only tools (v1.79.2: list/delete_price_alert,
+    list/delete_conversation) need the operator key (MCP_API_KEY); the other 18
+    stay anonymous. Headers are never logged. Bodies over settings.max_body_bytes
+    are refused with 413 by the security middleware before this handler runs.
     """
     try:
         body = await request.json()
