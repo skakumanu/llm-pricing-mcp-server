@@ -191,7 +191,7 @@
       </div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.75rem 1.1rem;font-size:.82rem;">
         <div style="color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">Tools</div>
-        <span style="color:var(--success);font-weight:600">29 tools · No key needed for pricing tools</span>
+        <span style="color:var(--success);font-weight:600">30 tools · No key needed for pricing tools</span>
       </div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.75rem 1.1rem;font-size:.82rem;" id="npm-package-card">
         <div style="color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">npm package</div>
@@ -237,7 +237,7 @@
           <div class="step-num">2</div>
           <div class="step-body" id="mcp-service-key">
             <h4>Optional: add your service key</h4>
-            <p>The 18 pricing and routing tools need no key. The four alert and conversation management tools marked <span style="color:var(--warn);font-weight:600">operator only</span> list or delete every subscriber's and visitor's data, so they need the server operator's key (<code>MCP_API_KEY</code>); anyone else gets <code>operator_key_required</code>. The 7 usage and budget tools marked <span style="color:var(--warn);font-weight:600">needs key</span> below read or write your org's data, so they need your service API key (free at <a href="/billing">/billing</a>, <code>POST /billing/signup</code>) sent on the MCP connection as <code>x-api-key</code> or <code>Authorization: Bearer</code>. They then act only on that key's org: <code>org_id</code> defaults to it, and another org's is refused (<code>org_mismatch</code>). Without a key they return <code>customer_key_required</code>.</p>
+            <p>The 18 pricing and routing tools need no key. The four alert and conversation management tools marked <span style="color:var(--warn);font-weight:600">operator only</span> list or delete every subscriber's and visitor's data, so they need the server operator's key (<code>MCP_API_KEY</code>); anyone else gets <code>operator_key_required</code>. The 7 usage and budget tools marked <span style="color:var(--warn);font-weight:600">needs key</span> below read or write your org's data, so they need your service API key (free at <a href="/billing">/billing</a>, <code>POST /billing/signup</code>) sent on the MCP connection as <code>x-api-key</code> or <code>Authorization: Bearer</code>. They then act only on that key's org: <code>org_id</code> defaults to it, and another org's is refused (<code>org_mismatch</code>). Without a key they return <code>customer_key_required</code>. The <code>dispatch</code> tool also needs your service key, plus at least one provider key stored for your org (<code>POST /dispatch/keys</code>): it makes a real model call billed to those keys; without a customer key it returns <code>dispatch_requires_api_key</code>.</p>
             <div class="code-block solo">{
   <span class="key">"mcpServers"</span>: {
     <span class="key">"llm-pricing"</span>: {
@@ -254,7 +254,7 @@
           <div class="step-num">3</div>
           <div class="step-body">
             <h4>Restart your client</h4>
-            <p>After saving the config, restart Claude Desktop / VS Code / Cursor. The 29 tools will appear automatically.</p>
+            <p>After saving the config, restart Claude Desktop / VS Code / Cursor. The 30 tools will appear automatically.</p>
           </div>
         </div>
         <div class="step">
@@ -291,10 +291,10 @@
           <div class="step-num">2</div>
           <div class="step-body">
             <h4>Optional: point it elsewhere, or add your service key</h4>
-            <p>All settings are optional; the defaults work out of the box. <code>LLM_PRICING_API_KEY</code> (bridge v1.1.0+) is forwarded as the <code>x-api-key</code> header and never logged; only the 7 usage and budget tools need it.</p>
+            <p>All settings are optional; the defaults work out of the box. <code>LLM_PRICING_API_KEY</code> (bridge v1.1.0+) is forwarded as the <code>x-api-key</code> header and never logged; only the 7 usage and budget tools and <code>dispatch</code> need it. If you use <code>dispatch</code> (a real model call with failover), raise the timeout to <code>LLM_PRICING_MCP_TIMEOUT_MS=120000</code>.</p>
             <div class="code-block solo"><span class="cmt"># env vars for the bridge</span>
 LLM_PRICING_MCP_URL=https://llm-pricing-api.fly.dev/mcp   <span class="cmt"># a self-hosted or local instance</span>
-LLM_PRICING_MCP_TIMEOUT_MS=30000                          <span class="cmt"># per-request timeout upstream</span>
+LLM_PRICING_MCP_TIMEOUT_MS=30000                          <span class="cmt"># per-request timeout upstream (120000 for dispatch)</span>
 LLM_PRICING_API_KEY=&lt;your-service-key&gt;                  <span class="cmt"># optional: usage &amp; budget tools</span></div>
             <p style="margin-top:.6rem">In the client config, add <code>"env": { "LLM_PRICING_API_KEY": "&lt;your-service-key&gt;" }</code> next to <code>"args"</code>.</p>
           </div>
@@ -303,7 +303,7 @@ LLM_PRICING_API_KEY=&lt;your-service-key&gt;                  <span class="cmt">
           <div class="step-num">3</div>
           <div class="step-body">
             <h4>Restart your client</h4>
-            <p>The 29 tools appear automatically. Package: <a href="https://www.npmjs.com/package/llm-pricing-mcp" style="color:var(--accent)">npmjs.com/package/llm-pricing-mcp</a> (MIT), listed in the MCP Registry as <code>io.github.skakumanu/llm-pricing-mcp-server</code>.</p>
+            <p>The 30 tools appear automatically. Package: <a href="https://www.npmjs.com/package/llm-pricing-mcp" style="color:var(--accent)">npmjs.com/package/llm-pricing-mcp</a> (MIT), listed in the MCP Registry as <code>io.github.skakumanu/llm-pricing-mcp-server</code>.</p>
           </div>
         </div>
       </div>
@@ -404,7 +404,7 @@ pip install -r requirements.txt</div>
             <div class="step-num">4</div>
             <div class="step-body">
               <h4>Enable the tools in Agent mode</h4>
-              <p>Open the Copilot Chat panel, switch to <em>Agent</em> mode, then click the tools icon and enable <strong>llm-pricing</strong>. All 29 tools become available to the agent.</p>
+              <p>Open the Copilot Chat panel, switch to <em>Agent</em> mode, then click the tools icon and enable <strong>llm-pricing</strong>. All 30 tools become available to the agent.</p>
             </div>
           </div>
         </div>
@@ -517,14 +517,14 @@ pip install -r requirements.txt</div>
           <div class="step-num">2</div>
           <div class="step-body">
             <h4>Restart Perplexity</h4>
-            <p>After saving, restart the desktop app. All 29 pricing tools will be available in your conversations.</p>
+            <p>After saving, restart the desktop app. All 30 pricing tools will be available in your conversations.</p>
           </div>
         </div>
         <div class="step">
           <div class="step-num">3</div>
           <div class="step-body">
             <h4>Verify</h4>
-            <p>Ask: <em>"What LLM pricing tools do you have available?"</em> — Perplexity should list all 29 tools.</p>
+            <p>Ask: <em>"What LLM pricing tools do you have available?"</em> — Perplexity should list all 30 tools.</p>
           </div>
         </div>
       </div>
@@ -532,10 +532,10 @@ pip install -r requirements.txt</div>
 
   </div><!-- /section -->
 
-  <!-- All 29 tools -->
+  <!-- All 30 tools -->
   <div class="section">
     <div class="section-label">Available Tools</div>
-    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">All 29 tools are accessible via MCP. <span style="color:var(--accent)">Purple</span> = required arg · <span style="color:var(--muted)">Grey</span> = optional · <span style="color:var(--warn)">needs key</span> = send your service key on the connection (<a href="#mcp-service-key">how</a>); these act only on your own org. <code>import_session_usage</code> needs the key too.</p>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">All 30 tools are accessible via MCP. <span style="color:var(--accent)">Purple</span> = required arg · <span style="color:var(--muted)">Grey</span> = optional · <span style="color:var(--warn)">needs key</span> = send your service key on the connection (<a href="#mcp-service-key">how</a>); these act only on your own org. <code>import_session_usage</code> needs the key too, and <code>dispatch</code> spends on your own stored provider keys.</p>
     <div class="tool-grid">
       <div class="tool-card">
         <div class="tool-name">get_all_pricing</div>
@@ -671,6 +671,11 @@ pip install -r requirements.txt</div>
         <div class="tool-name">delete_budget_alert<span class="needs-key" title="Needs your service API key on the MCP connection; acts only on your own org">needs key</span></div>
         <div class="tool-desc">Delete one of your org's budget-spend alerts by its ID.</div>
         <div class="tool-args"><span class="req">alert_id</span></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">dispatch<span class="needs-key" title="Needs your service API key on the MCP connection and a provider key stored for your org; makes a real, billed model call">needs key</span></div>
+        <div class="tool-desc">Run a text chat request through the dispatch gateway: your policy picks the best eligible model and you get the completion plus the full dispatch receipt (chosen model, reason, cost, savings, attempts). Makes a <strong>real model call billed to your own provider keys</strong> stored with <code>POST /dispatch/keys</code>; spend is recorded against your org. Hosted <code>/mcp</code> or the npx bridge only (with the bridge, set <code>LLM_PRICING_MCP_TIMEOUT_MS=120000</code>).</div>
+        <div class="tool-args"><span class="req">prompt | messages</span><span>system</span><span>model</span><span>max_tokens</span><span>temperature</span><span>top_p</span><span>stop</span><span>dispatch</span></div>
       </div>
     </div>
   </div>

@@ -28,9 +28,11 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-Restart Claude Desktop. All 29 tools are available immediately.
+Restart Claude Desktop. All 30 tools are available immediately.
 
 **Service key (optional, v1.79.1).** The pricing tools need no key. The 7 usage/budget tools (`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`) need your service API key on the connection — add `"headers": { "x-api-key": "<your-service-key>" }` next to `"url"` (or, with the npx bridge, `"env": { "LLM_PRICING_API_KEY": "<your-service-key>" }`). They then act only on that key's org; without a key they return `customer_key_required`. The local STDIO server (Option B) is always anonymous, so those tools refuse there. The four operator-only tools (`list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation`, v1.79.2) need the server operator's key (`MCP_API_KEY`); any other caller gets `operator_key_required`.
+
+**Dispatch from Claude (v1.80.0).** The `dispatch` tool runs a text chat request through the dispatch gateway — your policy picks the best eligible model — and returns the completion, `usage` and the full `dispatch_receipt`. It makes a **real model call billed to your own provider keys** stored for your org with `POST /dispatch/keys`, so it needs your service key on the connection (same `x-api-key` header or `LLM_PRICING_API_KEY` env as above); anonymous and operator callers get `dispatch_requires_api_key`, and the local STDIO server (Option B) returns `dispatch_requires_hosted_mcp`. Ask, for example, *"Use dispatch to answer 'what is MCP?' with the cheapest model scoring at least 70"*. Pass `prompt` (+ optional `system`) or `messages`, plus an optional `dispatch` policy object identical to HTTP's. Text-only and non-streaming. With the npx bridge, set `"LLM_PRICING_MCP_TIMEOUT_MS": "120000"` in `env` (failover can outlast the 30 s default), and bound calls with `dispatch.failover.timeout_ms` / `dispatch.failover.max_attempts`.
 
 **Config file locations:**
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
@@ -139,13 +141,13 @@ Test the server directly:
 cd /path/to/llm-pricing-mcp-server
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 ```
-Should print a JSON response with 29 tools.
+Should print a JSON response with 30 tools.
 
 ### Verify tool count
 
 ```bash
 python -c "from mcp.tools.tool_manager import ToolManager; print(len(ToolManager().list_tools()), 'tools')"
-# → 29 tools
+# → 30 tools
 ```
 
 ### HTTP endpoint not responding

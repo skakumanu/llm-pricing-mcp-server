@@ -30,7 +30,9 @@ from mcp.tools.import_session_usage import ImportSessionUsageTool
 from mcp.tools.register_budget_alert import RegisterBudgetAlertTool
 from mcp.tools.list_budget_alerts import ListBudgetAlertsTool
 from mcp.tools.delete_budget_alert import DeleteBudgetAlertTool
+from mcp.tools.dispatch import DispatchTool
 from src.services.currency import SUPPORTED_CURRENCIES
+from src.models.dispatch import DispatchPolicy
 from mcp.caller import ANONYMOUS, OPERATOR_ONLY_NOTE, PUBLIC, McpCaller, authorize
 
 # v1.76.0 — optional on the five pricing-output tools. MCP never detects a
@@ -55,11 +57,86 @@ _LOCALE_PROPERTIES = {
     },
 }
 
+# v1.80.0 — transports a ToolManager can serve. STDIO is a local process with no
+# connection credential, so tools that need one (dispatch) refuse there with guidance.
+TRANSPORT_HTTP = "http"
+TRANSPORT_STDIO = "stdio"
+
+_OBJECTIVES = list(DispatchPolicy.model_fields["objective"].annotation.__args__)
+
+
+def _number(description: str, **limits) -> Dict[str, Any]:
+    return {"type": "number", "description": description, **limits}
+
+
+# v1.80.0 — the `dispatch` policy object, hand-written inline (no $ref) so every MCP client
+# renders it. Mirrors DispatchPolicy / FailoverPolicy / ShadowPolicy field for field
+# (tests/test_mcp_dispatch.py pins the property sets); the same pydantic models validate it.
+_DISPATCH_POLICY_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "description": (
+        "Dispatch policy — the same object as the HTTP `dispatch` body field "
+        "(OpenAI SDK extra_body={'dispatch': {...}}). Omit for the balanced objective with failover on."
+    ),
+    "properties": {
+        "objective": {
+            "type": "string", "enum": _OBJECTIVES, "default": "balanced",
+            "description": "Objective preset used to order eligible candidates ('pinned' needs pinned_model)",
+        },
+        "min_quality_score": _number("Quality floor 0-100 (hard guarantee, incl. failover)", minimum=0, maximum=100),
+        "max_cost_per_1m_tokens": _number("Blended $/1M-token ceiling", exclusiveMinimum=0),
+        "min_context_window": {"type": "integer", "exclusiveMinimum": 0,
+                               "description": "Minimum context window in tokens"},
+        "task_type": {"type": "string", "maxLength": 100,
+                      "description": "Task type (inferred from the messages when omitted)"},
+        "preferred_provider": {"type": "string", "maxLength": 100,
+                               "description": "Provider that gets the router's preference boost"},
+        "exclude_reasoning_models": {"type": "boolean", "default": False,
+                                     "description": "Drop reasoning/thinking models"},
+        "allow": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 200},
+                  "description": "Only these models or 'provider:<name>' entries may be dispatched"},
+        "deny": {"type": "array", "maxItems": 100, "items": {"type": "string", "maxLength": 200},
+                 "description": "Never dispatch these models or 'provider:<name>' entries"},
+        "max_request_cost_usd": _number(
+            "Max estimated USD for this request (prompt tokens x input price + max_tokens x output price); "
+            "with a shadow the cap covers primary + shadow", exclusiveMinimum=0,
+        ),
+        "failover": {
+            "type": "object",
+            "description": "Reliability knobs for the dispatch loop",
+            "properties": {
+                "enabled": {"type": "boolean", "default": True,
+                            "description": "Re-dispatch to the next-best candidate on a retryable failure"},
+                "max_attempts": {"type": "integer", "minimum": 1, "maximum": 10,
+                                 "description": "Upper bound on provider attempts (server default 3)"},
+                "timeout_ms": {"type": "integer", "minimum": 100, "maximum": 600000,
+                               "description": "Per-attempt provider timeout in ms (server default 30000)"},
+            },
+        },
+        "pinned_model": {"type": "string", "maxLength": 200,
+                         "description": "Required when objective is 'pinned'; exactly one model"},
+        "shadow": {
+            "type": "object",
+            "description": "Optional shadow A/B run; give exactly one of model / objective. Its text is discarded",
+            "properties": {
+                "model": {"type": "string", "maxLength": 200, "description": "Catalogue model name to shadow with"},
+                "objective": {"type": "string", "enum": [o for o in _OBJECTIVES if o != "pinned"],
+                              "description": "Shadow with the top other candidate under this objective"},
+            },
+        },
+        "request_id": {"type": "string", "maxLength": 200, "description": "Idempotency key for the spend record"},
+        "session_id": {"type": "string", "maxLength": 200, "description": "Session tag for the usage ledger"},
+        "currency": {"type": "string", "enum": list(SUPPORTED_CURRENCIES),
+                     "description": "Also present receipt money figures in this ISO-4217 currency"},
+        "country": {"type": "string", "description": "ISO-3166 alpha-2 country whose currency to present"},
+    },
+}
+
 
 class ToolManager:
     """Manages all MCP tools and their metadata."""
 
-    def __init__(self, aggregator: Optional[PricingAggregatorService] = None):
+    def __init__(self, aggregator: Optional[PricingAggregatorService] = None, transport: str = TRANSPORT_HTTP):
         """Initialize all tools.
 
         Args:
@@ -70,8 +147,12 @@ class ToolManager:
                 Defaults to None, in which case each tool falls back to
                 constructing its own instance — unchanged behavior for direct
                 no-arg construction (e.g. in tests).
+            transport: TRANSPORT_HTTP (default) or TRANSPORT_STDIO (v1.80.0). On STDIO a
+                tool that declares ``stdio_refusal()`` (dispatch) returns that refusal
+                instead of running, since a local process has no connection credential.
         """
         self.aggregator = aggregator
+        self.transport = transport
         self.tools: Dict[str, Any] = {}
         self._register_tools()
 
@@ -1100,6 +1181,71 @@ class ToolManager:
                     "required": ["alert_id"],
                 },
             },
+            "dispatch": {
+                "instance": DispatchTool(),
+                "name": "dispatch",
+                "description": (
+                    "Send a text chat request through the dispatch gateway: it applies your policy, "
+                    "runs the best eligible model, and returns the completion, usage and the full "
+                    "dispatch_receipt (chosen model, reason, cost, savings, attempts) — the same as "
+                    "POST /v1/chat/completions with a `dispatch` object. This makes a REAL model call "
+                    "billed to your own provider keys stored for your org (POST /dispatch/keys), and the "
+                    "spend is recorded against your org. Requires your service API key on the MCP "
+                    "connection (x-api-key or Authorization: Bearer); the operator key and anonymous "
+                    "callers get dispatch_requires_api_key, and the local STDIO server refuses with "
+                    "dispatch_requires_hosted_mcp. Pass prompt (with optional system) or messages, not "
+                    "both. Text-only, single-choice, non-streaming; no tools/functions. Refusals carry "
+                    "the same error codes as HTTP. Calls can take a while with failover: bound them with "
+                    "dispatch.failover.timeout_ms and dispatch.failover.max_attempts, and set "
+                    "LLM_PRICING_MCP_TIMEOUT_MS=120000 when using the npx bridge."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "prompt": {
+                            "type": "string",
+                            "description": "The user prompt (use this or messages, not both)",
+                        },
+                        "system": {
+                            "type": "string",
+                            "description": "Optional system prompt, only with prompt",
+                        },
+                        "messages": {
+                            "type": "array",
+                            "minItems": 1,
+                            "description": "OpenAI-style chat messages (use this or prompt, not both)",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "role": {"type": "string", "enum": ["system", "user", "assistant"]},
+                                    "content": {"type": "string"},
+                                },
+                                "required": ["role", "content"],
+                            },
+                        },
+                        "model": {
+                            "type": "string",
+                            "description": "Requested model name (default 'auto'); the policy decides what runs",
+                        },
+                        "max_tokens": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Max completion tokens (server default when omitted)",
+                        },
+                        "temperature": {"type": "number", "description": "Sampling temperature"},
+                        "top_p": {"type": "number", "description": "Nucleus sampling"},
+                        "stop": {
+                            "description": "Stop sequence or list of stop sequences",
+                            "anyOf": [
+                                {"type": "string"},
+                                {"type": "array", "items": {"type": "string"}},
+                            ],
+                        },
+                        "dispatch": _DISPATCH_POLICY_SCHEMA,
+                    },
+                    "required": [],
+                },
+            },
             "ask_agent": {
                 "instance": AskAgentTool(),
                 "name": "ask_agent",
@@ -1176,16 +1322,30 @@ class ToolManager:
                 "error": f"Tool '{name}' not found",
             }
 
+        instance = tool["instance"]
         try:
             access = self.caller_access(name)
             if access == PUBLIC:
-                return await tool["instance"].execute(arguments)
+                return await instance.execute(arguments)
+            # v1.80.0: a tool that needs a connection credential refuses on STDIO with guidance.
+            if self.transport == TRANSPORT_STDIO and hasattr(instance, "stdio_refusal"):
+                return instance.stdio_refusal()
             refusal = authorize(caller, access, arguments)
             if refusal is not None:
+                # A tool may replace the generic customer_key_required with its own refusal
+                # (dispatch: HTTP's dispatch_requires_api_key). org_mismatch passes through.
+                if refusal.get("error_code") == "customer_key_required" and hasattr(instance, "access_refusal"):
+                    return instance.access_refusal()
                 return refusal
-            result = await tool["instance"].execute(arguments, caller=caller)
+            result = await instance.execute(arguments, caller=caller)
             return result
         except Exception as e:
+            if getattr(instance, "redact_errors", False):
+                return {
+                    "success": False,
+                    "error": f"Failed to execute tool '{name}'",
+                    "error_type": type(e).__name__,
+                }
             return {
                 "success": False,
                 "error": f"Failed to execute tool '{name}': {str(e)}",

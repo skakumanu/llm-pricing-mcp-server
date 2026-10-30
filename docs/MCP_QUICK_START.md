@@ -8,7 +8,7 @@
 
 ## What's Available
 
-29 MCP tools across two transports:
+30 MCP tools across two transports:
 
 | Transport | Endpoint | Use case |
 |-----------|----------|----------|
@@ -43,7 +43,7 @@ Expected response:
 }
 ```
 
-### List all 29 tools
+### List all 30 tools
 
 ```bash
 curl -X POST https://llm-pricing-api.fly.dev/mcp \
@@ -77,6 +77,21 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 
 Without a key → `error_code: "customer_key_required"`; another org's `org_id` → `error_code: "org_mismatch"` (both are `success: false` tool results, not JSON-RPC errors). The local STDIO server below is always anonymous, so these tools refuse there.
 
+### `dispatch` — run a request through the gateway (v1.80.0)
+
+`dispatch` sends a text chat request through the dispatch gateway and returns the completion, `usage` and the full `dispatch_receipt` — the same as `POST /v1/chat/completions` with a `dispatch` object. **It makes a real model call billed to your own provider keys**, stored once for your org with `POST /dispatch/keys`; spend is recorded against your org exactly as for HTTP.
+
+- **Auth**: your service key on the connection (`x-api-key` or `Authorization: Bearer`). Anonymous callers and the operator key get `error: "dispatch_requires_api_key"`; the local STDIO server (`python mcp/server.py`) returns `error: "dispatch_requires_hosted_mcp"` — use the hosted endpoint or the npx bridge.
+- **Arguments**: `prompt` (+ optional `system`) or `messages` (not both); optional `model`, `max_tokens`, `temperature`, `top_p`, `stop`, and the same `dispatch` policy object as HTTP (`objective`, `min_quality_score`, `allow`/`deny`, `max_request_cost_usd`, `failover`, `shadow`, `currency`, ...).
+- **Limits**: text-only, single-choice, non-streaming. Refusals carry HTTP's error codes (`no_eligible_candidate`, `budget_hard_stop`, `unsupported_feature`, `rate_limit_exceeded`, ...). MCP and HTTP dispatch share one per-customer rate limit.
+- **Timeout**: with failover a call can take longer than the npx bridge's 30 s default — set `LLM_PRICING_MCP_TIMEOUT_MS=120000`, and bound it with `dispatch.failover.timeout_ms` / `dispatch.failover.max_attempts`.
+
+```bash
+curl -X POST https://llm-pricing-api.fly.dev/mcp \
+  -H "Content-Type: application/json" -H "x-api-key: $LLM_PRICING_API_KEY" \
+  -d '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"dispatch","arguments":{"prompt":"Say hi","dispatch":{"objective":"cheapest"}}}}'
+```
+
 ---
 
 ## STDIO Transport (npx, no clone)
@@ -91,7 +106,7 @@ Add to any STDIO-only MCP client config:
 }
 ```
 
-This is a zero-dependency bridge ([`npm/llm-pricing-mcp`](../npm/llm-pricing-mcp)) that forwards stdin/stdout to the HTTP endpoint above — no Python, clone, or local pricing data involved. Set `"env": { "LLM_PRICING_API_KEY": "<your-service-key>" }` (bridge 1.1.0+) to forward your service key as `x-api-key` for the usage/budget tools; it is never logged.
+This is a zero-dependency bridge ([`npm/llm-pricing-mcp`](../npm/llm-pricing-mcp)) that forwards stdin/stdout to the HTTP endpoint above — no Python, clone, or local pricing data involved. Set `"env": { "LLM_PRICING_API_KEY": "<your-service-key>" }` (bridge 1.1.0+) to forward your service key as `x-api-key` for the usage/budget tools and `dispatch`; it is never logged. For `dispatch`, also set `"LLM_PRICING_MCP_TIMEOUT_MS": "120000"`.
 
 ---
 
@@ -118,7 +133,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 
 ---
 
-## All 29 Tools
+## All 30 Tools
 
 | Tool | Required args | Optional args |
 |------|--------------|---------------|
@@ -143,6 +158,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 | `list_conversations` | — | `limit` |
 | `delete_conversation` | `conversation_id` | — |
 | `ask_agent` | `message` | `conversation_id`, `autonomous` |
+| `dispatch` | `prompt` or `messages` (service key + stored provider keys) | `system`, `model`, `max_tokens`, `temperature`, `top_p`, `stop`, `dispatch` |
 
 ---
 
