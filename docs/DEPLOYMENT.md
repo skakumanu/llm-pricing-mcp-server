@@ -11,6 +11,9 @@ The old Azure blue-green docs are historical only:
 - Push to `master` runs `.github/workflows/ci-cd.yml`.
 - `deploy_fly` waits for `test`, `lint`, `osv_scan`, `security`, `secret_scan`, then runs
   `flyctl deploy --remote-only` (token: `FLY_API_TOKEN` Actions secret).
+- After a confirmed deploy it tags `vX.Y.Z` and publishes a GitHub Release whose notes are
+  that version's What's New entry (`scripts/release_notes_from_whats_new.py`). An unconfirmed
+  health check publishes nothing, so the Releases page only ever reflects what is live.
 - It polls `https://llm-pricing-api.fly.dev/health` for 3 min, expecting `200` and the
   `src/__init__.py` version. A timeout warns; it does not fail the build.
 - No staging slot, no manual step: a green `master` deploys itself.
