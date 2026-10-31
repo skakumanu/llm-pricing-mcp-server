@@ -796,11 +796,25 @@ class RouterRequest(BaseModel):
         False,
         description="Exclude slow thinking/reasoning models (e.g. o1, o3, R1, claude-3-7-sonnet)",
     )
+    client: Optional[str] = Field(
+        None,
+        max_length=100,
+        description=(
+            "AI coding client / tool the caller runs, e.g. 'Claude Code', 'cursor', "
+            "'github copilot', 'cline'. A recognised client RESTRICTS the candidates to "
+            "models it can run before ranking (restrict-then-rank); an unrecognised name "
+            "returns the unfiltered result plus a client_note. Case- and "
+            "separator-insensitive. Recognised: claude_code, claude_desktop, cursor, "
+            "github_copilot, windsurf, cline, continue, zed, jetbrains_ai, gemini_cli, "
+            "codex_cli, aider, amazon_q, chatgpt_desktop."
+        ),
+    )
     ide_context: Optional[str] = Field(
         None,
+        max_length=100,
         description=(
-            "IDE context hint — boosts IDE-native tools when set: "
-            "'copilot' | 'cursor' | 'windsurf' | 'claude_code' | 'jetbrains' | 'amazon_q'"
+            "Deprecated alias of client; same values ('copilot' | 'cursor' | 'windsurf' | "
+            "'claude_code' | 'jetbrains' | 'amazon_q'), same restrict-then-rank meaning."
         ),
     )
     monthly_budget_usd: Optional[float] = Field(
@@ -851,6 +865,24 @@ class RouterResponse(BaseModel):
         None,
         exclude_if=_omit_none,
         description="Present when recommended.local_prices / alternatives[].local_prices are populated",
+    )
+    applied_client: Optional[str] = Field(
+        None,
+        exclude_if=_omit_none,
+        description="Canonical id of the recognised client the candidate set was restricted to",
+    )
+    client_source: Optional[str] = Field(
+        None,
+        exclude_if=_omit_none,
+        description="'explicit' when a client was passed (REST never infers one)",
+    )
+    client_as_of: Optional[str] = Field(
+        None, exclude_if=_omit_none, description="Date the client table entry was last verified"
+    )
+    client_note: Optional[str] = Field(
+        None,
+        exclude_if=_omit_none,
+        description="Plain-language note: what was restricted, or that the client was unrecognised",
     )
 
 

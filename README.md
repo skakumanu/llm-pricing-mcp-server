@@ -74,6 +74,8 @@ All 32 tools are listed over `POST /mcp` and STDIO. MCP protocol version `2024-1
 | Usage and budget | `record_usage`, `get_usage_summary`, `analyze_session_usage`, `import_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert` |
 | Agent, support and dispatch | `ask_agent`, `support_chat`, `list_conversations`, `delete_conversation`, `dispatch` |
 
+Pass `client` (e.g. `Claude Code`, `cursor`, `github copilot`, `cline`) to `recommend_model`, `optimize_workload`, `compare_costs` or `POST /router/recommend` and the answer is restricted to models that tool can run before ranking; on the hosted MCP server it is inferred from the handshake when omitted, and an explicit value always wins. Recognised clients and the override order are in [docs/MCP_QUICK_START.md](docs/MCP_QUICK_START.md#client-aware-recommendations).
+
 The chat agent binds 27 of the 32 MCP tools (all except `ask_agent`, `support_chat`, `get_telemetry`, `get_cache_stats` and `dispatch`).
 
 ---
@@ -175,7 +177,7 @@ Full list: `src/config/settings.py`. Production settings: [docs/DEPLOYMENT.md](d
 pytest tests/ -q
 ```
 
-- 3521 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 3596 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 - Git Flow: `feature/*` → `develop` → `master`. See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 - Internals, services, data stores and CI: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Deploys to Fly.io from `master` when all CI gates pass: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

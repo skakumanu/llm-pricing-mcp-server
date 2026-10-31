@@ -155,8 +155,34 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.84.1 -->
+  <!-- v1.85.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.85.0</span>
+      <span class="release-date">Oct 31, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Recommendations that only name models your tool can run</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong><code>client</code> parameter on <code>recommend_model</code>, <code>optimize_workload</code>, <code>compare_costs</code> and the REST router (<code>POST /router/recommend</code> and <code>/router/recommend/stream</code>).</strong> Tell the service which tool you run and the candidate set is cut to the models that tool can run <em>before</em> ranking. Recognised: Claude Code, Claude Desktop / claude.ai, Cursor, GitHub Copilot, Windsurf, Cline, Continue, Zed, JetBrains AI, Gemini CLI, Codex CLI, Aider, Amazon Q Developer and ChatGPT desktop. Names are case- and separator-insensitive (<code>Claude Code</code>, <code>claude-code</code>, <code>claude_code</code>). Claude Code gets Anthropic models only, including <code>claude-haiku-5-5</code>, <code>claude-sonnet-5-5</code>, <code>claude-opus-5-5</code> and <code>claude-fable-5-1</code></li>
+        <li><strong>Hosted handshake inference.</strong> The hosted <code>/mcp</code> endpoint now returns an <code>Mcp-Session-Id</code> from <code>initialize</code>; clients that echo it have their <code>clientInfo.name</code> used when you omit <code>client</code>. An explicit <code>client</code> always wins. Best effort and held in memory only, so after a server restart it falls back to unfiltered results plus a note. STDIO infers from the same handshake</li>
+        <li><strong>Open and fixed menus.</strong> Tools that take any API key (Cline, Continue, Zed, Aider) consider every per-token API model and never another tool's subscription plan; the response says the menu is open. Multi-vendor tools (Cursor, GitHub Copilot, Windsurf, JetBrains AI) are matched by whole provider</li>
+        <li><strong><code>compare_costs</code> flags, never filters.</strong> Every model you name is still priced; with a client each found model carries <code>runnable_in_client</code></li>
+        <li><strong>Every response says what was applied:</strong> <code>applied_client</code>, <code>client_source</code> (<code>explicit</code>, <code>inferred</code> or <code>none</code>), <code>client_as_of</code> (when the hand-maintained client table was last checked) and <code>client_note</code>. An unrecognised client returns the unfiltered result plus a note listing the recognised names; an empty restricted set returns <code>no_runnable_model_for_client</code> naming the client</li>
+      </ul>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li><strong>Behaviour change: the hint now restricts instead of boosting.</strong> <code>ide_context</code> used to only boost your IDE's own plan 5x (and same-vendor models 1.15x), so Claude Code could still be told to use codestral or Llama. A recognised client now restricts the candidate set before ranking, on the MCP tools and <code>POST /router/recommend</code> (and <code>/stream</code>) alike; the native-plan preference still applies inside the set. The six old values keep working as aliases of <code>client</code>; omit the hint or pass an unknown one and you get the previous unfiltered ranking plus a note saying so</li>
+        <li>Prices, quality scores and the ranking formula are unchanged</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.84.1 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.84.1</span>

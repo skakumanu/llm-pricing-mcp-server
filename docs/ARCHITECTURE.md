@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.84.1 | **Last updated**: 2026-10-31
+**Version**: v1.85.0 | **Last updated**: 2026-10-31
 
 Canonical internals reference. Release history lives in `static/whats-new/`, not here.
 
@@ -71,7 +71,10 @@ src/
     price_oracle.py         reference registry: gap-fill, drift + retirement withholding (24h TTL + snapshot)
     data_quality.py         accuracy summary for /data-quality + get_data_quality
     cost_calculator.py      compute_token_cost(), shared by REST and MCP cost paths
-    router.py               routing engine; rank_models() / hard_filter_reason() reused by dispatch
+    router.py               routing engine; rank_models() / hard_filter_reason() reused by dispatch and the SSE router;
+                            restricts to the caller's client menu before ranking (v1.85.0)
+    client_models.py        curated, dated table of AI coding clients and the models each can run; resolve_client(),
+                            eligible_models() (v1.85.0)
     recommendation_cache.py ~5 min decision cache + hit/miss stats
     benchmark_service.py    quality scores: static table + HF fallback
     task_profiles.py, portfolio_optimizer.py, token_counter.py, session_recommendation.py, quality_tradeoff_caveat.py
@@ -98,7 +101,8 @@ src/
 mcp/
   server.py                 STDIO transport (always anonymous; transport='stdio')
   caller.py                 McpCaller + access levels PUBLIC / ORG_SCOPED / OPERATOR_ONLY / CUSTOMER_ONLY / IDENTITY_AWARE
-  tools/                    one module per tool + tool_manager.py + _locale.py (support_chat.py is identity-aware)
+  sessions.py               in-memory Mcp-Session-Id -> clientInfo.name store for hosted client inference (v1.85.0)
+  tools/                    one module per tool + tool_manager.py + _locale.py + _client.py (support_chat.py is identity-aware)
   schema_generator.py, schemas/   generated JSON-RPC schemas
 agent/                      pricing_agent.py, support_agent.py, support_tools.py, react_loop.py, llm_backend.py,
                             conversation.py, tools.py
@@ -159,6 +163,7 @@ Checked in this order:
 ### MCP transports
 - **STDIO** (`mcp/server.py`) and **HTTP** (`POST /mcp`): JSON-RPC 2.0, protocol `2024-11-05`, 32 tools.
 - **npx bridge** (`npm/llm-pricing-mcp`): forwards stdin lines to `POST /mcp`; optional `LLM_PRICING_API_KEY` → `x-api-key`. No tool logic of its own.
+- **Client inference (v1.85.0):** hosted `initialize` returns an `Mcp-Session-Id` header and remembers only `clientInfo.name` (in-memory, bounded, 24 h TTL, lost on restart; an unknown or missing session is never rejected). A `tools/call` that echoes it lets `recommend_model` / `optimize_workload` / `compare_costs` infer the client when `client` is omitted; STDIO keeps the name for the process. Precedence: explicit `client` > `ide_context` > handshake > none.
 - `ToolManager.execute_tool(name, args, caller)`; only HTTP `/mcp` resolves a caller, and only for non-PUBLIC tools. The resolved customer caller carries the *effective* tier.
 
 | Access level | Tools | Caller needed |
@@ -330,7 +335,7 @@ Auth: **None** = public · **Rate-limited** = anonymous, per-IP limit + body cap
 | GET | `/locale`, `/currency/rates` | None | Resolved locale; vendored rate table |
 | GET | `/use-cases`, `/performance`, `/telemetry`, `/cache-stats`, `/rate-limits/tiers` | None | Public stats and recommendations |
 | POST | `/cost-estimate`, `/cost-estimate/batch` | Rate-limited | Single / multi-model cost (1–50 models) |
-| POST | `/router/recommend`, `/router/recommend/stream`, `/router/feedback` | Service key | Routing recommendation (SSE variant), feedback |
+| POST | `/router/recommend`, `/router/recommend/stream`, `/router/feedback` | Service key | Routing recommendation (SSE variant), feedback; optional `client` restricts candidates before ranking |
 | GET | `/telemetry/savings`, `/telemetry/ide-savings` | Service key | Per-org savings |
 | POST/GET | `/usage`, `/usage/batch`, `/usage/summary`, `/usage/session/{id}` | Service key | Record and analyse actual usage |
 | POST/GET/DELETE | `/usage/alerts[/{id}]` | Service key | Spend webhooks; `hard_stop` needs a customer key |

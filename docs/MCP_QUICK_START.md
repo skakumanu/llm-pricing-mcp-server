@@ -65,10 +65,10 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 |---|---|---|---|
 | `get_all_pricing` | — | `currency`, `country` | public |
 | `estimate_cost` | `model_name`, `input_tokens`, `output_tokens` | `currency`, `country` | public |
-| `compare_costs` | `model_names[]` (1–50), `input_tokens`, `output_tokens` | `currency`, `country` | public |
+| `compare_costs` | `model_names[]` (1–50), `input_tokens`, `output_tokens` | `client`, `currency`, `country` | public |
 | `predict_cost` | `prompt` | `task_type`, `top_n`, `cache_hit_ratio`, `require_vision` | public |
-| `optimize_workload` | `workloads[]` | `monthly_budget_usd`, `min_quality_score` | public |
-| `recommend_model` | `description` | `task_type`, `max_cost_per_1m_tokens`, `min_quality_score`, `monthly_budget_usd` | public |
+| `optimize_workload` | `workloads[]` | `client`, `monthly_budget_usd`, `min_quality_score` | public |
+| `recommend_model` | `description` | `client`, `task_type`, `max_cost_per_1m_tokens`, `min_quality_score`, `monthly_budget_usd` | public |
 | `check_price_drift` | — | `threshold_pct`, `provider`, `limit` | public |
 | `get_data_quality` | — | — | public |
 | `get_performance_metrics` | — | `provider`, `include_cost` | public |
@@ -95,6 +95,18 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 | `delete_price_alert` | `alert_id` | — | operator |
 | `list_conversations` | — | `limit` | operator |
 | `delete_conversation` | `conversation_id` | — | operator |
+
+## Client-aware recommendations
+
+`recommend_model`, `optimize_workload` and `compare_costs` take a `client` argument naming the tool you run, so the answer only names models that tool can run.
+
+- **Recognised clients:** Claude Code, Claude Desktop / claude.ai, Cursor, GitHub Copilot, Windsurf, Cline, Continue, Zed, JetBrains AI, Gemini CLI, Codex CLI, Aider, Amazon Q Developer, ChatGPT desktop. Ids: `claude_code`, `claude_desktop`, `cursor`, `github_copilot`, `windsurf`, `cline`, `continue`, `zed`, `jetbrains_ai`, `gemini_cli`, `codex_cli`, `aider`, `amazon_q`, `chatgpt_desktop`. Names are case- and separator-insensitive (`Claude Code`, `claude-code`, `claude_code`).
+- **Restrict, then rank.** A recognised client cuts the candidate set to its models first; the usual cost/quality ranking (and the preference for the client's own subscription plan) then applies inside it. `compare_costs` still prices every model you name and only flags each one `runnable_in_client`.
+- **Fixed vs open menus.** Claude Code, Claude Desktop, Gemini CLI, Codex CLI, ChatGPT desktop and Amazon Q Developer have a fixed vendor menu; Cursor, GitHub Copilot, Windsurf and JetBrains AI are matched by whole provider (their own plans plus the vendors their model pickers expose). Cline, Continue, Zed and Aider take any API key, so every per-token model counts (never another tool's subscription plan) and the response says the menu is open.
+- **Override order:** explicit `client` > legacy `ide_context` (a deprecated alias of `client`) > the client inferred from the MCP handshake > none. On the hosted server `initialize` returns an `Mcp-Session-Id` header; a client that echoes it has its `clientInfo.name` used when `client` is omitted (best effort, in memory, lost on a server restart; STDIO infers from the same handshake). With nothing given or inferred you get the unfiltered ranking plus a note.
+- **Unknown client:** unfiltered result plus a note listing the recognised names. If nothing the client can run satisfies your filters you get `error_code: no_runnable_model_for_client`.
+- **Response fields:** `applied_client`, `client_source` (`explicit`, `inferred`, `none`), `client_as_of` (when the hand-maintained client table was last checked) and `client_note`.
+- **Behaviour change (v1.85.0):** `ide_context` used to only boost your IDE's own plan; a recognised value now restricts the candidates. The REST router (`POST /router/recommend`, `/router/recommend/stream`) takes the same `client` field and behaves the same way.
 
 ## `support_chat`
 

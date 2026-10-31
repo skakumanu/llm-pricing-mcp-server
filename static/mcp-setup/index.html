@@ -549,8 +549,8 @@ pip install -r requirements.txt</div>
       </div>
       <div class="tool-card">
         <div class="tool-name">compare_costs</div>
-        <div class="tool-desc">Side-by-side cost comparison across multiple models.</div>
-        <div class="tool-args"><span class="req">model_names[]</span><span class="req">input_tokens</span><span class="req">output_tokens</span></div>
+        <div class="tool-desc">Side-by-side cost comparison across multiple models. Pass <code>client</code> to flag which ones your tool can run.</div>
+        <div class="tool-args"><span class="req">model_names[]</span><span class="req">input_tokens</span><span class="req">output_tokens</span><span>client</span></div>
       </div>
       <div class="tool-card">
         <div class="tool-name">predict_cost</div>
@@ -559,13 +559,13 @@ pip install -r requirements.txt</div>
       </div>
       <div class="tool-card">
         <div class="tool-name">optimize_workload</div>
-        <div class="tool-desc">Route each task to its own cheapest qualifying model instead of one model for everything. Reports the saving versus a single-model deployment.</div>
-        <div class="tool-args"><span class="req">workloads[]</span><span>monthly_budget_usd</span><span>min_quality_score</span></div>
+        <div class="tool-desc">Route each task to its own cheapest qualifying model instead of one model for everything. Reports the saving versus a single-model deployment. With <code>client</code>, only models your tool can run are used.</div>
+        <div class="tool-args"><span class="req">workloads[]</span><span>client</span><span>monthly_budget_usd</span><span>min_quality_score</span></div>
       </div>
       <div class="tool-card">
         <div class="tool-name">recommend_model</div>
-        <div class="tool-desc">Describe your use case in plain English — get the optimal model recommendation plus up to 3 alternatives. Classifies the description into a task type, then runs the same routing engine behind /router/recommend.</div>
-        <div class="tool-args"><span class="req">description</span><span>task_type</span><span>max_cost_per_1m_tokens</span><span>min_quality_score</span><span>min_context_window</span><span>preferred_provider</span><span>monthly_budget_usd</span></div>
+        <div class="tool-desc">Describe your use case in plain English — get the optimal model recommendation plus up to 3 alternatives. Classifies the description into a task type, then runs the same routing engine behind /router/recommend. Pass <code>client</code> and it only names models your tool can run.</div>
+        <div class="tool-args"><span class="req">description</span><span>client</span><span>task_type</span><span>max_cost_per_1m_tokens</span><span>min_quality_score</span><span>min_context_window</span><span>preferred_provider</span><span>monthly_budget_usd</span></div>
       </div>
       <div class="tool-card">
         <div class="tool-name">check_price_drift</div>
@@ -693,6 +693,13 @@ pip install -r requirements.txt</div>
         <div class="tool-args"><span class="req">prompt | messages</span><span>system</span><span>model</span><span>max_tokens</span><span>temperature</span><span>top_p</span><span>stop</span><span>dispatch</span></div>
       </div>
     </div>
+  </div>
+
+  <!-- Client-aware recommendations -->
+  <div class="section" id="client-aware">
+    <div class="section-label">Client-aware recommendations</div>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:.6rem"><code>recommend_model</code>, <code>optimize_workload</code> and <code>compare_costs</code> take a <code>client</code> argument so the answer only names models your tool can run. Recognised clients: Claude Code, Claude Desktop / claude.ai, Cursor, GitHub Copilot, Windsurf, Cline, Continue, Zed, JetBrains AI, Gemini CLI, Codex CLI, Aider, Amazon Q Developer and ChatGPT desktop (ids <code>claude_code</code>, <code>claude_desktop</code>, <code>cursor</code>, <code>github_copilot</code>, <code>windsurf</code>, <code>cline</code>, <code>continue</code>, <code>zed</code>, <code>jetbrains_ai</code>, <code>gemini_cli</code>, <code>codex_cli</code>, <code>aider</code>, <code>amazon_q</code>, <code>chatgpt_desktop</code>); names are case- and separator-insensitive.</p>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:.6rem">A recognised client <strong>restricts</strong> the candidates before ranking (it is not just a boost); <code>compare_costs</code> still prices every model you name and flags each <code>runnable_in_client</code>. Override order: explicit <code>client</code> &gt; legacy <code>ide_context</code> (deprecated alias) &gt; the client inferred from the MCP handshake &gt; none. On the hosted server, <code>initialize</code> returns an <code>Mcp-Session-Id</code> header; a client that echoes it is inferred from its <code>clientInfo.name</code> (best effort, in memory, lost on a server restart). Unknown or missing client: unfiltered result plus a note. Every response carries <code>applied_client</code>, <code>client_source</code>, <code>client_as_of</code> and <code>client_note</code>.</p>
   </div>
 
   <!-- Sample prompts -->
