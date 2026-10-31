@@ -14,7 +14,7 @@ This directory contains VS Code workspace configuration for optimal development 
 1. Open this workspace in VS Code
 2. Install recommended extensions when prompted (or manually via Extensions panel)
 3. VS Code will automatically:
-   - Detect the `.venv` Python virtual environment
+   - Use the `.venv` Python virtual environment (`python.defaultInterpreterPath` points at the Windows layout, `.venv/Scripts/python.exe`; on macOS/Linux pick `.venv/bin/python` with **Python: Select Interpreter**)
    - Enable pytest for testing
    - Configure Black formatter
    - Set up Flake8 linting
@@ -26,15 +26,15 @@ Press `Ctrl+Shift+P` → **"Tasks: Run Task"** → Select task:
 - Run MCP Server (STDIO)
 - Run REST API Server
 - Quick Validate MCP Server
-- Run All Tests
+- Run All Tests / Run Tests with Coverage
+- Format Code (Black) / Lint Code (Flake8)
 - And more...
 
 ### Debugging
 Press `F5` or go to Run and Debug panel (`Ctrl+Shift+D`):
-- Debug MCP Server (STDIO)
-- Debug REST API Server
-- Debug Current Test File
-- And more...
+- MCP Server (STDIO)
+- MCP Server (Debug)
+- FastAPI Server
 
 ## Documentation
 

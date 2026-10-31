@@ -8,6 +8,14 @@
 > no manual blue-green switchover, load balancer, or Kubernetes cluster in production.
 > Actual deployment is CI/CD-driven onto Fly.io — see `docs/DEPLOYMENT.md` and
 > `CLAUDE.md`'s Git Flow section for the real, current process.
+>
+> Changes since this record was written: the two guides now live under `docs/`
+> ([BLUE_GREEN_DEPLOYMENT.md](BLUE_GREEN_DEPLOYMENT.md),
+> [BACKWARDS_COMPATIBILITY.md](BACKWARDS_COMPATIBILITY.md)); `/deployment/shutdown`
+> and `/deployment/shutdown/status` are operator-only (`X-API-Key` = `MCP_API_KEY`),
+> so the unauthenticated `curl` calls below would get 401; and the `SIGTERM`/`SIGINT`
+> handlers are registered only when the app is started with `python -m src.main`, not
+> under the `uvicorn` command the `Dockerfile` runs. Line counts are as of that PR.
 
 ## ✅ Completed Implementation
 

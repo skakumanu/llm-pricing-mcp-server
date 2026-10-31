@@ -2,11 +2,44 @@
 
 ## Overview
 
-As of v1.4.2, the LLM Pricing MCP Server implements intelligent live data fetching with graceful fallback mechanisms. **API keys are completely optional** - the system uses public pricing pages and status pages for live data without requiring authentication.
+**API keys are completely optional.** The pricing the server serves comes primarily from
+curated per-provider tables, checked against an external price registry; live fetching
+from provider pages and APIs is a best-effort layer on top. The web-scraping /
+status-page layer described further down dates from v1.4.2 and is still in the code for
+the original providers, but it is no longer the main source of prices.
 
-## Public Data Sources (No API Keys Required)
+## How pricing is actually produced
 
-All pricing and performance data can be fetched from **public endpoints**:
+`PricingAggregatorService.get_all_pricing_async()` (`src/services/pricing_aggregator.py`)
+runs every provider service concurrently and then post-processes the combined list:
+
+1. **Curated table.** Each provider service (`src/services/*_pricing.py`) builds its models
+   from its hand-maintained `STATIC_PRICING` dict. About a dozen of the older services
+   (OpenAI, Anthropic, Google, Cohere, Mistral, Groq, Together, Fireworks, Perplexity, ...)
+   first try the `DataFetcher` web-scrape described below and fall back to
+   `STATIC_PRICING`; the rest use `STATIC_PRICING` directly.
+2. **Registry-sourced models.** `BasePricingProvider.get_pricing_with_status()` merges
+   `data/registry_models/<provider>.json` (written by `scripts/pickup_registry_models.py`);
+   a curated entry always wins a name collision.
+3. **Live model sync (only with an API key).** If the provider has a model-list endpoint and
+   a key is configured, the live model IDs (cached 6 h) filter out models the provider no
+   longer serves and surface new ones as unpriced (`price_confirmed=False`).
+4. **Price oracle.** `src/services/price_oracle.py` loads the LiteLLM price registry
+   (`raw.githubusercontent.com/BerriAI/litellm/...`, cached 24 h, falling back to the vendored
+   `data/model_prices_snapshot.json` on any failure). It fills prices for unpriced models,
+   withholds (sets `price_confirmed=False` on) curated prices that drift more than 5% from the
+   registry, and withholds models past their registry deprecation date. Curated numbers are
+   never overwritten. If the oracle fails entirely, curated prices are served as-is.
+5. **Confirmed-only by default.** Models with `price_confirmed=False` are dropped unless the
+   caller asks for unconfirmed models.
+
+The snapshot is rebuilt weekly by `.github/workflows/price-audit.yml`, which also opens an
+issue when curated prices drift from the registry. `check_price_drift` and
+`get_data_quality` (and `GET /data-quality`) show what is currently withheld.
+
+## Legacy public data sources (web-scrape layer)
+
+The original five providers were configured with these **public endpoints**:
 
 | Provider | Pricing URL | Status Page |
 |----------|-------------|-------------|
@@ -16,19 +49,22 @@ All pricing and performance data can be fetched from **public endpoints**:
 | **Cohere** | https://cohere.com/pricing | https://status.cohere.com/ |
 | **Mistral** | https://mistral.ai/technology/#pricing | https://status.mistral.ai/ |
 
-## How It Works Without API Keys
+## How the web-scrape layer works without API keys
 
-The system follows a fallback strategy:
+For the services that use `DataFetcher`, the per-provider fallback is:
 
 ```
 1. Web Scrape Pricing Pages (Public - No Auth)
-       ↓ (success)
-2. Check Public Status Pages for Performance (Public - No Auth)
-       ↓ (if already cached)
-3. Use Cached Data from Previous Successful Fetches
-       ↓ (if cache expired)
-4. Use Hardcoded Static Data (Always Available)
+       ↓ (no usable table found, or fetch failed)
+2. Use the provider's curated STATIC_PRICING entry for each model
+       ↓ (in parallel)
+3. Check health endpoints / status pages for latency (Public - No Auth)
+       ↓ (any exception)
+4. Return the curated static data (Always Available)
 ```
+
+Most provider pricing pages are rendered client-side, so the default table parser usually
+finds nothing and step 2 supplies the price.
 
 ## Architecture Components
 
@@ -42,7 +78,8 @@ PricingDataSource:
   - source_type: API, WEB_SCRAPE, STATIC, or HYBRID
   - api_endpoint: Provider API URL
   - pricing_url: Pricing page URL
-  - cache_ttl_seconds: Cache time-to-live (7200s default)
+  - cache_ttl_seconds: Cache time-to-live (dataclass default 3600s; every
+    configured provider sets 7200s)
   - requires_auth: Whether API key needed
 
 PerformanceDataSource:
@@ -50,12 +87,9 @@ PerformanceDataSource:
   - cache_ttl_seconds: 300s (5 mins) for fresh metrics
 ```
 
-**Configured Providers:**
-- OpenAI: API + Web Scraping + Static fallback
-- Anthropic: API + Web Scraping + Static fallback
-- Google: API + Web Scraping + Static fallback
-- Cohere: API + Web Scraping + Static fallback
-- Mistral AI: API + Web Scraping + Static fallback
+**Configured Providers:** `PRICING_SOURCES` and `PERFORMANCE_SOURCES` each have 21
+entries (OpenAI through Oracle OCI), all typed `HYBRID`. Providers added later have no
+entry here and do not use the web-scrape layer.
 
 ### 2. Data Fetcher Utility (`src/services/data_fetcher.py`)
 
@@ -83,7 +117,8 @@ Core utility class providing:
 - Performs lightweight health checks
 - Measures actual API latency
 - Returns: status, latency (ms), timestamp
-- No API calls needed - just HEAD requests for speed
+- Sends `HEAD` requests: the public status/health URL first, then the API endpoint
+  (with the key, if one is set)
 
 #### Smart Cache Management
 ```python
@@ -112,18 +147,20 @@ async def fetch_pricing_data(self) -> List[PricingMetrics]:
 
 ```
 fetch_pricing_data()
-├─ Fetch live models from OpenAI API
+├─ Fetch live models from OpenAI API (only when OPENAI_API_KEY is set)
 │  └─ Cache for 2 hours
 ├─ Fetch live pricing from openai.com/api/pricing/
 │  └─ Cache for 2 hours
 ├─ Fetch performance metrics from API health check
 │  └─ Cache for 5 minutes (more frequent updates)
 └─ Merge and return PricingMetrics
-   ├─ priority: live API data
-   ├─ fallback: cached data
-   ├─ fallback: static data
+   ├─ priority: scraped website price (if a table was parsed)
+   ├─ fallback: curated STATIC_PRICING entry
    └─ on failure: use all static data
 ```
+
+After the service returns, the shared steps in "How pricing is actually produced"
+(registry models, live model sync, price oracle) apply.
 
 ## Performance Metrics
 
@@ -167,13 +204,17 @@ throughput = base_throughput * (expected_latency / actual_latency)
 ## Caching Strategy
 
 ```
-Type                    TTL       Priority   Purpose
-─────────────────────────────────────────────────────
-Live API Models         7200s     High      Model availability
-Live Pricing Data       7200s     High      Current prices
-Live Performance Data   300s      Medium    Fresh latency data
-Static Data             None      Fallback  Reliability
+Type                         TTL       Where                         Purpose
+──────────────────────────────────────────────────────────────────────────────
+Price registry (oracle)      86400s    price_oracle.py               Gap-fill + drift check
+Live model IDs (API key)     21600s    base_provider.py              Model availability
+Web-scrape models / pricing  7200s     data_sources.py PRICING_*     Legacy live layer
+Web-scrape performance       300s      data_sources.py PERFORMANCE_* Fresh latency data
+Static Data                  None      *_pricing.py STATIC_PRICING   Primary prices
 ```
+
+All caches are in-memory and per process; the aggregator itself is a process-wide
+singleton, so REST endpoints and MCP tools share them.
 
 **Cache Key Naming Convention:**
 - `{provider_lowercase}_models`: Available models
@@ -192,7 +233,9 @@ Step 3: Return Static Data (always available)
 Step 4: Log error and continue with best available
 ```
 
-All errors are logged at WARNING level with context.
+A provider service that raises is reported in `provider_status` as unavailable and its
+models are skipped; the other providers are still returned. Fetch failures are logged at
+WARNING (a provider service falling back to static data logs at ERROR).
 
 ## Configuration for External Deployment
 
@@ -230,7 +273,7 @@ MISTRAL_API_KEY=...                # Optional
 - Performance slightly improved with direct API health checks
 
 **Without API keys:**
-- Still get live pricing from public pages (web scraping)
+- Prices come from the curated tables plus the price registry (no key needed)
 - Still get performance metrics from public status pages
 - Still get model list from static data (always available)
 - Service **never fails** - always working
@@ -238,7 +281,8 @@ MISTRAL_API_KEY=...                # Optional
 ### Network Requirements
 
 The system needs outbound HTTPS access to:
-- Pricing pages (for web scraping): `openai.com`, `anthropic.com`, `ai.google.dev`, `cohere.com`, `mistral.ai`
+- Price registry: `raw.githubusercontent.com` (without it the vendored snapshot is used)
+- Pricing pages (for web scraping): `openai.com`, `anthropic.com`, `ai.google.dev`, `cohere.com`, `mistral.ai`, and the other `pricing_url`s in `data_sources.py`
 - Status pages (for health checks): `status.openai.com`, `status.cloud.google.com`, `status.cohere.com`, `status.mistral.ai`
 
 No auth required - all public domains with standard HTTPS.
@@ -246,32 +290,29 @@ No auth required - all public domains with standard HTTPS.
 ## Security Considerations
 
 ✅ API keys never logged or exposed in responses
-✅ Web scraping respects standard robots.txt
 ✅ Health checks use lightweight HEAD requests only
 ✅ Caching prevents excessive API calls
-✅ All external calls have 10-second timeouts
+✅ External calls have timeouts (10s for `DataFetcher` and live model sync, 20s for the
+   price-registry fetch)
 ✅ Failures don't break the service (fallback mechanism)
 
 ## Future Enhancements
 
 - [ ] Custom parser functions for complex pricing pages
-- [ ] Database persistence for historical pricing trends
+- [x] Database persistence for historical pricing trends (`pricing_history.db`, `/pricing/history`, `/pricing/trends`)
 - [ ] GraphQL query support for common data patterns
-- [ ] Real-time notification when pricing changes
+- [x] Notification when pricing changes (price-change alert webhooks, `/pricing/alerts`)
 - [ ] Provider-specific health dashboards
-- [ ] Cost estimation with live pricing data
-- [ ] Historical pricing data archive
+- [x] Cost estimation with live pricing data (`/cost-estimate`)
+- [x] Historical pricing data archive (snapshots every `PRICING_SNAPSHOT_INTERVAL_HOURS`, default 6)
 
 ## Development and Testing
 
 ### Running Tests
 
 ```bash
-# Test live data fetching
-python test_live_data.py
-
-# Test with API keys
-OPENAI_API_KEY=sk-... python -m pytest tests/test_live_data.py
+# Price oracle, provenance and data quality
+python -m pytest tests/test_price_oracle.py tests/test_price_provenance.py tests/test_data_quality.py -q
 
 # Test specific providers
 python -m pytest tests/test_services.py -v
@@ -279,10 +320,14 @@ python -m pytest tests/test_services.py -v
 
 ### Adding New Data Sources
 
-1. Add configuration to `data_sources.py`
-2. Create provider service with `_fetch_performance_metrics()`
-3. Implement `_get_static_pricing_data()` fallback
-4. Add tests for live data and fallback scenarios
+New providers no longer need a `data_sources.py` entry:
+
+1. Create a provider service in `src/services/<name>_pricing.py` subclassing
+   `BasePricingProvider`, with a curated `STATIC_PRICING` table
+2. Optionally configure the live model-list endpoint (`_live_model_api_endpoint` and
+   friends in `base_provider.py`) so an API key enables model sync
+3. Register the service in `pricing_aggregator.py`
+4. Add tests (see `tests/test_new_providers.py`)
 
 ## Monitoring
 
@@ -295,10 +340,16 @@ Monitor these metrics in production:
 
 ## Source Information
 
-The `source` field in API responses indicates data origin:
+The `source` field in API responses indicates data origin (OpenAI shown; other
+`DataFetcher` providers use the same pattern):
 
-- `"OpenAI Official API"` - Live data from API
-- `"OpenAI Official Pricing (Cached)"` - Cached live data
-- `"OpenAI Official Pricing (Fallback - Static)"` - Static fallback
+- `"OpenAI Official API"` - price parsed from the scraped pricing page
+- `"OpenAI Official Pricing (Cached)"` - the curated `STATIC_PRICING` entry, used when no
+  scraped price matched (despite the label, not a cached live fetch)
+- `"OpenAI Official Pricing (Fallback - Static)"` - curated table after the live path raised
+- `"LiteLLM price registry (<registry key>)"` - price taken from the price registry
+  (runtime gap-fill or a `data/registry_models` entry)
+
+Each model also carries `price_confirmed` and `price_as_of` provenance fields.
 
 This helps users understand data freshness and reliability.
