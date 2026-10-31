@@ -28,6 +28,7 @@ The old Azure blue-green docs are historical only:
 | `PRICING_HISTORY_DB_PATH` | `/app/data/pricing_history.db` |
 | `BILLING_DB_PATH` | `/app/data/billing.db` (unset = ephemeral image disk) |
 | `EXCHANGE_RATES_PATH` | `/app/vendored/exchange_rates.json` (the volume shadows the image's `/app/data`) |
+| `ORCHESTRATOR_DB_PATH` | `/app/data/orchestrator.db` (orchestrator core, v1.83.0) |
 | Build | repo `Dockerfile`: non-root uvicorn, `--workers 2`, port 8000; `Procfile` unused |
 
 ## Settings and secrets
@@ -61,6 +62,34 @@ flyctl secrets set PROVIDER_KEY_ENCRYPTION_KEY="$PROVIDER_KEY_ENCRYPTION_KEY"
 - Changing or losing it: rows show `needs_reregistration`, are never sent to a provider, and
   every customer must re-register. No in-place rotation.
 - Startup logs `Stored provider keys enabled` / `disabled`; a bad value logs the variable name only.
+
+## Orchestrator intake key (`ORCHESTRATOR_INTAKE_KEY`)
+
+- The GitHub Actions executor (`.github/workflows/orchestrator-intake.yml` and the weekly
+  audit's `report-run` job) authenticates with this separate credential. The service accepts
+  it only on `POST /orchestrator/events`, `GET /orchestrator/runs/{id}/actions` and
+  `POST /orchestrator/runs/{id}/actions/{aid}/result`; every other `/orchestrator/*` route and
+  the `/admin` Orchestrator block need `MCP_API_KEY`.
+- Unset: those three routes still take the operator key; the Actions jobs print one
+  step-summary line and exit 0 (nothing fails).
+- Set it in **two places** with the same value: a Fly secret and a GitHub repository secret of
+  the same name. Generate it locally; never paste it into docs, chat, issues or the workflow file.
+- What it does unlock: the events it posts carry the workflow's `actor_is_owner` assertion, so a
+  holder could complete a run's `sdlc_run` checkpoint with a pull request **in the run's own
+  repository** (the service refuses any other repository or PR number with `refused:repo_mismatch`)
+  and could post executor results. It cannot approve anything in the admin queue, change settings,
+  read the run log, or start owner-request workflows. Rotate it if it may have leaked.
+
+```bash
+export ORCHESTRATOR_INTAKE_KEY="$(python -c 'import secrets;print(secrets.token_urlsafe(32))')"
+flyctl secrets set ORCHESTRATOR_INTAKE_KEY="$ORCHESTRATOR_INTAKE_KEY"
+gh secret set ORCHESTRATOR_INTAKE_KEY --body "$ORCHESTRATOR_INTAKE_KEY"
+# optional, defaults to https://llm-pricing-api.fly.dev
+gh variable set ORCHESTRATOR_BASE_URL --body "https://llm-pricing-api.fly.dev"
+```
+
+- Rotation: set the new value in both places (two commands, no downtime); the old value stops
+  working at the next deploy. Startup logs `Orchestrator initialized ... (intake key set|unset)`.
 
 ## Webhook destinations (`WEBHOOK_ALLOW_PRIVATE_TARGETS`)
 

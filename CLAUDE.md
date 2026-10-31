@@ -245,3 +245,14 @@ Spec  →  Design  →  branch created  →  Code  →  Review (correctness / se
 This does not replace the rules above — it is those rules, split across phases so each one gets a
 dedicated agent instead of competing for one agent's attention alongside everything else. It still
 ends at an open PR against `develop`; merging is still the user's call (Git Flow rule 5).
+
+**Orchestrator core (v1.83.0).** The service also hosts an operator-only orchestrator
+(`src/services/orchestrator_*.py`, `/orchestrator/*`, the Orchestrator block on `/admin`) that
+accepts inbound work exactly once (GitHub events via `.github/workflows/orchestrator-intake.yml`,
+the weekly price audit's `report-run` job, owner requests), routes it from trigger class and
+owner-applied labels only, and holds every run at human checkpoints. The SDLC pipeline is wrapped
+as an **owner checkpoint**, not run unattended: the queue shows the exact command
+`/release-feature Fix issue #N (orchestrator run orc_...)`, the skill stamps `Orchestrator-Run:`
+into the PR footer, and the PR's `opened` event completes the checkpoint and posts one status
+comment. The orchestrator never merges, never moves money, never sends anything without a recorded
+approval, and cannot change its own budgets, modes or workflow definitions from inside a run.
