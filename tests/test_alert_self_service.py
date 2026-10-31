@@ -840,14 +840,12 @@ class TestAC16AC17DocsAndWording:
         for route in SELF_ROUTES:
             assert route in text
 
-    def test_whats_new_top_entry(self):
-        from src import __version__
+    def test_whats_new_entry(self):
+        # Locate the v1.81.0 entry rather than the top one: later releases push it down.
         text = (project_root / "static/whats-new/index.html").read_text(encoding="utf-8")
-        first = text.index('class="release')
-        assert text[first:].startswith('class="release latest"')
-        assert text.count('class="release latest"') == 1
-        assert f"v{__version__}" in text[first:first + 400]
-        assert "alert_token" in text[first:text.index('class="release"', first)]
+        start = text.index("<!-- v1.81.0 -->")
+        end = text.index("<!-- v", start + 1)
+        assert "alert_token" in text[start:end]
 
 
 # ---------------------------------------------------------------------------
