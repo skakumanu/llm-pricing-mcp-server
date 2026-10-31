@@ -50,7 +50,7 @@ git push -u origin promote-vX.Y.Z   # open PR → master
 
 | Workflow | Trigger | Effect |
 |---|---|---|
-| `ci-cd.yml` `deploy_fly` | push to `master` | Deploys to Fly.io (see [DEPLOYMENT.md](DEPLOYMENT.md)) |
+| `ci-cd.yml` `deploy_fly` | push to `master` | Deploys to Fly.io, then tags `vX.Y.Z` and publishes a GitHub Release from the What's New entry (see [DEPLOYMENT.md](DEPLOYMENT.md)) |
 | `sync-develop.yml` | push to `master` | Opens `ci/sync-develop-*` PR if `develop` lacks `master` commits |
 | `npm-publish.yml` | `npm/llm-pricing-mcp/**` changed | Publishes the npm wrapper (own version) |
 | `mcp-registry-publish.yml` | `server.json` changed | Updates the MCP registry entry |
