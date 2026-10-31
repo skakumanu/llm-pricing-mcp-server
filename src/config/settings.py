@@ -138,6 +138,11 @@ class Settings(BaseSettings):
     currency_detection_enabled: bool = True     # False = never infer a country from the IP
     geo_lookup_timeout_seconds: float = 1.0     # request-path cap on the IP -> country lookup
     exchange_rates_path: Optional[str] = None   # override for data/exchange_rates.json
+    # v1.84.1: on Fly the volume mount at /app/data shadows the image's data/ directory, so
+    # the vendored registry snapshot and the registry-sourced model files are read from the
+    # copy the Dockerfile places under /app/vendored (paths set in fly.toml). Unset = repo paths.
+    price_snapshot_path: Optional[str] = None   # override for data/model_prices_snapshot.json
+    registry_models_dir: Optional[str] = None   # override for data/registry_models/
 
     # Dispatch gateway (v1.77.0). Provider keys are never read from here — callers
     # bring their own per request (X-Provider-Key-<Provider> headers) or store them

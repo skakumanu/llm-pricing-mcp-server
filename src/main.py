@@ -109,6 +109,7 @@ from src.services.pricing_aggregator import (  # noqa: E402
     PROVIDER_COUNT, PricingAggregatorService, get_pricing_aggregator,
 )
 from src.services.cost_calculator import compute_token_cost  # noqa: E402
+from src.services.base_provider import registry_models_inventory  # noqa: E402
 from src.services.price_oracle import get_price_oracle  # noqa: E402
 from src.services.data_quality import compute_data_quality_report  # noqa: E402
 from src.services.telemetry import get_telemetry_service  # noqa: E402
@@ -1179,6 +1180,13 @@ async def startup_pricing_history() -> None:
         logger.error("Provider key store init failed (stored keys disabled): %s", type(exc).__name__)
     await init_pricing_history_service(settings.pricing_history_db_path)
     logger.info("Pricing history service initialized at %s", settings.pricing_history_db_path)
+    # v1.83.2: say loudly whether the registry-sourced catalogue is visible at runtime.
+    _inv = registry_models_inventory()
+    if _inv["models"]:
+        logger.info("Registry-sourced models: %d across %d file(s) at %s", _inv["models"], _inv["files"], _inv["dir"])
+    else:
+        logger.warning("No registry-sourced models visible at %s (exists=%s); the catalogue is curated-only. "
+                       "On Fly set REGISTRY_MODELS_DIR to the image copy outside the volume mount.", _inv["dir"], _inv["exists"])
     await init_pricing_alert_service(settings.pricing_history_db_path)
     logger.info("Pricing alert service initialized")
     await init_savings_tracker(settings.pricing_history_db_path)

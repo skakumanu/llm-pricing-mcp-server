@@ -28,6 +28,8 @@ The old Azure blue-green docs are historical only:
 | `PRICING_HISTORY_DB_PATH` | `/app/data/pricing_history.db` |
 | `BILLING_DB_PATH` | `/app/data/billing.db` (unset = ephemeral image disk) |
 | `EXCHANGE_RATES_PATH` | `/app/vendored/exchange_rates.json` (the volume shadows the image's `/app/data`) |
+| `PRICE_SNAPSHOT_PATH` | `/app/vendored/data/model_prices_snapshot.json` (same reason, v1.84.1) |
+| `REGISTRY_MODELS_DIR` | `/app/vendored/data/registry_models` (same reason, v1.84.1; without it production serves only the curated ~270 models) |
 | `ORCHESTRATOR_DB_PATH` | `/app/data/orchestrator.db` (orchestrator core, v1.83.0) |
 | Build | repo `Dockerfile`: non-root uvicorn, `--workers 2`, port 8000; `Procfile` unused |
 
@@ -125,6 +127,15 @@ env | grep '^STRIPE_' | flyctl secrets import
   150 USD/month cap). The agent refuses to call the LLM when the orchestrator DB is unavailable.
 - `SUPPORT_FALLBACK_PRICE_PER_1M_IN_USD` / `_OUT_USD` price a turn only when `AGENT_MODEL` is not
   in the pricing catalogue.
+
+## Vendored data and the volume mount
+
+- The Fly volume is mounted at `/app/data`, which hides the image's `data/` directory. Anything the
+  app reads from the repo's `data/` must come from the duplicate the Dockerfile keeps at
+  `/app/vendored/data` (`PRICE_SNAPSHOT_PATH`, `REGISTRY_MODELS_DIR`, `EXCHANGE_RATES_PATH`).
+- Startup logs `Registry-sourced models: N across F file(s) at <dir>`; a WARNING `No registry-sourced
+  models visible` means the catalogue is curated-only and `get_data_quality` will show a few hundred
+  models instead of 600+. Before v1.84.1 production ran this way unnoticed (273 models, 62.6% confirmed).
 
 ## Webhook destinations (`WEBHOOK_ALLOW_PRIVATE_TARGETS`)
 

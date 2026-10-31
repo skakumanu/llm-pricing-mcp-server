@@ -155,8 +155,26 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.84.0 -->
+  <!-- v1.84.1 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.84.1</span>
+      <span class="release-date">Oct 31, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Production now serves the full catalogue</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li><strong>Registry-sourced models were missing in production.</strong> The hosted server's data volume hid the files that hold the registry-sourced models and the offline price snapshot, so it served about 270 curated models at 62.6% confirmed while the codebase had 600+ at 98%. The files are now read from a copy outside the volume, and startup logs how many registry-sourced models are visible so this cannot recur silently</li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">Models in production <strong>273 → 600+</strong></div>
+        <div class="stat-chip">Confirmed <strong>62.6% → ~98%</strong></div>
+      </div>
+  <!-- v1.84.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.84.0</span>

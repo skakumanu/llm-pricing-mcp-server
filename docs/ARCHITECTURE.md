@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.84.0 | **Last updated**: 2026-10-31
+**Version**: v1.84.1 | **Last updated**: 2026-10-31
 
 Canonical internals reference. Release history lives in `static/whats-new/`, not here.
 
@@ -308,7 +308,10 @@ Pages: `/` (landing), `/chat` (Pricing | Support toggle; the optional service ke
 | `CONVERSATION_DB_PATH` (optional) | `conversations` | Unset on Fly → in-memory. Support turns (`sup-…` ids) are stored with secrets redacted; the customer's own email is kept (operator-only view) |
 | `orchestrator.db` (`ORCHESTRATOR_DB_PATH`) | `orch_runs`, `orch_steps`, `orch_events`, `orch_approvals`, `orch_actions`, `orch_spend`, `orch_settings` | Rows purged after `ORCHESTRATOR_RUN_RETENTION_DAYS` (365); redacted I/O summaries nulled after `ORCHESTRATOR_IO_RETENTION_DAYS` (90); `orch_actions` is append-only |
 
-- All `.db` files are gitignored and live on the Fly volume (`/app/data`).
+- All `.db` files are gitignored and live on the Fly volume (`/app/data`). The mount hides the image's
+  `data/` tree, so the registry snapshot, registry-sourced model files and exchange-rate table are read
+  from the Dockerfile's copy under `/app/vendored` (`PRICE_SNAPSHOT_PATH`, `REGISTRY_MODELS_DIR`,
+  `EXCHANGE_RATES_PATH`; startup logs the registry-sourced model count, v1.84.1).
 - Never stored anywhere: prompts/completions, provider keys in plaintext, IPs, request headers.
 
 ---
