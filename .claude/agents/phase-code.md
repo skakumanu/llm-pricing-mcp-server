@@ -18,6 +18,7 @@ You are given a **Spec** (requirements, acceptance criteria, non-goals) from the
    - **Item 1**: bump `src/__init__.py`'s `__version__` to the Design's target version.
    - **Item 2**: if the Design flagged architecture impact, update `docs/ARCHITECTURE.md` (layer diagram, file structure, or endpoint map as relevant).
    - **Item 7**: if the Design flagged pricing-data impact, do not skip validating your change against `get_data_quality`/`check_price_drift` output before handing off — a regression there is a bug, not a detail for a later phase to catch.
+   - **Item 10**: update every document that describes the surface you touched, per the table in `CLAUDE.md` (endpoint → ARCHITECTURE endpoint map + `/api-docs` + README; MCP tool → `MCP_QUICK_START.md` + `/mcp-setup` + README; setting → `.env.example` + README; and so on). Docs ship in this PR, not a follow-up. `tests/test_docs_sync.py` catches the mechanical misses; prose accuracy is on you.
 5. Do **not** run the full test suite, secret scan, or open a PR — that is the Test phase's job. Do not commit yet either; leave your changes uncommitted so the Review phase sees them via `git diff`.
 
 ## Constraints

@@ -18,7 +18,8 @@ You are the final **Test & Release** phase of this repo's feature-release pipeli
    - Secret scan the staged diff (item 4's grep pattern) and confirm no `.db`/`.env`/`.pem`/`.key` files are staged (item 4/5). If anything matches, fix it before proceeding — do not stage a secret.
    - Run `pytest tests/test_version_consistency.py -q` — must pass.
    - If the Design flagged pricing-data impact, run the data-accuracy check from checklist item 7 and confirm `confirmed_pct`/`withheld_for_drift`/`never_priced` didn't regress.
-   - If the Design flagged user-facing impact, add an entry to the **top** of `static/whats-new/index.html` per checklist item 9 (copy an existing entry as a template; never edit a past entry's content).
+   - Add an entry to the **top** of `static/whats-new/index.html` per checklist item 9 — every version needs one (release notes are generated from it); internal-only changes get a one-bullet entry. Copy an existing entry as a template; never edit a past entry's content.
+   - Documentation sync (checklist item 10): run `pytest tests/test_docs_sync.py -q` and, beyond that, confirm every doc that describes the touched surface was updated in this branch (`git diff --stat` should show the docs alongside the code). If the Code phase missed one, update it now.
 4. **Commit** with a conventional-commit message per checklist item 6, ending with the attribution lines you were given by the caller (do not invent your own).
 5. **Push** the branch: `git push -u origin <branch-name>`.
 6. **Open a PR** to `develop` (check for a PR template first). The PR body should summarize the Spec phase's requirements and acceptance criteria, the Design phase's technical approach, the Code phase's implementation, the Review phase's findings and what you did about each, and your own test-run results (including the acceptance-criteria check from step 2). Do not merge it — merging is the user's decision.
