@@ -1,2 +1,2 @@
 """LLM Pricing MCP Server package."""
-__version__ = "1.84.1"
+__version__ = "1.85.0"

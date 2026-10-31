@@ -120,6 +120,8 @@ from agent.support_agent import SupportAgent  # noqa: E402
 from mcp.tools.tool_manager import ToolManager  # noqa: E402
 from mcp.tools import support_chat as _support_chat_tool  # noqa: E402
 from mcp.caller import ANONYMOUS, PUBLIC, McpCaller  # noqa: E402
+from mcp.sessions import McpSessionStore  # noqa: E402
+from mcp.tools._client import handshake_client  # noqa: E402
 
 # Configure logging after settings are available
 logging.basicConfig(
@@ -363,7 +365,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "x-api-key"],
+    allow_headers=["Content-Type", "x-api-key", "Mcp-Session-Id"],
+    expose_headers=["Mcp-Session-Id"],
 )
 
 # Initialize deployment manager for blue-green deployment support
@@ -2226,6 +2229,77 @@ async def cache_stats():
     return get_cache_stats()
 
 
+def _rest_client_fields(raw: Optional[str]):
+    """Resolve a REST `client` / `ide_context` value.
+
+    Returns (entry_or_None, raw_or_None, response_fields). REST never infers a
+    client, so `client_source` is only ever 'explicit'; with no value at all the
+    fields are empty and the response is exactly what it was before v1.85.0.
+    """
+    from src.services.client_models import recognised_client_ids, resolve_client, restriction_label
+    if not (isinstance(raw, str) and raw.strip()):
+        return None, None, {}
+    entry = resolve_client(raw)
+    if entry is None:
+        return None, raw, {
+            "client_source": "explicit",
+            "client_note": (
+                f"Unknown client '{raw}'; results are unfiltered. "
+                f"Recognised clients: {', '.join(recognised_client_ids())}."
+            ),
+        }
+    return entry, raw, {
+        "applied_client": entry.id,
+        "client_source": "explicit",
+        "client_as_of": entry.as_of,
+        "client_note": (
+            f"Restricted to models {entry.display_name} can run "
+            f"({restriction_label(entry)}); client table as of {entry.as_of}."
+            + (" " + entry.notes if entry.menu == "open" else "")
+        ),
+    }
+
+
+def _no_match_detail(entry) -> str:
+    if entry is None:
+        return "No model matched the given constraints. Try relaxing cost or quality filters."
+    from src.services.client_models import restriction_label
+    return (
+        f"No model matched within what {entry.display_name} can run "
+        f"({restriction_label(entry)}). Relax cost/quality/context filters, "
+        "or omit client to search every model."
+    )
+
+
+# RouterRequest fields copied 1:1 onto RouterConstraints by both REST router
+# surfaces (/router/recommend and its stream variant) so the two cannot drift.
+_ROUTER_CONSTRAINT_FIELDS = (
+    "max_cost_per_1m_tokens",
+    "min_quality_score",
+    "min_context_window",
+    "preferred_provider",
+    "task_type",
+    "prefer_low_latency",
+    "exclude_reasoning_models",
+    "monthly_budget_usd",
+    "estimated_monthly_requests",
+    "avg_input_tokens",
+    "avg_output_tokens",
+)
+
+
+def _router_constraints_from_request(req: RouterRequest, client_entry, client_raw: Optional[str]):
+    """Build RouterConstraints for a REST router call (shared by both surfaces).
+
+    `client` is the canonical client id when the value resolved, else the raw
+    (unrecognised) value so the recommendation cache distinguishes it.
+    """
+    from src.services.router import RouterConstraints
+    kwargs = {name: getattr(req, name) for name in _ROUTER_CONSTRAINT_FIELDS}
+    kwargs["client"] = client_entry.id if client_entry else client_raw
+    return RouterConstraints(**kwargs)
+
+
 @app.post("/router/recommend", response_model=RouterResponse, tags=["Router"])
 @_locale_documented
 async def router_recommend(
@@ -2252,21 +2326,8 @@ async def router_recommend(
     the recommendation and its order never depend on country. With a locale
     active, `recommended` and each alternative carry `local_prices`.
     """
-    from src.services.router import RouterConstraints
-    constraints = RouterConstraints(
-        max_cost_per_1m_tokens=req.max_cost_per_1m_tokens,
-        min_quality_score=req.min_quality_score,
-        min_context_window=req.min_context_window,
-        preferred_provider=req.preferred_provider,
-        task_type=req.task_type,
-        prefer_low_latency=req.prefer_low_latency,
-        exclude_reasoning_models=req.exclude_reasoning_models,
-        ide_context=req.ide_context,
-        monthly_budget_usd=req.monthly_budget_usd,
-        estimated_monthly_requests=req.estimated_monthly_requests,
-        avg_input_tokens=req.avg_input_tokens,
-        avg_output_tokens=req.avg_output_tokens,
-    )
+    client_entry, client_raw, client_fields = _rest_client_fields(req.client or req.ide_context)
+    constraints = _router_constraints_from_request(req, client_entry, client_raw)
     router = get_router()
     result = await _router_recommend_cache.get_or_compute(
         constraints, lambda: router.get_optimal_model(constraints)
@@ -2274,7 +2335,7 @@ async def router_recommend(
     if result is None:
         raise HTTPException(
             status_code=404,
-            detail="No model matched the given constraints. Try relaxing cost or quality filters.",
+            detail=_no_match_detail(client_entry),
         )
 
     routing_id = str(uuid.uuid4())
@@ -2309,7 +2370,7 @@ async def router_recommend(
             baseline_cost_per_1m=baseline_cost_1m,
             task_type=req.task_type,
             routing_id=routing_id,
-            ide_context=req.ide_context,
+            ide_context=client_entry.id if client_entry else client_raw,
         )
     except Exception as exc:
         logger.warning("Failed to record routing savings: %s", exc)
@@ -2330,6 +2391,7 @@ async def router_recommend(
         routing_id=routing_id,
         cached=result.cached,
         currency_conversion=build_conversion(locale),
+        **client_fields,
     )
 
 
@@ -2707,35 +2769,15 @@ async def router_recommend_stream(req: RouterRequest, request: Request):
     Streaming version of /router/recommend — emits SSE progress events.
 
     Events: start → fetching_models → models_loaded → enriching_quality →
-    quality_enriched → filtering → candidates_ready → recommendation →
-    alternatives → done.
+    quality_enriched → filtering → client (only when `client` was passed:
+    applied_client, client_source, client_as_of, client_note) →
+    candidates_ready → recommendation → alternatives → done.
     """
     def _event(type_: str, data: Optional[dict] = None) -> str:
         payload: dict = {"type": type_}
         if data:
             payload.update(data)
         return f"data: {json.dumps(payload, default=str)}\n\n"
-
-    # Task-type → use-case keywords (mirrors router.py)
-    _TASK_USE_CASES = {
-        "code": ["code", "coding", "programming", "developer"],
-        "chat": ["chat", "conversation", "general", "assistant"],
-        "analysis": ["analysis", "reasoning", "research", "data"],
-        "summarization": ["summar", "extract", "document"],
-        "code_completion": ["code", "coding", "completion", "inline", "programming"],
-        "code_chat": ["chat", "code", "coding", "assistant", "conversation"],
-        "code_refactor": ["refactor", "code", "coding", "improvement", "analysis"],
-        "agentic_coding": ["agentic", "code", "coding", "tool", "agent", "multi-step"],
-    }
-
-    _IDE_NATIVE_PROVIDERS = {
-        "copilot": ["github copilot"],
-        "cursor": ["cursor"],
-        "windsurf": ["windsurf", "codeium"],
-        "claude_code": ["anthropic"],
-        "jetbrains": ["jetbrains ai"],
-        "amazon_q": ["amazon q developer"],
-    }
 
     async def generate():
         yield _event("start", {"constraints": req.model_dump(exclude_none=True)})
@@ -2749,76 +2791,31 @@ async def router_recommend_stream(req: RouterRequest, request: Request):
             yield _event("quality_enriched")
             yield _event("filtering")
 
-            # --- Hard filters (inline, mirrors router.py) ---
-            candidates = []
-            for m in models:
-                avg_cost_1m = (m.cost_per_input_token + m.cost_per_output_token) / 2 * 1_000_000
-                if req.max_cost_per_1m_tokens is not None and avg_cost_1m > req.max_cost_per_1m_tokens:
-                    continue
-                if req.min_quality_score is not None:
-                    if m.quality_score is None or m.quality_score < req.min_quality_score:
-                        continue
-                if req.min_context_window is not None:
-                    if m.context_window is None or m.context_window < req.min_context_window:
-                        continue
-                if req.task_type is not None:
-                    kws = _TASK_USE_CASES.get(req.task_type.lower(), [])
-                    if kws and m.use_cases:
-                        if not any(kw in " ".join(m.use_cases).lower() for kw in kws):
-                            continue
-                if req.exclude_reasoning_models and m.is_reasoning_model:
-                    continue
-                if req.monthly_budget_usd is not None:
-                    pricing_model = getattr(m, "pricing_model", "per_token")
-                    sub_price = getattr(m, "subscription_monthly_usd", None)
-                    if pricing_model == "subscription" and sub_price is not None:
-                        if sub_price > req.monthly_budget_usd:
-                            continue
-                    else:
-                        projected = (
-                            req.estimated_monthly_requests
-                            * (
-                                req.avg_input_tokens * m.cost_per_input_token
-                                + req.avg_output_tokens * m.cost_per_output_token
-                            )
-                        )
-                        if projected > req.monthly_budget_usd:
-                            continue
-                candidates.append(m)
+            # --- Hard filters + scoring: the same ModelRouter.rank_models() the
+            # other recommendation surfaces use, so they cannot drift. ---
+            from src.services.router import ModelRouter
+            client_entry, client_raw, client_fields = _rest_client_fields(
+                req.client or req.ide_context
+            )
+            constraints = _router_constraints_from_request(req, client_entry, client_raw)
+            stream_router = ModelRouter(aggregator)
+            if client_fields:
+                yield _event("client", client_fields)
+            candidates = stream_router.rank_models(models, constraints)
 
             if not candidates:
-                yield _event("error", {"detail": "No model matched constraints"})
+                yield _event(
+                    "error",
+                    {"detail": _no_match_detail(client_entry) if client_entry
+                     else "No model matched constraints"},
+                )
                 yield _event("done")
                 return
 
             yield _event("candidates_ready", {"count": len(candidates)})
 
-            # --- Scoring ---
-            _latency_sensitive = req.task_type in ("code_completion",) or req.prefer_low_latency
-
-            def _score(m) -> float:
-                base = m.quality_value_score or 0.0
-                if req.preferred_provider and m.provider.lower() == req.preferred_provider.lower():
-                    base *= 1.10
-                if req.ide_context:
-                    native = _IDE_NATIVE_PROVIDERS.get(req.ide_context.lower(), [])
-                    if any(np in m.provider.lower() for np in native):
-                        if getattr(m, "ide_native", False):
-                            base *= 5.0
-                        else:
-                            base *= 1.15
-                if _latency_sensitive and m.latency_ms is not None:
-                    if m.latency_ms <= 300:
-                        base *= 1.20
-                    elif m.latency_ms >= 2000:
-                        base *= 0.70
-                if req.task_type in ("code_completion", "code_chat") and m.is_reasoning_model:
-                    base *= 0.60
-                return base
-
-            candidates.sort(key=_score, reverse=True)
             best = candidates[0]
-            best_score = _score(best)
+            best_score = stream_router._score_model(best, constraints)
             avg_cost_1m = (best.cost_per_input_token + best.cost_per_output_token) / 2 * 1_000_000
             alternatives = candidates[1:4]
 
@@ -2861,7 +2858,7 @@ async def router_recommend_stream(req: RouterRequest, request: Request):
                     baseline_cost_per_1m=baseline_cost_1m,
                     task_type=req.task_type,
                     routing_id=stream_routing_id,
-                    ide_context=req.ide_context,
+                    ide_context=client_entry.id if client_entry else client_raw,
                 )
             except Exception as exc:
                 logger.warning("Failed to record stream routing savings: %s", exc)
@@ -5007,13 +5004,26 @@ async def _resolve_mcp_caller(request: Optional[Request]) -> McpCaller:
     return McpCaller.from_customer(customer, tier=_effective_tier(customer, settings.billing_past_due_grace_days))
 
 
-async def _handle_mcp_request(body: dict, request: Optional[Request] = None) -> Optional[dict]:
+_mcp_sessions = McpSessionStore()  # v1.85.0: Mcp-Session-Id -> clientInfo.name (in-memory, best effort)
+
+
+async def _handle_mcp_request(
+    body: dict,
+    request: Optional[Request] = None,
+    response_headers: Optional[dict] = None,
+) -> Optional[dict]:
     """Dispatch a JSON-RPC 2.0 MCP request; returns None for notifications.
 
     ``request`` (v1.79.1) carries the connection headers used to resolve the caller.
     Resolution is lazy: only a tools/call of a non-PUBLIC tool looks the key up, so
     public tools, initialize and tools/list never touch the billing service. Callers
     passing only ``body`` are anonymous.
+
+    v1.85.0: ``initialize`` mints an ``Mcp-Session-Id`` (written into ``response_headers``
+    when given) remembering only ``clientInfo.name``; a later tools/call that echoes the
+    header exposes that name to the tools via the ``handshake_client`` ContextVar so they can
+    infer the client. An unknown or missing session is never rejected: it just means no client
+    was inferred.
     """
     import json as _json
 
@@ -5028,6 +5038,12 @@ async def _handle_mcp_request(body: dict, request: Optional[Request] = None) -> 
     params = body.get("params", {})
 
     if method == "initialize":
+        client_info = params.get("clientInfo") if isinstance(params, dict) else None
+        client_name = client_info.get("name") if isinstance(client_info, dict) else None
+        if response_headers is not None:
+            response_headers["Mcp-Session-Id"] = _mcp_sessions.create(
+                client_name if isinstance(client_name, str) else None
+            )
         return _mcp_ok(request_id, {
             "protocolVersion": _MCP_PROTOCOL_VERSION,
             "capabilities": {"tools": {}},
@@ -5047,18 +5063,23 @@ async def _handle_mcp_request(body: dict, request: Optional[Request] = None) -> 
         tm = await _get_http_mcp_tool_manager()
         name = params["name"]
         await _bind_http_mcp_agent(tm, name)
-        if tm.caller_access(name) == PUBLIC:
-            result = await tm.execute_tool(name, params.get("arguments", {}))
-        else:
-            caller = await _resolve_mcp_caller(request)
-            # v1.84.0: the connection's address keys the anonymous support spend bucket (same rule
-            # as /support/chat); set for this call only and reset right after.
-            token = _support_chat_tool.client_address.set(
-                _client_ip_for_support(request) if request is not None else None)
-            try:
-                result = await tm.execute_tool(name, params.get("arguments", {}), caller=caller)
-            finally:
-                _support_chat_tool.client_address.reset(token)
+        session_id = request.headers.get("mcp-session-id") if request is not None else None
+        handshake_token = handshake_client.set(_mcp_sessions.client_name(session_id))
+        try:
+            if tm.caller_access(name) == PUBLIC:
+                result = await tm.execute_tool(name, params.get("arguments", {}))
+            else:
+                caller = await _resolve_mcp_caller(request)
+                # v1.84.0: the connection's address keys the anonymous support spend bucket (same rule
+                # as /support/chat); set for this call only and reset right after.
+                token = _support_chat_tool.client_address.set(
+                    _client_ip_for_support(request) if request is not None else None)
+                try:
+                    result = await tm.execute_tool(name, params.get("arguments", {}), caller=caller)
+                finally:
+                    _support_chat_tool.client_address.reset(token)
+        finally:
+            handshake_client.reset(handshake_token)
         return _mcp_ok(request_id, {
             "content": [{"type": "text", "text": _json.dumps(result, indent=2)}],
         })
@@ -5076,6 +5097,7 @@ async def mcp_info():
         "transport": "HTTP POST",
         "endpoint": "/mcp",
         "protocolVersion": _MCP_PROTOCOL_VERSION,
+        "session_header": "Mcp-Session-Id",
         "config_example": {
             "mcpServers": {
                 "llm-pricing": {"url": "https://llm-pricing-api.fly.dev/mcp"}
@@ -5115,12 +5137,13 @@ async def mcp_http(request: Request):
             content=_mcp_err(None, -32700, "Parse error: invalid JSON"),
         )
 
-    response = await _handle_mcp_request(body, request)
+    out_headers: dict = {}
+    response = await _handle_mcp_request(body, request, out_headers)
 
     if response is None:
         return Response(status_code=204)
 
-    return JSONResponse(content=response)
+    return JSONResponse(content=response, headers=out_headers or None)
 
 
 if __name__ == "__main__":
