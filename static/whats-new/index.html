@@ -155,8 +155,32 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.82.5 -->
+  <!-- v1.83.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.83.0</span>
+      <span class="release-date">Oct 31, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Orchestrator core: inbound work accepted once, held at human checkpoints</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong>One operator-only orchestrator.</strong> GitHub issues the owner labels <code>accepted</code>, the weekly price audit and owner requests now become runs with a stable reference id, routed from the trigger and owner-applied labels only. Issue text is stored redacted and never decides what runs; a repeated delivery attaches to the existing run and causes nothing new</li>
+        <li><strong>Approval queue, parked runs and run log on <code>/admin</code>.</strong> Approve, reject, edit-then-approve, mark done manually or skip; resume or close runs that need the owner; filter and export the run log as CSV; pause everything with one switch. Every approval is bound to the exact artifact and recipient it was given for</li>
+        <li><strong>The SDLC pipeline is wrapped as an owner checkpoint, not run unattended.</strong> The queue shows the exact <code>/release-feature</code> command to run; the pull request it opens completes the run and posts a single status comment on the issue. Merging stays with the owner, as before</li>
+        <li><strong>Specialists that are not built yet appear as checkpoints</strong> labelled "specialist not available - do manually or skip", recorded in the run log rather than silently skipped. Nothing merges, moves money, publishes or sends a message without a recorded approval, and budgets, modes and workflow definitions can only change from the owner's controls</li>
+      </ul>
+      <div class="section-label">For self-hosters</div>
+      <ul class="change-list">
+        <li>New optional settings <code>ORCHESTRATOR_DB_PATH</code>, <code>ORCHESTRATOR_INTAKE_KEY</code> (a separate credential for the GitHub Actions executor, accepted on three routes only), <code>ORCHESTRATOR_RUN_RETENTION_DAYS</code> and <code>ORCHESTRATOR_IO_RETENTION_DAYS</code>. Without the intake key the GitHub jobs print one line and exit cleanly</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.82.5 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.82.5</span>

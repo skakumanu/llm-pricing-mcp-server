@@ -449,3 +449,44 @@ jobs:
             --base develop \
             --head "$BRANCH" \
             || echo "gh pr create blocked — branch '$BRANCH' was pushed; open the PR manually."
+
+  # v1.83.0 — report this week's run to the orchestrator core as one schedule event
+  # (dedup key = the ISO week, so a manual re-run attaches to the same run). The service
+  # records a weekly_price_audit run; any failed job parks it for the owner. Additive and
+  # read-only: it posts job results and nothing else, and exits 0 without the intake key.
+  report-run:
+    runs-on: ubuntu-latest
+    needs: [audit, refresh-snapshot, refresh-exchange-rates, reconfirm, retire, pickup]
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: Report the weekly audit run to the orchestrator
+        env:
+          ORCHESTRATOR_INTAKE_KEY: ${{ secrets.ORCHESTRATOR_INTAKE_KEY }}
+          ORCHESTRATOR_BASE_URL: ${{ vars.ORCHESTRATOR_BASE_URL || 'https://llm-pricing-api.fly.dev' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          R_AUDIT: ${{ needs.audit.result }}
+          R_SNAPSHOT: ${{ needs.refresh-snapshot.result }}
+          R_RATES: ${{ needs.refresh-exchange-rates.result }}
+          R_RECONFIRM: ${{ needs.reconfirm.result }}
+          R_RETIRE: ${{ needs.retire.result }}
+          R_PICKUP: ${{ needs.pickup.result }}
+        run: |
+          if [ -z "$ORCHESTRATOR_INTAKE_KEY" ]; then
+            echo "ORCHESTRATOR_INTAKE_KEY is not set; weekly audit not reported to the orchestrator." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          WEEK=$(date -u +%G-W%V)
+          jq -n --arg week "$WEEK" --arg run_url "$RUN_URL" \
+            --arg audit "$R_AUDIT" --arg snapshot "$R_SNAPSHOT" --arg rates "$R_RATES" \
+            --arg reconfirm "$R_RECONFIRM" --arg retire "$R_RETIRE" --arg pickup "$R_PICKUP" \
+            '{trigger_class: "schedule", event_type: "price-audit.completed",
+              dedup_key: ("schedule:price-audit:" + $week), actor: "schedule", actor_is_owner: false,
+              delivery_ref: $run_url, source: {kind: "actions", ref: $run_url},
+              data: {jobs: {audit: $audit, "refresh-snapshot": $snapshot, "refresh-exchange-rates": $rates,
+                            reconfirm: $reconfirm, retire: $retire, pickup: $pickup}}}' > event.json
+          curl -sS --max-time 30 -X POST "$ORCHESTRATOR_BASE_URL/orchestrator/events" \
+            -H "x-api-key: $ORCHESTRATOR_INTAKE_KEY" -H "Content-Type: application/json" \
+            --data-binary @event.json | jq '{run_id, duplicate, outcome, status}' \
+            | tee -a "$GITHUB_STEP_SUMMARY" || echo "Orchestrator unreachable; the audit itself is unaffected."

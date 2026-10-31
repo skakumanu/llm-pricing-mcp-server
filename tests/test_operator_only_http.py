@@ -342,9 +342,49 @@ class TestOperatorOnlyTable:
         ("POST", "/pricing/alerts/self/delete", False),
         ("DELETE", "/pricing/alerts/self", True),
         ("DELETE", "/pricing/alerts/self/delete", True),
+        # v1.83.0: every method under /orchestrator/ is operator-only (prefix rule).
+        ("GET", "/orchestrator/runs", True),
+        ("HEAD", "/orchestrator/runs", True),
+        ("POST", "/orchestrator/events", True),
+        ("PUT", "/orchestrator/settings", True),
+        ("DELETE", "/orchestrator/runs/orc_aaaaaaaaaaaa", True),
+        ("PATCH", "/orchestrator/anything/at/all", True),
+        ("get", "/orchestrator/approvals", True),
+        ("OPTIONS", "/orchestrator/runs", False),
+        ("GET", "/orchestrator", False),   # no route lives there; it falls to the service-key branch
     ])
     def test_is_operator_only_request(self, method, path, expected):
         assert main_module._is_operator_only_request(method, path) is expected
+
+    def test_every_orchestrator_route_is_operator_only_for_every_method(self):
+        """v1.83.0 guard: a new /orchestrator/* route can never slip into a bypass."""
+        from fastapi.routing import APIRoute
+        seen = 0
+        for route in app.routes:
+            if not isinstance(route, APIRoute) or not route.path.startswith("/orchestrator/"):
+                continue
+            concrete = (route.path.replace("{run_id}", "orc_aaaaaaaaaaaa")
+                        .replace("{action_id}", "orc_aaaaaaaaaaaa:4").replace("{approval_id}", "apr_x"))
+            for method in route.methods:
+                assert main_module._is_operator_only_request(method, concrete), (method, route.path)
+                seen += 1
+        assert seen >= 16  # the v1.83.0 endpoint group: 16 (method, path) pairs
+
+    @pytest.mark.parametrize("method,path,expected", [
+        ("POST", "/orchestrator/events", True),
+        ("POST", "/orchestrator/events/", True),
+        ("GET", "/orchestrator/runs/orc_aaaaaaaaaaaa/actions", True),
+        ("POST", "/orchestrator/runs/orc_aaaaaaaaaaaa/actions/orc_aaaaaaaaaaaa:4/result", True),
+        ("GET", "/orchestrator/events", False),
+        ("GET", "/orchestrator/runs", False),
+        ("GET", "/orchestrator/runs/orc_aaaaaaaaaaaa", False),
+        ("POST", "/orchestrator/runs/orc_aaaaaaaaaaaa/actions", False),
+        ("POST", "/orchestrator/runs/orc_aaaaaaaaaaaa/resume", False),
+        ("POST", "/orchestrator/approvals/apr_x", False),
+        ("PUT", "/orchestrator/settings", False),
+    ])
+    def test_intake_key_routes_are_exactly_three(self, method, path, expected):
+        assert main_module._is_orchestrator_intake_route(method, path) is expected
 
     def test_every_alert_and_conversation_route_is_covered(self):
         """Guard: a new GET/DELETE route under these paths must not slip back into the bypass."""

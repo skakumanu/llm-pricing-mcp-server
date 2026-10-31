@@ -252,6 +252,22 @@
 
     /* ── Empty state ── */
     .empty-row td { color: var(--muted); font-style: italic; text-align: center; padding: 20px; }
+
+    /* ── Orchestrator (v1.83.0) ── */
+    .orch-section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); margin: 28px 0 12px; }
+    .orch-actions button, .orch-controls button, .orch-controls select {
+      background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+      border-radius: 6px; padding: 3px 8px; font-size: 11px; cursor: pointer; margin: 1px 2px;
+    }
+    .orch-actions button:hover, .orch-controls button:hover { border-color: var(--accent); color: var(--accent); }
+    .orch-actions button.danger:hover { border-color: var(--danger); color: var(--danger); }
+    .orch-cmd { display: block; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 11px; margin-top: 4px; user-select: all; overflow-wrap: anywhere; }
+    .orch-controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; padding: 14px 16px; font-size: 12px; }
+    .orch-controls label { color: var(--muted); }
+    .orch-budget { padding: 14px 16px; display: grid; gap: 8px; }
+    .orch-budget .budget-row { display: grid; grid-template-columns: 200px 1fr 120px; gap: 10px; align-items: center; font-size: 12px; }
+    .orch-filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .orch-filters select, .orch-filters input { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 3px 6px; font-size: 11px; }
   </style>
 </head>
 <body>
@@ -439,6 +455,73 @@
     </table>
   </div>
 
+  <!-- ── Orchestrator (v1.83.0) — operator-only control surface ── -->
+  <div class="orch-section-title" id="orch-section">Orchestrator</div>
+
+  <div class="panel" id="orch-controls-panel">
+    <div class="panel-header">
+      Controls
+      <span class="panel-badge" id="orch-pause-badge">—</span>
+    </div>
+    <div class="orch-controls" id="orch-controls">
+      <button id="orch-pause-btn" onclick="orchTogglePause()">Global pause: …</button>
+      <span id="orch-mode-controls"></span>
+    </div>
+    <div class="orch-budget" id="orch-budget"><span style="color:var(--muted)">Loading budget…</span></div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <div class="panel-header">
+        Approval Queue
+        <span class="panel-badge" id="orch-approval-count">—</span>
+      </div>
+      <div class="table-scroll">
+      <table class="data-table" id="orch-approvals-table">
+        <thead><tr><th>Run</th><th>Checkpoint</th><th>Artifact</th><th>Decide</th></tr></thead>
+        <tbody id="orch-approvals-body"><tr class="empty-row"><td colspan="4">Loading…</td></tr></tbody>
+      </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        Parked Runs (needs owner)
+        <span class="panel-badge" id="orch-parked-count">—</span>
+      </div>
+      <div class="table-scroll">
+      <table class="data-table" id="orch-parked-table">
+        <thead><tr><th>Run</th><th>Workflow</th><th>Reason</th><th></th></tr></thead>
+        <tbody id="orch-parked-body"><tr class="empty-row"><td colspan="4">Loading…</td></tr></tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      Run Log
+      <span class="orch-filters">
+        <select id="orch-filter-status" onchange="loadOrchestrator()">
+          <option value="">all statuses</option>
+          <option value="active">active</option><option value="waiting_owner">waiting_owner</option>
+          <option value="paused_global">paused_global</option><option value="parked">parked</option>
+          <option value="done">done</option><option value="failed">failed</option><option value="closed">closed</option>
+        </select>
+        <select id="orch-filter-workflow" onchange="loadOrchestrator()"><option value="">all workflows</option></select>
+        <button class="orch-csv" onclick="orchDownload('/orchestrator/runs?format=csv&limit=10000', 'orchestrator_runs.csv')">CSV runs</button>
+        <button class="orch-csv" onclick="orchDownload('/orchestrator/actions?format=csv&limit=10000', 'orchestrator_actions.csv')">CSV actions</button>
+      </span>
+      <span class="panel-badge" id="orch-run-count">—</span>
+    </div>
+    <div class="table-scroll">
+    <table class="data-table" id="orch-runs-table">
+      <thead><tr><th>Run</th><th>Workflow</th><th>Trigger</th><th>Mode</th><th>Status</th><th>Result</th><th>Steps</th><th>Cost</th><th>Created</th></tr></thead>
+      <tbody id="orch-runs-body"><tr class="empty-row"><td colspan="9">Loading…</td></tr></tbody>
+    </table>
+    </div>
+  </div>
+
 </div><!-- /page -->
 
 <script>
@@ -511,6 +594,7 @@ async function loadAll() {
     if (alerts) renderAlerts(alerts);
     if (convs)  renderConversations(convs);
     if (custs)  renderCustomers(custs);
+    await loadOrchestrator();
 
     document.getElementById("last-updated").textContent =
       "Updated " + new Date().toLocaleTimeString();
@@ -723,6 +807,212 @@ function renderCustomers(data) {
         <td style="color:var(--muted);font-size:12px">${joined}</td>
       </tr>`;
   }).join("");
+}
+
+// ── Orchestrator (v1.83.0) ─────────────────────────────────────────────────
+// Every call sends the operator key (headers()). Approvals are decided ONLY here —
+// never through a notification channel. Nothing on this page merges a PR or moves money.
+
+async function orchJson(path, opts) {
+  const res = await fetch(path, Object.assign({ headers: headers() }, opts || {}));
+  if (res.status === 503) return { _unavailable: true };
+  if (!res.ok) {
+    let detail = res.status + "";
+    try { const j = await res.json(); detail = (j.error || j.detail || detail) + (j.message ? ": " + j.message : ""); } catch (e) {}
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+async function loadOrchestrator() {
+  if (!_apiKey) return;
+  try {
+    const status = document.getElementById("orch-filter-status").value;
+    const wf = document.getElementById("orch-filter-workflow").value;
+    const q = "/orchestrator/runs?limit=100" + (status ? "&status=" + encodeURIComponent(status) : "")
+      + (wf ? "&workflow_id=" + encodeURIComponent(wf) : "");
+    const [settings, budget, approvals, parked, runs] = await Promise.all([
+      orchJson("/orchestrator/settings"), orchJson("/orchestrator/budget"),
+      orchJson("/orchestrator/approvals?status=waiting"), orchJson("/orchestrator/parked"), orchJson(q),
+    ]);
+    if (settings._unavailable) {
+      document.getElementById("orch-pause-badge").textContent = "unavailable";
+      return;
+    }
+    renderOrchControls(settings, budget);
+    renderOrchApprovals(approvals);
+    renderOrchParked(parked);
+    renderOrchRuns(runs);
+  } catch (e) {
+    showError("Orchestrator: " + e.message);
+  }
+}
+
+function renderOrchControls(data, budget) {
+  const s = data.settings || {};
+  const workflows = data.workflows || [];
+  const paused = !!s.global_pause;
+  document.getElementById("orch-pause-badge").textContent = paused ? "PAUSED" : "running";
+  const btn = document.getElementById("orch-pause-btn");
+  btn.textContent = paused ? "Release global pause" : "Global pause";
+  btn.dataset.paused = paused ? "1" : "0";
+
+  const modes = ["standard", "supervised", "dry_run"];
+  document.getElementById("orch-mode-controls").innerHTML = workflows.map(w => {
+    const current = s["mode_default." + w.workflow_id] || "supervised";
+    const opts = modes.map(m => {
+      const disabled = !w.specialist_available && m !== "dry_run";
+      return `<option value="${m}" ${m === current ? "selected" : ""} ${disabled ? "disabled" : ""}>${m}${disabled ? " (specialist missing)" : ""}</option>`;
+    }).join("");
+    return `<label>${esc(w.workflow_id)} <select onchange="orchSetMode('${esc(w.workflow_id)}', this.value)">${opts}</select></label>`;
+  }).join("");
+
+  const wsel = document.getElementById("orch-filter-workflow");
+  const keep = wsel.value;
+  wsel.innerHTML = '<option value="">all workflows</option>' + workflows.map(w =>
+    `<option value="${esc(w.workflow_id)}" ${w.workflow_id === keep ? "selected" : ""}>${esc(w.workflow_id)}</option>`).join("");
+
+  const g = (budget && budget.global) || {};
+  const pct = Math.min(100, Math.round(g.pct || 0));
+  const color = g.exhausted ? "var(--danger)" : g.soft_alert_triggered ? "var(--warn)" : "var(--accent2)";
+  let html = `<div class="budget-row"><span>Global ${esc(budget.period || "")}</span>
+      <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      <span class="mono">$${(g.spent_usd || 0).toFixed(2)} / $${(g.ceiling_usd || 0).toFixed(0)}${g.soft_alert_triggered ? " ⚠" : ""}</span></div>`;
+  (budget.workflows || []).forEach(w => {
+    const cap = w.monthly_cap_usd;
+    const p = cap ? Math.min(100, Math.round((w.spent_usd / cap) * 100)) : 0;
+    html += `<div class="budget-row"><span style="color:var(--muted)">${esc(w.workflow_id)}</span>
+      <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${p}%"></div></div>
+      <span class="mono" style="color:var(--muted)">$${(w.spent_usd || 0).toFixed(2)} / ${cap ? "$" + cap.toFixed(0) : "no cap"} · run ≤ $${(w.per_run_ceiling_usd || 0).toFixed(0)}</span></div>`;
+  });
+  document.getElementById("orch-budget").innerHTML = html;
+}
+
+function renderOrchApprovals(data) {
+  const items = data.approvals || [];
+  document.getElementById("orch-approval-count").textContent = data.count || 0;
+  const body = document.getElementById("orch-approvals-body");
+  if (items.length === 0) {
+    body.innerHTML = '<tr class="empty-row"><td colspan="4">Nothing waiting for you</td></tr>';
+    return;
+  }
+  body.innerHTML = items.map(a => {
+    const art = a.artifact_summary_json || {};
+    let artifact = esc(art.label || art.kind || a.kind);
+    if (a.owner_action) artifact += `<code class="orch-cmd" title="Copy and run from develop">${esc(a.owner_action)}</code>`;
+    else if (art.body) artifact += `<code class="orch-cmd">${esc(truncate(art.body, 220))}</code>`;
+    if (a.recipient) artifact += `<div style="font-size:10px;color:var(--muted)">to ${esc(a.recipient)}</div>`;
+    if ((a.advisory_tags || []).length) artifact += `<div style="font-size:10px;color:var(--warn)">advisory: ${esc(a.advisory_tags.join(", "))}</div>`;
+    if (a.instruction_like) artifact += `<div style="font-size:10px;color:var(--warn)">instruction-like content logged (routing unaffected)</div>`;
+    const allowed = a.allowed_decisions || ["approve", "reject"];
+    const buttons = allowed.map(d => {
+      const label = { approve: "Approve", reject: "Reject", edit_approve: "Edit + approve", done_manually: "Done manually", skip: "Skip" }[d] || d;
+      return `<button class="${d === "reject" ? "danger" : ""}" onclick="orchDecide('${esc(a.approval_id)}', '${d}', '${esc(a.artifact_hash)}')">${label}</button>`;
+    }).join("");
+    return `<tr>
+      <td class="mono" style="font-size:11px">${esc(a.run_id)}<div style="color:var(--muted)">${esc(a.workflow_id || "")} · ${esc(a.mode || "")}</div></td>
+      <td><span class="pill pill-amber">${esc(a.kind)}</span><div style="font-size:11px;color:var(--muted)">${esc(a.step_name || "")}</div></td>
+      <td style="font-size:12px;max-width:360px">${artifact}</td>
+      <td class="orch-actions">${buttons}</td>
+    </tr>`;
+  }).join("");
+}
+
+function renderOrchParked(data) {
+  const runs = data.runs || [];
+  document.getElementById("orch-parked-count").textContent = data.count || 0;
+  const body = document.getElementById("orch-parked-body");
+  if (runs.length === 0) {
+    body.innerHTML = '<tr class="empty-row"><td colspan="4">No parked runs</td></tr>';
+    return;
+  }
+  body.innerHTML = runs.map(r => `<tr>
+      <td class="mono" style="font-size:11px">${esc(r.run_id)}</td>
+      <td style="font-size:12px">${esc(r.workflow_id)}</td>
+      <td style="font-size:12px;color:var(--warn)">${esc(truncate(r.parked_reason || "", 90))}</td>
+      <td class="orch-actions"><button onclick="orchRun('${esc(r.run_id)}', 'resume')">Resume</button><button class="danger" onclick="orchRun('${esc(r.run_id)}', 'close')">Close</button></td>
+    </tr>`).join("");
+}
+
+function renderOrchRuns(data) {
+  const runs = data.runs || [];
+  document.getElementById("orch-run-count").textContent = data.count || 0;
+  const body = document.getElementById("orch-runs-body");
+  if (runs.length === 0) {
+    body.innerHTML = '<tr class="empty-row"><td colspan="9">No runs yet</td></tr>';
+    return;
+  }
+  const pill = s => ({ done: "pill-green", active: "pill-blue", waiting_owner: "pill-amber", parked: "pill-red",
+    paused_global: "pill-amber", failed: "pill-red", closed: "pill-amber" }[s] || "pill-blue");
+  body.innerHTML = runs.map(r => `<tr>
+      <td class="mono" style="font-size:11px">${esc(r.run_id)}</td>
+      <td style="font-size:12px">${esc(r.workflow_id)}</td>
+      <td style="font-size:11px;color:var(--muted)">${esc(r.trigger_class)}</td>
+      <td style="font-size:11px">${esc(r.mode)}</td>
+      <td><span class="pill ${pill(r.status)}">${esc(r.status)}</span></td>
+      <td style="font-size:11px;color:var(--muted)">${esc(r.result || "")}</td>
+      <td style="font-size:11px">${r.step_count}</td>
+      <td class="mono" style="font-size:11px">$${(r.cost_usd || 0).toFixed(2)}</td>
+      <td style="font-size:11px;color:var(--muted)">${r.created_at ? new Date(r.created_at * 1000).toLocaleString() : ""}</td>
+    </tr>`).join("");
+}
+
+async function orchDecide(approvalId, decision, artifactHash) {
+  const body = { decision: decision, artifact_hash: artifactHash };
+  if (decision === "edit_approve") {
+    const edited = prompt("Edited comment body (the marker is kept automatically):");
+    if (!edited) return;
+    body.artifact = { body: edited };
+  } else if (decision === "reject" || decision === "skip" || decision === "done_manually") {
+    const note = prompt("Optional note for the run log:");
+    if (note === null) return;
+    if (note) body.note = note;
+  }
+  try {
+    await orchJson("/orchestrator/approvals/" + encodeURIComponent(approvalId), { method: "POST", body: JSON.stringify(body) });
+    await loadOrchestrator();
+  } catch (e) { showError("Decision failed: " + e.message); }
+}
+
+async function orchRun(runId, action) {
+  let body = null;
+  if (action === "close") {
+    const note = prompt("Close this run (deliberately not done). Note:");
+    if (note === null) return;
+    body = JSON.stringify({ note: note || null });
+  }
+  try {
+    await orchJson("/orchestrator/runs/" + encodeURIComponent(runId) + "/" + action, { method: "POST", body: body });
+    await loadOrchestrator();
+  } catch (e) { showError("Run " + action + " failed: " + e.message); }
+}
+
+async function orchTogglePause() {
+  const paused = document.getElementById("orch-pause-btn").dataset.paused === "1";
+  if (!paused && !confirm("Pause the orchestrator? In-flight runs park at their next step boundary; nothing new starts until released.")) return;
+  try {
+    await orchJson("/orchestrator/settings", { method: "PUT", body: JSON.stringify({ changes: { global_pause: !paused } }) });
+    await loadOrchestrator();
+  } catch (e) { showError("Pause change failed: " + e.message); }
+}
+
+async function orchSetMode(workflowId, mode) {
+  const changes = {}; changes["mode_default." + workflowId] = mode;
+  try {
+    await orchJson("/orchestrator/settings", { method: "PUT", body: JSON.stringify({ changes: changes }) });
+    await loadOrchestrator();
+  } catch (e) { showError("Mode change failed: " + e.message); await loadOrchestrator(); }
+}
+
+async function orchDownload(path, filename) {
+  try {
+    const res = await fetch(path, { headers: headers() });
+    if (!res.ok) throw new Error(res.status + "");
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  } catch (e) { showError("Export failed: " + e.message); }
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────

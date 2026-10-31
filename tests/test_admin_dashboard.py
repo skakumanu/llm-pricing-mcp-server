@@ -351,6 +351,42 @@ def test_tracking_refusal_gets_503_not_500():
     assert resp.json() == {"detail": "draining"}
 
 
+# ── v1.83.0: Orchestrator block on /admin ──────────────────────────────────
+
+class TestAdminOrchestratorBlock:
+    def _html(self):
+        return client.get("/admin/", follow_redirects=True).text
+
+    def test_panel_ids_present(self):
+        html = self._html()
+        for el in ("orch-section", "orch-controls", "orch-budget", "orch-approvals-body", "orch-parked-body",
+                   "orch-runs-body", "orch-pause-btn", "orch-mode-controls"):
+            assert f'id="{el}"' in html, el
+
+    def test_references_every_orchestrator_data_route(self):
+        html = self._html()
+        for path in ("/orchestrator/settings", "/orchestrator/budget", "/orchestrator/approvals?status=waiting",
+                     "/orchestrator/parked", "/orchestrator/runs?", "/orchestrator/actions?format=csv"):
+            assert path in html, path
+
+    def test_offers_every_decision_and_dead_letter_control(self):
+        html = self._html()
+        for word in ("approve", "reject", "edit_approve", "done_manually", "skip", "resume", "close",
+                     "global_pause", "mode_default."):
+            assert word in html, word
+
+    def test_orchestrator_paths_are_not_public(self):
+        import src.main as main_module
+        assert "/orchestrator/" in main_module._OPERATOR_ONLY_PREFIXES
+        for path in main_module._unauthenticated_paths | main_module._anonymous_rate_limited_paths:
+            assert not path.startswith("/orchestrator"), path
+        assert "/orchestrator/" not in str(main_module._sensitive_paths)  # the prefix rule covers it
+
+    def test_shared_nav_unchanged(self):
+        html = self._html()
+        assert '<a href="/whats-new">What\'s New</a>' in html
+
+
 @pytest.mark.usefixtures("operator_key_configured")
 def test_migration_guide_url_points_at_an_existing_doc():
     resp = client.get("/api/versions", headers=OPERATOR_HEADERS)

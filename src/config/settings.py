@@ -137,6 +137,17 @@ class Settings(BaseSettings):
     # repr of Settings never shows it.
     provider_key_encryption_key: Optional[SecretStr] = None
 
+    # Orchestrator core (v1.83.0). One logical orchestrator (run ids, run log, approval
+    # queue, budget ledger, settings) in its own SQLite file on the volume. The intake key
+    # is a SEPARATE credential for the GitHub Actions executor; it is accepted only on
+    # POST /orchestrator/events, GET /orchestrator/runs/{id}/actions and
+    # POST /orchestrator/runs/{id}/actions/{aid}/result, never anywhere else. SecretStr so
+    # a repr of Settings never shows it. Unset = those routes take the operator key only.
+    orchestrator_db_path: str = "orchestrator.db"
+    orchestrator_intake_key: Optional[SecretStr] = None
+    orchestrator_run_retention_days: int = 365   # run / step / event / approval / action rows
+    orchestrator_io_retention_days: int = 90     # redacted I/O summaries nulled past this age
+
     # v1.82.1: back to "forbid" so an unknown .env key fails at startup instead of being
     # silently ignored; retired keys are filtered out first (RETIRED_ENV_KEYS). Process
     # environment variables were never affected: only names matching a field are read.
