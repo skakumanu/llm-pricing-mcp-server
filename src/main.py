@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from fastapi import FastAPI, Query, HTTPException, Request, Depends  # noqa: E402
 import csv  # noqa: E402
+import re  # noqa: E402
 import ipaddress  # noqa: E402
 import textwrap  # noqa: E402
 import json  # noqa: E402
@@ -64,6 +65,16 @@ from src.services.billing_service import init_billing_service, get_billing_servi
 from src.models.dispatch import ChatCompletionsRequest  # noqa: E402
 from src.services.dispatch_executors import HeaderKeyResolver  # noqa: E402
 from src.services.dispatch_receipts import init_dispatch_receipt_store, get_dispatch_receipt_store  # noqa: E402
+from src.services.orchestrator_store import (  # noqa: E402
+    ACTION_COLUMNS as _ORCH_ACTION_COLUMNS, RUN_COLUMNS as _ORCH_RUN_COLUMNS, init_orchestrator_store,
+)
+from src.services.orchestrator_service import (  # noqa: E402
+    OrchestratorError, OrchestratorService, get_orchestrator_service, init_orchestrator_service,
+)
+from src.services.orchestrator_workflows import workflow_catalogue as _orchestrator_workflow_catalogue  # noqa: E402
+from src.models.orchestrator import (  # noqa: E402
+    ActionResultIn, ApprovalDecisionIn, OrchestratorEventIn, OwnerRunIn, RunCloseIn, SettingsIn,
+)
 from src.services.provider_key_store import (  # noqa: E402
     SECRET_ENV_VAR as _PROVIDER_KEY_SECRET_ENV, InvalidProviderKey, ProviderKeyExists,
     ProviderKeyNotFound, StoredKeysUnavailable, UnsupportedProvider, accepted_providers as _accepted_key_providers,
@@ -179,6 +190,14 @@ _openapi_tags = [
     {
         "name": "Admin",
         "description": "Internal admin endpoints — aggregate stats, rate-limit state, and customer list.",
+    },
+    {
+        "name": "Orchestrator",
+        "description": (
+            "Operator-only orchestrator core (v1.83.0): idempotent intake, run log, approval queue, parked runs, "
+            "budgets and settings. Every route needs the operator key; the three executor routes also accept "
+            "ORCHESTRATOR_INTAKE_KEY."
+        ),
     },
     {
         "name": "OpenAI Proxy",
@@ -486,18 +505,61 @@ _OPERATOR_ONLY_EXACT = {
     ("HEAD", "/agent/conversations"),
 }
 _OPERATOR_ONLY_DELETE_PREFIXES = ("/pricing/alerts/", "/agent/conversations/")
+# v1.83.0: every method under these prefixes is operator-only (run log, approval queue,
+# parked runs, settings, budget). Constant refusals, limiter and body cap are inherited.
+_OPERATOR_ONLY_PREFIXES = ("/orchestrator/",)
+
+# The three executor routes that also accept the separate ORCHESTRATOR_INTAKE_KEY
+# (GitHub Actions). The intake key unlocks nothing else, but through these three routes it can
+# assert owner identity on a GitHub event (the workflow derives it from sender == repository
+# owner), so it is a secret: a pull_request.opened continuation is additionally bound to the
+# repository the run was created from (OrchestratorService._pr_matches_run). The operator key
+# still works here.
+_ORCHESTRATOR_INTAKE_ROUTES = (
+    ("POST", re.compile(r"^/orchestrator/events/?$")),
+    ("GET", re.compile(r"^/orchestrator/runs/[^/]+/actions/?$")),
+    ("POST", re.compile(r"^/orchestrator/runs/[^/]+/actions/[^/]+/result/?$")),
+)
 
 
 def _is_operator_only_request(method: str, path: str) -> bool:
     """True when (method, path) must carry the operator key (MCP_API_KEY).
 
     Lists every subscriber's alert webhooks / every visitor's conversations, or
-    deletes one of them. OPTIONS (CORS preflight) is never matched.
+    deletes one of them; or anything under /orchestrator/ (v1.83.0). OPTIONS (CORS
+    preflight) is never matched.
     """
     method = (method or "").upper()
+    if method == "OPTIONS":
+        return False
+    if path.startswith(_OPERATOR_ONLY_PREFIXES):
+        return True
     if method == "DELETE" and path.startswith(_OPERATOR_ONLY_DELETE_PREFIXES):
         return True
     return (method, path.rstrip("/") or "/") in _OPERATOR_ONLY_EXACT
+
+
+def _is_orchestrator_intake_route(method: str, path: str) -> bool:
+    method = (method or "").upper()
+    return any(m == method and rx.match(path) for m, rx in _ORCHESTRATOR_INTAKE_ROUTES)
+
+
+def _orchestrator_intake_key() -> Optional[str]:
+    key = settings.orchestrator_intake_key
+    return key.get_secret_value() if key else None
+
+
+def _key_matches(provided: Optional[str], expected: Optional[str]) -> bool:
+    """Constant-time compare on UTF-8 bytes (str compare_digest raises on non-ASCII)."""
+    if not provided or not expected:
+        return False
+    return secrets.compare_digest(provided.encode("utf-8"), expected.encode("utf-8"))
+
+
+def _orchestrator_caller_kind(request: Request) -> str:
+    """'operator' when the request carries MCP_API_KEY, else 'executor' (intake key)."""
+    provided = request.headers.get(settings.mcp_api_key_header)
+    return "operator" if _key_matches(provided, settings.mcp_api_key) else "executor"
 
 
 # Add deployment middleware for request tracking (needed for graceful shutdown)
@@ -570,7 +632,9 @@ async def security_middleware(request: Request, call_next):
                 return rejected
         return await call_next(request)
     if operator_only or path in _sensitive_paths:
-        if not settings.mcp_api_key:
+        # v1.83.0: the three orchestrator executor routes also accept ORCHESTRATOR_INTAKE_KEY.
+        intake_key = _orchestrator_intake_key() if _is_orchestrator_intake_route(request.method, path) else None
+        if not settings.mcp_api_key and not intake_key:
             return JSONResponse(
                 status_code=503,
                 content={"detail": "Authentication not configured"},
@@ -579,9 +643,7 @@ async def security_middleware(request: Request, call_next):
         # Compare as UTF-8 bytes: str compare_digest raises TypeError on non-ASCII
         # input (headers are latin-1 decoded), which would turn a bad key into a 500.
         # The key itself is never logged.
-        if not provided_key or not secrets.compare_digest(
-            provided_key.encode("utf-8"), settings.mcp_api_key.encode("utf-8")
-        ):
+        if not (_key_matches(provided_key, settings.mcp_api_key) or _key_matches(provided_key, intake_key)):
             client_ip = (
                 request.headers.get("x-forwarded-for", "").split(",")[0].strip()
                 or request.headers.get("x-real-ip")
@@ -1085,6 +1147,18 @@ async def startup_pricing_history() -> None:
         logger.info("Dispatch service initialized (enabled=%s)", settings.dispatch_enabled)
     except Exception as exc:  # nosec B110
         logger.error("Dispatch service init failed (dispatch mode disabled): %s", exc)
+    # v1.83.0 — orchestrator core: own SQLite file on the volume; no LLM, no outbound calls.
+    try:
+        orch_store = await init_orchestrator_store(
+            settings.orchestrator_db_path,
+            run_retention_days=settings.orchestrator_run_retention_days,
+            io_retention_days=settings.orchestrator_io_retention_days,
+        )
+        init_orchestrator_service(OrchestratorService(orch_store))
+        logger.info("Orchestrator initialized at %s (intake key %s)", settings.orchestrator_db_path,
+                    "set" if settings.orchestrator_intake_key else "unset")
+    except Exception as exc:  # nosec B110
+        logger.error("Orchestrator init failed (/orchestrator routes answer 503): %s", type(exc).__name__)
     asyncio.create_task(_pricing_snapshot_loop())
     logger.info(
         "Pricing snapshot loop started (interval=%dh)", settings.pricing_snapshot_interval_hours
@@ -3752,6 +3826,203 @@ async def admin_customers():
         "customers": rows,
         "snapshot_at": datetime.now(UTC).isoformat(),
     }
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator core (v1.83.0) — every route is operator-only via _OPERATOR_ONLY_PREFIXES;
+# the three executor routes also accept ORCHESTRATOR_INTAKE_KEY (see the middleware).
+# ---------------------------------------------------------------------------
+
+def _orchestrator() -> OrchestratorService:
+    try:
+        return get_orchestrator_service()
+    except RuntimeError:
+        raise HTTPException(status_code=503, detail="Orchestrator is not initialized")
+
+
+def _orchestrator_error(exc: OrchestratorError) -> JSONResponse:
+    return JSONResponse(status_code=exc.http_status, content={"error": exc.code, "message": exc.message})
+
+
+@app.post("/orchestrator/events", tags=["Orchestrator"])
+async def orchestrator_intake_event(body: OrchestratorEventIn, request: Request):
+    """
+    Idempotent intake of one inbound item (GitHub event, schedule slot, ...).
+
+    Routing uses only the trigger class, the event type and owner-controlled signals;
+    `data.title` / `data.body` are stored redacted and truncated as data and never
+    interpreted. A repeated `dedup_key` attaches to the existing run (`duplicate: true`)
+    and causes no new action. Operator key or `ORCHESTRATOR_INTAKE_KEY`.
+    """
+    svc = _orchestrator()
+    try:
+        return await svc.intake_event(body.model_dump(), actor_kind=_orchestrator_caller_kind(request))
+    except OrchestratorError as exc:
+        return _orchestrator_error(exc)
+
+
+@app.post("/orchestrator/runs", tags=["Orchestrator"])
+async def orchestrator_owner_run(body: OwnerRunIn):
+    """
+    Owner starts a workflow directly (owner_request trigger class; `support_triage` records
+    the customer_message class). `request_id` is the idempotency key. Operator key only.
+    """
+    svc = _orchestrator()
+    try:
+        return await svc.intake_owner_request(body.workflow_id, body.request_id, body.inputs, mode=body.mode)
+    except OrchestratorError as exc:
+        return _orchestrator_error(exc)
+
+
+@app.get("/orchestrator/runs", tags=["Orchestrator"])
+async def orchestrator_list_runs(
+    status: Optional[str] = Query(None, max_length=30),
+    workflow_id: Optional[str] = Query(None, max_length=60),
+    trigger_class: Optional[str] = Query(None, max_length=30),
+    since: Optional[str] = Query(None, description="unix or ISO-8601"),
+    until: Optional[str] = Query(None, description="unix or ISO-8601"),
+    limit: int = Query(200, ge=1, le=10_000),
+    format: str = Query("json", pattern="^(csv|json)$"),
+):
+    """The run log (operator-only): filterable, exportable as CSV (formula prefixes neutralised)."""
+    svc = _orchestrator()
+    rows = await svc.store.list_runs(
+        status=status, workflow_id=workflow_id, trigger_class=trigger_class,
+        since=_parse_receipt_time(since, "since"), until=_parse_receipt_time(until, "until"), limit=limit,
+    )
+    if format == "csv":
+        return Response(content=svc.store.to_csv(rows, _ORCH_RUN_COLUMNS), media_type="text/csv",
+                        headers={"Content-Disposition": 'attachment; filename="orchestrator_runs.csv"'})
+    return {"count": len(rows), "runs": rows}
+
+
+@app.get("/orchestrator/runs/{run_id}", tags=["Orchestrator"])
+async def orchestrator_get_run(run_id: str):
+    """One run with its steps, approvals, events and action records (redacted I/O summaries)."""
+    svc = _orchestrator()
+    try:
+        return await svc.describe_run(run_id)
+    except OrchestratorError as exc:
+        return _orchestrator_error(exc)
+
+
+@app.get("/orchestrator/runs/{run_id}/actions", tags=["Orchestrator"])
+async def orchestrator_pending_actions(run_id: str, executor: Optional[str] = Query(None, max_length=30)):
+    """
+    Approved external actions waiting for an executor. Empty while the global pause is on
+    or the run is not active. Operator key or `ORCHESTRATOR_INTAKE_KEY`.
+    """
+    svc = _orchestrator()
+    try:
+        actions = await svc.pending_actions(run_id, executor=executor)
+    except OrchestratorError as exc:
+        return _orchestrator_error(exc)
+    return {"run_id": run_id, "count": len(actions), "actions": actions}
+
+
+@app.post("/orchestrator/runs/{run_id}/actions/{action_id}/result", tags=["Orchestrator"])
+async def orchestrator_action_result(run_id: str, action_id: str, body: ActionResultIn, request: Request):
+    """
+    Executor reports an action's outcome. Requires the provenance echo (422 otherwise) and
+    the dispatched artifact hash (409 and the run parks on a mismatch). Idempotent per action.
+    """
+    svc = _orchestrator()
+    try:
+        return await svc.record_action_result(run_id, action_id, body.model_dump(),
+                                              actor=_orchestrator_caller_kind(request))
+    except OrchestratorError as exc:
+        return _orchestrator_error(exc)
+
+
+@app.get("/orchestrator/approvals", tags=["Orchestrator"])
+async def orchestrator_approvals(status: Optional[str] = Query("waiting", max_length=30)):
+    """The approval queue (system of record). `status=` filters; empty string lists all."""
+    svc = _orchestrator()
+    items = await svc.approval_queue(status=status or None)
+    return {"count": len(items), "approvals": items}
+
+
+@app.post("/orchestrator/approvals/{approval_id}", tags=["Orchestrator"])
+async def orchestrator_decide(approval_id: str, body: ApprovalDecisionIn):
+    """approve | reject | edit_approve | done_manually | skip — recorded with the exact artifact hash."""
+    svc = _orchestrator()
+    try:
+        return await svc.decide_approval(approval_id, body.decision, note=body.note, artifact=body.artifact,
+                                         expected_hash=body.artifact_hash)
+    except OrchestratorError as exc:
+        return _orchestrator_error(exc)
+
+
+@app.get("/orchestrator/parked", tags=["Orchestrator"])
+async def orchestrator_parked():
+    """Runs in the 'needs owner' state with their reason and prior outputs."""
+    svc = _orchestrator()
+    runs = await svc.parked_runs()
+    return {"count": len(runs), "runs": runs}
+
+
+@app.post("/orchestrator/runs/{run_id}/resume", tags=["Orchestrator"])
+async def orchestrator_resume(run_id: str):
+    svc = _orchestrator()
+    try:
+        return await svc.resume_run(run_id)
+    except OrchestratorError as exc:
+        return _orchestrator_error(exc)
+
+
+@app.post("/orchestrator/runs/{run_id}/close", tags=["Orchestrator"])
+async def orchestrator_close(run_id: str, body: Optional[RunCloseIn] = None):
+    svc = _orchestrator()
+    body = body or RunCloseIn()
+    try:
+        return await svc.close_run(run_id, note=body.note, result=body.result)
+    except OrchestratorError as exc:
+        return _orchestrator_error(exc)
+
+
+@app.get("/orchestrator/settings", tags=["Orchestrator"])
+async def orchestrator_get_settings():
+    svc = _orchestrator()
+    return {"settings": await svc.effective_settings(), "workflows": _orchestrator_workflow_catalogue(svc.registry)}
+
+
+@app.put("/orchestrator/settings", tags=["Orchestrator"])
+async def orchestrator_put_settings(body: SettingsIn):
+    """Owner control surface: global_pause, mode defaults, budgets. 422 `specialist_missing` when
+    a non-dry_run mode is set on a workflow whose specialist is not built."""
+    svc = _orchestrator()
+    try:
+        return {"settings": await svc.update_settings(body.changes, updated_by="operator")}
+    except OrchestratorError as exc:
+        return _orchestrator_error(exc)
+
+
+@app.get("/orchestrator/budget", tags=["Orchestrator"])
+async def orchestrator_budget():
+    svc = _orchestrator()
+    return await svc.budget_view()
+
+
+@app.get("/orchestrator/workflows", tags=["Orchestrator"])
+async def orchestrator_workflows():
+    svc = _orchestrator()
+    return {"workflows": _orchestrator_workflow_catalogue(svc.registry)}
+
+
+@app.get("/orchestrator/actions", tags=["Orchestrator"])
+async def orchestrator_actions(
+    since: Optional[str] = Query(None, description="unix or ISO-8601"),
+    run_id: Optional[str] = Query(None, max_length=40),
+    limit: int = Query(500, ge=1, le=10_000),
+    format: str = Query("json", pattern="^(csv|json)$"),
+):
+    """Append-only action records (what happened, by whom, with which artifact hash)."""
+    svc = _orchestrator()
+    rows = await svc.store.list_actions(run_id=run_id, since=_parse_receipt_time(since, "since"), limit=limit)
+    if format == "csv":
+        return Response(content=svc.store.to_csv(rows, _ORCH_ACTION_COLUMNS), media_type="text/csv",
+                        headers={"Content-Disposition": 'attachment; filename="orchestrator_actions.csv"'})
+    return {"count": len(rows), "actions": rows}
 
 
 # ---------------------------------------------------------------------------

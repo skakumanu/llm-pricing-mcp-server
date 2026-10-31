@@ -114,6 +114,11 @@ The chat agent binds 27 of the 31 MCP tools (all except `ask_agent`, `get_teleme
 - `POST /usage` records actual spend. `GET /usage/summary` and `GET /usage/session/{session_id}` analyze it.
 - Budget alerts (`POST /usage/alerts`) fire a webhook at a threshold; `hard_stop: true` also blocks dispatch for your org.
 
+### Orchestrator core (operator-only)
+- One place where the operator's inbound work (GitHub issues/PRs, the weekly price audit, owner requests) is accepted exactly once, routed by trigger class and owner-applied labels only, and held at human checkpoints.
+- `/orchestrator/*` plus an Orchestrator block on `/admin`: approval queue, parked runs, run log (CSV), global pause, per-workflow mode, budgets. Nothing merges, moves money or sends anything without a recorded approval.
+- The SDLC pipeline is wrapped as an owner checkpoint: the queue shows the exact `/release-feature` command; the PR it opens completes the run and posts one status comment on the issue.
+
 ---
 
 ## Access and keys
@@ -122,7 +127,8 @@ The chat agent binds 27 of the 31 MCP tools (all except `ask_agent`, `get_teleme
 |---|---|---|
 | Public | Anyone | Pricing, estimates, data quality, history, registering a price alert, the chat agent: 19 public MCP tools |
 | Service key | You (free: `POST /billing/signup`) | Usage/budget tools and endpoints, router, `dispatch`, `/dispatch/keys`; acts only on your own org |
-| Operator key | Server operator (`MCP_API_KEY`) | Listing/deleting all price alerts and conversations, admin customer list |
+| Operator key | Server operator (`MCP_API_KEY`) | Listing/deleting all price alerts and conversations, admin customer list, every `/orchestrator/*` route |
+| Intake key | GitHub Actions executor (`ORCHESTRATOR_INTAKE_KEY`) | Only `POST /orchestrator/events`, `GET /orchestrator/runs/{id}/actions`, `POST …/actions/{aid}/result`; it carries the workflow's owner assertion for GitHub events, so treat it as a secret |
 
 - Send keys as `x-api-key: <your-key>` (MCP also accepts `Authorization: Bearer <your-key>`).
 - Tiers: Free 30 / Pro 120 / Enterprise 600 req/min. Full endpoint and auth map: [/api-docs](https://llm-pricing-api.fly.dev/api-docs).
@@ -142,6 +148,9 @@ Set via environment variables or `.env`. An unknown key in `.env` stops startup 
 | `WEBHOOK_SECRET` | HMAC-SHA256 signing for alert webhooks |
 | `WEBHOOK_ALLOW_PRIVATE_TARGETS` | Local dev only: allow http/private webhook targets |
 | `BILLING_DB_PATH` / `PRICING_HISTORY_DB_PATH` | SQLite file locations |
+| `ORCHESTRATOR_DB_PATH` | Orchestrator SQLite file (runs, approvals, action records, spend, settings) |
+| `ORCHESTRATOR_INTAKE_KEY` | Separate credential for the GitHub Actions executor; accepted on three routes only |
+| `ORCHESTRATOR_RUN_RETENTION_DAYS` / `ORCHESTRATOR_IO_RETENTION_DAYS` | Orchestrator retention: rows (365) and redacted I/O summaries (90) |
 
 Full list: `src/config/settings.py`. Production settings: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
@@ -153,7 +162,7 @@ Full list: `src/config/settings.py`. Production settings: [docs/DEPLOYMENT.md](d
 pytest tests/ -q
 ```
 
-- 3086 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 3348 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 - Git Flow: `feature/*` → `develop` → `master`. See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 - Internals, services, data stores and CI: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Deploys to Fly.io from `master` when all CI gates pass: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
