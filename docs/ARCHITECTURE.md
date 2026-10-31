@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.82.5 | **Last updated**: 2026-10-31
+**Version**: v1.83.0 | **Last updated**: 2026-10-31
 
 Canonical internals reference. Release history lives in `static/whats-new/`, not here.
 
@@ -16,6 +16,7 @@ FastAPI service that aggregates LLM pricing from 30 providers (600+ models) and 
 - **Dispatch gateway**: `POST /v1/chat/completions` + `dispatch` object executes the best eligible model on the caller's own provider key
 - **Local currency**: 13 currencies, additive `local_*` fields; pricing data itself stays USD
 - **Dev tooling (not deployed)**: `/release-feature` phase-agent pipeline (see `CLAUDE.md`); `scripts/audit_repo.py` customer-run cost auditor
+- **Orchestrator core (v1.83.0)**: operator-only `/orchestrator/*` — idempotent intake of GitHub events / schedules / owner requests, finite workflows with human checkpoints, run log, approval queue, budgets; executors are `orchestrator-intake.yml` and the owner on `/admin`; no LLM in v1
 
 ---
 
@@ -33,16 +34,16 @@ FastAPI service that aggregates LLM pricing from 30 providers (600+ models) and 
 │  body cap · per-bucket sliding window (src/services/rate_limiter.py) │
 └───────┬───────────────────────┬──────────────────────┬───────────────┘
 ┌───────▼──────────────┐ ┌──────▼─────────┐ ┌──────────▼──────────────┐
-│ Pricing & usage      │ │ Agent / RAG    │ │ Billing                 │
+│ Pricing & usage      │ │ Agent / RAG    │ │ Billing · Orchestrator  │
 │ PricingAggregator    │ │ ReAct loop     │ │ BillingService          │
 │ 30 provider impls    │ │ TF-IDF RAG     │ │ free signup → API key   │
 │ PriceOracle, Router  │ │ conv. memory   │ │ Stripe (optional)       │
 │ Usage/Budget/Alerts  │ │ Anthropic or   │ │ ProviderKeyStore        │
-│ WebhookGuard         │ │ OpenAI backend │ │ (AES-GCM, per org)      │
-│ Currency · Dispatch  │ └──────┬─────────┘ └──────────┬──────────────┘
-└───────┬──────────────┘        │                      │
+│ WebhookGuard         │ │ OpenAI backend │ │ OrchestratorService     │
+│ Currency · Dispatch  │ └──────┬─────────┘ │ (runs, approvals, budget)│
+└───────┬──────────────┘        │           └──────────┬──────────────┘
 ┌───────▼───────────────────────▼──────────────────────▼───────────────┐
-│ Data: pricing_history.db · billing.db · in-memory caches             │
+│ Data: pricing_history.db · billing.db · orchestrator.db · caches     │
 └───────┬──────────────────────────────────────────────────────────────┘
 ┌───────▼──────────────────────────────────────────────────────────────┐
 │ External: provider pricing/model APIs · reference price registry ·   │
@@ -60,7 +61,8 @@ src/
   __init__.py               __version__ (single source of truth)
   main.py                   FastAPI app, all endpoints, auth/rate-limit/body-cap middleware
   config/settings.py        pydantic-settings; unknown .env keys fail startup (RETIRED_ENV_KEYS)
-  models/                   pricing.py, billing.py, deployment.py, dispatch.py (DispatchPolicy, ChatCompletionsRequest)
+  models/                   pricing.py, billing.py, deployment.py, dispatch.py (DispatchPolicy, ChatCompletionsRequest),
+                            orchestrator.py (event / owner-run / approval / result bodies)
   services/
     pricing_aggregator.py   PROVIDER_SERVICES list, async fan-out + TTL cache, get_pricing_aggregator() singleton
     base_provider.py        BasePricingProvider: build_metrics, registry-entry merge, live model sync
@@ -84,6 +86,9 @@ src/
     provider_key_store.py   encrypted per-org provider keys; CompositeKeyResolver
     rate_limiter.py         the one sliding-window store, shared by HTTP and MCP dispatch
     billing_service.py      customers table, Stripe sync
+    orchestrator_workflows.py  finite workflow definitions (validated at import), route(), redaction, templates
+    orchestrator_store.py   orchestrator.db: runs, steps, events, approvals, append-only actions, spend, settings
+    orchestrator_service.py the run engine: intake/dedup, step loop, checkpoints, executors, budgets, pause
     ide_pricing.py, telemetry.py, geolocation.py, data_fetcher.py, data_sources.py, deployment.py
 mcp/
   server.py                 STDIO transport (always anonymous; transport='stdio')
@@ -102,7 +107,8 @@ scripts/                    weekly audit scripts, validate_price_snapshot.py, sy
                             release_notes_from_whats_new.py (deploy job → GitHub Release notes)
 npm/llm-pricing-mcp/        zero-dependency STDIO↔HTTP bridge published to npm
 server.json                 MCP registry listing (remote + npm package)
-.github/workflows/          ci-cd, sync-develop, price-audit, npm-publish, mcp-registry-publish
+.github/workflows/          ci-cd, sync-develop, price-audit (+ report-run), npm-publish, mcp-registry-publish,
+                            orchestrator-intake (GitHub executor of the orchestrator core)
 tests/                      pytest suite (count: README "passing tests" line)
 fly.toml, Dockerfile        Fly config; image copies src/ static/ agent/ rag/ mcp/ docs/ data/
 CLAUDE.md                   session rules + release checklist
@@ -122,9 +128,9 @@ Checked in this order:
 
 | Step | Paths | Effect |
 |---|---|---|
-| 1. Operator-only request | GET/HEAD `/pricing/alerts`, `/agent/conversations`; DELETE `/pricing/alerts/{id}`, `/agent/conversations/{id}` | Decided first so the `/pricing` prefix bypass can't expose them |
+| 1. Operator-only request | GET/HEAD `/pricing/alerts`, `/agent/conversations`; DELETE `/pricing/alerts/{id}`, `/agent/conversations/{id}`; any method under `/orchestrator/` (`_OPERATOR_ONLY_PREFIXES`) | Decided first so the `/pricing` prefix bypass can't expose them |
 | 2. Full bypass | OPTIONS, static UIs, `/pricing*`, `/mcp`, `_unauthenticated_paths` | No auth, no limiter; `_public_body_capped_paths` (`/v1/chat/completions`, `/mcp`) still body-capped |
-| 3. Operator key | step 1 + `_sensitive_paths` (`/deployment/shutdown*`, `/admin/customers`, `/admin/stats`, `/admin/rate-limits`) | Global `MCP_API_KEY` in `x-api-key` only (byte compare); 503 if unset |
+| 3. Operator key | step 1 + `_sensitive_paths` (`/deployment/shutdown*`, `/admin/customers`, `/admin/stats`, `/admin/rate-limits`) | Global `MCP_API_KEY` in `x-api-key` only (byte compare); 503 if unset. The three orchestrator executor routes (POST `/orchestrator/events`, GET `…/runs/{id}/actions`, POST `…/actions/{aid}/result`) also accept `ORCHESTRATOR_INTAKE_KEY`; it unlocks nothing else, but on those routes it carries the executor's owner assertion for GitHub events, so a `pull_request.opened` continuation is additionally bound to the repository the run was created from (`refused:repo_mismatch` otherwise) |
 | 4. Anonymous, rate-limited | `/agent/chat*`, `/billing/signup`, POST `/pricing/alerts`, `/pricing/alerts/self/*`, `/cost-estimate*` | Per-IP limit + body cap; a customer key on `/cost-estimate*` gets its tier limit |
 | 5. Service key | everything else | Billing customer key (tier from DB) or global key; 401 otherwise |
 
@@ -221,6 +227,29 @@ DispatchService
 - Registration returns a one-time `alert_token` (`lpa_` prefix); only its SHA-256 is stored (`pricing_alerts.token_hash`).
 - `POST /pricing/alerts/self/view|delete` and MCP `manage_price_alert` look up by token only; every miss → `invalid_alert_token`.
 
+### Orchestrator core (v1.83.0)
+```
+trigger (GitHub event · schedule · owner request) ──► POST /orchestrator/events | POST /orchestrator/runs
+  dedup_key UNIQUE (INSERT OR IGNORE → SELECT): duplicate attaches, no new side effect
+  route(trigger class, event type, owner signals) → workflow   ← titles/bodies never reach routing
+  run orc_xxxxxxxxxxxx · steps from the definition (≤ 20; agents cannot add/reorder/skip)
+    deterministic → handler (3 attempts, 30 s)   checkpoint → approval row, run waits (never times out)
+    external_action → approval bound to (run, step, artifact sha256, recipient) → executor fetches
+       GET …/actions?executor=github → acts (at-most-once via <!-- orchestrator:run:step --> marker)
+       → POST …/result {artifact_hash, provenance_echo}  (422 without echo · 409 + park on mismatch)
+    llm (none in v1) → check_budget (per run · per workflow · global 150/mo, 80 % soft alert) → spend ledger
+  every hand-off carries a provenance envelope; the next step refuses to start without one
+  failure / block / deadline / max steps → status parked (reason + prior outputs); owner resumes or closes
+  result ∈ {done, awaiting_owner, failed, deliberately_not_done}; public_summary is a template
+```
+- **Workflows (code, `orchestrator_workflows.py`)**: `github_accepted_bug` (intake → annotate → `sdlc_run` checkpoint → one status comment), `release_notes_draft` and `support_triage` (specialist missing → forced `dry_run`, owner checkpoint "do manually or skip"), `weekly_price_audit` (parks on any failed job). `validate_registry()` runs at import and rejects `FORBIDDEN_ACTIONS` (`merge_pr`, `refund`, `charge`, `send_email`, `publish`, `push_branch`, `grant_permission`); the only executor action kind is `github_issue_comment_upsert`.
+- **SDLC wrap**: the checkpoint shows `/release-feature Fix issue #N (orchestrator run orc_…)`; the skill stamps `Orchestrator-Run:` into the PR footer; `pull_request: opened` (same repo, owner) completes the checkpoint and approves the templated status comment (`decided_by: github_pr_marker`); the PR URL must be in the repository recorded on the run and match the event's PR number, so a leaked intake key cannot attach a foreign link. Merging stays the owner's.
+- **Concurrency**: approval decisions, executor results, resume/close and PR continuations run under the service's one `asyncio.Lock` and continue the run inside it, so two identical concurrent requests apply once (the second gets 409 / `already_recorded`). Time spent paused or waiting on the owner is credited back to the 24 h executing deadline; an owner resume after a `deadline` park grants a fresh window.
+- **Modes**: `standard` (mandatory kinds gate: merge, money, outbound, publish, audit_flag, missing_specialist), `supervised` (default; every external action gates), `dry_run` (actions rendered, never executed). A mode can only add supervision; `PUT /orchestrator/settings` answers 422 `specialist_missing` when a non-dry_run mode is set on a missing-specialist workflow.
+- **Owner control surface** (`/admin` Orchestrator block): approval queue (approve / reject / edit-then-approve / done manually / skip), parked runs (resume / close), run log + CSV, global pause (parks in-flight runs at the next step boundary; `/actions` returns `[]`; release does not resume parked runs), per-workflow mode, budget bars. `update_settings()` refuses and logs any call made from inside a run.
+- **Untrusted input**: `summarize_untrusted()` redacts `sk-`/`pk-`/`whsec_`/`AKIA`/Stripe-id/email/`lpa_` tokens, truncates (title 200, body 500) and sets `instruction_like` (advisory, logged, never routes). Owner identity for GitHub events is asserted by the Actions workflow from `sender.login == repository_owner`.
+- **Notifications v1**: admin counters, the GitHub status comment, Actions step summary, WARNING logs. Email is a v1.1 follow-up; approvals are never accepted through a notification channel.
+
 ---
 
 ## UI Design System
@@ -251,8 +280,9 @@ Pages: `/` (landing), `/chat`, `/calculator`, `/compare`, `/history`, `/trends`,
 | `pricing_history.db` | `pricing_snapshots`, `routing_savings`, `routing_feedback`, `usage_events`, `pricing_alerts`, `budget_alerts`, `dispatch_receipts` | Receipts are metadata only, purged after 90 days |
 | `billing.db` | `customers`, `provider_keys` | Provider keys stored as ciphertext + last-4 fingerprint |
 | `CONVERSATION_DB_PATH` (optional) | `conversations` | Unset on Fly → in-memory |
+| `orchestrator.db` (`ORCHESTRATOR_DB_PATH`) | `orch_runs`, `orch_steps`, `orch_events`, `orch_approvals`, `orch_actions`, `orch_spend`, `orch_settings` | Rows purged after `ORCHESTRATOR_RUN_RETENTION_DAYS` (365); redacted I/O summaries nulled after `ORCHESTRATOR_IO_RETENTION_DAYS` (90); `orch_actions` is append-only |
 
-- Both `.db` files are gitignored and live on the Fly volume (`/app/data`).
+- All `.db` files are gitignored and live on the Fly volume (`/app/data`).
 - Never stored anywhere: prompts/completions, provider keys in plaintext, IPs, request headers.
 
 ---
@@ -291,6 +321,12 @@ Auth: **None** = public · **Rate-limited** = anonymous, per-IP limit + body cap
 | GET/POST | `/billing/me`, `/billing/checkout`, `/billing/portal` | Service key | Dashboard, Stripe checkout/portal |
 | POST | `/billing/webhook` | Stripe signature | Subscription sync |
 | GET | `/admin/stats`, `/admin/rate-limits`, `/admin/customers` | Operator key | Admin data |
+| POST | `/orchestrator/events` | Operator or intake key | Idempotent intake of one inbound item |
+| GET/POST | `/orchestrator/runs/{id}/actions`, `/orchestrator/runs/{id}/actions/{aid}/result` | Operator or intake key | Executor fetch / result (provenance echo + artifact hash) |
+| POST/GET | `/orchestrator/runs[/{id}]`, `/orchestrator/runs/{id}/resume`, `/orchestrator/runs/{id}/close` | Operator key | Owner request; run log (JSON/CSV); run detail; dead-letter controls |
+| GET/POST | `/orchestrator/approvals[/{id}]` | Operator key | Approval queue; approve / reject / edit_approve / done_manually / skip |
+| GET | `/orchestrator/parked`, `/orchestrator/budget`, `/orchestrator/workflows`, `/orchestrator/actions` | Operator key | Parked runs, budget view, workflow catalogue, action records (JSON/CSV) |
+| GET/PUT | `/orchestrator/settings` | Operator key | Global pause, mode defaults, budgets (422 `specialist_missing`) |
 | GET | `/api/versions`, `/deployment/metadata`, `/deployment/info` | Service key | Version metadata |
 | POST/GET | `/deployment/shutdown`, `/deployment/shutdown/status` | Operator key | Graceful shutdown |
 | GET | `/docs`, `/redoc`, `/openapi.json` | None | OpenAPI |
@@ -309,8 +345,12 @@ PR to develop/master, push to master  (ci-cd.yml)
 push to master → sync-develop.yml opens a ci/sync-develop-* PR if develop lags
 push to master touching npm/llm-pricing-mcp/** → npm-publish.yml
 push to master touching server.json            → mcp-registry-publish.yml
-weekly → price-audit.yml (human-merged PRs)
+weekly → price-audit.yml (human-merged PRs) → report-run posts one schedule event to the orchestrator
+issues labeled · PR opened (same repo, develop) · push master · workflow_dispatch(run_id)
+  → orchestrator-intake.yml: POST /orchestrator/events → GET …/actions?executor=github → comment upsert → POST …/result
 ```
+
+`orchestrator-intake.yml` runs with `contents: read`; only its `execute` job has `issues: write`. It uses `GITHUB_TOKEN` (no PAT), picks fields with `jq` from the event payload (never `${{ github.event.* }}` text in a script), guards PRs to the same repo, and exits 0 with a step-summary line when `ORCHESTRATOR_INTAKE_KEY` is absent. Pinned by `tests/test_orchestrator_intake_workflow.py`.
 
 | Weekly job (`price-audit.yml`) | Does |
 |---|---|

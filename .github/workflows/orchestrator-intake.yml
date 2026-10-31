@@ -1,0 +1,224 @@
+name: Orchestrator intake
+
+# v1.83.0 — the GitHub executor of the orchestrator core. It does exactly three things,
+# all against the FastAPI service (the one logical orchestrator) and never against
+# another agent:
+#   1. POST /orchestrator/events with a handful of jq-picked fields from the event
+#      payload (never the whole payload). Titles/bodies travel as data; the service
+#      redacts, truncates and flags them and never routes on them.
+#   2. GET /orchestrator/runs/<run_id>/actions?executor=github and execute each
+#      approved action. The only action kind in v1 is github_issue_comment_upsert: find
+#      the bot's own comment carrying the <!-- orchestrator:<run_id>:<step> --> marker
+#      and PATCH it, else create one. A retry after a timeout therefore never posts a
+#      second comment.
+#   3. POST .../actions/<action_id>/result echoing the artifact hash and provenance.
+#
+# Credentials: ORCHESTRATOR_INTAKE_KEY (repo secret; accepted by the service only on
+# the three routes above) and ORCHESTRATOR_BASE_URL (repo variable). When the secret is
+# absent every job prints one step-summary line and exits 0, so a fork or a fresh clone
+# never fails CI. GITHUB_TOKEN is used only to comment on issues (issues: write on the
+# executing job) and to read PR/commit metadata. No PAT, repository contents stay
+# read-only — the orchestrator cannot merge, push or change anything in the repo.
+#
+# Owner identity is asserted here from sender.login == repository owner; it is the only
+# "is this the owner" signal the service trusts for GitHub events. Routing happens in
+# the service from (trigger class, event type, owner-applied labels) only.
+
+on:
+  issues:
+    types: [labeled]
+  pull_request:
+    types: [opened]
+    branches: [develop]
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Orchestrator run id (orc_...) to re-drive pending GitHub actions for"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: orchestrator-intake-${{ github.event_name }}-${{ github.event.issue.number || github.event.pull_request.number || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  intake:
+    runs-on: ubuntu-latest
+    # Same-repo guard: a PR from a fork never reaches the service (its body is untrusted and
+    # its author is not the owner anyway).
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      run_id: ${{ steps.post.outputs.run_id }}
+      enabled: ${{ steps.guard.outputs.enabled }}
+    steps:
+      - name: Check the intake secret is configured
+        id: guard
+        env:
+          ORCHESTRATOR_INTAKE_KEY: ${{ secrets.ORCHESTRATOR_INTAKE_KEY }}
+        run: |
+          if [ -z "$ORCHESTRATOR_INTAKE_KEY" ]; then
+            echo "ORCHESTRATOR_INTAKE_KEY is not set; orchestrator intake skipped." >> "$GITHUB_STEP_SUMMARY"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build the event from picked fields
+        if: steps.guard.outputs.enabled == 'true'
+        id: build
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DISPATCH_RUN_ID: ${{ inputs.run_id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Everything below reads $GITHUB_EVENT_PATH with jq. No event-payload text is ever
+          # interpolated into this script through an expression, so issue titles/bodies cannot
+          # inject shell.
+          EV="$GITHUB_EVENT_PATH"
+          case "$EVENT_NAME" in
+            issues)
+              ACTOR=$(jq -r '.sender.login // ""' "$EV")
+              jq -n --arg actor "$ACTOR" --arg owner "$REPO_OWNER" --arg repo "$REPO" --arg run_url "$RUN_URL" \
+                --argjson n "$(jq '.issue.number' "$EV")" \
+                --arg label "$(jq -r '.label.name // ""' "$EV")" \
+                --argjson labels "$(jq '[.issue.labels[]?.name] | map(tostring)' "$EV")" \
+                --arg title "$(jq -r '(.issue.title // "")[0:300]' "$EV")" \
+                --arg body "$(jq -r '(.issue.body // "")[0:2000]' "$EV")" \
+                '{trigger_class: "github_event", event_type: "issues.labeled",
+                  dedup_key: ("gh:issue:" + ($n|tostring) + ":" + ($label|ascii_downcase)),
+                  actor: $actor, actor_is_owner: ($actor == $owner), delivery_ref: $run_url,
+                  source: {kind: "github", ref: $run_url},
+                  data: {issue_number: $n, label: $label, labels: $labels, title: $title, body: $body, repo: $repo}}' \
+                > event.json
+              ;;
+            pull_request)
+              ACTOR=$(jq -r '.sender.login // ""' "$EV")
+              # The Orchestrator-Run marker is written by /release-feature into the PR body.
+              MARKER_RUN=$(jq -r '.pull_request.body // ""' "$EV" | grep -oE 'Orchestrator-Run: orc_[a-z0-9]{12}' | head -n1 | sed 's/Orchestrator-Run: //' || true)
+              if [ -z "$MARKER_RUN" ]; then
+                echo "No Orchestrator-Run marker in the PR body; nothing to report." >> "$GITHUB_STEP_SUMMARY"
+                echo "skip=true" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              jq -n --arg actor "$ACTOR" --arg owner "$REPO_OWNER" --arg repo "$REPO" --arg run_url "$RUN_URL" \
+                --argjson n "$(jq '.pull_request.number' "$EV")" \
+                --arg pr_url "$(jq -r '.pull_request.html_url' "$EV")" \
+                --arg marker_run "$MARKER_RUN" \
+                '{trigger_class: "github_event", event_type: "pull_request.opened",
+                  dedup_key: ("gh:pr:" + ($n|tostring) + ":opened"),
+                  actor: $actor, actor_is_owner: ($actor == $owner), delivery_ref: $run_url,
+                  source: {kind: "github", ref: $run_url},
+                  data: {pr_number: $n, pr_url: $pr_url, orchestrator_run_id: $marker_run, repo: $repo}}' \
+                > event.json
+              ;;
+            push)
+              ACTOR=$(jq -r '.sender.login // .pusher.name // ""' "$EV")
+              SHA=$(jq -r '.after' "$EV")
+              # The merged PR for this commit, from the API (metadata, not commit-message text).
+              PR_NUMBER=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '.[0].number // empty' 2>/dev/null || true)
+              jq -n --arg actor "$ACTOR" --arg owner "$REPO_OWNER" --arg repo "$REPO" --arg run_url "$RUN_URL" \
+                --arg sha "$SHA" --arg pr "${PR_NUMBER:-}" \
+                '{trigger_class: "github_event", event_type: "push.master",
+                  dedup_key: ("gh:master:" + $sha),
+                  actor: $actor, actor_is_owner: ($actor == $owner), delivery_ref: $run_url,
+                  source: {kind: "github", ref: $run_url},
+                  data: ({sha: $sha, repo: $repo} + (if $pr == "" then {} else {pr_number: ($pr|tonumber)} end))}' \
+                > event.json
+              ;;
+            workflow_dispatch)
+              # Re-drive: no new event, just fetch pending actions for the given run.
+              echo "run_id=$DISPATCH_RUN_ID" >> "$GITHUB_OUTPUT"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Post the event to the orchestrator
+        if: steps.guard.outputs.enabled == 'true' && steps.build.outputs.skip != 'true'
+        id: post
+        env:
+          ORCHESTRATOR_INTAKE_KEY: ${{ secrets.ORCHESTRATOR_INTAKE_KEY }}
+          ORCHESTRATOR_BASE_URL: ${{ vars.ORCHESTRATOR_BASE_URL || 'https://llm-pricing-api.fly.dev' }}
+        run: |
+          set -euo pipefail
+          RESP=$(curl -sS --max-time 30 -X POST "$ORCHESTRATOR_BASE_URL/orchestrator/events" \
+            -H "x-api-key: $ORCHESTRATOR_INTAKE_KEY" -H "Content-Type: application/json" \
+            --data-binary @event.json)
+          echo "$RESP" | jq '{run_id, duplicate, outcome, status, workflow_id, mode}'
+          RUN_ID=$(echo "$RESP" | jq -r '.run_id // ""')
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          {
+            echo "Orchestrator intake: outcome=$(echo "$RESP" | jq -r '.outcome // "?"')"
+            echo "run=$RUN_ID duplicate=$(echo "$RESP" | jq -r '.duplicate // false')"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  execute:
+    runs-on: ubuntu-latest
+    needs: intake
+    if: needs.intake.outputs.enabled == 'true' && (needs.intake.outputs.run_id != '' || github.event_name == 'workflow_dispatch')
+    # The ONLY job that may write anything, and only issue comments.
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Execute approved GitHub actions for the run
+        env:
+          ORCHESTRATOR_INTAKE_KEY: ${{ secrets.ORCHESTRATOR_INTAKE_KEY }}
+          ORCHESTRATOR_BASE_URL: ${{ vars.ORCHESTRATOR_BASE_URL || 'https://llm-pricing-api.fly.dev' }}
+          RUN_ID: ${{ needs.intake.outputs.run_id || inputs.run_id }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$RUN_ID" | grep -qE '^orc_[a-z0-9]{12}$'; then
+            echo "No valid run id; nothing to execute." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          ACTIONS=$(curl -sS --max-time 30 "$ORCHESTRATOR_BASE_URL/orchestrator/runs/$RUN_ID/actions?executor=github" \
+            -H "x-api-key: $ORCHESTRATOR_INTAKE_KEY")
+          COUNT=$(echo "$ACTIONS" | jq -r '.count // 0')
+          echo "Pending GitHub actions for $RUN_ID: $COUNT" >> "$GITHUB_STEP_SUMMARY"
+          echo "$ACTIONS" | jq -c '.actions[]?' | while read -r ACTION; do
+            KIND=$(echo "$ACTION" | jq -r '.kind')
+            ACTION_ID=$(echo "$ACTION" | jq -r '.action_id')
+            HASH=$(echo "$ACTION" | jq -r '.artifact_hash')
+            OUTCOME="failed"; REF=""; ERR="unsupported_action"
+            if [ "$KIND" = "github_issue_comment_upsert" ]; then
+              ISSUE=$(echo "$ACTION" | jq -r '.artifact.issue_number')
+              MARKER=$(echo "$ACTION" | jq -r '.artifact.marker')
+              echo "$ACTION" | jq -r '.artifact.body' > body.md
+              # At-most-once: reuse the bot's own comment that carries this marker. Only comments
+              # authored by github-actions[bot] count, so a spoofed marker in someone else's comment
+              # cannot hijack the update.
+              EXISTING=$(gh api --paginate "repos/$REPO/issues/$ISSUE/comments" \
+                --jq --arg m "$MARKER" '.[] | select(.user.login == "github-actions[bot]" and (.body | contains($m))) | .id' \
+                | head -n1 || true)
+              if [ -n "$EXISTING" ]; then
+                REF=$(gh api -X PATCH "repos/$REPO/issues/comments/$EXISTING" -F body=@body.md --jq '.html_url') \
+                  && OUTCOME="success" && ERR="" || ERR="patch_failed"
+              else
+                REF=$(gh api -X POST "repos/$REPO/issues/$ISSUE/comments" -F body=@body.md --jq '.html_url') \
+                  && OUTCOME="success" && ERR="" || ERR="create_failed"
+              fi
+            fi
+            jq -n --arg outcome "$OUTCOME" --arg ref "$REF" --arg hash "$HASH" --arg run "$RUN_ID" \
+              --arg action "$ACTION_ID" --arg err "$ERR" \
+              '{outcome: $outcome, external_ref: ($ref | select(. != "")), artifact_hash: $hash,
+                provenance_echo: {run_id: $run, action_id: $action},
+                error_code: ($err | select(. != ""))}' > result.json
+            curl -sS --max-time 30 -X POST "$ORCHESTRATOR_BASE_URL/orchestrator/runs/$RUN_ID/actions/$ACTION_ID/result" \
+              -H "x-api-key: $ORCHESTRATOR_INTAKE_KEY" -H "Content-Type: application/json" \
+              --data-binary @result.json | jq -c '{status, step_status}'
+            echo "action $ACTION_ID: $OUTCOME ${REF:+$REF}" >> "$GITHUB_STEP_SUMMARY"
+          done
