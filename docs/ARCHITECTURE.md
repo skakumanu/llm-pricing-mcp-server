@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.81.2 | **Last updated**: 2026-10-31
+**Version**: v1.81.4 | **Last updated**: 2026-10-31
 
 ---
 
@@ -39,20 +39,20 @@ A production FastAPI service that aggregates real-time LLM pricing data from 30 
 ┌─────────────────────────────────▼───────────────────────────────────────────┐
 │  Presentation Layer (src/main.py + mcp/)                                    │
 │                                                                             │
-│  REST API              MCP (31 tools)          Browser UIs (13 pages)       │
+│  REST API              MCP (31 tools)          Browser UIs (14 pages)       │
 │  /pricing              STDIO transport          /  /chat  /calculator        │
 │  /router/recommend     HTTP POST /mcp           /compare  /history           │
 │  /cache-stats          JSON-RPC 2.0             /trends   /widget            │
 │  /billing/*            MCP 2024-11-05           /billing  /admin             │
 │  /agent/chat                                    /mcp-setup  /api-docs        │
-│  /v1/chat/completions                           /whats-new                   │
+│  /v1/chat/completions                           /whats-new  /ide-compare     │
 │    (+ dispatch mode, v1.77.0)                                               │
-│  /dispatch/providers  /dispatch/receipts                                    │
+│  /dispatch/providers  /dispatch/receipts        /conversations (operator)    │
 │  /dispatch/keys[/{provider}]  (stored provider keys, v1.79.0)               │
 │  /locale  /currency/rates  (+ currency/country on 6 pricing endpoints)      │
 │                                                                             │
 │  Security middleware: billing DB key → global MCP_API_KEY fallback          │
-│  Rate limiting: per {ip}:{tier} token-bucket (30/120/600 req/min)           │
+│  Rate limiting: per {ip}:{tier} sliding window (30/120/600 req/min)         │
 │  (dispatch mode authenticates in-handler: customer key only, same bucket;   │
 │   MCP `dispatch` shares the bucket via src/services/rate_limiter.py)        │
 └──────────┬──────────────────────┬──────────────────────┬────────────────────┘
@@ -82,9 +82,11 @@ A production FastAPI service that aggregates real-time LLM pricing data from 30 
 │  Data Layer                                                                 │
 │                                                                             │
 │  pricing_history.db     billing.db          In-memory cache                │
-│  price_history table    customers table     Aggregator (TTL)               │
-│  routing_feedback       (api_key, tier,     Savings per org_id             │
-│  usage_events table     org_id, stripe_id)  Alert callbacks                │
+│  pricing_snapshots      customers table     Aggregator (TTL)               │
+│  routing_savings        (api_key, tier,     Conversations (unless          │
+│  routing_feedback       org_id, stripe_id)  CONVERSATION_DB_PATH set)      │
+│  usage_events                                                              │
+│  pricing_alerts (+token_hash)                                              │
 │  budget_alerts (+hard_stop)                 Recommendation cache (5min TTL)│
 │  dispatch_receipts (metadata only)          provider_keys (v1.79.0,        │
 │                                             AES-GCM, org-scoped)           │
@@ -114,6 +116,7 @@ llm-pricing-mcp-server/
 │   ├── config/
 │   │   └── settings.py              # Pydantic-settings; all env vars incl. Stripe, billing
 │   ├── models/
+│   │   ├── deployment.py            # Deployment/health-check models (DeploymentMetadata, GracefulShutdownStatus, …)
 │   │   ├── pricing.py               # PricingMetrics, PerformanceMetrics, RouterResponse, …; BudgetAlertRequest/Record gain hard_stop (v1.77.0)
 │   │   ├── billing.py               # SignupRequest/Response, CheckoutRequest, CustomerDashboard
 │   │   └── dispatch.py              # v1.77.0: DispatchPolicy (objective preset, router constraints, allow/deny, max_request_cost_usd, failover, pinned_model, shadow, request_id, currency/country) — provider keys deliberately NOT modelled (headers only)
@@ -196,6 +199,8 @@ llm-pricing-mcp-server/
 │   ├── retire_models.py             # Weekly PR: delete entries retired >=30 days; registry-sourced rows are removed from their JSON
 │   ├── validate_price_snapshot.py   # Gates the snapshot-refresh PR
 │   ├── audit_repo.py                # Customer-run repo cost auditor (not deployed)
+│   ├── sync_nav.py                  # Stamps the canonical nav into every static page (--check reports drift; v1.75.1)
+│   ├── quick_validate.py            # Local smoke check: starts the STDIO MCP server, lists tools, calls a few
 │   └── promote_branch_content.sh    # Mirror one branch's tree onto another
 │
 ├── agent/
@@ -205,6 +210,12 @@ llm-pricing-mcp-server/
 │   ├── conversation.py              # SQLite conversation memory, turn limit
 │   └── tools.py                     # 27 of 31 MCP tool bindings for agent use (+ RAG search)
 │
+├── rag/                             # Agent's docs/pricing retrieval (no external vector DB)
+│   ├── document_loader.py           # Loads markdown docs + pricing data as documents
+│   ├── chunker.py                   # Splits documents into retrieval chunks
+│   ├── vector_store.py              # In-memory TF-IDF store
+│   └── pipeline.py                  # RAGPipeline: index + retrieve
+│
 ├── mcp/
 │   ├── server.py                    # MCP STDIO transport (Claude Desktop) — always an anonymous caller; DEBUG logs method/id only (v1.79.1); ToolManager(transport='stdio') so dispatch refuses (v1.80.0)
 │   ├── caller.py                    # v1.79.1: McpCaller (anonymous | customer | operator; id/org/tier only, never a key), access levels PUBLIC / ORG_SCOPED / OPERATOR_ONLY (v1.79.2) / CUSTOMER_ONLY (v1.80.0: dispatch), authorize(), effective_org_id(), operator_key_required()
@@ -213,8 +224,8 @@ llm-pricing-mcp-server/
 │   └── schemas/                     # Generated MCP JSON-RPC schema definitions
 │
 ├── static/
-│   ├── index.html                   # / — marketing landing page
-│   ├── landing/index.html           # /  (alias)
+│   ├── index.html                   # /chat — PricingAgent chat UI (static/ is mounted at /chat)
+│   ├── landing/index.html           # / — marketing landing page (served by the root route)
 │   ├── admin/index.html             # /admin — server stats, rate limits, customers
 │   ├── billing/index.html           # /billing — SaaS signup + upgrade SPA
 │   ├── calculator/index.html        # /calculator — interactive cost calculator
@@ -222,8 +233,10 @@ llm-pricing-mcp-server/
 │   ├── history/index.html           # /history — Chart.js pricing history
 │   ├── trends/index.html            # /trends — price-change leaderboard
 │   ├── widget/index.html            # /widget — embeddable pricing table
+│   ├── widget/widget.js             # Embeddable script for third-party pages
+│   ├── ide-compare/index.html       # /ide-compare — AI coding IDE subscription comparison
 │   ├── conversations/index.html     # /conversations — operator-only conversation management (operator key in localStorage, shared with /admin; operator-key-required state otherwise; v1.79.2)
-│   ├── mcp-setup/index.html         # /mcp-setup — MCP integration hub (5 client tabs, live test, all 31 tools)
+│   ├── mcp-setup/index.html         # /mcp-setup — MCP integration hub (6 client tabs, live test, all 31 tools)
 │   ├── api-docs/index.html          # /api-docs — API reference (Swagger/ReDoc iframe + endpoint table)
 │   └── whats-new/index.html         # /whats-new — release notes timeline (v1.35.0 → current)
 │
@@ -242,7 +255,7 @@ llm-pricing-mcp-server/
 │   ├── test/mock-server.js          # Local stand-in for POST /mcp, used only by tests/test_npm_wrapper.py
 │   └── README.md
 │
-├── tests/                           # 667 pytest tests (as of v1.48.0)
+├── tests/                           # pytest suite (current count: README's "passing tests" line)
 ├── docs/
 │   └── ARCHITECTURE.md              # THIS FILE — update on every structural change
 ├── fly.toml                         # Fly.io app config (volume at /app/data, health checks, EXCHANGE_RATES_PATH)
@@ -271,7 +284,7 @@ def get_x_service() -> XService:
         raise RuntimeError("XService not initialized")
     return _service
 ```
-All `init_*` calls live in the `startup_pricing_history()` FastAPI lifespan handler. Services: `PricingAggregator`, `PricingHistory`, `BenchmarkService`, `SavingsTracker`, `UsageTracker`, `BudgetAlertService`, `BillingService`, `ProviderKeyStore` (v1.79.0; `billing.db`, initialized right after billing), `DispatchReceiptStore`, `DispatchService` (v1.77.0; built from the router and the ledgers above; its default executor factory is `get_executor`, and tests inject a fake through the `executor_factory` parameter).
+All `init_*` calls live in the `startup_pricing_history()` FastAPI startup handler (`@app.on_event("startup")`). Services: `BillingService`, `ProviderKeyStore` (v1.79.0; `billing.db`, initialized right after billing), `PricingHistory`, `PricingAlertService`, `SavingsTracker`, `UsageTracker`, `BudgetAlertService`, the agent's conversation store (`init_conversation_store`), `PricingAggregator` (via `get_pricing_aggregator()`), `ModelRouter` (`init_router`), `DispatchReceiptStore`, `DispatchService` (v1.77.0; built from the router and the ledgers above; its default executor factory is `get_executor`, and tests inject a fake through the `executor_factory` parameter).
 
 `PricingAggregatorService`'s singleton (`get_pricing_aggregator()`, lazy + `asyncio.Lock`-guarded, defined in `pricing_aggregator.py` itself) is the one exception reused across *both* the REST API and every MCP tool in-process: `ToolManager` takes an optional `aggregator` param forwarded to all 13 pricing-dependent tools, and both MCP transports (`mcp/server.py`'s STDIO `main()`, `src/main.py`'s HTTP `/mcp` `_get_http_mcp_tool_manager()`) resolve `get_pricing_aggregator()` once and hand it to their `ToolManager`. This means one warm pricing cache per process, not one per surface — a REST call and an MCP tool call for the same model agree within the cache's TTL. Each tool's constructor still falls back to building its own instance when `aggregator` is omitted (e.g. direct instantiation in tests), so no existing call site broke.
 
@@ -307,7 +320,7 @@ Incoming request
             NO  → check against global MCP_API_KEY; bucket = ip:tier where tier comes from the
                   X-Api-Key-Tier header ONLY if that global key was presented and valid — anonymous
                   requests get tier "" (default limit) regardless of the header (v1.73.5)
-  └─ Rate limit check (token bucket per bucket key — `_rate_limit_allow(bucket_key, tier)`, v1.77.0 extracted
+  └─ Rate limit check (60s sliding window per bucket key — `_rate_limit_allow(bucket_key, tier)`, v1.77.0 extracted
      so other call sites share the same store and lock; v1.80.0 moved the store/lock/cleanup to
      src/services/rate_limiter.py — src.main re-exports the same objects and keeps `_rate_limit_allow` as a
      wrapper that reads its own settings — so the MCP dispatch tool consumes the same per-customer bucket)
@@ -363,7 +376,7 @@ A provider's catalogue is the union of its curated `STATIC_PRICING` (a human's s
 `BasePricingProvider._fetch_live_model_ids()` queries the provider's `/v1/models` API (cached 6 h).
 `_apply_live_filter()` removes models absent from the live list — keeps any model whose name is an exact
 or prefix match in the live set. Falls back to the full static list if the API is unreachable or no key is set.
-Enabled for: OpenAI, Anthropic, Groq, Mistral AI, Together AI, Fireworks AI, xAI, DeepSeek, Cerebras, NVIDIA NIM.
+Enabled for: OpenAI, Anthropic, Groq, Mistral AI, Together AI, Fireworks AI, xAI, DeepSeek, Cerebras, NVIDIA NIM, Hugging Face, PromptQL.
 
 `PricingAggregatorService` fetches all providers concurrently (`asyncio.gather`), merges results, and caches with a configurable TTL. Adding a new provider = new file + one `PROVIDER_SERVICES` entry (+ `PROVIDER_FILTER_ALIASES` strings) in the aggregator. DeepInfra, Novita, Vercel AI Gateway, Nebius and Databricks have no live model sync configured: their candidate list endpoints could not be verified as public/key-optional from the authoring environment, and Databricks has none.
 
@@ -543,7 +556,7 @@ DNS rebinding between check and connect cannot reach a private address. A 3xx co
 followed. Payload bytes and the `X-LLM-Pricing-Signature` HMAC are unchanged.
 
 ### 9. UI Design System
-All 13 browser UIs share the same CSS custom properties (defined in each page's `:root`):
+All 14 browser UIs share the same CSS custom properties (defined in each page's `:root`):
 
 | Variable | Value |
 |----------|-------|
@@ -552,6 +565,7 @@ All 13 browser UIs share the same CSS custom properties (defined in each page's 
 | `--surface2` | `#22263a` |
 | `--border` | `#2e3347` |
 | `--accent` | `#7c6af7` |
+| `--accent2` | `#4ecdc4` (most pages; `/whats-new` uses `#5b4fe0`, billing/conversations/chat omit it) |
 | `--text` | `#e2e8f0` |
 | `--muted` | `#8892a4` |
 | `--success` | `#48bb78` |
@@ -571,9 +585,9 @@ All use `'Segoe UI', system-ui, sans-serif`, `font-size: 14px`, sticky `.main-na
 
 | Database | File | Tables | Purpose |
 |----------|------|--------|---------|
-| Pricing history | `pricing_history.db` | `price_history`, `routing_feedback`, `usage_events` (nullable `session_id`, `is_estimated` flag), `budget_alerts` (`hard_stop` flag, v1.77.0), `dispatch_receipts` (v1.77.0) | Price snapshots, router feedback, actual usage/spend (optionally session-scoped, exact or text-estimated), spend-threshold webhooks (optionally a dispatch hard stop), dispatch receipt metadata — ids, model/provider, outcome, attempts, tokens, costs, savings, latencies, shadow summary; never messages, completions, provider error bodies, keys, IPs or headers; purged after `DISPATCH_RECEIPT_RETENTION_DAYS` (90) |
+| Pricing history | `pricing_history.db` | `pricing_snapshots`, `routing_savings`, `routing_feedback`, `pricing_alerts` (`token_hash`, v1.81.0), `usage_events` (nullable `session_id`, `is_estimated` flag), `budget_alerts` (`hard_stop` flag, v1.77.0), `dispatch_receipts` (v1.77.0) | Price snapshots, router feedback, actual usage/spend (optionally session-scoped, exact or text-estimated), spend-threshold webhooks (optionally a dispatch hard stop), dispatch receipt metadata — ids, model/provider, outcome, attempts, tokens, costs, savings, latencies, shadow summary; never messages, completions, provider error bodies, keys, IPs or headers; purged after `DISPATCH_RECEIPT_RETENTION_DAYS` (90) |
 | Billing | `billing.db` | `customers`, `provider_keys` (v1.79.0) | API keys, tiers, Stripe IDs; per-org stored provider keys — AES-256-GCM ciphertext (never plaintext), last-4 fingerprint, key_version, created/rotated/last-used times; one row per (org_id, provider). On the Fly volume via `BILLING_DB_PATH`; encrypted under `PROVIDER_KEY_ENCRYPTION_KEY` |
-| Conversations | per-session SQLite | `messages` | Agent conversation memory |
+| Conversations | `CONVERSATION_DB_PATH` (optional; in-memory when unset — `fly.toml` does not set it) | `conversations` (one row per conversation; turns as JSON in `messages`) | Agent conversation memory |
 
 Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/data`, 1 GB).
 
@@ -592,20 +606,22 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | GET | `/currency/rates` | None | Vendored USD rate table: `as_of`, `rate_age_days`, `stale` (7-day rule), `source`, `placeholder`, `zero_decimal` |
 | GET | `/pricing/history` | None | Historical price snapshots |
 | GET | `/pricing/trends` | None | Price-change leaderboard |
+| GET | `/pricing/subscription-trends` | None | IDE/subscription tools whose monthly price changed the most |
 | GET | `/pricing/history/export` | None | CSV / JSON export |
 | GET | `/pricing/alerts/signing-info` | None | Webhook HMAC signing key info |
 | GET | `/performance` | None | Performance metrics |
 | GET | `/use-cases` | None | Use-case recommendations; `currency` / `country` add `models[].local_cost` (set, order and USD-band `cost_tier` unchanged) |
-| POST | `/cost-estimate` | None | Single-model cost; `currency` / `country` add `local_cost` + `currency_conversion` |
-| POST | `/cost-estimate/batch` | None | Multi-model cost comparison; `currency` / `country` add `models[].local_cost`, `local_cost_range` (cheapest/most-expensive stay USD-derived) |
+| POST | `/cost-estimate` | Required | Single-model cost; `currency` / `country` add `local_cost` + `currency_conversion` |
+| POST | `/cost-estimate/batch` | Required | Multi-model cost comparison; `currency` / `country` add `models[].local_cost`, `local_cost_range` (cheapest/most-expensive stay USD-derived) |
 | GET | `/rate-limits/tiers` | None | Tier rate limits |
-| GET | `/api/versions` | None | API version negotiation |
+| GET | `/api/versions` | Required | API version negotiation |
 | GET | `/telemetry` | None | Request telemetry |
 | GET | `/cache-stats` | None | Process-lifetime hit/miss counts + hit rate for the recommendation cache, per call site (`recommend_model`, `router_recommend`) |
 | POST | `/router/recommend` | Required | LLM routing recommendation (~5min in-memory cache; response `cached` field); `currency` / `country` add `local_prices` on `recommended` and `alternatives[]` (constraints stay USD) |
 | POST | `/router/recommend/stream` | Required | SSE streaming router |
 | POST | `/router/feedback` | Required | Accept/reject feedback |
 | GET | `/telemetry/savings` | Required | Per-org savings stats |
+| GET | `/telemetry/ide-savings` | Required | Routing decisions, savings and acceptance rate broken down by IDE context |
 | POST | `/usage` | Required | Record one actual LLM usage event (cost computed server-side) |
 | POST | `/usage/batch` | Required | Record multiple usage events at once |
 | GET | `/usage/summary` | Required | Actual spend summary by model/provider, per-org, plus an org-wide exact-vs-estimated breakdown (`estimated_request_count`, `has_estimated_usage`) |
@@ -641,15 +657,21 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | GET | `/openapi.json` | None | OpenAPI spec (JSON) |
 | GET | `/billing` | None | Billing SPA |
 | GET | `/admin` | None | Admin SPA |
-| GET | `/{page}` | None | Browser UIs |
+| GET | `/admin/stats`, `/admin/rate-limits` | Operator key (`MCP_API_KEY`, x-api-key) | Admin dashboard data: aggregate telemetry/provider health; top rate-limit consumers by IP or customer id (v1.81.4: operator only — previously allow-listed) |
+| GET | `/admin/customers` | Operator key (`MCP_API_KEY`, x-api-key) | Every customer's email, org_id and Stripe id (v1.78.1: operator only) |
+| GET | `/deployment/metadata`, `/deployment/info` | Required | Version/API-versioning metadata; blue-green environment info |
+| POST | `/deployment/shutdown` | Operator key (`MCP_API_KEY`, x-api-key) | Start graceful shutdown |
+| GET | `/deployment/shutdown/status` | Operator key (`MCP_API_KEY`, x-api-key) | Graceful-shutdown status |
+| GET | `/chat`, `/calculator`, `/compare`, `/history`, `/trends`, `/widget`, `/mcp-setup`, `/api-docs`, `/whats-new`, `/conversations` | None | Browser UIs (static mounts; `/conversations` asks for the operator key in-page) |
+| GET | `/ide-compare` | None | IDE comparison UI (static mount; v1.81.4: added to the static-UI bypass, it previously returned 401 when `MCP_API_KEY` was set) |
 
 ---
 
 ## CI/CD Pipeline
 
 ```
-PR / push to master
-  ├── test        pytest (667+ tests, coverage report)
+PR to master or develop / push to master
+  ├── test        pytest (full suite, coverage report)
   ├── lint        flake8 (syntax errors + undefined names)
   ├── osv_scan    Google OSV Scanner (dependency CVEs)
   ├── security    bandit (Python SAST)

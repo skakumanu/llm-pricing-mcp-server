@@ -254,7 +254,7 @@
           <div class="step-num">3</div>
           <div class="step-body">
             <h4>Restart your client</h4>
-            <p>After saving the config, restart Claude Desktop / VS Code / Cursor. The 31 tools will appear automatically.</p>
+            <p>After saving the config, restart VS Code / Cursor. The 31 tools will appear automatically. (Claude Desktop adds remote servers under Settings → Connectors instead — see its tab.)</p>
           </div>
         </div>
         <div class="step">
@@ -311,7 +311,7 @@ LLM_PRICING_API_KEY=&lt;your-service-key&gt;                  <span class="cmt">
 
     <!-- Claude Desktop -->
     <div class="tab-panel" id="tab-claude">
-      <div class="callout"><strong>Option A (remote, easiest):</strong> use the Remote HTTP tab. <strong>Option B (no Python):</strong> the npx tab — <code>npx -y llm-pricing-mcp</code> bridges STDIO to the hosted server. Option C below runs a local Python server — works offline.</div>
+      <div class="callout"><strong>Option A (remote, easiest):</strong> in Claude Desktop open <strong>Settings → Connectors → Add custom connector</strong> and paste <code>https://llm-pricing-api.fly.dev/mcp</code>. Claude Desktop does not read a <code>url</code> entry from <code>claude_desktop_config.json</code>; that file only launches local commands. A connector carries no custom headers, so for the 7 usage/budget tools and <code>dispatch</code> use Option B with <code>LLM_PRICING_API_KEY</code> set. <strong>Option B (no Python):</strong> the npx tab — <code>npx -y llm-pricing-mcp</code> bridges STDIO to the hosted server. Option C below runs a local Python server — works offline.</div>
       <div class="steps">
         <div class="step">
           <div class="step-num">1</div>

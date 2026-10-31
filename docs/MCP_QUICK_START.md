@@ -14,7 +14,7 @@
 |-----------|----------|----------|
 | HTTP POST | `https://llm-pricing-api.fly.dev/mcp` | Remote clients (Claude Desktop, Cursor, CI) |
 | STDIO (npx) | `npx -y llm-pricing-mcp` | STDIO-only clients, no Python/clone needed — bridges to the HTTP endpoint above |
-| STDIO (local) | `python mcp/server.py` | Fully offline, runs the actual server locally |
+| STDIO (local) | `python mcp/server.py` | Runs the actual server locally; works offline on bundled static pricing (live refresh, `check_price_drift` and `ask_agent` need network) |
 
 ---
 
@@ -110,7 +110,7 @@ This is a zero-dependency bridge ([`npm/llm-pricing-mcp`](../npm/llm-pricing-mcp
 
 ---
 
-## STDIO Transport (Local, fully offline)
+## STDIO Transport (Local)
 
 ### Setup
 
@@ -137,28 +137,36 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 
 | Tool | Required args | Optional args |
 |------|--------------|---------------|
-| `get_all_pricing` | — | — |
-| `estimate_cost` | `model_name`, `input_tokens`, `output_tokens` | — |
-| `compare_costs` | `model_names[]`, `input_tokens`, `output_tokens` | — |
-| `predict_cost` | `prompt` | `task_type`, `cache_hit_ratio`, `top_n`, `require_function_calling`, `require_vision`, `min_context_tokens` |
+| `get_all_pricing` | — | `currency`, `country` |
+| `estimate_cost` | `model_name`, `input_tokens`, `output_tokens` | `currency`, `country` |
+| `compare_costs` | `model_names[]`, `input_tokens`, `output_tokens` | `currency`, `country` |
+| `predict_cost` | `prompt` | `task_type`, `top_n`, `cache_hit_ratio`, `require_function_calling`, `require_vision`, `min_context_tokens` |
 | `optimize_workload` | `workloads[]` | `monthly_budget_usd`, `min_quality_score` |
-| `recommend_model` | `description` | `task_type`, `max_cost_per_1m_tokens`, `min_quality_score`, `min_context_window`, `preferred_provider`, `monthly_budget_usd` |
+| `recommend_model` | `description` | `task_type`, `max_cost_per_1m_tokens`, `min_quality_score`, `min_context_window`, `preferred_provider`, `prefer_low_latency`, `exclude_reasoning_models`, `ide_context`, `monthly_budget_usd`, `estimated_monthly_requests`, `avg_input_tokens`, `avg_output_tokens`, `currency`, `country` |
 | `check_price_drift` | — | `threshold_pct`, `provider`, `limit` |
 | `get_data_quality` | — | — |
+| `get_cache_stats` | — | — |
 | `get_ide_pricing` | — | `provider`, `max_monthly`, `inline_only` |
 | `get_performance_metrics` | — | `provider`, `include_cost` |
-| `get_use_cases` | — | `provider` |
+| `get_use_cases` | — | `provider`, `currency`, `country` |
 | `get_telemetry` | — | `include_details`, `limit` |
 | `get_pricing_history` | — | `model_name`, `provider`, `days`, `limit` |
 | `get_pricing_trends` | — | `days`, `limit` |
 | `register_price_alert` | `url` | `threshold_pct`, `provider`, `model_name` |
-| `list_price_alerts` | — | — |
-| `delete_price_alert` | `alert_id` | — |
+| `list_price_alerts` | — (operator key) | — |
+| `delete_price_alert` | `alert_id` (operator key) | — |
 | `manage_price_alert` | `action` (`view`/`delete`), `alert_token` | — |
 | `get_pricing_export_url` | — | `format`, `model_name`, `provider`, `days`, `limit` |
-| `list_conversations` | — | `limit` |
-| `delete_conversation` | `conversation_id` | — |
+| `list_conversations` | — (operator key) | `limit` |
+| `delete_conversation` | `conversation_id` (operator key) | — |
 | `ask_agent` | `message` | `conversation_id`, `autonomous` |
+| `record_usage` | `model_name`, `input_tokens`, `output_tokens` (service key) | `org_id`, `occurred_at`, `request_id`, `session_id` |
+| `get_usage_summary` | — (service key) | `org_id`, `days` |
+| `analyze_session_usage` | `session_id` (service key) | `org_id` |
+| `import_session_usage` | `session_id`, `entries[]` (service key) | `org_id` |
+| `register_budget_alert` | `url`, `threshold_usd` (service key) | `org_id`, `period_days` |
+| `list_budget_alerts` | — (service key) | — |
+| `delete_budget_alert` | `alert_id` (service key) | — |
 | `dispatch` | `prompt` or `messages` (service key + stored provider keys) | `system`, `model`, `max_tokens`, `temperature`, `top_p`, `stop`, `dispatch` |
 
 ---
@@ -178,7 +186,7 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp -H "Content-Type: application/j
 # tools/list
 curl -X POST https://llm-pricing-api.fly.dev/mcp -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
-# → result.tools has 19 entries
+# → result.tools has 31 entries
 
 # tools/call
 curl -X POST https://llm-pricing-api.fly.dev/mcp -H "Content-Type: application/json" \
@@ -226,7 +234,7 @@ The [`/mcp-setup`](../static/mcp-setup/index.html) page has "Add to Cursor" / "A
   "mcpServers": {
     "llm-pricing": {
       "command": "python",
-      "args": ["/absolute/path/to/mcp/server.py"],
+      "args": ["/absolute/path/to/llm-pricing-mcp-server/mcp/server.py"],
       "cwd": "/absolute/path/to/llm-pricing-mcp-server",
       "env": { "PYTHONUNBUFFERED": "1" }
     }

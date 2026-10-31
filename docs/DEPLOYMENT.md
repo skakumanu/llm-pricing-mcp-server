@@ -44,10 +44,17 @@ The app's Fly.io configuration lives in `fly.toml` at the repo root:
 
 - **App**: `llm-pricing-api`, region `iad`
 - **VM**: shared-cpu-1x, 512MB
-- **HTTP service**: port 8000, `force_https`, health check on `GET /health` every 30s
+- **HTTP service**: port 8000, `force_https`, health check on `GET /health` every 30s,
+  `min_machines_running = 1` (idle machines beyond that auto-stop and auto-start)
 - **Persistent volume**: `llm_pricing_data` mounted at `/app/data` — this is where
   `pricing_history.db` and `billing.db` live, so data survives redeploys
-- **Build**: uses the repo's `Dockerfile` unchanged
+- **`[env]`**: `PRICING_HISTORY_DB_PATH=/app/data/pricing_history.db`,
+  `BILLING_DB_PATH=/app/data/billing.db` (unset, billing.db would land on the ephemeral
+  image disk), and `EXCHANGE_RATES_PATH=/app/vendored/exchange_rates.json` (the volume
+  mount shadows the image's `/app/data`, so the Dockerfile copies the rate table outside it)
+- **Build**: uses the repo's `Dockerfile` unchanged — `python -m uvicorn src.main:app
+  --host 0.0.0.0 --port 8000 --workers 2` as a non-root user. `Procfile` and `run.sh`
+  (a leftover Azure App Service startup script) are not used on Fly.io
 
 ## Environment Variables & Secrets
 
@@ -59,16 +66,23 @@ subset is configured.
 Set secrets on the running app with `flyctl secrets set` (this triggers a redeploy):
 
 ```bash
-flyctl secrets set MCP_API_KEY="your-strong-random-key"
-flyctl secrets set OPENAI_API_KEY="sk-..." ANTHROPIC_API_KEY="sk-ant-..."
+# Export the values in your own shell first; never paste them into docs or chat
+flyctl secrets set MCP_API_KEY="$MCP_API_KEY"
+flyctl secrets set OPENAI_API_KEY="$OPENAI_API_KEY" ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
 # ...and so on for any other provider key you want live-synced pricing for
 ```
 
 List what's currently set (values are never shown) with `flyctl secrets list`.
 
-Non-secret settings (`SERVER_PORT`, `RATE_LIMIT_PER_MINUTE`, `AGENT_LLM_PROVIDER`,
+Non-secret settings (`RATE_LIMIT_PER_MINUTE`, `AGENT_LLM_PROVIDER`, `DISPATCH_ENABLED`,
 etc.) can be set the same way, or via the `[env]` block in `fly.toml` for values
-that aren't sensitive.
+that aren't sensitive. (`SERVER_HOST`/`SERVER_PORT` only apply when the app is started
+with `python -m src.main`; on Fly the Dockerfile's uvicorn command fixes port 8000.)
+
+`MCP_API_KEY` is the operator key: when it is unset, operator-only routes
+(`/deployment/shutdown`, `/admin/customers`, `GET /pricing/alerts`, ...) answer 503 and
+other keyed routes run unauthenticated (logged once as a warning), so production must
+set it.
 
 ### Stored provider keys (`PROVIDER_KEY_ENCRYPTION_KEY`, v1.79.0)
 

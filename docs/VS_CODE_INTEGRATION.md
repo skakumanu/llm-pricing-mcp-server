@@ -1,8 +1,8 @@
 # VS Code Integration Guide
 
-> **Version**: 1.1  
+> **Version**: 1.2  
 > **Target**: Developers & MCP Client Users  
-> **Updated**: August 10, 2026
+> **Updated**: October 31, 2026
 
 ## Overview
 
@@ -12,7 +12,7 @@ This guide explains how to use Visual Studio Code with the LLM Pricing MCP Serve
 
 ### Prerequisites
 - VS Code 1.85 or later
-- Python 3.9+ installed
+- Python 3.11 recommended (CI and the Docker image use 3.11)
 - Git (for cloning the repository)
 
 ### Initial Setup
@@ -57,8 +57,8 @@ Press `Ctrl+Shift+P` → **"Tasks: Run Task"** → Choose:
 
 - **Run MCP Server (STDIO)** - Start MCP server in STDIO mode for Claude Desktop integration
 - **Run REST API Server** - Start FastAPI server on port 8000 with hot reload
-- **Quick Validate MCP Server** - Run 6 fast validation tests (~15 seconds)
-- **Test MCP Server Integration** - Full integration tests (~30 seconds)
+- **Quick Validate MCP Server** - Run `scripts/quick_validate.py`: initialize, tool discovery, the 5 core pricing tools and an unknown-tool error check over STDIO
+- **Test MCP Server Integration** - Currently broken: points at `scripts/test_mcp_server.py`, which is no longer in the repo
 
 #### Method 2: Using Terminal
 
@@ -96,7 +96,7 @@ Press `Ctrl+Shift+P` → **"Tasks: Run Task"**:
 - **Run All Tests** - Execute the full test suite
 - **Run Tests with Coverage** - Generate coverage report
 - **Quick Validate MCP Server** - Fast pre-deployment validation
-- **Validate MCP Client** - Comprehensive 16-scenario validation
+- **Validate MCP Client** - Currently broken: points at `scripts/validate_mcp_client.py`, which is no longer in the repo
 
 #### Run Tests via Testing Panel
 
@@ -125,7 +125,7 @@ python scripts/quick_validate.py
 
 #### Auto-formatting on Save
 - Enabled by default in workspace settings
-- Uses **Black** formatter (88 character line length)
+- Uses **Black** formatter (88 character line length; flake8 allows up to 119 via `.flake8`)
 - Imports auto-organized on save
 
 #### Manual Formatting & Linting
@@ -148,7 +148,7 @@ The workspace includes optimized settings in `.vscode/settings.json`:
 
 | Setting | Value | Purpose |
 |---------|-------|---------|
-| `python.defaultInterpreterPath` | `.venv/Scripts/python.exe` | Auto-detect virtual environment |
+| `python.defaultInterpreterPath` | `${workspaceFolder}/.venv/Scripts/python.exe` | Windows venv layout; on macOS/Linux select `.venv/bin/python` instead |
 | `python.testing.pytestEnabled` | `true` | Enable pytest framework |
 | `editor.formatOnSave` | `true` | Auto-format on save |
 | `editor.rulers` | `[88, 120]` | Visual line length guides |
@@ -276,7 +276,7 @@ The REST API is separate from the MCP tools — same underlying pricing data, pl
 ### Task: Validate Before Deployment
 
 ```bash
-# Run quick validation (6 tests, ~15 seconds)
+# Run quick validation (STDIO smoke test of the 5 core pricing tools)
 python scripts/quick_validate.py
 
 # Run the full suite
@@ -359,15 +359,15 @@ graceful-shutdown feature, not a deployment runbook — do not follow it for dep
 ### Issue: MCP Server Won't Start
 
 **Solution:**
-1. Check Python version: `python --version` (must be 3.9+)
-2. Verify dependencies installed: `pip list | grep mcp`
+1. Check Python version: `python --version` (3.11 recommended)
+2. Verify dependencies installed: `pip install -r requirements.txt` (the server has no `mcp` pip package dependency; `mcp/` is a local package)
 3. Check logs in VS Code terminal for specific errors
 4. Ensure no other process using same port (for REST API mode)
 
 ### Issue: Debugging Breakpoints Not Hit
 
 **Solution:**
-1. Ensure `justMyCode` is set to `false` in launch.json (already configured)
+1. Use the **MCP Server (Debug)** configuration, which sets `justMyCode` to `false` (the other two keep it `true`)
 2. Check breakpoint is in executed code path
 3. Verify correct debug configuration selected
 4. Clear breakpoints and re-add: `Ctrl+Shift+F9`
@@ -387,7 +387,7 @@ graceful-shutdown feature, not a deployment runbook — do not follow it for dep
 
 ## VS Code Extensions Reference
 
-### Essential Extensions (Auto-installed)
+### Essential Extensions (recommended in `.vscode/extensions.json`)
 
 | Extension | Purpose | Usage |
 |-----------|---------|-------|
@@ -424,7 +424,7 @@ graceful-shutdown feature, not a deployment runbook — do not follow it for dep
 | Quick Open File | `Ctrl+P` | `Cmd+P` |
 | Toggle Terminal | `Ctrl+` ` | `Cmd+` ` |
 | Run/Debug | `F5` | `F5` |
-| Run Task | `Ctrl+Shift+B` | `Cmd+Shift+B` |
+| Run Build Task | `Ctrl+Shift+B` | `Cmd+Shift+B` |
 | Find in Files | `Ctrl+Shift+F` | `Cmd+Shift+F` |
 | Go to Definition | `F12` | `F12` |
 | Find References | `Shift+F12` | `Shift+F12` |
@@ -435,10 +435,12 @@ graceful-shutdown feature, not a deployment runbook — do not follow it for dep
 
 | Action | Shortcut |
 |--------|----------|
-| Run Test at Cursor | `Ctrl+Shift+T` (custom) |
-| Debug Test at Cursor | `Ctrl+Shift+D` (custom) |
-| Rerun Last Test | `Ctrl+Shift+R` (custom) |
-| Toggle Test Panel | `Ctrl+Shift+Alt+T` |
+| Run Test at Cursor | `Ctrl+; C` |
+| Debug Test at Cursor | `Ctrl+; Ctrl+C` |
+| Rerun Last Run | `Ctrl+; L` |
+| Run All Tests | `Ctrl+; A` |
+
+These are VS Code defaults (`Cmd` on macOS); the repo ships no custom keybindings.
 
 ## Tips & Best Practices
 
@@ -486,7 +488,7 @@ This guide complements other MCP documentation:
 
 - **[MCP_QUICK_START.md](MCP_QUICK_START.md)** - Initial MCP setup (5-minute guide)
 - **[CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md)** - Claude Desktop configuration
-- **[MCP_TESTING.md](MCP_TESTING.md)** - Complete testing guide (3 test suites)
+- **[MCP_TESTING.md](MCP_TESTING.md)** - Testing guide (pytest suite, manual STDIO checks, `quick_validate.py`)
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture overview
 
 ## Next Steps
@@ -523,10 +525,11 @@ This guide complements other MCP documentation:
 - **Issues**: Report bugs via GitHub Issues
 - **Discussions**: Ask questions in GitHub Discussions
 - **Contributing**: See [CONTRIBUTING.md](CONTRIBUTING.md)
-- **Security**: Report vulnerabilities per [SECURITY_PATCH_PROCEDURE.md](SECURITY_PATCH_PROCEDURE.md)
+- **Security**: Report vulnerabilities privately to the maintainer rather than in a public issue
 
 ---
 
 **Version History**
+- v1.2 (2026-10-31): Flagged the two tasks whose scripts no longer exist; corrected the Python version, interpreter path, test keyboard shortcuts and quick-validate description; removed a dead security-doc link
 - v1.1 (2026-08-10): Fixed the MCP stdio entrypoint (was `src/main.py`, actually `mcp/server.py`); added GitHub Copilot and Cline/Continue MCP setup, previously missing despite the guide's title; corrected REST API example paths and request bodies to match the live endpoints
 - v1.0 (2026-02-20): Initial VS Code integration guide

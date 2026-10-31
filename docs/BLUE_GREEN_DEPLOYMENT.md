@@ -1,5 +1,16 @@
 # Blue-Green Deployment & Backwards Compatibility Guide
 
+> **Not the active deployment path.** Production runs as a single Fly.io app
+> (`llm-pricing-api`) deployed by the `deploy_fly` job in `.github/workflows/ci-cd.yml`;
+> there is no blue/green slot pair, load balancer switchover, Kubernetes cluster, or
+> container registry in this project (the Azure blue-green slot deploy was removed in
+> v1.34.0). See [DEPLOYMENT.md](DEPLOYMENT.md) for the real process. The `/health/*`,
+> `/deployment/*` and `/api/versions` endpoints described below do exist and work; the
+> orchestration examples (Docker, Kubernetes, AWS ALB) are illustrative only.
+> `/deployment/shutdown` and `/deployment/shutdown/status` are operator-only: they
+> require the `X-API-Key` header set to `MCP_API_KEY` (401 otherwise, 503 when
+> `MCP_API_KEY` is unset).
+
 ## Overview
 
 This guide explains how to deploy the LLM Pricing MCP Server with zero downtime using blue-green deployment, and how the service maintains backwards compatibility for all clients.
@@ -141,11 +152,12 @@ Once green is stable (5-10 minutes of traffic):
 ```bash
 # Gracefully shut down blue
 curl -X POST http://localhost:8000/deployment/shutdown \
+  -H "X-API-Key: $MCP_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"drain_timeout_seconds": 30}'
 
 # Monitor shut down
-curl http://localhost:8000/deployment/shutdown/status
+curl -H "X-API-Key: $MCP_API_KEY" http://localhost:8000/deployment/shutdown/status
 
 # Stop blue container once drained
 docker stop llm-pricing-blue
@@ -162,6 +174,7 @@ If issues occur in green, switch traffic back to blue:
 
 # Then gracefully shut down green
 curl -X POST http://localhost:8001/deployment/shutdown \
+  -H "X-API-Key: $MCP_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"drain_timeout_seconds": 30}'
 ```
@@ -188,12 +201,14 @@ curl http://localhost:8000/api/versions
 
 #### Deprecated Endpoints
 
-Deprecated endpoints still work but return a deprecation header:
+No endpoint is currently deprecated, and the server does not emit `Deprecation` /
+`Sunset` headers today. If an endpoint is deprecated in future, the plan is to signal
+it with headers like these:
 
 ```
 Deprecation: true
-Sunset: Sun, 01 Jul 2025 23:59:59 GMT
-Link: <https://docs.example.com/migration>; rel="deprecation"
+Sunset: <date>
+Link: <migration-guide-url>; rel="deprecation"
 ```
 
 ### Endpoint Stability Guarantee
@@ -324,7 +339,7 @@ spec:
         lifecycle:
           preStop:
             exec:
-              command: ["/bin/sh", "-c", "sleep 5 && curl -X POST http://localhost:8000/deployment/shutdown -d '{\"drain_timeout_seconds\": 30}'"]
+              command: ["/bin/sh", "-c", "sleep 5 && curl -X POST http://localhost:8000/deployment/shutdown -H \"X-API-Key: $MCP_API_KEY\" -H 'Content-Type: application/json' -d '{\"drain_timeout_seconds\": 30}'"]
         
         terminationGracePeriodSeconds: 45
         
@@ -375,6 +390,10 @@ aws elbv2 deregister-targets \
 
 ### 3. Docker Best Practices
 
+Illustrative only. The project's real image is built from the repo-root `Dockerfile`
+(runs `python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 2`, with a
+`HEALTHCHECK` on `/health`).
+
 Dockerfile:
 
 ```dockerfile
@@ -410,9 +429,11 @@ curl http://localhost:8000/health/detailed | jq '{
   status: .status,
   uptime: .uptime_seconds,
   active_requests: .metrics.active_requests,
-  avg_response_time: .metrics.avg_response_time_ms,
-  providers: (.services | length)
+  services: (.services | length)
 }'
+
+# Average response time comes from telemetry, not /health/detailed
+curl -s http://localhost:8000/telemetry | jq '.overall_stats.avg_response_time_ms'
 ```
 
 Set alerts for:
@@ -457,11 +478,13 @@ curl -s http://localhost:8000/telemetry | jq '.provider_adoption[] | {provider_n
 
 ### What Happens During Graceful Shutdown
 
-1. Service stops accepting new requests
+1. Service rejects new requests to every path except `/health`, `/health/live`,
+   `/health/ready` and `/health/detailed`, and `/health/ready` reports `ready: false`
 2. In-flight requests are allowed to complete
-3. Wait up to `drain_timeout_seconds` (default 30)
-4. Service exits cleanly
-5. Orchestrator detects exit and terminates container
+3. Wait up to `drain_timeout_seconds` (default 30); the `POST` returns once drained or
+   timed out
+4. The process does **not** exit on its own; the orchestrator must stop the container
+   (e.g. SIGTERM / `docker stop`) after the drain
 
 ### Initiating Graceful Shutdown
 
@@ -469,6 +492,7 @@ curl -s http://localhost:8000/telemetry | jq '.provider_adoption[] | {provider_n
 
 ```bash
 curl -X POST http://localhost:8000/deployment/shutdown \
+  -H "X-API-Key: $MCP_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"drain_timeout_seconds": 30}'
 ```
@@ -476,14 +500,16 @@ curl -X POST http://localhost:8000/deployment/shutdown \
 **Via signal (K8s/Docker):**
 
 ```bash
-# Kubernetes will send SIGTERM when terminating pod
-# Container handles it automatically via signal handlers
+# The app's own SIGTERM/SIGINT drain handlers are registered only when it is started
+# with `python -m src.main`. Under the uvicorn command the Dockerfile uses, uvicorn's
+# own signal handling applies (it stops accepting connections and finishes in-flight
+# requests) and the /deployment/shutdown drain is not triggered.
 ```
 
 **Monitor shutdown progress:**
 
 ```bash
-curl http://localhost:8000/deployment/shutdown/status
+curl -H "X-API-Key: $MCP_API_KEY" http://localhost:8000/deployment/shutdown/status
 
 # Response
 {
@@ -510,6 +536,8 @@ lifecycle:
         sleep 5
         # Request graceful shutdown
         curl -X POST http://localhost:8000/deployment/shutdown \
+          -H "X-API-Key: $MCP_API_KEY" \
+          -H "Content-Type: application/json" \
           -d '{"drain_timeout_seconds": 25}'
         # Wait for completion
         sleep 25
@@ -584,7 +612,7 @@ If instances stay shutting down:
 
 ```bash
 # Check shutdown status
-curl http://localhost:8000/deployment/shutdown/status
+curl -H "X-API-Key: $MCP_API_KEY" http://localhost:8000/deployment/shutdown/status
 
 # Force timeout (last resort)
 docker stop -t 5 <container-id>  # Gives 5 more seconds then kills
@@ -598,8 +626,8 @@ docker stop -t 5 <container-id>  # Gives 5 more seconds then kills
 | Verify green | `curl http://localhost:8001/health/ready` |
 | Check version | `curl http://localhost:8001/deployment/metadata` |
 | Switch traffic | Load balancer configuration change |
-| Graceful shutdown | `curl -X POST http://localhost:8000/deployment/shutdown` |
+| Graceful shutdown | `curl -X POST -H "X-API-Key: $MCP_API_KEY" http://localhost:8000/deployment/shutdown` |
 | Check compatibility | `curl http://localhost:8000/api/versions` |
 | Monitor health | `curl http://localhost:8000/health/detailed` |
 
-For questions or issues, refer to the main [README.md](README.md) or open an issue on GitHub.
+For questions or issues, refer to the main [README.md](../README.md) or open an issue on GitHub.

@@ -155,8 +155,49 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.81.2 -->
+  <!-- v1.81.4 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.81.4</span>
+      <span class="release-date">Oct 31, 2026</span>
+      <span class="release-tag tag-security">Security</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Admin dashboard data is operator-only</div>
+      <div class="section-label">Security</div>
+      <ul class="change-list">
+        <li><strong><code>/admin/stats</code> and <code>/admin/rate-limits</code> now need the operator key.</strong> They were reachable without a key, and the rate-limit snapshot listed the busiest callers by IP address or customer id. Both now return 401 to anyone without the server's <code>MCP_API_KEY</code> (a free service key is not enough), and 503 if it is not configured. The admin dashboard already sends the operator key, so it works as before</li>
+      </ul>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li><strong><code>/ide-compare</code> loads for everyone.</strong> The IDE subscription comparison page returned 401 whenever the server had an operator key set</li>
+        <li><strong>Shutdown returns 503.</strong> Requests that arrive while the server is draining now get the intended <code>503 Service is shutting down</code> instead of a 500</li>
+        <li><strong>Working migration link.</strong> <code>/api/versions</code> now links to the backwards-compatibility guide instead of a missing page</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.81.3 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.81.3</span>
+      <span class="release-date">Oct 31, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Documentation brought in line with the code</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li><strong>Claude Desktop setup.</strong> Remote servers are added in Claude Desktop under Settings → Connectors → Add custom connector; a <code>url</code> entry in <code>claude_desktop_config.json</code> is ignored. To send your service key from Claude Desktop, use the <code>npx -y llm-pricing-mcp</code> bridge with <code>LLM_PRICING_API_KEY</code></li>
+        <li><strong>Accurate endpoint and tool references.</strong> Which endpoints need a key or the operator key, full tool tables with every argument, environment variables, CI gates and the Fly.io deployment now match the server. Outdated one-off setup files were removed, and the Azure-era deployment guides are marked historical</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.81.2 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.81.2</span>
