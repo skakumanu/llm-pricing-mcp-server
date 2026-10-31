@@ -91,6 +91,41 @@ gh variable set ORCHESTRATOR_BASE_URL --body "https://llm-pricing-api.fly.dev"
 - Rotation: set the new value in both places (two commands, no downtime); the old value stops
   working at the next deploy. Startup logs `Orchestrator initialized ... (intake key set|unset)`.
 
+## Stripe (paid tiers, v1.84.0)
+
+- Checkout, the customer portal and the webhook stay off (503, and `/billing` shows "Checkout
+  unavailable on this server") until these four secrets are set. Everything else, including
+  free signup and the support assistant, works without them.
+
+```bash
+# export STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_ID_PRO and STRIPE_PRICE_ID_ENTERPRISE
+# in your own shell first (never paste them into docs or chat), then import them as Fly secrets:
+env | grep '^STRIPE_' | flyctl secrets import
+```
+
+- Point the Stripe webhook at `POST /billing/webhook` and subscribe it to exactly these events:
+  `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`,
+  `invoice.paid`, `invoice.payment_failed`, `charge.refunded`, `charge.dispute.created`. Other
+  event types are acknowledged and recorded as `ignored`; redelivered event ids are ignored.
+- `BILLING_PAST_DUE_GRACE_DAYS` (14): a failed renewal keeps the stored tier for this long, then
+  the account is served at the free rate limit until `invoice.paid` arrives. Refunds, disputes and
+  failed renewals also open an escalation in the `/admin` queue.
+- `GET /billing/config` shows what the running server can sell (`checkout_enabled`, per-tier
+  `checkout_available`).
+
+## Support assistant (`SUPPORT_*`)
+
+- The support agent runs on the same LLM key as the pricing agent (`ANTHROPIC_API_KEY` /
+  `OPENAI_API_KEY`). `SUPPORT_ENABLED=false` turns it into a deterministic FAQ-and-escalation
+  fallback without touching the pricing agent.
+- Per-caller daily caps: `SUPPORT_DAILY_CAP_ANONYMOUS_USD` (0.10), `_FREE_USD` (0.50), `_PRO_USD`
+  (3.00), `_ENTERPRISE_USD` (10.00); `SUPPORT_MAX_ESCALATIONS_PER_DAY` (3; anonymous callers get 1).
+  The counters are per worker process; the authoritative ceiling is the orchestrator spend ledger
+  (every call is recorded under workflow `support_triage`, default 40 USD/month, under the global
+  150 USD/month cap). The agent refuses to call the LLM when the orchestrator DB is unavailable.
+- `SUPPORT_FALLBACK_PRICE_PER_1M_IN_USD` / `_OUT_USD` price a turn only when `AGENT_MODEL` is not
+  in the pricing catalogue.
+
 ## Webhook destinations (`WEBHOOK_ALLOW_PRIVATE_TARGETS`)
 
 - Price and budget alert webhooks deliver only to **public https URLs** (`src/services/webhook_guard.py`).

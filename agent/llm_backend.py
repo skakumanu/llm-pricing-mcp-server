@@ -19,6 +19,17 @@ class LLMResponse:
     stop_reason: str = "end_turn"
     # Raw provider content — used by append_assistant_turn to avoid re-serialising
     _raw_content: Any = None
+    # v1.84.0: {"input_tokens", "output_tokens"} when the provider reported them (support spend caps)
+    usage: Dict[str, int] = field(default_factory=dict)
+
+
+def _usage(input_tokens: Any, output_tokens: Any) -> Dict[str, int]:
+    out: Dict[str, int] = {}
+    if isinstance(input_tokens, int):
+        out["input_tokens"] = input_tokens
+    if isinstance(output_tokens, int):
+        out["output_tokens"] = output_tokens
+    return out
 
 
 class LLMBackend(ABC):
@@ -115,11 +126,13 @@ class AnthropicBackend(LLMBackend):
                     "args": block.input,
                 })
 
+        usage = getattr(response, "usage", None)
         return LLMResponse(
             content=text_content,
             tool_calls=tool_calls,
             stop_reason=response.stop_reason or "end_turn",
             _raw_content=response.content,
+            usage=_usage(getattr(usage, "input_tokens", None), getattr(usage, "output_tokens", None)),
         )
 
     async def complete_stream(
@@ -157,6 +170,7 @@ class AnthropicBackend(LLMBackend):
                     "args": block.input,
                 })
 
+        usage = getattr(final_message, "usage", None)
         yield {
             "type": "response",
             "response": LLMResponse(
@@ -164,6 +178,7 @@ class AnthropicBackend(LLMBackend):
                 tool_calls=tool_calls,
                 stop_reason=final_message.stop_reason or "end_turn",
                 _raw_content=final_message.content,
+                usage=_usage(getattr(usage, "input_tokens", None), getattr(usage, "output_tokens", None)),
             ),
         }
 
@@ -251,11 +266,13 @@ class OpenAIBackend(LLMBackend):
                     "args": args,
                 })
 
+        usage = getattr(response, "usage", None)
         return LLMResponse(
             content=text_content,
             tool_calls=tool_calls,
             stop_reason=choice.finish_reason or "stop",
             _raw_content=message,
+            usage=_usage(getattr(usage, "prompt_tokens", None), getattr(usage, "completion_tokens", None)),
         )
 
     async def complete_stream(
@@ -291,9 +308,16 @@ class OpenAIBackend(LLMBackend):
         accumulated_text = ""
         accumulated_tool_calls: Dict[int, Dict[str, str]] = {}
         finish_reason = "stop"
+        stream_usage: Dict[str, int] = {}
 
+        # v1.84.0: ask for the trailing usage chunk (choices == [], usage set).
+        kwargs["stream_options"] = {"include_usage": True}
         stream = await self._client.chat.completions.create(timeout=60.0, **kwargs)
         async for chunk in stream:
+            chunk_usage = getattr(chunk, "usage", None)
+            if chunk_usage is not None:
+                stream_usage = _usage(getattr(chunk_usage, "prompt_tokens", None),
+                                      getattr(chunk_usage, "completion_tokens", None)) or stream_usage
             if not chunk.choices:
                 continue
             choice = chunk.choices[0]
@@ -355,6 +379,7 @@ class OpenAIBackend(LLMBackend):
                     content=accumulated_text,
                     tool_calls=raw_tool_calls,
                 ),
+                usage=stream_usage,
             ),
         }
 

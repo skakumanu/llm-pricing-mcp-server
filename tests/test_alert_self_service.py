@@ -819,7 +819,7 @@ class TestAC14ChatAgent:
 
 class TestAC16AC17DocsAndWording:
     def test_registry_has_31_with_19_public(self, env):
-        assert len(env.tm.tools) == 31
+        assert len(env.tm.tools) == 32  # v1.84.0: + support_chat (identity-aware, not public)
         assert len([n for n in env.tm.tools if env.tm.caller_access(n) == PUBLIC]) == 19
 
     def test_mcp_descriptions(self, env):

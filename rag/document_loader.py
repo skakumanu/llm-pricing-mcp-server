@@ -1,7 +1,7 @@
 """Document loader for RAG pipeline - loads markdown docs and pricing data."""
 import logging
 from pathlib import Path
-from typing import List
+from typing import Iterable, List, Optional
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -15,9 +15,11 @@ class Document:
     doc_type: str  # "markdown" or "pricing"
 
 
-def load_markdown_docs(docs_path: str) -> List[Document]:
-    """Load all .md files from the configured docs directory.
+def load_markdown_docs(docs_path: str, names: Optional[Iterable[str]] = None) -> List[Document]:
+    """Load .md files from the configured docs directory.
 
+    ``names`` (v1.84.0) restricts the load to those file names (an allow-list, e.g. the
+    support agent's FAQ + integration guides); ``None`` loads every ``*.md`` as before.
     Only files that resolve to a path *inside* docs_dir are loaded; symlinks
     that escape the directory are silently skipped to prevent path traversal.
     """
@@ -27,7 +29,10 @@ def load_markdown_docs(docs_path: str) -> List[Document]:
     if not docs_dir.exists() or not docs_dir.is_dir():
         return documents
 
+    allowed = {str(n) for n in names} if names is not None else None
     for md_file in sorted(docs_dir.glob("*.md")):
+        if allowed is not None and md_file.name not in allowed:
+            continue
         try:
             # Resolve symlinks and verify the file stays within docs_dir
             resolved = md_file.resolve()

@@ -336,7 +336,7 @@ class TestInputSchemas:
 
     def test_other_tools_untouched_and_count_unchanged(self):
         registry = ToolManager()
-        assert len(registry.tools) == 31  # v1.81.0: + manage_price_alert
+        assert len(registry.tools) == 32  # v1.81.0: + manage_price_alert; v1.84.0: + support_chat
         for name, meta in registry.tools.items():
             if name not in self.FIVE:
                 assert "currency" not in meta["input_schema"].get("properties", {}), name

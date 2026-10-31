@@ -155,8 +155,35 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.83.1 -->
+  <!-- v1.84.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.84.0</span>
+      <span class="release-date">Oct 31, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Customer support: a grounded support assistant, a published FAQ, truthful plans you can actually buy</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong>Support assistant on <a href="/chat?mode=support">/chat</a> (Support mode) and the <code>support_chat</code> MCP tool.</strong> Answers plan, billing, key, rate-limit, how-to and data-accuracy questions only from the published FAQ, the plan catalogue and, when you send your service key, your own account (plan, payment status, rate limit, key preview, 30-day savings). It says "I don't know" instead of inventing a policy, never reveals or repeats a key, never sees another customer's data, and treats everything you type as data, not instructions</li>
+        <li><strong>Escalation to the owner with a reference.</strong> Refunds, double charges, disputes, failed payments, a lost key without the current key, bug and feature reports, security reports and "talk to a human" all open an escalation in the owner's operator-only queue (reference <code>orc_…</code>). The assistant changes nothing itself; the owner replies from <code>/admin</code> and you can read the reply by asking for the reference's status. Response time is best effort on every plan</li>
+        <li><strong>Published FAQ at <a href="/faq">/faq</a></strong> (plans, billing, keys, rate limits, data accuracy, how to get help), generated from <code>docs/FAQ.md</code> so the assistant and the page cannot disagree</li>
+        <li><strong>Plans say only what they do.</strong> Free, Pro ($29) and Enterprise ($299) differ in rate limit, support assistant allowance ($0.50 / $3.00 / $10.00 per day) and escalation priority; the unimplemented "priority routing", "usage analytics", "SLA", "dedicated support" and similar claims are gone from <a href="/billing">/billing</a> and the landing page. Upgrade and Manage Billing buttons are live when Stripe is configured (<code>GET /billing/config</code> says so) instead of "Coming soon"</li>
+        <li><strong>Key rotation.</strong> <code>POST /billing/key/rotate</code> (Rotate key on the dashboard) issues a new service key with the current one; the owner can rotate a verified customer's key from <code>/admin</code>. Keys are still shown exactly once</li>
+        <li><strong>Payment events handled end to end.</strong> The Stripe webhook now processes <code>invoice.paid</code>, <code>invoice.payment_failed</code> (14-day grace period as <code>past_due</code>, then the free rate limit until paid), <code>charge.refunded</code> and <code>charge.dispute.created</code> (both escalate to the owner), ignores duplicate deliveries, and <code>/billing/me</code> reports <code>billing_status</code> and <code>effective_tier</code></li>
+        <li><strong>Spend and audit.</strong> Per-caller daily LLM allowances by tier (anonymous strictest), the orchestrator's global monthly ceiling over everything, and a non-LLM fallback with FAQ links when a cap is hit. Every support answer, escalation, key rotation and Stripe event leaves an operator-only, append-only action record with secrets redacted</li>
+      </ul>
+      <div class="section-label">For self-hosters</div>
+      <ul class="change-list">
+        <li>New optional settings <code>SUPPORT_ENABLED</code>, <code>SUPPORT_DAILY_CAP_ANONYMOUS_USD</code> / <code>_FREE_USD</code> / <code>_PRO_USD</code> / <code>_ENTERPRISE_USD</code>, <code>SUPPORT_MAX_ESCALATIONS_PER_DAY</code>, <code>SUPPORT_FALLBACK_PRICE_PER_1M_IN_USD</code> / <code>_OUT_USD</code> and <code>BILLING_PAST_DUE_GRACE_DAYS</code>. Checkout stays disabled until the Stripe secrets are set; subscribe the webhook to the seven event types listed in <code>docs/DEPLOYMENT.md</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.83.1 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.83.1</span>

@@ -97,6 +97,25 @@ class Settings(BaseSettings):
     stripe_price_id_enterprise: Optional[str] = None
     billing_db_path: str = "billing.db"
     billing_base_url: str = "http://localhost:8000"
+    # v1.84.0: a paid customer whose renewal failed keeps the stored tier for this many
+    # days (billing_status = past_due); after that the *effective* tier is free until
+    # Stripe reports the invoice paid. Stored tiers change only through Stripe events.
+    billing_past_due_grace_days: int = 14
+
+    # Support agent (v1.84.0). A second ReAct agent (agent/support_agent.py) that answers
+    # account, billing, key and FAQ questions on the operator's LLM key. Per-caller daily
+    # USD caps by tier (anonymous strictest); the authoritative ceiling is the
+    # orchestrator spend ledger (workflow support_triage, global monthly cap). A cap hit
+    # returns a deterministic non-LLM fallback (FAQ links + escalation), never a 5xx.
+    support_enabled: bool = True
+    support_daily_cap_anonymous_usd: float = 0.10
+    support_daily_cap_free_usd: float = 0.50
+    support_daily_cap_pro_usd: float = 3.00
+    support_daily_cap_enterprise_usd: float = 10.00
+    support_max_escalations_per_day: int = 3        # identified customers; anonymous callers get 1
+    # Used to price a support turn only when AGENT_MODEL is not in the pricing catalogue.
+    support_fallback_price_per_1m_in_usd: float = 3.0
+    support_fallback_price_per_1m_out_usd: float = 15.0
 
     # Pricing history
     pricing_history_db_path: str = "pricing_history.db"

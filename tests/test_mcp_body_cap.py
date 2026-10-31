@@ -182,7 +182,7 @@ class TestChunked:
 
         resp = client.post("/mcp", content=chunks(), headers={"Content-Type": "application/json"})
         assert resp.status_code == 200
-        assert len(resp.json()["result"]["tools"]) == 31
+        assert len(resp.json()["result"]["tools"]) == 32  # v1.84.0: + support_chat
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +199,7 @@ class TestBoundary:
         assert len(body) == LIMIT
         resp = client.post("/mcp", content=body, headers={"Content-Type": "application/json"})
         assert resp.status_code == 200
-        assert len(resp.json()["result"]["tools"]) == 31
+        assert len(resp.json()["result"]["tools"]) == 32  # v1.84.0: + support_chat
 
     def test_one_byte_over_is_413(self, env):
         base = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {"pad": ""}})

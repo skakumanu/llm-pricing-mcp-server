@@ -36,6 +36,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from src.services import orchestrator_workflows as wfdef
 from src.services.orchestrator_store import OrchestratorStore, new_run_id
+from src.services.tiers import PRIORITY_RANK
 
 logger = logging.getLogger(__name__)
 
@@ -118,13 +119,26 @@ _OK_STEP_STATUSES = frozenset({"done", "done_manually"})
 # The one approval-decision policy: which checkpoint kinds the owner may mark done manually or
 # skip. decide_approval enforces it and _allowed_decisions renders the admin queue's buttons
 # from it, so the two can never disagree.
-_DONE_MANUALLY_KINDS = frozenset({"missing_specialist", "sdlc_run", "outbound", "publish", "step_review"})
+_DONE_MANUALLY_KINDS = frozenset({"missing_specialist", "sdlc_run", "outbound", "publish", "step_review",
+                                  "owner_handoff"})
 _SKIPPABLE_KINDS = frozenset({"missing_specialist", "sdlc_run"})
+# v1.84.0: an owner_handoff is answered (done_manually with a reply) or rejected; "approve" means nothing.
+_NO_APPROVE_KINDS = frozenset({"owner_handoff"})
 _FINISHED_STEP_STATUSES = _OK_STEP_STATUSES | {"skipped_dry_run", "skipped_by_owner", "failed"}
 _INPUT_KEYS = ("issue_number", "labels", "label", "pr_number", "pr_url", "sha", "jobs", "org_id", "repo",
-               "orchestrator_run_id", "customer_ref")
+               "orchestrator_run_id", "customer_ref",
+               # v1.84.0 support escalations (all set by server code, never by customer text)
+               "category", "priority", "tier", "conversation_ref", "identified", "suggested_reply")
+_SUPPORT_STR_KEYS = ("category", "priority", "tier", "conversation_ref")
 # Every stored string input is bounded; the intake key must not be able to fill the volume.
 _INPUT_STR_MAX = 200
+# The support agent's suggested reply is untrusted-adjacent (LLM output): redacted and capped like a body.
+_SUGGESTED_REPLY_MAX = wfdef.BODY_MAX
+
+# v1.84.0: live support chat records its LLM spend under this workflow id (the workflow itself
+# still parks at missing_specialist until the agent is wired into it in phase 2).
+SUPPORT_SPEND_WORKFLOW = "support_triage"
+SUPPORT_SPEND_AGENT = "support_agent"
 
 
 def _redact_deep(value: Any) -> Any:
@@ -148,9 +162,21 @@ def _pick_inputs(data: Dict[str, Any]) -> Dict[str, Any]:
             elif not isinstance(value, (int, float, bool, list, dict)):
                 value = str(value)[:_INPUT_STR_MAX]
             out[k] = _redact_deep(value)
-    for k in ("sha", "repo", "org_id", "customer_ref", "label", "orchestrator_run_id"):
+    for k in ("sha", "repo", "org_id", "customer_ref", "label", "orchestrator_run_id") + _SUPPORT_STR_KEYS:
         if k in out and not isinstance(out[k], str):
             out[k] = str(out[k])[:_INPUT_STR_MAX]
+    if "category" in out and out["category"] not in wfdef.ESCALATION_CATEGORIES:
+        out["category"] = "other"
+    if "priority" in out and out["priority"] not in ("standard", "pro", "enterprise"):
+        out["priority"] = "standard"
+    if "identified" in out:
+        out["identified"] = bool(out["identified"])
+    if "suggested_reply" in out:
+        # Taken from the raw data again: the generic loop above capped it at _INPUT_STR_MAX.
+        reply = data.get("suggested_reply")
+        out["suggested_reply"] = wfdef.redact_untrusted_text(str(reply))[:_SUGGESTED_REPLY_MAX] if reply else None
+        if out["suggested_reply"] is None:
+            out.pop("suggested_reply")
     if "labels" in out and not isinstance(out["labels"], list):
         out["labels"] = [str(out["labels"])[:50]]
     if isinstance(out.get("labels"), list):
@@ -225,6 +251,22 @@ class OrchestratorService:
             return {"decision": "advisory tags recorded (shown in the queue only)", "advisory_tags": tags,
                     "data_as_of": _iso(ctx.service.clock())}
 
+        async def escalation_intake(ctx: StepContext) -> Dict[str, Any]:
+            # v1.84.0: structured, server-set facts only. The customer's text lives (redacted,
+            # truncated) in summary_json.text; no email, key or Stripe id can reach this output.
+            i = ctx.inputs
+            return {
+                "decision": "customer escalation recorded; waiting for the owner (owner_handoff)",
+                "category": i.get("category") or "other",
+                "priority": i.get("priority") or "standard",
+                "tier": i.get("tier"),
+                "identified": bool(i.get("identified")),
+                "org_ref": i.get("customer_ref"),
+                "conversation_ref": i.get("conversation_ref"),
+                "reference": ctx.run["run_id"],
+                "data_as_of": _iso(ctx.service.clock()),
+            }
+
         async def release_record(ctx: StepContext) -> Dict[str, Any]:
             pr_number = ctx.inputs.get("pr_number")
             pr_url = ctx.inputs.get("pr_url")
@@ -253,6 +295,7 @@ class OrchestratorService:
             ("github_accepted_bug", "annotate"): gh_annotate,
             ("support_triage", "intake"): support_intake,
             ("support_triage", "annotate"): support_annotate,
+            ("support_escalation", "intake"): escalation_intake,
             ("release_notes_draft", "release_record"): release_record,
             ("weekly_price_audit", "record_jobs"): record_jobs,
             ("weekly_price_audit", "summarize"): summarize,
@@ -273,7 +316,7 @@ class OrchestratorService:
         for wid, wf in self.registry.items():
             out[f"mode_default.{wid}"] = wfdef.resolve_mode(wf, raw.get(f"mode_default.{wid}", out["mode_default"]))
             out[f"budget.per_run_usd.{wid}"] = float(raw.get(f"budget.per_run_usd.{wid}", wf.per_run_budget_usd))
-            cap = raw.get(f"budget.workflow_monthly_usd.{wid}")
+            cap = raw.get(f"budget.workflow_monthly_usd.{wid}", wf.monthly_budget_usd)
             out[f"budget.workflow_monthly_usd.{wid}"] = float(cap) if cap is not None else None
         return out
 
@@ -336,7 +379,8 @@ class OrchestratorService:
         event_type = str(payload.get("event_type") or "")[:100]
         dedup_key = str(payload.get("dedup_key") or "")
         if trigger_class not in wfdef.TRIGGER_CLASSES:
-            raise Invalid("invalid_trigger_class", "trigger_class must be one of the four trigger classes")
+            raise Invalid("invalid_trigger_class",
+                          "trigger_class must be one of " + ", ".join(wfdef.TRIGGER_CLASSES))
         if not wfdef.DEDUP_KEY_RE.match(dedup_key):
             raise Invalid("invalid_dedup_key", "dedup_key must look like gh:issue:12:accepted")
         data = payload.get("data") or {}
@@ -372,6 +416,19 @@ class OrchestratorService:
         if trigger_class == "github_event" and event_type == "pull_request.opened":
             return await self._intake_pr_opened(event_base, inputs, actor_is_owner)
 
+        # v1.84.0: escalations into the owner's queue come only from in-process callers (the support
+        # agent for customer_message/support.escalation, the Stripe webhook handler for payment_event).
+        # Neither the executor intake key (GitHub Actions) nor the operator surface may forge one via
+        # POST /orchestrator/events; the owner starts support_escalation runs as owner_request instead.
+        untrusted_escalation = (
+            (trigger_class == "payment_event" and actor_kind != "stripe")
+            or (trigger_class == "customer_message" and event_type == wfdef.SUPPORT_ESCALATION_EVENT
+                and actor_kind != "support_agent")
+        )
+        if untrusted_escalation:
+            return await self._refuse_intake(event_base, dedup_key, trigger_class, event_type, actor_kind,
+                                             "refused:untrusted_actor")
+
         if trigger_class == "owner_request" and actor_kind != "operator":
             # Only the operator key may assert owner identity; the executor's intake key
             # cannot start an owner-request workflow by claiming to be the owner (AC2).
@@ -382,17 +439,22 @@ class OrchestratorService:
         if workflow_id is None:
             if outcome == "continuation":
                 outcome = "refused:no_route"
-            await self.store.insert_event({**event_base, "run_id": None, "duplicate": False, "outcome": outcome})
-            await self.store.append_action({
-                "actor": f"intake:{actor_kind}", "at": self.clock(), "action": "intake.refused",
-                "target": dedup_key, "trigger": f"{trigger_class}/{event_type}", "outcome": outcome,
-            })
-            return self._intake_result(None, False, outcome)
+            return await self._refuse_intake(event_base, dedup_key, trigger_class, event_type, actor_kind, outcome)
 
         wf = self.registry[workflow_id]
         requester = _requester_for(trigger_class, actor, inputs)
         return await self._create_or_attach(wf, trigger_class, dedup_key, requester, source_ref, inputs, text,
                                             owner_signals, event_base, actor_kind, event_actor=actor)
+
+    async def _refuse_intake(self, event_base: Dict[str, Any], dedup_key: str, trigger_class: str,
+                             event_type: str, actor_kind: str, outcome: str) -> Dict[str, Any]:
+        """Record a refused intake (event row + action) and return the no-run result."""
+        await self.store.insert_event({**event_base, "run_id": None, "duplicate": False, "outcome": outcome})
+        await self.store.append_action({
+            "actor": f"intake:{actor_kind}", "at": self.clock(), "action": "intake.refused",
+            "target": dedup_key, "trigger": f"{trigger_class}/{event_type}", "outcome": outcome,
+        })
+        return self._intake_result(None, False, outcome)
 
     async def intake_owner_request(self, workflow_id: str, request_id: str, inputs_in: Dict[str, Any],
                                    mode: Optional[str] = None) -> Dict[str, Any]:
@@ -946,6 +1008,21 @@ class OrchestratorService:
         elif kind == "publish":
             artifact = {"kind": "publish", "label": "publish requires owner approval",
                         "content_step": sdef.requires[-1] if sdef.requires else None}
+        elif kind == "owner_handoff":
+            # v1.84.0: the customer escalation card. Body and suggested reply were redacted and
+            # truncated at intake; the customer is an opaque org prefix, never an email or key.
+            text = (run.get("summary_json") or {}).get("text") or {}
+            artifact = {
+                "kind": "owner_handoff",
+                "label": f"customer escalation: {inputs.get('category') or 'other'} "
+                         f"({inputs.get('tier') or 'anonymous'})",
+                "priority": inputs.get("priority") or "standard",
+                "body": (text.get("body") or "")[:wfdef.BODY_MAX],
+                "customer": {"identified": bool(inputs.get("identified")), "org_ref": inputs.get("customer_ref")},
+                "conversation_ref": inputs.get("conversation_ref"),
+                "instruction_like": bool(run.get("instruction_like")),
+                "suggested_reply": inputs.get("suggested_reply"),
+            }
         else:
             artifact = {"kind": kind, "label": f"{kind} requires owner approval"}
         approval, is_new = await self.ensure_approval(run["run_id"], step["step_id"], kind, artifact, None)
@@ -1120,6 +1197,8 @@ class OrchestratorService:
 
         if decision == "skip" and kind not in _SKIPPABLE_KINDS:
             raise Invalid("skip_not_allowed", f"a {kind} checkpoint cannot be skipped")
+        if decision in ("approve", "edit_approve") and kind in _NO_APPROVE_KINDS:
+            raise Invalid("approve_not_allowed", f"a {kind} checkpoint is answered (done_manually) or rejected")
         if decision == "done_manually" and kind not in _DONE_MANUALLY_KINDS:
             raise Invalid("done_manually_not_allowed", f"a {kind} checkpoint cannot be marked done manually")
         if decision == "edit_approve":
@@ -1424,32 +1503,58 @@ class OrchestratorService:
         return await self.store.get_run(run_id)
 
     # ------------------------------------------------------------------ budget
-    async def check_budget(self, run: Dict[str, Any],
-                           step: Dict[str, Any]) -> Tuple[bool, Optional[str], Dict[str, Any]]:
+    async def budget_gate(self, workflow_id: str,
+                          run_id: Optional[str] = None) -> Tuple[bool, Optional[str], Dict[str, Any]]:
+        """Global and per-workflow monthly caps, plus the once-per-period soft alert (v1.84.0).
+
+        Factored out of ``check_budget`` so the live support agent can ask the same question
+        before every LLM call without a run: every support turn is written to ``orch_spend``
+        under ``SUPPORT_SPEND_WORKFLOW``, so the global ceiling and the /admin budget bars cover it.
+        """
         eff = await self.effective_settings()
         period = _period(self.clock())
-        wid = run["workflow_id"]
         global_cap = eff["budget.global_monthly_usd"]
         global_spent = await self.store.spend_total(period=period)
-        wf_cap = eff.get(f"budget.workflow_monthly_usd.{wid}")
-        wf_spent = await self.store.spend_total(period=period, workflow_id=wid)
-        run_cap = eff.get(f"budget.per_run_usd.{wid}", 0)
+        wf_cap = eff.get(f"budget.workflow_monthly_usd.{workflow_id}")
+        wf_spent = await self.store.spend_total(period=period, workflow_id=workflow_id)
         info = {"period": period, "global_cap": global_cap, "global_spent": global_spent, "workflow_cap": wf_cap,
-                "workflow_spent": wf_spent, "run_cap": run_cap, "run_spent": run.get("cost_usd") or 0.0}
+                "workflow_spent": wf_spent}
         pct = (global_spent / global_cap * 100.0) if global_cap else 0.0
         soft_alert_key = f"budget.soft_alert:{period}"
         if pct >= eff["budget.soft_alert_pct"] and await self.store.count_actions(None, soft_alert_key) == 0:
             await self.store.append_action({"actor": "orchestrator", "at": self.clock(),
                                             "action": f"budget.soft_alert:{period}", "target": "global",
                                             "outcome": f"{pct:.0f}% of monthly ceiling"})
-            await self._notify("budget_soft_threshold", run["run_id"], f"{pct:.0f}% of the global monthly budget used")
+            await self._notify("budget_soft_threshold", run_id, f"{pct:.0f}% of the global monthly budget used")
         if global_spent >= global_cap:
             return False, "global_monthly_cap", info
         if wf_cap is not None and wf_spent >= wf_cap:
             return False, "workflow_monthly_cap", info
+        return True, None, info
+
+    async def check_budget(self, run: Dict[str, Any],
+                           step: Dict[str, Any]) -> Tuple[bool, Optional[str], Dict[str, Any]]:
+        wid = run["workflow_id"]
+        ok, reason, info = await self.budget_gate(wid, run_id=run["run_id"])
+        eff = await self.effective_settings()
+        run_cap = eff.get(f"budget.per_run_usd.{wid}", 0)
+        info = {**info, "run_cap": run_cap, "run_spent": run.get("cost_usd") or 0.0}
+        if not ok:
+            return False, reason, info
         if run_cap and (run.get("cost_usd") or 0.0) >= run_cap:
             return False, "per_run_ceiling", info
         return True, None, info
+
+    async def record_agent_spend(self, workflow_id: str, agent: str, run_id: str, model: Optional[str],
+                                 tokens_in: Optional[int], tokens_out: Optional[int], cost_usd: float) -> str:
+        """v1.84.0: one ledger row for an LLM call made outside a run (the support agent's
+        ``conv:<conversation_id>``). Counted by ``spend_total`` like any run's spend."""
+        now = self.clock()
+        return await self.store.record_spend({
+            "run_id": str(run_id)[:120], "step_id": None, "workflow_id": workflow_id, "agent": agent,
+            "model": model, "at": now, "period": _period(now), "tokens_in": tokens_in, "tokens_out": tokens_out,
+            "cost_usd": float(cost_usd),
+        })
 
     async def record_spend(self, run: Dict[str, Any], step: Dict[str, Any], cost_usd: float,
                            model: Optional[str] = None, tokens_in: Optional[int] = None,
@@ -1523,9 +1628,33 @@ class OrchestratorService:
             item["instruction_like"] = bool((run or {}).get("instruction_like"))
             art = ap.get("artifact_summary_json") or {}
             item["owner_action"] = art.get("owner_action") if isinstance(art, dict) else None
+            # v1.84.0: escalation priority (enterprise > pro > standard) from the run's structured inputs.
+            inputs = ((run or {}).get("summary_json") or {}).get("inputs") or {}
+            item["priority"] = inputs.get("priority") or "standard"
             item["allowed_decisions"] = _allowed_decisions(ap["kind"], step["kind"] if step else None)
             out.append(item)
+        # Paying customers' escalations first, then newest first (list_approvals is already newest-first).
+        out.sort(key=lambda it: (PRIORITY_RANK.get(it["priority"], 2), -(it.get("requested_at") or 0.0)))
         return out
+
+    async def public_escalation_view(self, run_id: str) -> Optional[Dict[str, Any]]:
+        """v1.84.0: what a customer may see about their escalation — reference, coarse status and the
+        owner's reply note (a done_manually decision on the owner_handoff). Nothing else leaves."""
+        if not isinstance(run_id, str) or not wfdef.RUN_ID_RE.match(run_id):
+            return None
+        run = await self.store.get_run(run_id)
+        if run is None or run.get("workflow_id") != "support_escalation":
+            return None
+        owner_reply = None
+        for ap in await self.store.list_approvals(status=None, run_id=run_id):
+            if ap.get("kind") == "owner_handoff" and ap.get("status") == "done_manually":
+                owner_reply = ap.get("decision_note") or None
+                break
+        return {
+            "reference": run_id,
+            "status": wfdef.result_for_status(run["status"]),
+            "owner_reply": owner_reply,
+        }
 
     async def parked_runs(self) -> List[Dict[str, Any]]:
         out = []
@@ -1559,7 +1688,10 @@ def _requester_for(trigger_class: str, actor: Optional[str], inputs: Dict[str, A
     if trigger_class == "schedule":
         return "schedule"
     if trigger_class == "customer_message":
-        return f"customer:{inputs.get('org_id') or 'unknown'}"
+        return f"customer:{inputs.get('org_id') or inputs.get('customer_ref') or 'unknown'}"
+    if trigger_class == "payment_event":
+        # v1.84.0: Stripe-originated; the customer is an opaque org prefix, never a Stripe id.
+        return f"stripe:{inputs.get('customer_ref') or 'unknown'}"
     return f"github:{actor or 'unknown'}"
 
 
@@ -1570,6 +1702,9 @@ def _missing_envelope_fields(envelope: Any) -> List[str]:
 
 
 def _allowed_decisions(kind: str, step_kind: Optional[str]) -> List[str]:
+    if kind in _NO_APPROVE_KINDS:
+        # v1.84.0: a customer escalation is answered or rejected, never "approved".
+        return ["done_manually", "reject"]
     allowed = ["approve", "reject"]
     if step_kind == "external_action":
         allowed.append("edit_approve")
