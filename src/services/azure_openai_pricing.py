@@ -66,7 +66,8 @@ class AzureOpenAIPricingService(BasePricingProvider):
             "is_reasoning_model": True, "supports_function_calling": True,
         },
         "gpt-4-turbo": {
-            "input": 0.010, "output": 0.030,
+            "input": 0.011, "output": 0.033,
+            "price_as_of": "2026-10-31",  # drift fix: registry $11/$33 per 1M (was $10/$30)
             "context_window": 128000,
             "use_cases": ["Vision", "Long context", "Complex tasks", "Code"],
             "strengths": ["Vision capable", "128k context", "Reliable"],
