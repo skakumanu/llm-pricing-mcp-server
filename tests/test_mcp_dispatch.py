@@ -260,12 +260,12 @@ def _mcp_error_payload(result):
 
 
 # ---------------------------------------------------------------------------
-# AC: tools/list includes dispatch; 30 tools
+# AC: tools/list includes dispatch; 31 tools (v1.81.0: + manage_price_alert)
 # ---------------------------------------------------------------------------
 
-def test_tools_list_includes_dispatch_and_has_30(env):
+def test_tools_list_includes_dispatch_and_has_31(env):
     tools = _rpc("tools/list").json()["result"]["tools"]
-    assert len(tools) == 30
+    assert len(tools) == 31
     by_name = {t["name"]: t for t in tools}
     desc = by_name["dispatch"]["description"]
     assert "REAL model call" in desc and "your own provider keys" in desc
@@ -300,11 +300,11 @@ def test_dispatch_policy_schema_mirrors_the_pydantic_models(env):
 # AC: agent exclusion
 # ---------------------------------------------------------------------------
 
-def test_agent_does_not_bind_dispatch_and_still_binds_26(env):
+def test_agent_does_not_bind_dispatch_and_still_binds_27(env):
     tm = ToolManager()
     bound = {t.name for t in build_agent_tools(tm, rag_pipeline=None)}
     assert "dispatch" not in bound
-    assert len(bound & set(tm.tools)) == 26
+    assert len(bound & set(tm.tools)) == 27  # v1.81.0: + manage_price_alert
 
 
 def test_react_agent_run_cannot_invoke_dispatch(env):

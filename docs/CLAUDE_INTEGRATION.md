@@ -28,7 +28,7 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-Restart Claude Desktop. All 30 tools are available immediately.
+Restart Claude Desktop. All 31 tools are available immediately.
 
 **Service key (optional, v1.79.1).** The pricing tools need no key. The 7 usage/budget tools (`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`) need your service API key on the connection — add `"headers": { "x-api-key": "<your-service-key>" }` next to `"url"` (or, with the npx bridge, `"env": { "LLM_PRICING_API_KEY": "<your-service-key>" }`). They then act only on that key's org; without a key they return `customer_key_required`. The local STDIO server (Option B) is always anonymous, so those tools refuse there. The four operator-only tools (`list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation`, v1.79.2) need the server operator's key (`MCP_API_KEY`); any other caller gets `operator_key_required`.
 
@@ -106,7 +106,8 @@ Fully quit and relaunch. Look for "llm-pricing" in the tools panel with a green 
 | `get_pricing_trends` | Price-change leaderboard |
 | `register_price_alert` | Webhook alert when prices change by X% |
 | `list_price_alerts` | List registered alerts |
-| `delete_price_alert` | Remove an alert |
+| `delete_price_alert` | Remove an alert (operator only) |
+| `manage_price_alert` | View or delete the alert you registered, with its one-time `alert_token` (no key) |
 | `get_pricing_export_url` | Download link for CSV/JSON export |
 | `list_conversations` | Past agent chat sessions |
 | `delete_conversation` | Remove a conversation |
@@ -141,13 +142,13 @@ Test the server directly:
 cd /path/to/llm-pricing-mcp-server
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 ```
-Should print a JSON response with 30 tools.
+Should print a JSON response with 31 tools.
 
 ### Verify tool count
 
 ```bash
 python -c "from mcp.tools.tool_manager import ToolManager; print(len(ToolManager().list_tools()), 'tools')"
-# → 30 tools
+# → 31 tools
 ```
 
 ### HTTP endpoint not responding
