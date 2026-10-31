@@ -1,45 +1,21 @@
 # llm-pricing-mcp
 
-A zero-dependency STDIO launcher for the [LLM Pricing MCP server](https://github.com/skakumanu/llm-pricing-mcp-server) — drift-verified pricing, cost+quality model routing, and real usage tracking across 30 LLM providers, exposed as 31 MCP tools.
+A zero-dependency STDIO bridge to the [LLM Pricing MCP server](https://github.com/skakumanu/llm-pricing-mcp-server). It gives you drift-verified pricing, cost and quality model routing, and usage tracking across 30 LLM providers, as 31 MCP tools.
 
-This package is a thin bridge, not the server itself: it reads MCP JSON-RPC requests from stdin and forwards each one to the hosted server at `https://llm-pricing-api.fly.dev/mcp`, writing the response back to stdout. There's nothing to install beyond Node — no Python, no `pip install`, no local pricing data to keep up to date.
+- Reads JSON-RPC from stdin, forwards it to `https://llm-pricing-api.fly.dev/mcp`, and writes replies to stdout.
+- Needs only Node: no Python, no clone, no local pricing data.
+- **Node 22.23.4+, 24.22.1+ or 26.12.1+.** These builds carry the October 2026 security fixes, including Brotli decoder RCE CVE-2026-111497. The bridge's `fetch` decodes compressed responses. Node 18 and 20 are end-of-life and unpatched.
 
-**Node requirement:** 22.23.4+, 24.22.1+ or 26.12.1+. These are the builds that carry the October 2026 Node.js security fixes (including the Brotli decoder RCE, CVE-2026-111497); the bridge uses Node's built-in `fetch`, which decodes compressed responses, so run it on a patched Node. Node 18 and 20 are end-of-life and will not receive the fix.
+## When to use it
 
-## Use it
+| Client | Use |
+|---|---|
+| Cursor, VS Code, Claude Code | Point at `https://llm-pricing-api.fly.dev/mcp` directly; no bridge needed |
+| Claude Desktop, no key | Settings → Connectors → Add custom connector with the URL above |
+| Claude Desktop, with a service key | This bridge (connectors send no custom headers) |
+| Any STDIO-only client | This bridge |
 
-MCP clients that support remote/HTTP servers directly (Cursor, VS Code, Claude Code; Claude Desktop via Settings → Connectors) can skip this package — point them at `https://llm-pricing-api.fly.dev/mcp` and you're done. Use this package when you need to pass your service key from Claude Desktop, since its connectors send no custom headers. This package exists for STDIO-only clients that can't talk HTTP directly.
-
-Add to your client's MCP config:
-
-```json
-{
-  "mcpServers": {
-    "llm-pricing": {
-      "command": "npx",
-      "args": ["-y", "llm-pricing-mcp"]
-    }
-  }
-}
-```
-
-Claude Desktop: add the block above to `claude_desktop_config.json` (Settings → Developer → Edit Config) and restart Claude Desktop.
-
-## Configuration
-
-All are optional — the defaults work out of the box.
-
-| Env var | Default | Purpose |
-|---|---|---|
-| `LLM_PRICING_MCP_URL` | `https://llm-pricing-api.fly.dev/mcp` | Point at a self-hosted or local instance instead |
-| `LLM_PRICING_MCP_TIMEOUT_MS` | `30000` | Per-request timeout to the upstream server. Set `120000` if you use the `dispatch` tool (a real model call with failover can outlast 30 s) |
-| `LLM_PRICING_API_KEY` | _(unset)_ | Your service API key (free at `POST /billing/signup`), forwarded as the `x-api-key` header. Never logged. |
-
-### Service API key (optional, v1.1.0)
-
-19 of the 31 tools (pricing, routing, cost estimates, data quality) work with no key. One of them, `manage_price_alert` (server v1.81.0), views or deletes a single price alert using the one-time `alert_token` (`lpa_...`) that `register_price_alert` returns; the token is its only credential. Four more — `list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation` — are operator-only (v1.79.2): they need the server operator's key (`MCP_API_KEY`) and return `error_code: "operator_key_required"` to anyone else. The 7 per-org usage and budget tools — `record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert` — need your service API key and act only on that key's own org. Without a key they return `error_code: "customer_key_required"`; passing another org's `org_id` returns `error_code: "org_mismatch"`.
-
-The `dispatch` tool (server v1.80.0) also needs your service key: it runs a text chat request through the dispatch gateway and makes a **real model call billed to your own provider keys** stored for your org with `POST /dispatch/keys`, returning the completion and the full `dispatch_receipt`. Without a key it returns `error: "dispatch_requires_api_key"`. Set `LLM_PRICING_MCP_TIMEOUT_MS` to `120000` for it, and bound calls with `dispatch.failover.timeout_ms` / `dispatch.failover.max_attempts`. No bridge upgrade is needed — the bridge forwards the call unchanged.
+## Setup
 
 ```json
 {
@@ -53,9 +29,37 @@ The `dispatch` tool (server v1.80.0) also needs your service key: it runs a text
 }
 ```
 
-## Why a bridge instead of a bundled server?
+- `env` is optional; drop it for the public tools only.
+- Claude Desktop: paste into `claude_desktop_config.json` (Settings → Developer → Edit Config), then restart.
 
-The actual tool logic and pricing data live server-side and change independently of this package's release cycle — drift corrections, new providers, and new tools ship immediately to every client without anyone needing to update or republish this wrapper. The tradeoff is a network dependency on the hosted endpoint; if you need a fully offline server, clone [the main repo](https://github.com/skakumanu/llm-pricing-mcp-server) and run `mcp/server.py` directly instead (the local STDIO server is anonymous, so the 7 per-org usage/budget tools and the four operator-only tools refuse there, and `dispatch` returns `dispatch_requires_hosted_mcp`).
+## Environment variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `LLM_PRICING_MCP_URL` | `https://llm-pricing-api.fly.dev/mcp` | Point at a self-hosted or local instance |
+| `LLM_PRICING_MCP_TIMEOUT_MS` | `30000` | Upstream timeout per request. Use `120000` for `dispatch` |
+| `LLM_PRICING_API_KEY` | unset | Your service key (free via `POST /billing/signup`). Sent as `x-api-key`, never logged |
+
+## Tool access
+
+| Tools | Credential | Without it |
+|---|---|---|
+| 19 public (pricing, routing, estimates, data quality) | none | — |
+| 7 usage/budget (`record_usage`, `get_usage_summary`, `register_budget_alert`, ...) | `LLM_PRICING_API_KEY`; acts only on that key's org | `customer_key_required`; another org's `org_id` gives `org_mismatch` |
+| `dispatch` | `LLM_PRICING_API_KEY` | `dispatch_requires_api_key` |
+| 4 operator-only (`list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation`) | server operator's `MCP_API_KEY` | `operator_key_required` |
+
+- `manage_price_alert` (public) views or deletes your own alert. Its only credential is the one-time `alert_token` (`lpa_...`) from `register_price_alert`.
+- `dispatch` makes a **real model call billed to your own provider keys**, stored with `POST /dispatch/keys`. It returns the completion and a `dispatch_receipt`.
+- Cap `dispatch` with `dispatch.failover.timeout_ms` / `max_attempts`.
+- Full tool list: [MCP Quick Start](https://github.com/skakumanu/llm-pricing-mcp-server/blob/master/docs/MCP_QUICK_START.md#tool-reference-31).
+
+## Why a bridge?
+
+- Tools and pricing data live server-side. Fixes, providers and tools ship without republishing this package.
+- The cost is a network dependency on the hosted endpoint.
+- For offline use, clone the repo and run `mcp/server.py`.
+- That local server is anonymous: key-gated and operator tools refuse, and `dispatch` returns `dispatch_requires_hosted_mcp`.
 
 ## License
 
