@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.81.4 | **Last updated**: 2026-10-31
+**Version**: v1.82.0 | **Last updated**: 2026-10-31
 
 ---
 
@@ -611,8 +611,8 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | GET | `/pricing/alerts/signing-info` | None | Webhook HMAC signing key info |
 | GET | `/performance` | None | Performance metrics |
 | GET | `/use-cases` | None | Use-case recommendations; `currency` / `country` add `models[].local_cost` (set, order and USD-band `cost_tier` unchanged) |
-| POST | `/cost-estimate` | Required | Single-model cost; `currency` / `country` add `local_cost` + `currency_conversion` |
-| POST | `/cost-estimate/batch` | Required | Multi-model cost comparison; `currency` / `country` add `models[].local_cost`, `local_cost_range` (cheapest/most-expensive stay USD-derived) |
+| POST | `/cost-estimate` | None (rate-limited, body-capped; a customer key gets its tier limit; v1.82.0) | Single-model cost; `currency` / `country` add `local_cost` + `currency_conversion` |
+| POST | `/cost-estimate/batch` | None (rate-limited, body-capped; a customer key gets its tier limit; v1.82.0) | Multi-model cost comparison, 1-50 models (`MAX_COMPARE_MODELS`, shared with `compare_costs`); `currency` / `country` add `models[].local_cost`, `local_cost_range` (cheapest/most-expensive stay USD-derived) |
 | GET | `/rate-limits/tiers` | None | Tier rate limits |
 | GET | `/api/versions` | Required | API version negotiation |
 | GET | `/telemetry` | None | Request telemetry |

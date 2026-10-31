@@ -395,6 +395,19 @@ _anonymous_rate_limited_paths = {
     # listed here, or the "/pricing" prefix bypass would skip the limiter and body cap.
     "/pricing/alerts/self/view",
     "/pricing/alerts/self/delete",
+    # v1.82.0: cost estimation computes from public prices, the same math as the public
+    # estimate_cost / compare_costs MCP tools. It needed a key only because it was never
+    # listed; now anonymous but throttled and body-capped (batch does one lookup per model).
+    "/cost-estimate",
+    "/cost-estimate/batch",
+}
+
+# Anonymous-throttled paths where a valid customer key, if sent, still gets that
+# customer's tier limit instead of the shared per-IP bucket. Only paths whose
+# handlers ignore request.state.customer belong here: it affects rate limiting only.
+_customer_tiered_anonymous_paths = {
+    "/cost-estimate",
+    "/cost-estimate/batch",
 }
 
 # Public (no auth, no limiter) but still body-capped: /v1/chat/completions must stay
@@ -614,6 +627,14 @@ async def security_middleware(request: Request, call_next):
         elif not settings.mcp_api_key and not customer and not _auth_warning_logged:
             logger.warning("MCP API key not configured; endpoints are unauthenticated.")
             _auth_warning_logged = True
+    elif path in _customer_tiered_anonymous_paths:
+        # Anonymous allowed; an unknown or wrong key just falls back to the per-IP bucket.
+        provided_key = request.headers.get(settings.mcp_api_key_header)
+        if provided_key:
+            try:
+                request.state.customer = await get_billing_service().get_customer_by_api_key(provided_key)
+            except RuntimeError:
+                pass  # nosec B110 — billing not initialized yet
 
     if settings.rate_limit_per_minute > 0:
         # Periodically cleanup stale IP entries

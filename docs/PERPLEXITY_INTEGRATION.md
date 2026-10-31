@@ -157,7 +157,7 @@ These tools are available inside Perplexity once connected. You can invoke them 
 |------|--------------|---------------|-------------|
 | `get_all_pricing` | — | `currency`, `country` | Pricing for every model across all providers |
 | `estimate_cost` | `model_name`, `input_tokens`, `output_tokens` | `currency`, `country` | Cost breakdown for a single model |
-| `compare_costs` | `model_names[]`, `input_tokens`, `output_tokens` | `currency`, `country` | Side-by-side cost comparison |
+| `compare_costs` | `model_names[]` (1-50), `input_tokens`, `output_tokens` | `currency`, `country` | Side-by-side cost comparison |
 | `predict_cost` | `prompt` | `task_type`, `cache_hit_ratio`, `top_n`, `require_function_calling`, `require_vision`, `min_context_tokens` | Rank every model cheapest-first from raw prompt text — no token counts needed |
 | `optimize_workload` | `workloads[]` | `monthly_budget_usd`, `min_quality_score` | Assign the cheapest qualifying model per task across a workload mix; reports saving vs. one-model-for-everything |
 | `recommend_model` | `description` | `task_type`, `max_cost_per_1m_tokens`, `min_quality_score`, `min_context_window`, `preferred_provider`, `prefer_low_latency`, `exclude_reasoning_models`, `ide_context`, `monthly_budget_usd`, `estimated_monthly_requests`, `avg_input_tokens`, `avg_output_tokens`, `currency`, `country` | Recommend the optimal model from a free-text use-case description via the routing engine |
@@ -288,6 +288,8 @@ All endpoints are also accessible directly via HTTP — no MCP required. The bas
 | GET | `/health/live` | Liveness probe |
 | GET | `/health/ready` | Readiness probe |
 | GET | `/health/detailed` | Detailed environment + service statuses |
+| POST | `/cost-estimate` | Single model cost estimate (rate-limited; v1.82.0) |
+| POST | `/cost-estimate/batch` | Multi-model cost comparison, 1-50 models (rate-limited; v1.82.0) |
 
 ### Protected Endpoints (require API key)
 
@@ -295,8 +297,6 @@ Pass your API key as `x-api-key: <key>` header.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/cost-estimate` | Single model cost estimate |
-| POST | `/cost-estimate/batch` | Multi-model cost comparison |
 | GET | `/api/versions` | API version info |
 | POST | `/router/recommend` | Smart model routing recommendation |
 | POST | `/router/recommend/stream` | Streaming router (SSE) |
@@ -356,18 +356,16 @@ curl https://llm-pricing-api.fly.dev/pricing
 curl "https://llm-pricing-api.fly.dev/pricing?provider=OpenAI"
 ```
 
-**Estimate cost (requires API key):**
+**Estimate cost (no key needed; rate-limited):**
 ```bash
 curl -X POST https://llm-pricing-api.fly.dev/cost-estimate \
-  -H "x-api-key: <your-api-key>" \
   -H "Content-Type: application/json" \
   -d '{"model_name": "gpt-4o", "input_tokens": 1000, "output_tokens": 500}'
 ```
 
-**Batch compare costs (requires API key):**
+**Batch compare costs (no key needed; rate-limited, up to 50 models):**
 ```bash
 curl -X POST https://llm-pricing-api.fly.dev/cost-estimate/batch \
-  -H "x-api-key: <your-api-key>" \
   -H "Content-Type: application/json" \
   -d '{
     "model_names": ["gpt-4o", "gpt-4o-mini", "claude-haiku-4-5-20251001"],

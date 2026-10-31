@@ -299,7 +299,6 @@ llm-pricing-mcp-server/
 ├── requirements.txt      # Python dependencies
 ├── pyproject.toml        # Project metadata and config
 ├── Procfile              # Process type declaration (unused by Fly.io's Dockerfile build, kept for reference)
-├── run.sh                # Legacy Azure App Service startup script (/home/site/wwwroot); unused on Fly.io
 └── [other config files]
 ```
 

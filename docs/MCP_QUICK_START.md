@@ -139,7 +139,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 |------|--------------|---------------|
 | `get_all_pricing` | — | `currency`, `country` |
 | `estimate_cost` | `model_name`, `input_tokens`, `output_tokens` | `currency`, `country` |
-| `compare_costs` | `model_names[]`, `input_tokens`, `output_tokens` | `currency`, `country` |
+| `compare_costs` | `model_names[]` (1-50), `input_tokens`, `output_tokens` | `currency`, `country` |
 | `predict_cost` | `prompt` | `task_type`, `top_n`, `cache_hit_ratio`, `require_function_calling`, `require_vision`, `min_context_tokens` |
 | `optimize_workload` | `workloads[]` | `monthly_budget_usd`, `min_quality_score` |
 | `recommend_model` | `description` | `task_type`, `max_cost_per_1m_tokens`, `min_quality_score`, `min_context_window`, `preferred_provider`, `prefer_low_latency`, `exclude_reasoning_models`, `ide_context`, `monthly_budget_usd`, `estimated_monthly_requests`, `avg_input_tokens`, `avg_output_tokens`, `currency`, `country` |

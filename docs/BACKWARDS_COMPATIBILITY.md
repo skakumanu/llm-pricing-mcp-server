@@ -7,11 +7,12 @@
 > or scheduled, and the 2025-2026 migration dates below passed without one. The
 > compatibility rules still describe how changes are made.
 >
-> Auth note: `POST /cost-estimate`, `POST /cost-estimate/batch`, `GET /api/versions` and
+> Auth note: `GET /api/versions` and
 > `GET /deployment/metadata` require an API key (`x-api-key`: a free key from
 > `POST /billing/signup` works) when the server has `MCP_API_KEY` set, as production does.
 > `/`, `/models`, `/pricing`, `/performance`, `/use-cases`, `/telemetry` and `/health*`
-> are public.
+> are public. `POST /cost-estimate` and `/cost-estimate/batch` are public but rate-limited
+> (since v1.82.0).
 
 This guide explains how the LLM Pricing MCP Server manages backwards compatibility and API versioning to ensure seamless upgrades for all users.
 

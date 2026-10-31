@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field, ConfigDict, computed_field
 from typing import Literal, Optional, List
 from datetime import date, datetime, UTC
 
+from src.services.cost_calculator import MAX_COMPARE_MODELS
+
 # A hand-maintained price older than this is flagged stale. Providers change
 # per-token rates often enough that a quarter-old number should not be trusted
 # silently for budgeting.
@@ -387,7 +389,10 @@ class CostEstimateResponse(BaseModel):
 class BatchCostEstimateRequest(BaseModel):
     """Request model for batch cost estimation (compare multiple models)."""
 
-    model_names: List[str] = Field(..., description="List of LLM model names to compare")
+    model_names: List[str] = Field(
+        ..., min_length=1, max_length=MAX_COMPARE_MODELS,
+        description=f"List of LLM model names to compare (1-{MAX_COMPARE_MODELS})",
+    )
     input_tokens: int = Field(..., ge=0, description="Number of input tokens")
     output_tokens: int = Field(..., ge=0, description="Number of output tokens")
 

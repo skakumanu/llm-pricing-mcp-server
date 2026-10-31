@@ -155,8 +155,43 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.81.4 -->
+  <!-- v1.82.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.82.0</span>
+      <span class="release-date">Oct 31, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Cost estimates over REST no longer need a key</div>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li><strong><code>POST /cost-estimate</code> and <code>/cost-estimate/batch</code> are public.</strong> They return the same numbers as the public <code>estimate_cost</code> and <code>compare_costs</code> MCP tools, so the key requirement only got in the way. Anonymous calls are rate-limited per IP; send your service key and you get your plan's limit instead</li>
+        <li><strong>Up to 50 models per comparison.</strong> <code>/cost-estimate/batch</code> and the <code>compare_costs</code> tool now accept 1 to 50 model names; larger requests are refused with a clear error</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.81.5 -->
+  <div class="release">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.81.5</span>
+      <span class="release-date">Oct 31, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Repository housekeeping</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li><strong>Leftover files removed.</strong> An empty placeholder <code>ci-cd.yml</code> and the Azure-era <code>run.sh</code> startup script are gone from the repository root, and two VS Code tasks that pointed at missing scripts were removed. The server itself is unchanged</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.81.4 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.81.4</span>

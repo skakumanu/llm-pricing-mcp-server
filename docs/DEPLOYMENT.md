@@ -53,8 +53,8 @@ The app's Fly.io configuration lives in `fly.toml` at the repo root:
   image disk), and `EXCHANGE_RATES_PATH=/app/vendored/exchange_rates.json` (the volume
   mount shadows the image's `/app/data`, so the Dockerfile copies the rate table outside it)
 - **Build**: uses the repo's `Dockerfile` unchanged — `python -m uvicorn src.main:app
-  --host 0.0.0.0 --port 8000 --workers 2` as a non-root user. `Procfile` and `run.sh`
-  (a leftover Azure App Service startup script) are not used on Fly.io
+  --host 0.0.0.0 --port 8000 --workers 2` as a non-root user. `Procfile` is not used
+  on Fly.io (the Azure-era `run.sh` startup script was removed in v1.81.5)
 
 ## Environment Variables & Secrets
 
