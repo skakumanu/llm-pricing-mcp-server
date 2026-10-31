@@ -1,5 +1,6 @@
 """Tool management for MCP server."""
 from typing import Dict, Any, Optional
+from src.services.cost_calculator import MAX_COMPARE_MODELS
 from src.services.pricing_aggregator import PricingAggregatorService
 from mcp.tools.get_all_pricing import GetAllPricingTool
 from mcp.tools.estimate_cost import EstimateCostTool
@@ -206,7 +207,8 @@ class ToolManager:
                         "model_names": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "List of model names to compare",
+                            "maxItems": MAX_COMPARE_MODELS,
+                            "description": f"List of model names to compare (at most {MAX_COMPARE_MODELS})",
                         },
                         "input_tokens": {
                             "type": "integer",
