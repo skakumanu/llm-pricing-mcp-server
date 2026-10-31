@@ -111,14 +111,15 @@ def _registry_chat_count(raw, provider):
 # ---------------------------------------------------------------------------
 
 class TestPresence:
-    def test_provider_count_is_31(self):
-        assert PROVIDER_COUNT == 31
-        assert len(pa.PROVIDER_SERVICES) == 31
+    def test_provider_count_is_30(self):
+        # 31 -> 30 at v1.81.2: one provider retired (tests/test_provider_retirement.py)
+        assert PROVIDER_COUNT == 30
+        assert len(pa.PROVIDER_SERVICES) == 30
 
-    def test_statuses_list_31_providers_including_the_five(self, catalogue):
+    def test_statuses_list_30_providers_including_the_five(self, catalogue):
         _, statuses = catalogue
         names = [s.provider_name for s in statuses]
-        assert len(statuses) == 31
+        assert len(statuses) == 30
         for p in NEW_PROVIDERS:
             assert p in names
 
