@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.82.2 | **Last updated**: 2026-10-31
+**Version**: v1.82.3 | **Last updated**: 2026-10-31
 
 Canonical internals reference. Release history lives in `static/whats-new/`, not here.
 
@@ -98,7 +98,8 @@ data/
   exchange_rates.json         vendored USD rate table (weekly refresh PR)
   registry_models/<slug>.json registry-sourced models per provider (written only by pickup script)
 scripts/                    weekly audit scripts, validate_price_snapshot.py, sync_nav.py,
-                            quick_validate.py, audit_repo.py, promote_branch_content.sh
+                            quick_validate.py, audit_repo.py, promote_branch_content.sh,
+                            release_notes_from_whats_new.py (deploy job → GitHub Release notes)
 npm/llm-pricing-mcp/        zero-dependency STDIO↔HTTP bridge published to npm
 server.json                 MCP registry listing (remote + npm package)
 .github/workflows/          ci-cd, sync-develop, price-audit, npm-publish, mcp-registry-publish
@@ -303,6 +304,8 @@ Auth: **None** = public · **Rate-limited** = anonymous, per-IP limit + body cap
 PR to develop/master, push to master  (ci-cd.yml)
   test · lint (flake8) · osv_scan · security (bandit) · secret_scan (gitleaks)
     └─ all pass on a master push → deploy_fly → /health version must match src/__init__.py
+         └─ confirmed → tag vX.Y.Z + GitHub Release (notes = that version's What's New entry,
+            via scripts/release_notes_from_whats_new.py; idempotent, skipped on an unconfirmed deploy)
 push to master → sync-develop.yml opens a ci/sync-develop-* PR if develop lags
 push to master touching npm/llm-pricing-mcp/** → npm-publish.yml
 push to master touching server.json            → mcp-registry-publish.yml
