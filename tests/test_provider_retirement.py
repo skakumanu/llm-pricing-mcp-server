@@ -47,11 +47,14 @@ RETIRED_HOST = f"{RETIRED_LOWER}.com"
 # - What's New (past entries are a historical record, plus the retirement entry)
 # - README's single durable "Retired providers" line
 # - this guard file
+# - settings.py's RETIRED_ENV_KEYS (v1.82.1), which lets a stale .env entry through
+#   while strict .env validation rejects every other unknown key
 NAME_ALLOWLIST = {
     "data/model_prices_snapshot.json",
     "static/whats-new/index.html",
     "README.md",
     "tests/test_provider_retirement.py",
+    "src/config/settings.py",
 }
 README_RETIRED_LINE = f"- **Retired providers**: {RETIRED_PROVIDER} (2026-10)"
 
@@ -203,6 +206,10 @@ class TestSettings:
             f"{RETIRED_ENV_VAR}={_fake_key()}\nSERVER_PORT=8123\n", encoding="utf-8"
         )
         assert Settings(_env_file=str(env_file)).server_port == 8123
+
+    def test_retired_key_is_registered(self):
+        from src.config.settings import RETIRED_ENV_KEYS
+        assert RETIRED_SETTING in RETIRED_ENV_KEYS
 
 
 # ---------------------------------------------------------------------------
