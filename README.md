@@ -3,7 +3,7 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Most LLM pricing tools are a static lookup table. This one checks its own numbers against a live, independently-maintained price registry and tells you when they disagree, routes to a model by cost *and* quality instead of just quoting a price, and tracks what you actually spent — not just what you might. All of that is backed by a RESTful API (FastAPI), **31 MCP tools** over STDIO and HTTP, a conversational Agent + RAG pipeline, browser-based UIs, and a self-serve billing dashboard, for pricing data from **31 major LLM providers**.
+Most LLM pricing tools are a static lookup table. This one checks its own numbers against a live, independently-maintained price registry and tells you when they disagree, routes to a model by cost *and* quality instead of just quoting a price, and tracks what you actually spent — not just what you might. All of that is backed by a RESTful API (FastAPI), **31 MCP tools** over STDIO and HTTP, a conversational Agent + RAG pipeline, browser-based UIs, and a self-serve billing dashboard, for pricing data from **30 major LLM providers**.
 
 **Live at**: https://llm-pricing-api.fly.dev
 
@@ -29,7 +29,7 @@ Most LLM pricing tools are a static lookup table. This one checks its own number
 - MCP Protocol version: `2024-11-05`
 
 ### RESTful API
-- Real-time pricing from 31 providers (600+ models), async fetching with smart caching. Every price says where it came from: `price_source_kind` is `provider` when confirmed against the provider's rate card, `registry` when taken from the reference price registry (with `registry_key` and date); registry-sourced models are usable in estimates and comparisons but never counted as provider-confirmed, and the weekly pickup PR adds new registry models under covered providers automatically
+- Real-time pricing from 30 providers (600+ models), async fetching with smart caching. Every price says where it came from: `price_source_kind` is `provider` when confirmed against the provider's rate card, `registry` when taken from the reference price registry (with `registry_key` and date); registry-sourced models are usable in estimates and comparisons but never counted as provider-confirmed, and the weekly pickup PR adds new registry models under covered providers automatically
 - Cost estimation: single model (`POST /cost-estimate`) and batch comparison (`POST /cost-estimate/batch`)
 - Prices in your currency (v1.76.0): `GET /pricing`, `POST /cost-estimate`, `POST /cost-estimate/batch`, `GET /use-cases`, `POST /router/recommend` and `GET /pricing/public` accept `currency` / `country` (query or `X-Currency` / `X-Country` headers) and return converted figures as additive `local_*` fields next to the unchanged USD ones; the browser calculator and compare pages preset the currency from the visitor's country and let them switch — see [Currency and locale](#currency-and-locale)
 - Performance metrics, use-case recommendations, pricing history, trends
@@ -102,7 +102,7 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 - Operator-only data (v1.79.2): listing or deleting price-alert webhooks and chat conversations needs the operator key (`MCP_API_KEY`) on every surface — `x-api-key` over HTTP (`GET`/`DELETE /pricing/alerts`, `GET`/`DELETE /agent/conversations`), `x-api-key` or `Bearer` over MCP; anyone else gets 401 over HTTP or `operator_key_required` over MCP, with nothing revealed about stored records. Since v1.81.0 a registrant views or deletes their own alert with its `alert_token` instead (see Self-service price alerts)
 - Request size limit (1MB default), enforced before parsing on `POST /mcp` too (413 above it)
 - Webhook SSRF guard (v1.80.1): alert webhooks only reach public https destinations — checked at registration and again at every delivery, connecting only to the checked IP (DNS-rebinding safe), never following redirects, and ignoring `HTTPS_PROXY`. Alerts stored earlier that break these rules are kept but skipped at delivery (logged, not retried); the operator removes them via the operator-only list/delete
-- 3009 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 3038 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
@@ -862,7 +862,8 @@ The server fetches pricing data from official public pricing pages using web scr
 
 - **Cache TTL**: 2 hours for pricing, 5 minutes for performance metrics
 - **Fallback**: Static hardcoded data if live sources are unavailable
-- **Providers**: OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Anyscale, Amazon Bedrock
+- **Providers**: OpenAI, Anthropic, Google, Cohere, Mistral AI, Groq, Together AI, Fireworks AI, Perplexity AI, AI21 Labs, Amazon Bedrock
+- **Retired providers**: Anyscale (2026-10)
 
 Optional provider API keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) improve model-list freshness but are not required.
 
