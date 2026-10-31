@@ -128,15 +128,6 @@ PRICING_SOURCES = {
         requires_auth=False,  # Pricing page is public
         cache_ttl_seconds=7200,
     ),
-    "Anyscale": PricingDataSource(
-        provider="Anyscale",
-        source_type=DataSourceType.HYBRID,
-        api_endpoint="https://api.endpoints.anyscale.com/v1/models",  # Optional: requires API key
-        pricing_url="https://www.anyscale.com/pricing",  # Public: no auth needed
-        public_health_check="https://status.anyscale.com/",
-        requires_auth=False,  # Pricing page is public
-        cache_ttl_seconds=7200,
-    ),
     "Amazon Bedrock": PricingDataSource(
         provider="Amazon Bedrock",
         source_type=DataSourceType.HYBRID,
@@ -309,14 +300,6 @@ PERFORMANCE_SOURCES = {
         api_endpoint="https://api.ai21.com/studio/v1/models",  # Optional: requires API key
         health_check_endpoint="https://api.ai21.com/studio/v1/models",
         public_status_page="https://status.ai21.com/",  # Public: no auth
-        cache_ttl_seconds=300,
-    ),
-    "Anyscale": PerformanceDataSource(
-        provider="Anyscale",
-        source_type=DataSourceType.HYBRID,
-        api_endpoint="https://api.endpoints.anyscale.com/v1/models",  # Optional: requires API key
-        health_check_endpoint="https://api.endpoints.anyscale.com/v1/models",
-        public_status_page="https://status.anyscale.com/",  # Public: no auth
         cache_ttl_seconds=300,
     ),
     "Amazon Bedrock": PerformanceDataSource(

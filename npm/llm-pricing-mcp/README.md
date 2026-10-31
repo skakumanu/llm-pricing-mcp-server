@@ -1,6 +1,6 @@
 # llm-pricing-mcp
 
-A zero-dependency STDIO launcher for the [LLM Pricing MCP server](https://github.com/skakumanu/llm-pricing-mcp-server) — drift-verified pricing, cost+quality model routing, and real usage tracking across 31 LLM providers, exposed as 31 MCP tools.
+A zero-dependency STDIO launcher for the [LLM Pricing MCP server](https://github.com/skakumanu/llm-pricing-mcp-server) — drift-verified pricing, cost+quality model routing, and real usage tracking across 30 LLM providers, exposed as 31 MCP tools.
 
 This package is a thin bridge, not the server itself: it reads MCP JSON-RPC requests from stdin and forwards each one to the hosted server at `https://llm-pricing-api.fly.dev/mcp`, writing the response back to stdout. There's nothing to install beyond Node — no Python, no `pip install`, no local pricing data to keep up to date.
 

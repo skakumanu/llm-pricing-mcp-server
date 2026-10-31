@@ -1,12 +1,12 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.81.1 | **Last updated**: 2026-10-31
+**Version**: v1.81.2 | **Last updated**: 2026-10-31
 
 ---
 
 ## System Overview
 
-A production FastAPI service that aggregates real-time LLM pricing data from 31 providers (600+ models), exposes it via REST API and MCP protocol, and layers on a ReAct agent, self-serve SaaS billing, and a suite of browser UIs.
+A production FastAPI service that aggregates real-time LLM pricing data from 30 providers (600+ models), exposes it via REST API and MCP protocol, and layers on a ReAct agent, self-serve SaaS billing, and a suite of browser UIs.
 
 - **Primary deployment**: Fly.io (`llm-pricing-api.fly.dev`) — shared-cpu-1x, 512 MB, ~$3.40/mo
 - **CI/CD**: GitHub Actions → test → lint → bandit → OSV scan → gitleaks → Fly.io deploy
@@ -61,7 +61,7 @@ A production FastAPI service that aggregates real-time LLM pricing data from 31 
 │  Pricing Services   │  │  Agent / RAG   │  │  Billing Service           │
 │                     │  │                │  │                            │
 │  PricingAggregator  │  │  ReAct loop    │  │  BillingService            │
-│  31 provider impls  │  │  TF-IDF RAG    │  │  billing.db (SQLite)       │
+│  30 provider impls  │  │  TF-IDF RAG    │  │  billing.db (SQLite)       │
 │  PricingHistory     │  │  Conv. memory  │  │  Free signup → API key     │
 │  BenchmarkService   │  │  LLM backend   │  │  Stripe checkout/webhook   │
 │  Router             │  │  (GPT-4o-mini  │  │  Tier sync (free/pro/ent)  │
@@ -163,7 +163,6 @@ llm-pricing-mcp-server/
 │       ├── fireworks_pricing.py
 │       ├── perplexity_pricing.py
 │       ├── bedrock_pricing.py
-│       ├── anyscale_pricing.py
 │       ├── ai21_pricing.py
 │       ├── xai_pricing.py
 │       ├── deepseek_pricing.py
@@ -353,7 +352,7 @@ HTTP 200), not JSON-RPC errors: `customer_key_required` (with `signup`, header a
 MCP: an anonymous caller cannot read or write any org's data at all.
 
 ### 3. Provider Pattern
-Each of 31 LLM providers implements `BasePricingProvider`:
+Each of 30 LLM providers implements `BasePricingProvider`:
 - `fetch_pricing_data() -> list[PricingMetrics]` — returns static pricing (with live data fallback where available)
 - `get_pricing_with_status()` — wraps `fetch_pricing_data()`, merges **registry-sourced entries**, applies **live model sync**, returns `(data, status)`
 

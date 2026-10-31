@@ -104,7 +104,6 @@ PROVIDER_ALIASES: Dict[str, frozenset] = {
     "oracle oci": frozenset({"oci"}),                   # the catalogue's display name
     "vertex ai": frozenset({"vertex_ai-language-models", "vertex_ai", "gemini"}),
     "hugging face": frozenset({"huggingface"}),
-    "anyscale": frozenset({"anyscale"}),
     # Snowflake Cortex publishes its own per-token rates and the registry
     # carries them under provider "snowflake" (19 entries), so it is a first
     # party here even though the models themselves are third-party.
