@@ -3,7 +3,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from mcp.tools._locale import resolve_tool_locale
-from src.services.cost_calculator import compute_token_cost
+from src.services.cost_calculator import MAX_COMPARE_MODELS, compute_token_cost
 from src.services.currency import conversion_metadata, convert, localize_cost
 from src.services.pricing_aggregator import PricingAggregatorService
 
@@ -82,6 +82,12 @@ class CompareCostsTool:
                 return {
                     "success": False,
                     "error": "model_names must be a non-empty list",
+                }
+
+            if len(model_names) > MAX_COMPARE_MODELS:
+                return {
+                    "success": False,
+                    "error": f"model_names accepts at most {MAX_COMPARE_MODELS} models",
                 }
 
             if input_tokens is None or output_tokens is None:
