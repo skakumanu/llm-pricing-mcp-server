@@ -44,6 +44,18 @@ section.
   and greps `README.md` plus a fixed list of docs for stale tool counts. This is what
   catches a doc saying "14 tools" after a tool was added — update `EXPECTED_TOOLS` and,
   if you add a new doc that states the tool count, add it to `DOC_FILES` in that file.
+- **`tests/test_mcp_org_scoping.py`** — the 7 org-scoped usage/budget tools over `POST /mcp`:
+  `customer_key_required` without a service key, `org_mismatch` for another org's `org_id`.
+- **`tests/test_mcp_operator_only.py`** — the 4 operator-only tools (`list_price_alerts`,
+  `delete_price_alert`, `list_conversations`, `delete_conversation`) refuse every caller but
+  the operator key (`MCP_API_KEY`) with `operator_key_required`.
+- **`tests/test_mcp_dispatch.py`** — the customer-only `dispatch` tool over `POST /mcp`
+  (mocked executor, no network), including the STDIO `dispatch_requires_hosted_mcp` refusal.
+- **`tests/test_mcp_body_cap.py`** — `POST /mcp` enforces the global request-body cap.
+- **`tests/test_currency_mcp.py`** — optional `currency` / `country` on the five
+  pricing-output tools.
+- **`tests/test_mcp_registry_publish_workflow.py`** — guards `server.json` and the MCP
+  registry publish workflow.
 - Individual tool behavior (pricing math, cost estimation, alerts, conversation history,
   etc.) is covered by the corresponding `tests/test_*.py` file per service/tool, not
   duplicated here.

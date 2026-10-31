@@ -2,6 +2,17 @@
 
 ## Overview
 
+> **Status note.** This guide was written at v1.5.1 (early 2024 plan). The server is now
+> on v1.81.x (see `src/__init__.py`) and the API is still **v1**: no v2 has been released
+> or scheduled, and the 2025-2026 migration dates below passed without one. The
+> compatibility rules still describe how changes are made.
+>
+> Auth note: `POST /cost-estimate`, `POST /cost-estimate/batch`, `GET /api/versions` and
+> `GET /deployment/metadata` require an API key (`x-api-key`: a free key from
+> `POST /billing/signup` works) when the server has `MCP_API_KEY` set, as production does.
+> `/`, `/models`, `/pricing`, `/performance`, `/use-cases`, `/telemetry` and `/health*`
+> are public.
+
 This guide explains how the LLM Pricing MCP Server manages backwards compatibility and API versioning to ensure seamless upgrades for all users.
 
 ## Versioning Policy
@@ -9,7 +20,7 @@ This guide explains how the LLM Pricing MCP Server manages backwards compatibili
 ### Current Status
 
 - **Stable Version**: v1 (Current - fully backwards compatible)
-- **Latest Version**: 1.5.1
+- **Latest Version**: see `src/__init__.py` (v1.81.x at the time of this note; this guide was written at 1.5.1)
 - **Support Policy**: All patches maintain backwards compatibility until major version bump to v2
 
 ### Semantic Versioning
@@ -30,7 +41,7 @@ Backwards Compatibility Rules:
 
 ### Guaranteed Stable Endpoints
 
-These endpoints will never change until v2.0 (scheduled: 2025):
+These endpoints will never change until v2.0 (no v2 is currently scheduled):
 
 **Core Pricing Endpoints:**
 - `GET /` - Server information
@@ -119,13 +130,13 @@ GET /api/versions  # Completely new, doesn't affect existing endpoints
 }
 ```
 
-❌ Changing response structure:
+❌ Changing response structure (hypothetical example):
 ```python
-# v1.4 returns array
-GET /pricing → [{ model_name: "gpt-4", ... }, ...]
+# v1 returns an object with a "models" array
+GET /pricing → { "models": [{ model_name: "gpt-4", ... }], "total_models": ..., ... }
 
-# v2.0 might return object (breaking change)
-GET /pricing → { "data": [{ ... }] }
+# Returning a bare array instead would be a breaking change
+GET /pricing → [{ ... }]
 ```
 
 ❌ Removing query parameters:
@@ -137,13 +148,13 @@ GET /pricing?provider=openai
 GET /pricing  # provider parameter no longer works
 ```
 
-❌ Changing HTTP methods:
+❌ Changing HTTP methods (hypothetical example):
 ```python
-# v1.4 uses GET
-GET /cost-estimate?model=gpt-4&input_tokens=100&output_tokens=50
+# v1 uses POST with a JSON body
+POST /cost-estimate  {"model_name": "gpt-4", "input_tokens": 100, "output_tokens": 50}
 
-# v2.0 changes to POST (breaking change)
-POST /cost-estimate  # GET no longer works
+# Switching it to GET with query parameters would be a breaking change
+GET /cost-estimate?model=gpt-4&input_tokens=100&output_tokens=50
 ```
 
 ## Client Resilience Recommendations
@@ -213,12 +224,13 @@ class ModelData:
 ```python
 # ✅ Good - checks compatibility before critical operation
 def cost_estimate(model_name, tokens):
-    # Check API version supports cost-estimate
-    version_info = requests.get('http://api/api/versions').json()
-    if 'cost-estimate' not in version_info.get('current_version', ''):
-        raise ValueError(f"Cost estimation not supported in {version_info['current_version']}")
+    # Check the server still serves API v1 (current_version is "v1"; all_versions lists every supported one)
+    headers = {'x-api-key': API_KEY}
+    version_info = requests.get('http://api/api/versions', headers=headers).json()
+    if 'v1' not in version_info.get('all_versions', []):
+        raise ValueError(f"API v1 not supported (current: {version_info.get('current_version')})")
     
-    return requests.post('http://api/cost-estimate', json={
+    return requests.post('http://api/cost-estimate', headers=headers, json={
         'model_name': model_name,
         'input_tokens': tokens[0],
         'output_tokens': tokens[1]
@@ -230,18 +242,21 @@ def cost_estimate(model_name, tokens):
 ### Check for Breaking Changes Before Upgrading
 
 ```bash
-# Get current version
-curl http://localhost:8000/deployment/metadata | \
+# Get current version (also available without a key from GET /health -> .version)
+curl -H "x-api-key: $API_KEY" http://localhost:8000/deployment/metadata | \
   jq '{version, api_versions, breaking_changes}'
 
 # Check migration guide
-curl http://localhost:8000/api/versions | \
+curl -H "x-api-key: $API_KEY" http://localhost:8000/api/versions | \
   jq '.migration_guide_url'
 ```
 
 ### Timeline for v2.0 Migration
 
-**v1.x Support Timeline:**
+> Original plan, kept for the record. None of these milestones happened: no v2 has
+> shipped and v1 remains the only API version.
+
+**v1.x Support Timeline (original plan):**
 - **Now - Jun 2025**: v1.x is stable, actively supported
 - **Jun 2025**: v2.0 released with breaking changes
 - **Jun 2025 - Jun 2026**: Both v1 and v2 supported (dual-running)
@@ -322,9 +337,9 @@ Mid 2026: v1 support ends
 ### 1. Test with Latest Version
 
 ```bash
-# Run against v1.5
-curl http://localhost:8000/deployment/metadata | jq .version
-# "1.5.1"
+# Check the running version
+curl http://localhost:8000/health | jq .version
+# e.g. "1.81.1"
 
 # Run your client code
 python my_client.py
@@ -369,14 +384,17 @@ assert result is not None
 ```python
 # Always check API version before using new features
 def use_new_feature():
-    version_info = requests.get('http://api/api/versions').json()
-    
-    # Only use feature if API version supports it
-    if 'v1.5' in version_info['current_version']:
-        # v1.5+ supports telemetry_access feature
+    # /api/versions reports API versions ("v1"), not app releases; use
+    # /health's "version" (e.g. "1.81.1") to gate on an app release
+    app_version = requests.get('http://api/health').json()['version']
+    major, minor = (int(x) for x in app_version.split('.')[:2])
+
+    # Only use feature if the server release supports it
+    if (major, minor) >= (1, 5):
+        # telemetry was added in 1.5
         return requests.get('http://api/telemetry')
     else:
-        print("Feature requires API v1.5 or later")
+        print("Feature requires server 1.5 or later")
         return None
 ```
 
@@ -489,9 +507,9 @@ For backwards compatibility questions:
 - Check this guide
 - Review [BLUE_GREEN_DEPLOYMENT.md](BLUE_GREEN_DEPLOYMENT.md) for deployment practices
 - Open an issue on GitHub with details
-- Check [API version info](http://api/api/versions) for official status
+- Check `GET /api/versions` on your server for official status
 
 ---
 
-**Last Updated:** February 17, 2026  
-**Status:** v1.5.1 - Stable and backwards compatible until June 2025 migration to v2.0
+**Written at:** v1.5.1  
+**Status:** API v1 - stable and backwards compatible; no v2 is scheduled

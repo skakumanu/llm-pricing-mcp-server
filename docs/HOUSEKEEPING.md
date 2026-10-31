@@ -116,7 +116,8 @@ git push origin feature/add-new-feature
 # - Add description of what changed and why
 
 # Step 7: After PR approved and CI passes
-# - Merge via GitHub (DO NOT push directly)
+# - The repo owner merges via GitHub (DO NOT push directly; agents never merge
+#   their own PRs, per CLAUDE.md Git Flow rule 5)
 # - Delete remote branch
 
 # Step 8: Clean up locally
@@ -237,10 +238,11 @@ git branch -r
 - [ ] **Update test assertions** - Version references in test files
 - [ ] **Update README.md** - All API examples and documentation
 - [ ] **Update BACKWARDS_COMPATIBILITY.md** - Version timeline and examples
-- [ ] **Update package.json** - Match version in metadata
-- [ ] **Update deployment docs** - Docker tags and examples
-  - BLUE_GREEN_DEPLOYMENT.md
-  - DEPLOYMENT_IMPLEMENTATION.md
+- [ ] **Update `docs/ARCHITECTURE.md`'s `**Version**` header** - must equal `__version__`
+  (enforced by `tests/test_version_consistency.py`, which fails on any `docs/*.md`
+  `**Version**:` header that pins a different version)
+- [ ] **Root `package.json`** - not checked by any test and currently lags the app
+  version; the npm package in `npm/llm-pricing-mcp/` is versioned separately
 
 ### ✅ After Documentation Changes
 - [ ] **Update version references** - Consistency across all .md files
@@ -274,13 +276,20 @@ Maintaining well-organized files and directories is essential for code maintaina
 ```
 llm-pricing-mcp-server/
 ├── .github/              # GitHub workflows and CI/CD
+├── .claude/              # Claude Code agents, skills, workflows
 ├── fly.toml              # Fly.io app configuration
 ├── docs/                 # All project documentation
-├── scripts/              # Deployment and utility scripts
+├── scripts/              # Maintenance and utility scripts
 ├── src/                  # Source code (all Python)
 ├── mcp/                  # MCP server, tools, transport
 ├── agent/                # ReAct agent
+├── rag/                  # Retrieval pipeline for the agent
+├── static/               # Browser UI pages
+├── data/                 # Vendored price snapshot, registry models, exchange rates
+├── npm/                  # npm wrapper package (llm-pricing-mcp)
 ├── tests/                # Test files
+├── CLAUDE.md             # Agent instructions (Git Flow + Release Checklist)
+├── server.json           # MCP registry manifest
 ├── .env.example          # Example environment variables
 ├── .gitignore            # Git ignore rules
 ├── .dockerignore         # Docker ignore rules
@@ -290,6 +299,7 @@ llm-pricing-mcp-server/
 ├── requirements.txt      # Python dependencies
 ├── pyproject.toml        # Project metadata and config
 ├── Procfile              # Process type declaration (unused by Fly.io's Dockerfile build, kept for reference)
+├── run.sh                # Legacy Azure App Service startup script (/home/site/wwwroot); unused on Fly.io
 └── [other config files]
 ```
 
@@ -315,6 +325,8 @@ src/
 ├── models/               # Data models (Pydantic)
 │   ├── __init__.py
 │   ├── pricing.py        # Pricing data models
+│   ├── billing.py        # Billing models
+│   ├── dispatch.py       # Dispatch gateway models
 │   └── deployment.py     # Deployment models
 ├── services/             # Business logic services
 │   ├── __init__.py
@@ -352,15 +364,15 @@ src/
 **Expected Structure:**
 ```
 tests/
-├── __init__.py
 ├── conftest.py           # Pytest configuration and fixtures
 ├── test_api.py           # API endpoint tests
 ├── test_async_pricing.py # Async functionality tests
-├── test_deployment.py    # Deployment feature tests
-├── test_geolocation.py   # Geolocation service tests
 ├── test_models.py        # Data model tests
 ├── test_security.py      # Security/auth tests
 ├── test_services.py      # Service layer tests
+├── test_tool_registry.py # MCP tool registry + doc tool-count sync
+├── test_version_consistency.py # Single-sourced version guard
+├── [many more test_*.py] # One per feature/module
 └── __pycache__/          # Python cache (gitignored)
 ```
 
@@ -392,9 +404,11 @@ docs/
 ├── LIVE_DATA_FETCHING.md              # Data fetching architecture
 ├── BACKWARDS_COMPATIBILITY.md         # API versioning
 ├── DEPLOYMENT.md                      # Deployment overview
-├── BLUE_GREEN_DEPLOYMENT.md           # Zero-downtime deployment
-├── DEPLOYMENT_IMPLEMENTATION.md       # Implementation details
+├── BLUE_GREEN_DEPLOYMENT.md           # Blue-green guide (not the active deployment path)
+├── DEPLOYMENT_IMPLEMENTATION.md       # Historical implementation record
 ├── CONTRIBUTING.md                    # Contribution guidelines
+├── MCP_INTEGRATION.md, MCP_QUICK_START.md, MCP_TESTING.md, MCP_VALIDATION_REPORT.md
+├── CLAUDE_INTEGRATION.md, PERPLEXITY_INTEGRATION.md, VS_CODE_INTEGRATION.md
 └── HOUSEKEEPING.md                    # This file
 ```
 
@@ -421,10 +435,15 @@ docs/
 **Expected Structure:**
 ```
 scripts/
-├── promote_branch_content.sh # develop → master clean promotion
+├── promote_branch_content.sh  # develop → master clean promotion
 ├── quick_validate.py          # Local MCP STDIO smoke test
-├── validate_price_snapshot.py # Pricing snapshot validation
-└── [utility scripts]
+├── validate_price_snapshot.py # Pricing snapshot validation (used by price-audit.yml)
+├── pickup_registry_models.py  # Writes data/registry_models/*.json from the price registry
+├── reconfirm_stale_prices.py  # Re-confirms stale curated prices that still match the registry
+├── retire_models.py           # Finds (optionally removes) models a provider has shut down
+├── refresh_exchange_rates.py  # Refreshes data/exchange_rates.json
+├── sync_nav.py                # Stamps the canonical nav into every static/ page
+└── audit_repo.py              # Audits a codebase's LLM call sites for token savings
 ```
 
 **Naming Conventions:**
@@ -463,7 +482,8 @@ scripts/
 .git/               # Git repository (auto-created, never touch)
 .github/            # GitHub-specific configs
 .gitignore          # Ignore rules
-.gitattributes      # File handling rules
+.gitleaks.toml      # gitleaks config for the secret_scan gate
+.pre-commit-config.yaml # Optional local hooks (gitleaks, branch guard, large files)
 ```
 
 **Rules:**
@@ -471,7 +491,7 @@ scripts/
 - [ ] `.gitignore` excludes build artifacts
 - [ ] `.gitignore` excludes cache/temp files
 - [ ] `.gitignore` excludes environment files
-- [ ] `.gitattributes` handles line endings
+- [ ] `.gitattributes` handles line endings (none exists today; add one if line endings become a problem)
 - [ ] Meaningful `.git` history (linear on master)
 - [ ] Commit messages follow conventions
 - [ ] No large files in git (> 100MB)
@@ -543,7 +563,8 @@ This project follows Git Flow branching model:
 - **feature/*** : Individual feature/fix branches — the only branch type created by hand
   - Created from: `develop`
   - Merged back to: `develop` (via PR)
-  - Naming: `feature/description-of-feature` (or `fix/description` for bug fixes)
+  - Naming: `feature/<topic>-v<version>` (e.g. `feature/api-tiers-v1.36.0`), bug fixes
+    included — there is no separate `fix/*` type
   - Example: `feature/security-baseline`, `feature/groq-integration`
 
 ### ✅ Feature Development Workflow
@@ -573,11 +594,11 @@ This project follows Git Flow branching model:
 
 5. **CI/CD Validation**
    - All tests must pass (see README.md for the current passing-test count)
-   - Code coverage must be ≥ 90%
-   - No security vulnerabilities
+   - Coverage is reported (`--cov=src`, uploaded to Codecov) but not gated; aim for ≥ 90%
+   - `lint` (flake8), `osv_scan`, `security` (bandit) and `secret_scan` (gitleaks) pass
 
 6. **Merge to develop**
-   - Merge via GitHub UI (squash merge)
+   - The repo owner merges via GitHub UI (squash merge); agents leave merging to the user
    - Delete feature branch after merge
 
 7. **Delete local feature branch**
@@ -697,7 +718,7 @@ footer
    - Let PRs handle merges
 3. **Check GitHub Actions** - Verify CI/CD pipeline passes
    - CI /test must pass
-   - Coverage must be ≥ 90%
+   - Coverage is reported but not gated; aim for ≥ 90%
    - No security vulnerabilities introduced
    - Full test suite passing (see README.md for the current count)
 
@@ -750,7 +771,7 @@ footer
 6. **A06:2021 – Vulnerable and Outdated Components**
    - [ ] All dependencies scanned for vulnerabilities
    - [ ] Dependency updates applied regularly
-   - [ ] `pip check` passes with no vulnerabilities
+   - [ ] `pip check` passes (dependency conflicts) and the `osv_scan` CI gate reports no vulnerabilities
    - [ ] No deprecated/EOL packages used
 
 7. **A07:2021 – Identification & Authentication Failures**
@@ -848,7 +869,8 @@ footer
 
 ### ✅ Security Checks
 - **Vulnerability Scanner**: Check for dependency vulnerabilities regularly
-  - Run `pip check` before commits
+  - Run `pip check` before commits (catches broken/conflicting requirements, not CVEs)
+  - The `osv_scan` CI gate scans dependencies for known vulnerabilities
   - Check GitHub Dependabot alerts
   - Review security advisories
   
@@ -886,7 +908,7 @@ every commit (version bump, docs updates, secret scan, data-accuracy check, test
 Nothing beyond CLAUDE.md's Release Checklist and a green PR is required:
 - [ ] Full test suite passing (see `README.md` for the current count)
 - [ ] CI's five gates green on the PR: `test`, `lint`, `osv_scan`, `security`, `secret_scan`
-- [ ] Version bumped in `src/__init__.py` (and `docs/ARCHITECTURE.md`/`package.json` in
+- [ ] Version bumped in `src/__init__.py` (and `docs/ARCHITECTURE.md`'s version header in
       lockstep — enforced by `tests/test_version_consistency.py`)
 - [ ] No hardcoded secrets or sensitive data staged
 
@@ -971,18 +993,18 @@ python -m pytest --cov=src tests/
 
 **Dependency Check:**
 ```bash
-# Check for vulnerabilities
+# Check for broken/conflicting requirements (CVEs are covered by the osv_scan CI gate)
 pip check
 
-# Check for unused imports
-python -m pylint src/
+# Lint the way CI does
+flake8 src tests --count --select=E9,F63,F7,F82 --show-source --statistics
 ```
 
 ### ✅ Post-Push Verification
 
 1. **GitHub Actions Results**
    - CI /test workflow passes (full suite — see README.md for the current count)
-   - Coverage ≥ 90%
+   - Coverage reported (not gated); aim for ≥ 90%
    - No security warnings
    
 2. **PR Status (if applicable)**
@@ -1001,28 +1023,28 @@ python -m pylint src/
 When working on any task, follow this workflow:
 
 ### For New Features:
-1. Create feature branch: `git checkout -b feature/description develop`
+1. Create feature branch: `git checkout -b feature/<topic>-v<version> develop`
 2. Make code changes with tests
 3. Verify all syntax: Run tests
 4. Verify test coverage ≥ 90% for your code
 5. Update documentation if needed
 6. Verify no secrets/hardcoded values
 7. Commit with clear message: `feat(scope): description`
-8. Push to origin: `git push origin feature/description`
+8. Push to origin: `git push origin feature/<topic>-v<version>`
 9. Create PR to develop branch
 10. Wait for CI checks to pass
-11. Merge via GitHub (auto-deletes branch)
-12. Pull latest develop
+11. Leave the merge to the repo owner (CLAUDE.md Git Flow rule 5)
+12. Pull latest develop after it is merged
 
 ### For Bug Fixes:
-1. Create feature branch: `git checkout -b fix/description develop`
+1. Create feature branch: `git checkout -b feature/<topic>-v<version> develop`
 2. Make code changes with regression tests
 3. Verify the full test suite still passes
 4. Update documentation if needed
 5. Verify no new security issues
 6. Commit with clear message: `fix(scope): description`
 7. Push and create PR to develop
-8. Merge after CI passes
+8. The repo owner merges after CI passes
 
 ### For Documentation Updates:
 1. Update .md files on a `feature/*` branch (never directly on develop)
@@ -1035,8 +1057,8 @@ When working on any task, follow this workflow:
 Every commit bumps the version as part of its own `feature/*` branch — there is no
 separate release branch or release process. Per `CLAUDE.md`'s Release Checklist:
 1. On your `feature/*` branch, update `src/__init__.py` with the new version
-2. Update `docs/ARCHITECTURE.md`'s version header and `package.json`'s version in
-   lockstep (enforced by `tests/test_version_consistency.py`)
+2. Update `docs/ARCHITECTURE.md`'s version header in lockstep (enforced by
+   `tests/test_version_consistency.py`)
 3. Run the full test suite
 4. Update `static/whats-new/index.html` if the change is user-facing
 5. Commit: `chore: bump version to 1.X.X` (or fold the bump into the feature's own commit)
@@ -1046,7 +1068,7 @@ separate release branch or release process. Per `CLAUDE.md`'s Release Checklist:
 ### For Security Patches:
 Same `feature/*` → `develop` → promote-to-`master` path as everything else — there is no
 separate hotfix branch or expedited path:
-1. Create branch: `git checkout -b fix/description develop`
+1. Create branch: `git checkout -b feature/<topic>-v<version> develop`
 2. Make the minimal fix, add tests verifying it
 3. Run the full test suite
 4. Commit: `sec: description of security fix`
@@ -1078,7 +1100,7 @@ python -m pytest tests/ -v
 echo "Checking coverage..."
 python -m pytest --cov=src tests/
 
-echo "Checking for vulnerabilities..."
+echo "Checking dependency consistency..."
 pip check
 
 echo "Checking for secrets..."
