@@ -155,8 +155,33 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.82.4 -->
+  <!-- v1.82.5 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.82.5</span>
+      <span class="release-date">Oct 31, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Price drift cleared: every catalogue price is confirmed again</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li><strong>Five withheld prices restored.</strong> The weekly audit had withheld <code>gpt-4-turbo</code> (Azure OpenAI) and four Databricks models whose registry prices changed this week. Azure's rate is corrected to $11 / $33 per 1M tokens, and the Databricks registry-sourced entries are re-synced from the refreshed registry snapshot, so <code>check_price_drift</code> now reports no findings</li>
+        <li><strong>Registry snapshot refreshed and 11 Databricks models picked up.</strong> The vendored price registry moves from 2,928 to 3,124 chat models (validated, no removals). New registry-sourced Databricks entries include <code>databricks-claude-sonnet-5-5</code>, <code>databricks-gemini-3-8-flash</code> and <code>databricks-gpt-6-astra</code></li>
+      </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">Withheld for drift <strong>5 → 0</strong></div>
+        <div class="stat-chip">Confirmed <strong>97.2% → 98.0%</strong></div>
+        <div class="stat-chip">Models <strong>602 → 613</strong></div>
+        <div class="stat-chip">Never priced <strong>5 → 5</strong></div>
+        <div class="stat-chip">Stale <strong>63 → 63</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- v1.82.4 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.82.4</span>
