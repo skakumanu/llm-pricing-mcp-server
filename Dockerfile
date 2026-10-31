@@ -1,3 +1,7 @@
+# v1.86.0: Litestream binary for continuous SQLite replication (see litestream.yml and
+# docs/DEPLOYMENT.md). Copied out of the official image so nothing is downloaded at build time.
+FROM litestream/litestream:0.3.13 AS litestream
+
 # Use Python 3.11 slim image
 FROM python:3.11-slim
 
@@ -17,6 +21,13 @@ COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Litestream binary + config + the entrypoint that supervises uvicorn (v1.86.0).
+# entrypoint.sh sits at the repo root because scripts/ is not copied into the image.
+COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
+COPY litestream.yml /etc/litestream.yml
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod 755 /app/entrypoint.sh
 
 # Copy application code
 COPY src/ ./src/
@@ -51,4 +62,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Run the application
-CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# entrypoint.sh replicates the databases with Litestream when LITESTREAM_REPLICA_URL is set,
+# and otherwise runs plain uvicorn (--workers 2) exactly as before.
+CMD ["/app/entrypoint.sh"]

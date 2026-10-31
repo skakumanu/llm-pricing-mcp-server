@@ -20,6 +20,7 @@ sys.path.insert(0, str(project_root))
 from fastapi.testclient import TestClient  # noqa: E402
 import src.main as main_module  # noqa: E402
 from src.main import app  # noqa: E402
+from src.services import legal_pages  # noqa: E402
 from src.services.billing_service import BillingService, CustomerRecord, effective_tier  # noqa: E402
 from src.services.orchestrator_service import OrchestratorService  # noqa: E402
 from src.services.orchestrator_store import OrchestratorStore  # noqa: E402
@@ -55,6 +56,9 @@ def env(tmp_path):
         patch.object(main_module.settings, "stripe_secret_key", SK),
         patch.object(main_module.settings, "stripe_price_id_pro", PRICE_PRO),
         patch.object(main_module.settings, "stripe_price_id_enterprise", PRICE_ENT),
+        # v1.86.0: checkout needs the legal pages in force; these tests exercise the Stripe flow
+        patch.object(main_module.settings, "legal_pages_live", True),
+        patch.object(legal_pages, "_cache", {}),
         patch("src.main.get_billing_service", return_value=billing),
         patch("src.main.get_orchestrator_service", return_value=svc),
         patch("src.services.orchestrator_store.get_orchestrator_store", return_value=store),

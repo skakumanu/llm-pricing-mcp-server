@@ -25,7 +25,11 @@ ENV_EXAMPLE = project_root / ".env.example"
 
 # FastAPI's own documentation routes, plus HTML pages served by route handlers rather
 # than static mounts (they are UI pages, documented in the README's UI table, not API).
-UNDOCUMENTED_ROUTES = {"/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect", "/", "/admin"}
+UNDOCUMENTED_ROUTES = {
+    "/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect", "/", "/admin",
+    # v1.86.0 legal pages: UI pages served by handlers (README / ARCHITECTURE UI lists)
+    "/terms", "/privacy", "/refunds", "/dpa", "/subprocessors", "/security",
+}
 # Settings that are constants derived in code, not environment configuration.
 INTERNAL_SETTINGS = {"app_name", "app_version", "app_description"}
 

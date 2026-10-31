@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — LLM Pricing API</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3347;
+      --accent: #7c6af7;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --warn: #ed8936;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 1.6; }
+    /* ── Shared nav (identical on every page; scripts/sync_nav.py, tests/test_nav_consistency.py) ── */
+    .main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;border-bottom:1px solid #23263a;position:sticky;top:0;z-index:200;gap:.5rem;flex-shrink:0}
+    .nav-brand{font-weight:700;color:#7c6af7;text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
+    .nav-spacer{flex:1}
+    .nav-links{display:flex;align-items:center;gap:.125rem}
+    .nav-links a{color:#8b93a5;text-decoration:none;padding:.35rem .6rem;border-radius:6px;font-size:.8rem;white-space:nowrap;transition:all .15s;border:none}
+    .nav-links a:hover{background:#1a1d2e;color:#e5e7eb}
+    .nav-links a.active{background:#1a1d2e;color:#7c6af7;font-weight:600}
+    .nav-links a.nav-cta{margin-left:.35rem;border:1px solid #7c6af7;color:#7c6af7}
+    .nav-links a.nav-cta:hover{background:#7c6af7;color:#fff}
+    .nav-toggle{display:none;background:none;border:1px solid #2a2d3a;color:#9ca3af;font-size:1.1rem;cursor:pointer;padding:.25rem .5rem;border-radius:6px;line-height:1;flex-shrink:0}
+    @media(max-width:760px){
+      .nav-toggle{display:block}
+      .nav-links{display:none;position:absolute;top:52px;left:0;right:0;flex-direction:column;align-items:stretch;background:#0f1117;border-bottom:1px solid #23263a;padding:.5rem 1rem;gap:.25rem;z-index:199}
+      .nav-links.open{display:flex}
+      .nav-links a{padding:.6rem .75rem;font-size:.875rem}
+      .nav-links a.nav-cta{margin-left:0;text-align:center}
+    }
+    /* ── Legal page ── */
+    .container { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+    .legal h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+    .legal .updated { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+    .legal h2 { font-size: 18px; font-weight: 600; margin: 32px 0 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+    .legal h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+    .legal p { color: var(--muted); margin: 0 0 10px; }
+    .legal ul, .legal ol { margin: 0 0 12px 1.2rem; color: var(--text); }
+    .legal li { margin: 4px 0; overflow-wrap: anywhere; }
+    .legal a { color: var(--accent); text-decoration: none; }
+    .legal a:hover { text-decoration: underline; }
+    .legal code { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 0 .35em; font-size: .9em; }
+    .legal table { border-collapse: collapse; width: 100%; margin: 10px 0 14px; font-size: 13px; background: var(--surface); border: 1px solid var(--border); }
+    .legal th, .legal td { border-bottom: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+    .legal th { background: var(--surface2); font-weight: 600; }
+    .legal-draft { border: 1px solid var(--warn); color: var(--warn); background: var(--surface); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 18px; }
+    .legal-links { margin-top: 36px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; font-size: 13px; color: var(--muted); }
+    .legal-links a { color: var(--accent); text-decoration: none; margin-right: 12px; }
+  </style>
+</head>
+<body>
+<nav class="main-nav">
+  <a href="/" class="nav-brand">⚡ LLM Pricing</a>
+  <span class="nav-spacer"></span>
+  <div class="nav-links" id="navLinks">
+    <a href="/calculator">Calculator</a>
+    <a href="/compare">Compare</a>
+    <a href="/trends">Trends</a>
+    <a href="/chat">Chat</a>
+    <a href="/mcp-setup">MCP</a>
+    <a href="/api-docs">API</a>
+    <a href="/whats-new">What's New</a>
+    <a href="/billing" class="nav-cta">Sign in</a>
+  </div>
+  <button class="nav-toggle" id="navToggle" aria-label="Menu" aria-expanded="false" aria-controls="navLinks">☰</button>
+</nav>
+<script>
+(function(){
+  var t=document.getElementById('navToggle'),l=document.getElementById('navLinks');
+  if(!t||!l)return;
+  t.onclick=function(){var o=l.classList.toggle('open');t.setAttribute('aria-expanded',o?'true':'false');};
+  var p=location.pathname.replace(/\/$/,'')||'/';
+  l.querySelectorAll('a').forEach(function(a){
+    var h=a.getAttribute('href');
+    if(h===p||h===p+'/')a.classList.add('active');
+    a.addEventListener('click',function(){l.classList.remove('open');t.setAttribute('aria-expanded','false');});
+  });
+})();
+</script>
+
+<div class="container">
+  <div class="legal">
+<!-- legal:notice -->
+<p class="updated">Last updated 2026-10-31</p>
+<!-- legal:start (generated from docs/legal/ by scripts/sync_legal.py; do not edit by hand) -->
+<h1>Privacy Policy</h1>
+<p>This policy explains what personal data [ENTITY NAME] ("we", "us") holds when you use the LLM Pricing API service, why, for how long, and what rights you have. It is written for customers in the United States (including California residents under the CCPA) and, where it applies, the EU and UK (GDPR and UK GDPR). This document is a template awaiting legal review and is not in force until the notice at the top of the page is gone.</p>
+<h2 id="1-what-we-hold-and-why">1. What we hold and why</h2>
+<table><thead><tr><th>Data</th><th>Purpose</th><th>Retention</th></tr></thead>
+<tbody><tr><td>Account email, organisation id, plan, billing status and Stripe customer and subscription references</td><td>Create and run your account, bill you, contact you about your account</td><td>Until you ask us to delete the account</td></tr><tr><td>Service key</td><td>Authenticate your requests</td><td>Until the key is rotated or the account is deleted</td></tr><tr><td>Provider keys you store for dispatch (encrypted at rest)</td><td>Run your dispatch requests on your own provider account</td><td>Until you remove them or the account is deleted</td></tr><tr><td>Usage events (endpoint, model, token counts, cost, time)</td><td>Rate limits, budgets, usage and savings reports</td><td>Until the account is deleted</td></tr><tr><td>Dispatch receipt metadata (model, provider, token counts, cost and status, never the prompt or the response)</td><td>Audit and cost reporting for dispatch</td><td>90 days</td></tr><tr><td>Support conversations and escalations (the messages you send the support assistant, with keys and secrets redacted before the assistant reads them)</td><td>Answer questions and, on request, escalate to the owner</td><td>Escalations and their action records for 365 days; redacted summaries of inputs and outputs for 90 days</td></tr><tr><td>Network address (transient)</td><td>Per-address rate limiting and choosing a display currency; kept in memory and not written to the databases. To estimate your country for currency and usage analytics, the address is sent to a third-party IP geolocation service (ip-api.com)</td><td>Cleared on restart; the geolocation service applies its own retention</td></tr></tbody></table>
+<p>We do not sell personal data and we do not use it for advertising.</p>
+<h2 id="2-who-receives-it">2. Who receives it</h2>
+<p>We use the service providers listed on the <a href="/subprocessors">Subprocessors</a> page: a hosting provider, a payment processor, an IP geolocation service and the language-model provider that runs the support and pricing assistants. Support messages reach that language-model provider after redaction of keys and secrets. We disclose data where the law requires it.</p>
+<h2 id="3-your-rights">3. Your rights</h2>
+<p>You can ask us to: tell you what we hold about you, give you a copy of it, correct it, delete it, or stop processing it. California residents have the right to know, delete and correct, and to not be discriminated against for exercising these rights. Residents of the EU and UK also have the rights of access, rectification, erasure, restriction, portability and objection, and may complain to their data protection authority.</p>
+<p>To exercise any of these rights, ask the support assistant on <a href="/chat?mode=support">the chat page</a> to escalate your request, or write to [CONTACT EMAIL]. We verify your identity before acting, normally by asking you to prove control of the account, and respond within 30 days. Deleting an account ends any subscription so that no further charge occurs; the refund policy at <a href="/refunds">Refunds</a> still applies.</p>
+<h2 id="4-legal-bases-eu-and-uk">4. Legal bases (EU and UK)</h2>
+<p>We process account and billing data to perform our contract with you, security and usage data for our legitimate interest in running a secure service, and any other data with your consent, which you can withdraw.</p>
+<h2 id="5-international-transfers">5. International transfers</h2>
+<p>The Service is hosted in the United States. If you are in the EU or UK, your data is transferred to the United States under the safeguards described in the <a href="/dpa">Data Processing Addendum</a>.</p>
+<h2 id="6-security">6. Security</h2>
+<p>Stored provider keys are encrypted, the Service is reachable only over TLS, and operator functions are restricted. See the <a href="/security">Security</a> statement for plain facts, including what we do not have.</p>
+<h2 id="7-children">7. Children</h2>
+<p>The Service is not directed to anyone under 16 and we do not knowingly collect their data.</p>
+<h2 id="8-changes-and-contact">8. Changes and contact</h2>
+<p>We will update the "Last updated" date when this policy changes. Controller: [ENTITY NAME], [POSTAL ADDRESS]. Contact: [CONTACT EMAIL].</p>
+<!-- legal:end -->
+  </div>
+  <div class="legal-links">
+    <span>Policies:</span>
+    <a href="/terms">Terms of Service</a>
+    <a href="/privacy">Privacy Policy</a>
+    <a href="/refunds">Refund Policy</a>
+    <a href="/dpa">Data Processing Addendum</a>
+    <a href="/subprocessors">Subprocessors</a>
+    <a href="/security">Security</a>
+    <a href="/faq">FAQ</a>
+    <a href="/billing">Billing</a>
+  </div>
+</div>
+
+</body>
+</html>

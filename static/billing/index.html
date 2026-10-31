@@ -309,7 +309,7 @@
         </div>
         <div class="success-msg" style="margin-top:0.6rem;" id="rotate-msg"></div>
       </div>
-      <div class="help-links">Need help? <a href="/chat?mode=support">Ask the support assistant</a> · <a href="/faq">Read the FAQ</a>. Lost your key and can't load this page? The assistant can escalate a key-recovery request to the owner.</div>
+      <div class="help-links">Need help? <a href="/chat?mode=support">Ask the support assistant</a> · <a href="/faq">Read the FAQ</a>. Lost your key and can't load this page? The assistant can escalate a key-recovery request to the owner. By signing up you agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy</a> policy.</div>
     </div>
   </div>
 
@@ -359,7 +359,7 @@
         <div class="error-msg" id="ent-error"></div>
       </div>
     </div>
-    <div class="help-links">Cancel, change your card or download invoices with <strong>Manage Billing</strong> above (Stripe customer portal). Refunds and disputes are reviewed by the owner: ask the <a href="/chat?mode=support">support assistant</a> to escalate.</div>
+    <div class="help-links">Cancel, change your card or download invoices with <strong>Manage Billing</strong> above (Stripe customer portal). Refunds and disputes are reviewed by the owner: ask the <a href="/chat?mode=support">support assistant</a> to escalate. Policies: <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/refunds">Refunds</a> · <a href="/dpa">DPA</a> · <a href="/subprocessors">Subprocessors</a> · <a href="/security">Security</a>.</div>
   </div>
 
 </main>
@@ -405,7 +405,9 @@
       btn.title = available ? '' : 'Checkout unavailable on this server';
     }
     if (!_config.checkout_enabled) {
-      notice.textContent = 'Checkout unavailable on this server: Stripe is not configured, so paid plans cannot be bought here.';
+      notice.textContent = _config.checkout_disabled_reason === 'legal_pages_not_live'
+        ? 'Checkout unavailable on this server: the Terms, Privacy and Refund policy are not yet in force, so paid plans cannot be bought here.'
+        : 'Checkout unavailable on this server: Stripe is not configured, so paid plans cannot be bought here.';
       notice.style.display = 'block';
     } else {
       notice.style.display = 'none';

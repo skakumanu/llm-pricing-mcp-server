@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terms of Service — LLM Pricing API</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3347;
+      --accent: #7c6af7;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --warn: #ed8936;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 1.6; }
+    /* ── Shared nav (identical on every page; scripts/sync_nav.py, tests/test_nav_consistency.py) ── */
+    .main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;border-bottom:1px solid #23263a;position:sticky;top:0;z-index:200;gap:.5rem;flex-shrink:0}
+    .nav-brand{font-weight:700;color:#7c6af7;text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
+    .nav-spacer{flex:1}
+    .nav-links{display:flex;align-items:center;gap:.125rem}
+    .nav-links a{color:#8b93a5;text-decoration:none;padding:.35rem .6rem;border-radius:6px;font-size:.8rem;white-space:nowrap;transition:all .15s;border:none}
+    .nav-links a:hover{background:#1a1d2e;color:#e5e7eb}
+    .nav-links a.active{background:#1a1d2e;color:#7c6af7;font-weight:600}
+    .nav-links a.nav-cta{margin-left:.35rem;border:1px solid #7c6af7;color:#7c6af7}
+    .nav-links a.nav-cta:hover{background:#7c6af7;color:#fff}
+    .nav-toggle{display:none;background:none;border:1px solid #2a2d3a;color:#9ca3af;font-size:1.1rem;cursor:pointer;padding:.25rem .5rem;border-radius:6px;line-height:1;flex-shrink:0}
+    @media(max-width:760px){
+      .nav-toggle{display:block}
+      .nav-links{display:none;position:absolute;top:52px;left:0;right:0;flex-direction:column;align-items:stretch;background:#0f1117;border-bottom:1px solid #23263a;padding:.5rem 1rem;gap:.25rem;z-index:199}
+      .nav-links.open{display:flex}
+      .nav-links a{padding:.6rem .75rem;font-size:.875rem}
+      .nav-links a.nav-cta{margin-left:0;text-align:center}
+    }
+    /* ── Legal page ── */
+    .container { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+    .legal h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+    .legal .updated { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+    .legal h2 { font-size: 18px; font-weight: 600; margin: 32px 0 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+    .legal h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+    .legal p { color: var(--muted); margin: 0 0 10px; }
+    .legal ul, .legal ol { margin: 0 0 12px 1.2rem; color: var(--text); }
+    .legal li { margin: 4px 0; overflow-wrap: anywhere; }
+    .legal a { color: var(--accent); text-decoration: none; }
+    .legal a:hover { text-decoration: underline; }
+    .legal code { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 0 .35em; font-size: .9em; }
+    .legal table { border-collapse: collapse; width: 100%; margin: 10px 0 14px; font-size: 13px; background: var(--surface); border: 1px solid var(--border); }
+    .legal th, .legal td { border-bottom: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+    .legal th { background: var(--surface2); font-weight: 600; }
+    .legal-draft { border: 1px solid var(--warn); color: var(--warn); background: var(--surface); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 18px; }
+    .legal-links { margin-top: 36px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; font-size: 13px; color: var(--muted); }
+    .legal-links a { color: var(--accent); text-decoration: none; margin-right: 12px; }
+  </style>
+</head>
+<body>
+<nav class="main-nav">
+  <a href="/" class="nav-brand">⚡ LLM Pricing</a>
+  <span class="nav-spacer"></span>
+  <div class="nav-links" id="navLinks">
+    <a href="/calculator">Calculator</a>
+    <a href="/compare">Compare</a>
+    <a href="/trends">Trends</a>
+    <a href="/chat">Chat</a>
+    <a href="/mcp-setup">MCP</a>
+    <a href="/api-docs">API</a>
+    <a href="/whats-new">What's New</a>
+    <a href="/billing" class="nav-cta">Sign in</a>
+  </div>
+  <button class="nav-toggle" id="navToggle" aria-label="Menu" aria-expanded="false" aria-controls="navLinks">☰</button>
+</nav>
+<script>
+(function(){
+  var t=document.getElementById('navToggle'),l=document.getElementById('navLinks');
+  if(!t||!l)return;
+  t.onclick=function(){var o=l.classList.toggle('open');t.setAttribute('aria-expanded',o?'true':'false');};
+  var p=location.pathname.replace(/\/$/,'')||'/';
+  l.querySelectorAll('a').forEach(function(a){
+    var h=a.getAttribute('href');
+    if(h===p||h===p+'/')a.classList.add('active');
+    a.addEventListener('click',function(){l.classList.remove('open');t.setAttribute('aria-expanded','false');});
+  });
+})();
+</script>
+
+<div class="container">
+  <div class="legal">
+<!-- legal:notice -->
+<p class="updated">Last updated 2026-10-31</p>
+<!-- legal:start (generated from docs/legal/ by scripts/sync_legal.py; do not edit by hand) -->
+<h1>Terms of Service</h1>
+<p>These Terms govern your use of the LLM Pricing API service (the "Service") operated by [ENTITY NAME] ("we", "us"), a US entity. By creating an account or using the Service you agree to them. This document is a template awaiting legal review and is not in force until the notice at the top of the page is gone.</p>
+<h2 id="1-the-service">1. The Service</h2>
+<p>The Service provides verified pricing data for large language models over a REST API, the Model Context Protocol (MCP) and browser tools, a routing engine that recommends a model by cost and quality, an optional dispatch gateway that runs a model on provider keys you supply, and a support assistant. The plans, prices and limits are published on <a href="/billing">the billing page</a> and in the <a href="/faq">FAQ</a>; those figures form part of these Terms.</p>
+<h2 id="2-accounts-and-service-keys">2. Accounts and service keys</h2>
+<ul>
+<li>You sign up with an email address and receive a service key. The key is shown once; keep it secret. You are responsible for activity under your key.</li>
+<li>If you think a key has leaked, rotate it from <a href="/billing">the billing page</a> or ask the support assistant.</li>
+<li>You must give accurate information and be able to form a binding contract.</li>
+</ul>
+<h2 id="3-plans-pilot-and-payment">3. Plans, pilot and payment</h2>
+<ul>
+<li>The Free plan costs nothing. Paid plans are billed monthly in US dollars through Stripe: Pro is $29 per month and Enterprise is $299 per month.</li>
+<li>Paid plans are currently offered as a pilot to invited customers. Features, limits and prices may change; we will tell you before a change affects a subscription you already hold.</li>
+<li>Subscriptions renew until cancelled. You can cancel at any time from the Stripe customer portal; cancelling returns you to Free at the end of the paid period.</li>
+<li>If a renewal payment fails you keep your paid tier for a grace period of 14 days; after that your account is served at the Free rate limit until the invoice is paid.</li>
+<li>Taxes are added where required. Refunds are governed by the <a href="/refunds">Refund Policy</a>.</li>
+</ul>
+<h2 id="4-acceptable-use">4. Acceptable use</h2>
+<p>You will not: attack, probe or overload the Service; evade rate limits or share a key to do so; use the Service to break the law or a third party's rights; resell raw Service output as a competing pricing database; or attempt to access another customer's data. We may suspend a key that does any of these.</p>
+<h2 id="5-your-provider-keys-and-data">5. Your provider keys and data</h2>
+<p>If you store provider keys for dispatch, you authorise us to use them only to run your requests. Your use of a provider is governed by that provider's terms. How we handle personal data is described in the <a href="/privacy">Privacy Policy</a> and, where we act as your processor, the <a href="/dpa">Data Processing Addendum</a>.</p>
+<h2 id="6-pricing-data-and-no-advice">6. Pricing data and no advice</h2>
+<p>Pricing data is checked against an external registry and published with its source, but providers change prices without notice. Data is provided for information, "as is"; verify a price with the provider before you rely on it for billing or contracts. Recommendations from the router are not professional advice.</p>
+<h2 id="7-support">7. Support</h2>
+<p>Support is provided on a best effort basis through the support assistant and the owner's escalation queue. No response time is promised on any plan, and escalation priority decides the order of the queue, not a response time.</p>
+<h2 id="8-no-sla">8. No SLA</h2>
+<p>There is no service level agreement. The Service may be unavailable, slow or change without notice, and we do not promise any uptime figure or service credits.</p>
+<h2 id="9-warranty-disclaimer">9. Warranty disclaimer</h2>
+<p>To the fullest extent permitted by law, the Service is provided "as is" and "as available", without warranties of any kind, express or implied, including merchantability, fitness for a particular purpose and non-infringement.</p>
+<h2 id="10-limitation-of-liability">10. Limitation of liability</h2>
+<p>To the fullest extent permitted by law, we are not liable for indirect, incidental, special, consequential or punitive damages, or for lost profits, revenue or data. Our total liability for any claim relating to the Service is limited to the amount you paid us in the 12 months before the event giving rise to the claim, or $100 if you paid nothing.</p>
+<h2 id="11-termination">11. Termination</h2>
+<p>You may stop using the Service and ask for your account to be deleted at any time (see the <a href="/privacy">Privacy Policy</a>). We may suspend or end access for breach of these Terms or to protect the Service. Sections that by their nature should survive termination do so.</p>
+<h2 id="12-changes">12. Changes</h2>
+<p>We may update these Terms. The "Last updated" date shows the current version. Continued use after a change means you accept it.</p>
+<h2 id="13-governing-law-and-contact">13. Governing law and contact</h2>
+<p>These Terms are governed by the laws of the State of [STATE], United States, without regard to conflict-of-law rules. Courts located in [STATE] have exclusive jurisdiction, except where the law of your location requires otherwise.</p>
+<p>Contact: [CONTACT EMAIL], [POSTAL ADDRESS].</p>
+<!-- legal:end -->
+  </div>
+  <div class="legal-links">
+    <span>Policies:</span>
+    <a href="/terms">Terms of Service</a>
+    <a href="/privacy">Privacy Policy</a>
+    <a href="/refunds">Refund Policy</a>
+    <a href="/dpa">Data Processing Addendum</a>
+    <a href="/subprocessors">Subprocessors</a>
+    <a href="/security">Security</a>
+    <a href="/faq">FAQ</a>
+    <a href="/billing">Billing</a>
+  </div>
+</div>
+
+</body>
+</html>

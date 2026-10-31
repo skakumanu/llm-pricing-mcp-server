@@ -155,8 +155,34 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.85.0 -->
+  <!-- v1.86.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.86.0</span>
+      <span class="release-date">Oct 31, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Launch readiness: published terms, honest security statement, off-site backups</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong>Terms, Privacy, Refunds, DPA and Subprocessors at <a href="/terms">/terms</a>, <a href="/privacy">/privacy</a>, <a href="/refunds">/refunds</a>, <a href="/dpa">/dpa</a> and <a href="/subprocessors">/subprocessors</a>.</strong> Generated from Markdown, each with a last-updated date, linked from the site footer, the billing page and the FAQ. They are templates awaiting legal review and show a "Draft, not yet in force" notice until the owner marks them in force. Refund policy: full refund on request within 14 days of the first payment, pro-rated after, every request reviewed by the owner through the support assistant</li>
+        <li><strong>A security statement at <a href="/security">/security</a>.</strong> Plain facts about what the service does (TLS only, encrypted stored provider keys, secrets kept out of the repository, CI gates, off-site backups) and what it does not have (no SOC 2, no ISO 27001, no third-party penetration test). Reports go through the support assistant; a root <code>SECURITY.md</code> points to it</li>
+        <li><strong>Continuous database replication (Litestream) with a documented restore.</strong> Billing, pricing-history and orchestrator databases replicate to S3-compatible storage when the operator sets the replication secrets; without them the service runs exactly as before. A step-by-step restore from an empty volume is in the deployment guide</li>
+        <li><strong>Dependabot and CodeQL.</strong> Weekly grouped dependency updates for pip and GitHub Actions, and Python code scanning on every pull request and weekly. They are additional scanners; the five deploy gates are unchanged</li>
+        <li>A machine-readable launch checklist (<code>docs/LAUNCH_CHECKLIST.md</code>) and a guard that fails the build if a database is added without being replicated</li>
+      </ul>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li><strong>Checkout now needs Stripe and the legal pages in force.</strong> <code>GET /billing/config</code> gains <code>legal_pages_live</code> and <code>checkout_disabled_reason</code> (<code>stripe_not_configured</code> or <code>legal_pages_not_live</code>); <code>POST /billing/checkout</code> returns the same 503 as without Stripe until then. The customer portal is unaffected. The pages count as in force only when the operator flag is on and no placeholder remains, otherwise they stay draft</li>
+        <li>No pricing data, tiers or prices changed</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.85.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.85.0</span>

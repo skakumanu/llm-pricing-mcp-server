@@ -20,3 +20,5 @@ aiofiles
 aiosqlite
 stripe>=10.0.0
 email-validator>=2.0.0
+# v1.86.0: scripts/check_replication.py parses litestream.yml (already installed transitively by uvicorn[standard])
+pyyaml==6.0.3

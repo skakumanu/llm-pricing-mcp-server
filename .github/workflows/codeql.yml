@@ -1,0 +1,28 @@
+# CodeQL code scanning for Python (v1.86.0). Runs on pull requests and weekly. It is an
+# additional scanner, not one of the five deploy gates in ci-cd.yml.
+name: CodeQL
+
+on:
+  pull_request:
+    branches: [master, develop]
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"
