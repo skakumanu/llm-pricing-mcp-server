@@ -1,6 +1,12 @@
 """MCP Tool: Recommend a model from a free-text use-case description."""
 from typing import Any, Dict, Optional
 
+from mcp.tools._client import (
+    client_response_fields,
+    no_runnable_model_error,
+    resolve_tool_client,
+    with_runnable_count,
+)
 from mcp.tools._locale import resolve_tool_locale
 from src.services.currency import LocaleContext, conversion_metadata, local_prices_for
 from src.services.pricing_aggregator import PricingAggregatorService
@@ -109,6 +115,8 @@ class RecommendModelTool:
             if isinstance(locale, dict):
                 return locale
 
+            client_res = resolve_tool_client(arguments)
+
             task_type_arg: Optional[str] = arguments.get("task_type")
             valid_types = list_task_types()
             if task_type_arg and task_type_arg not in valid_types:
@@ -144,7 +152,12 @@ class RecommendModelTool:
                 task_type=_to_router_task_type(task_type),
                 prefer_low_latency=bool(arguments.get("prefer_low_latency", False)),
                 exclude_reasoning_models=bool(arguments.get("exclude_reasoning_models", False)),
-                ide_context=arguments.get("ide_context"),
+                # Canonical id when recognised; the raw value otherwise (the
+                # router ignores it, the cache key still distinguishes it).
+                client=(
+                    client_res.entry.id if client_res.entry
+                    else (arguments.get("client") or arguments.get("ide_context"))
+                ),
                 monthly_budget_usd=monthly_budget_usd,
                 estimated_monthly_requests=int(arguments.get("estimated_monthly_requests", 1000)),
                 avg_input_tokens=int(arguments.get("avg_input_tokens", 500)),
@@ -154,6 +167,10 @@ class RecommendModelTool:
             result = await self._cache.get_or_compute(
                 constraints, lambda: self.router.get_optimal_model(constraints)
             )
+            if result is None and client_res.entry is not None:
+                err = no_runnable_model_error(client_res)
+                err.update({"task_type": task_type, "task_type_inferred": inferred})
+                return err
             if result is None:
                 return {
                     "success": False,
@@ -214,6 +231,8 @@ class RecommendModelTool:
                 "alternatives": [_model_summary(m, locale) for m in result.alternatives],
                 "cached": result.cached,
             }
+            client_res = with_runnable_count(client_res, result.runnable_models)
+            response.update(client_response_fields(client_res))
             if caveats:
                 response["caveats"] = caveats
             if locale.active:

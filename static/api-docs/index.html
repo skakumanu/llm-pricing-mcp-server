@@ -261,8 +261,8 @@
 
       <div class="endpoint-group">
         <h3>Router</h3>
-        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/recommend</span><span class="ep-desc">Smart model routing recommendation (<code>?currency=</code> adds <code>local_prices</code>)</span><span class="ep-auth">API key</span></div>
-        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/recommend/stream</span><span class="ep-desc">Streaming router recommendation (SSE)</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/recommend</span><span class="ep-desc">Smart model routing recommendation (<code>?currency=</code> adds <code>local_prices</code>; <code>client</code> such as <code>Claude Code</code> restricts the candidates to models that tool can run before ranking)</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/recommend/stream</span><span class="ep-desc">Streaming router recommendation (SSE; same <code>client</code> restriction, emits a <code>client</code> event)</span><span class="ep-auth">API key</span></div>
         <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/router/feedback</span><span class="ep-desc">Submit routing feedback</span><span class="ep-auth">API key</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/telemetry/savings</span><span class="ep-desc">Router savings report per org</span><span class="ep-auth">API key</span></div>
       </div>

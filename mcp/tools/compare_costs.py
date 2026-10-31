@@ -2,7 +2,9 @@
 import re
 from typing import Any, Dict, List, Optional
 
+from mcp.tools._client import client_response_fields, resolve_tool_client
 from mcp.tools._locale import resolve_tool_locale
+from src.services.client_models import is_runnable
 from src.services.cost_calculator import MAX_COMPARE_MODELS, compute_token_cost
 from src.services.currency import conversion_metadata, convert, localize_cost
 from src.services.pricing_aggregator import PricingAggregatorService
@@ -62,6 +64,8 @@ class CompareCostsTool:
                 - output_tokens: int (required, >= 0)
                 - currency: str (optional) — ISO-4217 code to convert into
                 - country: str (optional) — ISO-3166 alpha-2 whose currency to use
+                - client: str (optional) — AI coding client; never filters, but each
+                  found model is flagged ``runnable_in_client``
 
         Returns:
             Dictionary with cost comparison results. cheapest/most_expensive and
@@ -76,6 +80,8 @@ class CompareCostsTool:
             locale = resolve_tool_locale(arguments)
             if isinstance(locale, dict):
                 return locale
+
+            client_res = resolve_tool_client(arguments)
 
             # Validate arguments
             if not model_names or not isinstance(model_names, list):
@@ -149,6 +155,8 @@ class CompareCostsTool:
                     "cost_per_1m_tokens": round(cost_per_1m, 2) if cost_per_1m else 0,
                     "is_available": True,
                 }
+                if client_res.entry is not None:
+                    row["runnable_in_client"] = is_runnable(client_res.entry, pricing)
                 if locale.active:
                     row["local_cost"] = localize_cost(
                         input_cost, output_cost, total_cost, locale, cost_per_1m
@@ -185,6 +193,7 @@ class CompareCostsTool:
                 "cost_range": cost_range,
                 "currency": "USD",
             }
+            result.update(client_response_fields(client_res))
             if locale.active:
                 result["local_cost_range"] = (
                     {

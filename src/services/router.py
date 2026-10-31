@@ -9,6 +9,12 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from src.services.benchmark_service import enrich_models
+from src.services.client_models import (
+    ClientEntry,
+    is_runnable,
+    resolve_client,
+    restriction_label,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +32,12 @@ class RouterConstraints:
     task_type: Optional[str] = None
     prefer_low_latency: bool = False
     exclude_reasoning_models: bool = False
-    ide_context: Optional[str] = None  # "copilot"|"cursor"|"windsurf"|"claude_code"|"jetbrains"|"amazon_q"
+    # AI coding client / MCP client (see src/services/client_models.py). A
+    # recognised client RESTRICTS the candidate set to models it can run before
+    # ranking (v1.85.0); an unrecognised value changes nothing.
+    client: Optional[str] = None
+    # Deprecated alias of ``client`` (the six legacy values still resolve).
+    ide_context: Optional[str] = None
     monthly_budget_usd: Optional[float] = None
     estimated_monthly_requests: int = 1000
     avg_input_tokens: int = 500
@@ -45,6 +56,10 @@ class RouterResult:
     # served from cache rather than freshly computed. get_optimal_model()
     # itself never sets this — it always returns cached=False.
     cached: bool = False
+    # Set when a recognised client applied: id, and how many models it can run
+    # (counted before the other hard filters).
+    client_id: Optional[str] = None
+    runnable_models: Optional[int] = None
 
 
 class ModelRouter:
@@ -63,16 +78,6 @@ class ModelRouter:
         "agentic_coding": ["agentic", "code", "coding", "tool", "agent", "multi-step"],
     }
 
-    # ide_context -> provider names that are native to that IDE (get a score boost)
-    _IDE_NATIVE_PROVIDERS = {
-        "copilot": ["github copilot"],
-        "cursor": ["cursor"],
-        "windsurf": ["windsurf", "codeium"],
-        "claude_code": ["anthropic"],
-        "jetbrains": ["jetbrains ai"],
-        "amazon_q": ["amazon q developer"],
-    }
-
     def __init__(self, aggregator) -> None:
         self._aggregator = aggregator
 
@@ -88,6 +93,11 @@ class ModelRouter:
             return None
 
         models = await enrich_models(models)
+
+        entry = _client_entry(constraints)
+        runnable_count = (
+            sum(1 for m in models if is_runnable(entry, m)) if entry is not None else None
+        )
 
         candidates = self.rank_models(models, constraints)
         if not candidates:
@@ -121,6 +131,8 @@ class ModelRouter:
             score=round(best_score, 4),
             reason=reason,
             alternatives=alternatives,
+            client_id=entry.id if entry is not None else None,
+            runnable_models=runnable_count,
         )
 
     def rank_models(self, models: List[object], constraints: RouterConstraints) -> List[object]:
@@ -149,6 +161,10 @@ class ModelRouter:
         reports the returned code in its receipt's exclusion list; rank_models()
         keeps exactly the models for which this returns None.
         """
+        entry = _client_entry(constraints)
+        if entry is not None and not is_runnable(entry, m):
+            return "not_runnable_in_client"
+
         avg_cost_1m = (m.cost_per_input_token + m.cost_per_output_token) / 2 * 1_000_000
 
         if constraints.max_cost_per_1m_tokens is not None:
@@ -206,10 +222,11 @@ class ModelRouter:
         ):
             base *= 1.10
 
-        # ide_context: native IDE tools get a strong boost; same provider, non-native gets a mild one
-        if constraints.ide_context:
-            native_providers = self._IDE_NATIVE_PROVIDERS.get(constraints.ide_context.lower(), [])
-            if any(np in m.provider.lower() for np in native_providers):
+        # client: inside the restricted set, the client's own plans get a strong
+        # boost; same-provider, non-native models get a mild one
+        entry = _client_entry(constraints)
+        if entry is not None:
+            if any(np in m.provider.lower() for np in entry.native_providers):
                 if getattr(m, "ide_native", False):
                     base *= 5.0   # strong: user is in this IDE, prefer its own tooling
                 else:
@@ -228,6 +245,11 @@ class ModelRouter:
                 base *= 0.60
 
         return base
+
+
+def _client_entry(constraints: RouterConstraints) -> Optional[ClientEntry]:
+    """The recognised client in effect (``client`` wins over legacy ``ide_context``)."""
+    return resolve_client(constraints.client or constraints.ide_context)
 
 
 def _build_reason(
@@ -250,8 +272,9 @@ def _build_reason(
         parts.append(f"cost=${cost_1m:.2f}/1M tokens")
     if c.preferred_provider and model.provider.lower() == c.preferred_provider.lower():
         parts.append("preferred provider bonus applied")
-    if c.ide_context:
-        parts.append(f"ide_context={c.ide_context}")
+    entry = _client_entry(c)
+    if entry is not None:
+        parts.append(f"client={entry.id} (restricted to {restriction_label(entry)})")
     if c.exclude_reasoning_models:
         parts.append("reasoning models excluded")
     if c.prefer_low_latency and model.latency_ms is not None:

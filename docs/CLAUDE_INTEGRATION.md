@@ -63,6 +63,13 @@ Add to `claude_desktop_config.json` (Settings → Developer → Edit Config), th
 - `support_chat` answers questions about this service (plans, billing, keys, rate limits, how to connect) from the published [FAQ](FAQ.md); with setup B it also knows your own account. Anything it cannot do (refunds, disputes, a lost key) it escalates to the owner and returns a reference.
 - Try: *"Use support_chat to ask what plan I am on and what my rate limit is."*
 
+## Recommendations for the tool you run
+
+- `recommend_model`, `optimize_workload` and `compare_costs` accept `client` and then only name models that tool can run (Claude Desktop / claude.ai and Claude Code are Anthropic-only). Connected through the hosted server, Claude Desktop, claude.ai and Claude Code are inferred from the MCP handshake when you omit `client` (best effort; older clients that do not echo the `Mcp-Session-Id` header get the unfiltered ranking plus a note). Local STDIO infers from the same handshake.
+- To override, pass `client` explicitly (e.g. `"client": "cursor"`); an explicit value always wins. The old `ide_context` argument is a deprecated alias that now restricts instead of only boosting.
+- Try: *"Use recommend_model with client claude_code to pick the cheapest model for refactoring a Python module."*
+- Recognised clients and the full override order: [MCP_QUICK_START.md § Client-aware recommendations](MCP_QUICK_START.md#client-aware-recommendations).
+
 ## Example prompts
 
 - *"Cheapest model under $2/1M tokens for summarization?"*
