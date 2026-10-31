@@ -155,8 +155,25 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.82.0 -->
+  <!-- v1.82.1 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.82.1</span>
+      <span class="release-date">Oct 31, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Typos in <code>.env</code> are caught at startup again</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li><strong>Self-hosters: unknown <code>.env</code> keys fail fast.</strong> Since v1.81.2 a misspelled key in <code>.env</code> (for example <code>MCP_APIKEY</code>) was silently ignored, so the server could start without the setting you meant to apply. Startup now stops with an error naming the unknown key. Keys of retired settings, such as the old Anyscale key, are still accepted, and environment variables set outside <code>.env</code> behave as before</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.82.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.82.0</span>
