@@ -19,7 +19,6 @@ class Settings(BaseSettings):
     fireworks_api_key: Optional[str] = None
     perplexity_api_key: Optional[str] = None
     ai21_api_key: Optional[str] = None
-    anyscale_api_key: Optional[str] = None
     xai_api_key: Optional[str] = None
     deepseek_api_key: Optional[str] = None
     cerebras_api_key: Optional[str] = None
@@ -116,9 +115,13 @@ class Settings(BaseSettings):
     # repr of Settings never shows it.
     provider_key_encryption_key: Optional[SecretStr] = None
 
+    # v1.81.2: "extra": "ignore" so a deployment whose .env still carries a key for a
+    # retired provider (see tests/test_provider_retirement.py) starts normally instead of failing with
+    # "Extra inputs are not permitted" at import.
     model_config = {
         "env_file": ".env",
-        "case_sensitive": False
+        "case_sensitive": False,
+        "extra": "ignore",
     }
 
 

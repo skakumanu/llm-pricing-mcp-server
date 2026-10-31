@@ -14,7 +14,6 @@ from src.services.together_pricing import TogetherPricingService
 from src.services.fireworks_pricing import FireworksPricingService
 from src.services.perplexity_pricing import PerplexityPricingService
 from src.services.ai21_pricing import AI21PricingService
-from src.services.anyscale_pricing import AnyscalePricingService
 from src.services.bedrock_pricing import BedrockPricingService
 from src.services.xai_pricing import XAIPricingService
 from src.services.deepseek_pricing import DeepSeekPricingService
@@ -56,7 +55,6 @@ PROVIDER_SERVICES: List[Tuple[str, Type[BasePricingProvider]]] = [
     ("fireworks_service", FireworksPricingService),
     ("perplexity_service", PerplexityPricingService),
     ("ai21_service", AI21PricingService),
-    ("anyscale_service", AnyscalePricingService),
     ("bedrock_service", BedrockPricingService),
     ("xai_service", XAIPricingService),
     ("deepseek_service", DeepSeekPricingService),
@@ -103,7 +101,6 @@ PROVIDER_FILTER_ALIASES: Dict[str, str] = {
     "perplexity ai": "perplexity_service",
     "ai21": "ai21_service",
     "ai21 labs": "ai21_service",
-    "anyscale": "anyscale_service",
     "bedrock": "bedrock_service",
     "amazon bedrock": "bedrock_service",
     "xai": "xai_service",
