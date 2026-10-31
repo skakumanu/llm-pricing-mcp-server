@@ -1,533 +1,118 @@
-# VS Code Integration Guide
+# VS Code Integration
 
-> **Version**: 1.2  
-> **Target**: Developers & MCP Client Users  
-> **Updated**: October 31, 2026
+Two uses: **connect VS Code's MCP clients** to the server, or **develop the server** in VS Code.
 
-## Overview
+## Connect an MCP client
 
-This guide explains how to use Visual Studio Code with the LLM Pricing MCP Server for both **development** and **client usage**.
+Point any client at the hosted server; no install. Tools and access levels: [tool reference](MCP_QUICK_START.md#tool-reference-31).
 
-## Quick Start
+| Client | Where | Config shape |
+|---|---|---|
+| GitHub Copilot (Agent mode) | **MCP: Open User Configuration**, or `.vscode/mcp.json` for this workspace | `servers` + `"type": "http"` |
+| Cline | Settings (⚙) → MCP Servers → Edit JSON | `mcpServers` |
+| Continue | `mcpServers` section of its settings | `mcpServers` |
+| Claude Desktop | Not a VS Code setting; see [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md) | connector |
 
-### Prerequisites
-- VS Code 1.85 or later
-- Python 3.11 recommended (CI and the Docker image use 3.11)
-- Git (for cloning the repository)
-
-### Initial Setup
-
-1. **Clone and Open Repository**
-   ```bash
-   git clone https://github.com/skakumanu/llm-pricing-mcp-server.git
-   cd llm-pricing-mcp-server
-   code .
-   ```
-
-2. **Install Recommended Extensions**
-   - When opening the workspace, VS Code will prompt you to install recommended extensions
-   - Click **"Install All"** to get the full development experience
-   - Core extensions: Python, Pylance, Black Formatter, Flake8
-
-3. **Create Virtual Environment**
-   ```bash
-   python -m venv .venv
-   .venv\Scripts\activate  # Windows
-   # or
-   source .venv/bin/activate  # macOS/Linux
-   ```
-
-4. **Install Dependencies**
-   - Press `Ctrl+Shift+P` (Windows/Linux) or `Cmd+Shift+P` (macOS)
-   - Type: **"Tasks: Run Task"**
-   - Select: **"Install Dependencies"**
-   
-   Or manually:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## Development Workflow
-
-### Running the MCP Server
-
-#### Method 1: Using VS Code Tasks (Recommended)
-
-Press `Ctrl+Shift+P` → **"Tasks: Run Task"** → Choose:
-
-- **Run MCP Server (STDIO)** - Start MCP server in STDIO mode for Claude Desktop integration
-- **Run REST API Server** - Start FastAPI server on port 8000 with hot reload
-- **Quick Validate MCP Server** - Run `scripts/quick_validate.py`: initialize, tool discovery, the 5 core pricing tools and an unknown-tool error check over STDIO
-
-#### Method 2: Using Terminal
-
-```bash
-# STDIO mode (for MCP clients like Claude Desktop, Cline, Continue)
-python mcp/server.py
-
-# REST API mode
-python -m uvicorn src.main:app --reload --port 8000
-```
-
-### Debugging
-
-VS Code provides 3 debug configurations (`.vscode/launch.json`) accessible via **Run and Debug** panel (`Ctrl+Shift+D`):
-
-| Configuration | Purpose | When to Use |
-|--------------|---------|-------------|
-| **MCP Server (STDIO)** | Run the MCP stdio server with breakpoints | Testing MCP client integration |
-| **MCP Server (Debug)** | Same, with `justMyCode` off and `DEBUG=1` | Stepping into library code, verbose logging |
-| **FastAPI Server** | Run the REST API (`src/main.py`) with breakpoints | REST API development |
-
-To debug an individual test file or the whole suite instead, use the **Testing** panel (beaker icon) — its per-test and per-file debug buttons don't require a `launch.json` entry.
-
-**To debug:**
-1. Set breakpoints by clicking left of line numbers
-2. Press `F5` or select configuration from Run panel
-3. Use debug toolbar: Continue (`F5`), Step Over (`F10`), Step Into (`F11`), Step Out (`Shift+F11`)
-
-### Testing
-
-#### Run Tests via Tasks
-
-Press `Ctrl+Shift+P` → **"Tasks: Run Task"**:
-
-- **Run All Tests** - Execute the full test suite
-- **Run Tests with Coverage** - Generate coverage report
-- **Quick Validate MCP Server** - Fast pre-deployment validation
-
-#### Run Tests via Testing Panel
-
-1. Click **Testing** icon in Activity Bar (beaker icon)
-2. Tests auto-discovered from `tests/` directory
-3. Click play button next to test to run
-4. Green check = passed, Red X = failed
-
-#### Run Tests via Command Line
-
-```bash
-# All tests
-pytest tests/ -v
-
-# Specific test file
-pytest tests/test_api.py -v
-
-# With coverage
-pytest tests/ --cov=src --cov-report=html
-
-# Quick validation (recommended before deployment)
-python scripts/quick_validate.py
-```
-
-### Code Quality
-
-#### Auto-formatting on Save
-- Enabled by default in workspace settings
-- Uses **Black** formatter (88 character line length; flake8 allows up to 119 via `.flake8`)
-- Imports auto-organized on save
-
-#### Manual Formatting & Linting
-
-Press `Ctrl+Shift+P` → **"Tasks: Run Task"**:
-- **Format Code (Black)** - Format all Python files
-- **Lint Code (Flake8)** - Check code quality
-
-Or via terminal:
-```bash
-black src/ tests/ scripts/
-flake8 src/ tests/ scripts/
-```
-
-## Workspace Configuration
-
-### Settings Overview
-
-The workspace includes optimized settings in `.vscode/settings.json`:
-
-| Setting | Value | Purpose |
-|---------|-------|---------|
-| `python.defaultInterpreterPath` | `${workspaceFolder}/.venv/Scripts/python.exe` | Windows venv layout; on macOS/Linux select `.venv/bin/python` instead |
-| `python.testing.pytestEnabled` | `true` | Enable pytest framework |
-| `editor.formatOnSave` | `true` | Auto-format on save |
-| `editor.rulers` | `[88, 120]` | Visual line length guides |
-| `python.analysis.typeCheckingMode` | `basic` | Enable type checking |
-
-### Customizing Settings
-
-1. Open **Settings** (`Ctrl+,`)
-2. Switch to **Workspace** tab (overrides user settings)
-3. Search for setting (e.g., "python.testing")
-4. Modify as needed
-
-## MCP Client Usage in VS Code
-
-### Option 1: Remote HTTP (Recommended, No Install)
-
-Every MCP-capable client — Copilot, Cline, Continue, Claude Desktop — can point directly at the hosted server instead of running a local process:
+Copilot:
 
 ```json
-{
-  "mcpServers": {
-    "llm-pricing": {
-      "url": "https://llm-pricing-api.fly.dev/mcp"
-    }
-  }
-}
+{ "servers": { "llm-pricing": { "type": "http", "url": "https://llm-pricing-api.fly.dev/mcp" } } }
 ```
 
-Where this JSON goes depends on your client — see Options 2 and 3 below. This is the config used across the [`/mcp-setup`](../static/mcp-setup/index.html) page and the project README; local STDIO (Options 4–5) is only needed for offline use or when developing the server itself.
+- Cline and Continue use the same entry under `mcpServers`, without `type`.
+- **Copilot**: open Chat, switch to **Agent**, click the tools icon, enable **llm-pricing**.
+- **Cline**: run **Cline: Reload MCP Servers**. **Continue**: restart VS Code.
+- To send a service key, add an `x-api-key` header, or use the [npx bridge](MCP_QUICK_START.md#npx-bridge-stdio-no-clone).
 
-### Option 2: GitHub Copilot (Agent Mode)
+## Develop the server
 
-Copilot's built-in MCP support uses its own config shape — a `servers` key with an explicit `type`, not `mcpServers`:
-
-1. Command Palette (`Ctrl+Shift+P`) → **MCP: Open User Configuration** (all workspaces), or create `.vscode/mcp.json` in this workspace for a project-only server.
-2. Add:
-   ```json
-   {
-     "servers": {
-       "llm-pricing": {
-         "type": "http",
-         "url": "https://llm-pricing-api.fly.dev/mcp"
-       }
-     }
-   }
-   ```
-3. Open the Copilot Chat panel, switch to **Agent** mode, click the tools icon, and enable **llm-pricing**.
-
-### Option 3: Cline & Continue
-
-1. In Cline: Settings (⚙) → MCP Servers → Edit JSON. In Continue: open the `mcpServers` section of its settings.
-2. Add the `mcpServers`-shaped config from Option 1 above.
-3. Command Palette → **Cline: Reload MCP Servers** (or restart VS Code for Continue).
-
-### Option 4: Claude Desktop
-
-Claude Desktop reads a separate config file, not a VS Code setting:
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-
-Use the Option 1 JSON for the hosted server (no install), or for local STDIO:
-```json
-{
-  "mcpServers": {
-    "llm-pricing": {
-      "command": "C:\\Users\\YourUsername\\...\\llm-pricing-mcp-server\\.venv\\Scripts\\python.exe",
-      "args": ["C:\\Users\\YourUsername\\...\\llm-pricing-mcp-server\\mcp\\server.py"],
-      "env": { "PYTHONUNBUFFERED": "1" }
-    }
-  }
-}
-```
-Replace `YourUsername` and paths with your actual paths, then restart Claude Desktop.
-
-**See also**: [MCP_QUICK_START.md](MCP_QUICK_START.md) for the full client-setup reference.
-
-### Option 5: VS Code Terminal (Manual JSON-RPC, Development/Testing)
-
-Run the MCP server directly in the VS Code terminal to send raw JSON-RPC requests:
+### Setup
 
 ```bash
-python mcp/server.py
-# Server listens on STDIN/STDOUT for JSON-RPC 2.0 messages
+git clone https://github.com/skakumanu/llm-pricing-mcp-server.git && cd llm-pricing-mcp-server
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt && code .
 ```
 
-Example request:
-```json
-{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}
+- Needs VS Code 1.85+ and Python 3.11 (what CI and Docker use).
+- Accept the **Install All** extension prompt: Python, Pylance, Black Formatter, Flake8.
+- The interpreter path defaults to the Windows layout. On macOS/Linux, pick `.venv/bin/python` via **Python: Select Interpreter**.
+
+### Tasks
+
+`Ctrl+Shift+P` → **Tasks: Run Task** (defined in `.vscode/tasks.json`):
+
+| Task | Does |
+|---|---|
+| Run MCP Server (STDIO) | `python mcp/server.py` |
+| Run REST API Server | uvicorn on port 8000 with reload |
+| Quick Validate MCP Server | `scripts/quick_validate.py` STDIO smoke test |
+| Run All Tests / Run Tests with Coverage | pytest, optionally with `--cov=src` |
+| Format Code (Black) / Lint Code (Flake8) | formatting and lint over `src/ tests/ scripts/` |
+| Install Dependencies | `pip install -r requirements.txt` |
+| Generate MCP Schemas | `python mcp/schema_generator.py`, after editing tool schemas |
+
+- Tasks call `.venv/Scripts/python.exe`, the Windows layout. On macOS/Linux, run the commands in the terminal instead.
+
+### Debug
+
+`F5` or the Run and Debug panel (`Ctrl+Shift+D`), from `.vscode/launch.json`:
+
+| Configuration | Use |
+|---|---|
+| MCP Server (STDIO) | Breakpoints in the STDIO server and tools |
+| MCP Server (Debug) | Same, with `justMyCode: false` and `DEBUG=1` to step into libraries |
+| FastAPI Server | Breakpoints in the REST API (`src/main.py`) |
+
+- To debug a test, use the **Testing** panel's per-test debug button; no launch entry is needed.
+- To hit a tool breakpoint, start **MCP Server (STDIO)** and call the tool directly:
+  `python -c "import asyncio; from mcp.tools.estimate_cost import EstimateCostTool; print(asyncio.run(EstimateCostTool().execute({'model_name':'gpt-4o','input_tokens':1000,'output_tokens':500})))"`
+
+### Test
+
+- The **Testing** panel (beaker icon) auto-discovers `tests/`.
+- Defaults: `Ctrl+; A` runs all, `Ctrl+; C` runs the test at the cursor, `Ctrl+; L` reruns the last run.
+- CLI: `pytest tests/ -q`; skip slow ones with `-m "not slow"`.
+- What each test file covers: [MCP_TESTING.md](MCP_TESTING.md).
+
+### Code style
+
+- Black formats on save at 88 columns; flake8 allows 119 (`.flake8`). Rulers are set at 88 and 120.
+- Imports are organised on save. Type checking is `basic`.
+
+### REST requests from the editor
+
+With REST Client or Thunder Client and the API running locally, save this as an `.http` file:
+
+```http
+POST http://localhost:8000/cost-estimate/batch
+Content-Type: application/json
+
+{"model_names": ["gpt-4o", "claude-sonnet-4-6", "gemini-2.5-pro"], "input_tokens": 1000, "output_tokens": 500}
 ```
 
-### Option 6: REST API Testing
+- All endpoints: https://llm-pricing-api.fly.dev/api-docs
 
-The REST API is separate from the MCP tools — same underlying pricing data, plain HTTP instead of JSON-RPC. VS Code's REST client extensions (Thunder Client, REST Client) work well here:
+### Ship a change
 
-1. **Create a test file** (e.g., `api-tests.http`):
-   ```http
-   ### Get all pricing data
-   GET http://localhost:8000/pricing
-
-   ### Estimate cost for one model
-   POST http://localhost:8000/cost-estimate
-   Content-Type: application/json
-
-   {
-     "model_name": "gpt-4o",
-     "input_tokens": 1000,
-     "output_tokens": 500
-   }
-
-   ### Compare costs across models
-   POST http://localhost:8000/cost-estimate/batch
-   Content-Type: application/json
-
-   {
-     "model_names": ["gpt-4o", "claude-sonnet-4-6", "gemini-2.5-pro"],
-     "input_tokens": 1000,
-     "output_tokens": 500
-   }
-   ```
-
-2. **Run requests** by clicking **"Send Request"** above each section
-
-## Common Tasks
-
-### Task: Validate Before Deployment
-
-```bash
-# Run quick validation (STDIO smoke test of the 5 core pricing tools)
-python scripts/quick_validate.py
-
-# Run the full suite
-pytest tests/ -q
-```
-
-Or via VS Code:
-- Press `Ctrl+Shift+P` → **"Tasks: Run Task"** → **"Quick Validate MCP Server"**
-
-If both pass, follow the git-flow promotion in [CONTRIBUTING.md](CONTRIBUTING.md) — there is no local deploy step; production deploys happen automatically when a promotion PR merges to `master` (see below).
-
-### Task: Test a Single Tool
-
-1. Start MCP server in debug mode:
-   - Press `F5` → Select **"MCP Server (STDIO)"**
-   - Set breakpoint in tool file (e.g., `mcp/tools/estimate_cost.py`)
-
-2. Call it directly to trigger the breakpoint:
-   ```bash
-   python -c "
-   import asyncio
-   from mcp.tools.estimate_cost import EstimateCostTool
-   print(asyncio.run(EstimateCostTool().execute({
-       'model_name': 'gpt-4o', 'input_tokens': 1000, 'output_tokens': 500
-   })))
-   "
-   ```
-
-3. Debugger will pause at breakpoint
-
-### Task: Generate Updated Schemas
-
-After modifying MCP tool schemas:
-
-```bash
-# Regenerate JSON schemas
-python mcp/schema_generator.py
-
-# Or via task
-Ctrl+Shift+P → "Tasks: Run Task" → "Generate MCP Schemas"
-```
-
-### Task: Deploy a New Version
-
-There is no local deploy tooling — production runs on Fly.io, and deploys are entirely
-CI/CD-driven:
-
-1. Ship the change through the normal git flow: `feature/*` → PR to `develop` → clean
-   promotion (`scripts/promote_branch_content.sh`) → PR to `master`.
-2. Merging to `master` triggers the `CI/CD Pipeline` workflow, which runs the full test
-   suite and, if it passes, deploys via `flyctl deploy` followed by a health check.
-3. Watch the run under **Actions** in GitHub, or `curl https://llm-pricing-api.fly.dev/health`
-   once it completes.
-
-The workflow definition (`.github/workflows/ci-cd.yml`), this repo's `CLAUDE.md` (git-flow
-rules, release checklist), and `DEPLOYMENT.md` are the authoritative source for this.
-`DEPLOYMENT_IMPLEMENTATION.md` is a historical implementation record for the health-check/
-graceful-shutdown feature, not a deployment runbook — do not follow it for deployment.
+- There is no local deploy. Validate with Quick Validate and `pytest tests/ -q`.
+- Then follow git flow: `feature/*` → PR to `develop` → PR to `master` ([CONTRIBUTING.md](CONTRIBUTING.md)).
+- Merging to `master` runs `.github/workflows/ci-cd.yml`, which tests, deploys to Fly.io and runs a health check.
+- Runbook: [DEPLOYMENT.md](DEPLOYMENT.md). [DEPLOYMENT_IMPLEMENTATION.md](archive/DEPLOYMENT_IMPLEMENTATION.md) is a historical record, not a runbook.
 
 ## Troubleshooting
 
-### Issue: Tests Not Discovered
+| Problem | Fix |
+|---|---|
+| Tests not discovered | Activate the venv, select the `.venv` interpreter, **Developer: Reload Window** |
+| Import errors | Run from the workspace root (it must be on `PYTHONPATH`); restart the terminal |
+| MCP server won't start | Python 3.11; reinstall requirements. `mcp/` is a local package, not the `mcp` pip package |
+| Breakpoints not hit | Use **MCP Server (Debug)** (`justMyCode: false`) |
+| REST port busy | Stop the other process on 8000 |
 
-**Solution:**
-1. Ensure virtual environment is activated
-2. Check Python interpreter: Click Python version in status bar → Select `.venv` interpreter
-3. Reload window: `Ctrl+Shift+P` → **"Developer: Reload Window"**
+## More
 
-### Issue: Import Errors
-
-**Solution:**
-1. Verify `PYTHONPATH` includes workspace root:
-   ```bash
-   echo $env:PYTHONPATH  # Windows PowerShell
-   echo $PYTHONPATH      # macOS/Linux
-   ```
-2. Should include: `C:\Users\...\llm-pricing-mcp-server`
-3. Restart VS Code terminal
-
-### Issue: MCP Server Won't Start
-
-**Solution:**
-1. Check Python version: `python --version` (3.11 recommended)
-2. Verify dependencies installed: `pip install -r requirements.txt` (the server has no `mcp` pip package dependency; `mcp/` is a local package)
-3. Check logs in VS Code terminal for specific errors
-4. Ensure no other process using same port (for REST API mode)
-
-### Issue: Debugging Breakpoints Not Hit
-
-**Solution:**
-1. Use the **MCP Server (Debug)** configuration, which sets `justMyCode` to `false` (the other two keep it `true`)
-2. Check breakpoint is in executed code path
-3. Verify correct debug configuration selected
-4. Clear breakpoints and re-add: `Ctrl+Shift+F9`
-
-### Issue: Slow Test Execution
-
-**Solution:**
-1. Run specific test file instead of entire suite:
-   ```bash
-   pytest tests/test_api.py -v
-   ```
-2. Use quick validation for fast checks:
-   ```bash
-   python scripts/quick_validate.py
-   ```
-3. Skip slow tests: `pytest -m "not slow"`
-
-## VS Code Extensions Reference
-
-### Essential Extensions (recommended in `.vscode/extensions.json`)
-
-| Extension | Purpose | Usage |
-|-----------|---------|-------|
-| **Python** | Python language support | Auto-enabled |
-| **Pylance** | Fast Python language server | Type checking, IntelliSense |
-| **Black Formatter** | Code formatting | Auto-format on save |
-| **Flake8** | Code linting | Real-time error detection |
-
-### Recommended Extensions
-
-| Extension | Purpose | Usage |
-|-----------|---------|-------|
-| **Thunder Client** | REST API testing | Test FastAPI endpoints |
-| **GitLens** | Git supercharged | View blame, history inline |
-| **Git Graph** | Visualize git branches | View commit graph |
-| **Docker** | Container management | Build/deploy containers |
-| **Markdown All in One** | Markdown editing | Edit documentation |
-| **TODO Tree** | Track TODOs | Find TODO/FIXME comments |
-
-### Optional Extensions
-
-- **Python Test Adapter** - Visual test runner in sidebar
-- **Code Spell Checker** - Catch typos in code/docs
-- **Better Comments** - Colorize comment types
-- **Remote - SSH** - Connect to remote servers
-
-## Keyboard Shortcuts
-
-### Essential Shortcuts
-
-| Action | Windows/Linux | macOS |
-|--------|--------------|-------|
-| Command Palette | `Ctrl+Shift+P` | `Cmd+Shift+P` |
-| Quick Open File | `Ctrl+P` | `Cmd+P` |
-| Toggle Terminal | `Ctrl+` ` | `Cmd+` ` |
-| Run/Debug | `F5` | `F5` |
-| Run Build Task | `Ctrl+Shift+B` | `Cmd+Shift+B` |
-| Find in Files | `Ctrl+Shift+F` | `Cmd+Shift+F` |
-| Go to Definition | `F12` | `F12` |
-| Find References | `Shift+F12` | `Shift+F12` |
-| Format Document | `Shift+Alt+F` | `Shift+Option+F` |
-| Toggle Comment | `Ctrl+/` | `Cmd+/` |
-
-### Testing Shortcuts
-
-| Action | Shortcut |
-|--------|----------|
-| Run Test at Cursor | `Ctrl+; C` |
-| Debug Test at Cursor | `Ctrl+; Ctrl+C` |
-| Rerun Last Run | `Ctrl+; L` |
-| Run All Tests | `Ctrl+; A` |
-
-These are VS Code defaults (`Cmd` on macOS); the repo ships no custom keybindings.
-
-## Tips & Best Practices
-
-### Tip 1: Use Workspace Folders
-If working on multiple MCP servers or related projects, use VS Code Multi-root Workspaces:
-```json
-// workspace.code-workspace
-{
-  "folders": [
-    {"path": "llm-pricing-mcp-server"},
-    {"path": "another-mcp-project"}
-  ]
-}
-```
-
-### Tip 2: Quick Task Execution
-Add to `keybindings.json` for one-key task execution:
-```json
-[
-  {
-    "key": "ctrl+shift+t",
-    "command": "workbench.action.tasks.runTask",
-    "args": "Quick Validate MCP Server"
-  }
-]
-```
-
-### Tip 3: Live Share for Collaboration
-Install **Live Share** extension to pair program on MCP development:
-1. Install: `ms-vsliveshare.vsliveshare`
-2. Click **Live Share** in status bar
-3. Share link with collaborators
-
-### Tip 4: Use Snippets
-Create Python snippets for common MCP patterns:
-- File → Preferences → Configure User Snippets → Python
-- Add snippets for tool definitions, test cases, etc.
-
-### Tip 5: Zen Mode for Focus
-Press `Ctrl+K Z` to enter Zen Mode (distraction-free coding).
-
-## Integration with MCP Documentation
-
-This guide complements other MCP documentation:
-
-- **[MCP_QUICK_START.md](MCP_QUICK_START.md)** - Initial MCP setup (5-minute guide)
-- **[CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md)** - Claude Desktop configuration
-- **[MCP_TESTING.md](MCP_TESTING.md)** - Testing guide (pytest suite, manual STDIO checks, `quick_validate.py`)
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture overview
-
-## Next Steps
-
-### For Developers
-1. ✅ Set up VS Code workspace (this guide)
-2. ✅ Run quick validation: `python scripts/quick_validate.py`
-3. ✅ Explore codebase: Start with `src/main.py` → `mcp/server.py` → `mcp/tools/`
-4. ✅ Run tests: `pytest tests/ -v`
-5. ✅ Make changes and test locally
-6. ✅ Read [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines
-
-### For MCP Client Users
-1. ✅ Set up Claude Desktop: Follow [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md)
-2. ✅ Configure MCP server in Claude config
-3. ✅ Test with simple query: "What's the pricing for GPT-4?"
-4. ✅ Explore the MCP tools via Claude — see [MCP_QUICK_START.md](MCP_QUICK_START.md) for the current count and full list
-
-### For DevOps/Deployers
-1. ✅ Validate locally: `python scripts/quick_validate.py` and `pytest tests/ -q`
-2. ✅ Follow the git-flow promotion in [CONTRIBUTING.md](CONTRIBUTING.md) — `feature/*` → `develop` (PR) → `master` (PR)
-3. ✅ Deploy to production happens automatically on merge to `master` via `.github/workflows/ci-cd.yml` (Fly.io + health check) — there is no separate local deploy step
-
-## Additional Resources
-
-- **MCP Specification**: https://spec.modelcontextprotocol.io/
-- **VS Code Python Tutorial**: https://code.visualstudio.com/docs/python/python-tutorial
-- **VS Code Debugging**: https://code.visualstudio.com/docs/editor/debugging
-- **FastAPI Documentation**: https://fastapi.tiangolo.com/
-- **pytest Documentation**: https://docs.pytest.org/
-
-## Support & Contribution
-
-- **Issues**: Report bugs via GitHub Issues
-- **Discussions**: Ask questions in GitHub Discussions
-- **Contributing**: See [CONTRIBUTING.md](CONTRIBUTING.md)
-- **Security**: Report vulnerabilities privately to the maintainer rather than in a public issue
-
----
-
-**Version History**
-- v1.2 (2026-10-31): Flagged the two tasks whose scripts no longer exist; corrected the Python version, interpreter path, test keyboard shortcuts and quick-validate description; removed a dead security-doc link
-- v1.1 (2026-08-10): Fixed the MCP stdio entrypoint (was `src/main.py`, actually `mcp/server.py`); added GitHub Copilot and Cline/Continue MCP setup, previously missing despite the guide's title; corrected REST API example paths and request bodies to match the live endpoints
-- v1.0 (2026-02-20): Initial VS Code integration guide
+- Recommended extras: Thunder Client, GitLens, Docker.
+- Workspace files: [`.vscode/README.md`](../.vscode/README.md)
+- Architecture: [ARCHITECTURE.md](ARCHITECTURE.md)
+- MCP spec: https://spec.modelcontextprotocol.io/

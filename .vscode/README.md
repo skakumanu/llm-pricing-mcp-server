@@ -1,50 +1,15 @@
-# VS Code Configuration
+# VS Code Workspace
 
-This directory contains VS Code workspace configuration for optimal development experience.
+| File | Holds |
+|---|---|
+| `settings.json` | Interpreter, Black on save, pytest, Flake8 |
+| `tasks.json` | Run server / REST API, tests, quick validate, format, lint, schemas |
+| `launch.json` | Debug: MCP Server (STDIO), MCP Server (Debug), FastAPI Server |
+| `extensions.json` | Recommended extensions |
 
-## Files
+- Accept the recommended-extensions prompt on first open.
+- Run tasks with `Ctrl+Shift+P` → **Tasks: Run Task**. Debug with `F5`.
+- Paths point at the Windows venv layout (`.venv/Scripts/python.exe`).
+- On macOS/Linux, choose `.venv/bin/python` via **Python: Select Interpreter**.
 
-- **settings.json** - Workspace settings (Python interpreter, formatting, testing)
-- **tasks.json** - Common development tasks (run server, tests, validation)
-- **extensions.json** - Recommended VS Code extensions
-- **launch.json** - Debug configurations for various scenarios
-
-## Quick Start
-
-1. Open this workspace in VS Code
-2. Install recommended extensions when prompted (or manually via Extensions panel)
-3. VS Code will automatically:
-   - Use the `.venv` Python virtual environment (`python.defaultInterpreterPath` points at the Windows layout, `.venv/Scripts/python.exe`; on macOS/Linux pick `.venv/bin/python` with **Python: Select Interpreter**)
-   - Enable pytest for testing
-   - Configure Black formatter
-   - Set up Flake8 linting
-
-## Usage
-
-### Running Tasks
-Press `Ctrl+Shift+P` → **"Tasks: Run Task"** → Select task:
-- Run MCP Server (STDIO)
-- Run REST API Server
-- Quick Validate MCP Server
-- Run All Tests / Run Tests with Coverage
-- Format Code (Black) / Lint Code (Flake8)
-- And more...
-
-### Debugging
-Press `F5` or go to Run and Debug panel (`Ctrl+Shift+D`):
-- MCP Server (STDIO)
-- MCP Server (Debug)
-- FastAPI Server
-
-## Documentation
-
-For complete VS Code integration guide, see:
-**[docs/VS_CODE_INTEGRATION.md](../docs/VS_CODE_INTEGRATION.md)**
-
-This guide includes:
-- Detailed setup instructions
-- Development workflow
-- Testing procedures
-- Troubleshooting tips
-- Keyboard shortcuts
-- Integration with MCP tools
+Full guide: [docs/VS_CODE_INTEGRATION.md](../docs/VS_CODE_INTEGRATION.md)

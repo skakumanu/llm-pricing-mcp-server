@@ -1,6 +1,6 @@
 # MCP Server Integration - PR-Ready Branch Plan
 
-> **Historical record** (2024). Describes the original implementation; counts and file lists are out of date. For the current system see [ARCHITECTURE.md](ARCHITECTURE.md) and [MCP_QUICK_START.md](MCP_QUICK_START.md).
+> **Historical record** (2024). Describes the original implementation; counts and file lists are out of date. For the current system see [ARCHITECTURE.md](../ARCHITECTURE.md) and [MCP_QUICK_START.md](../MCP_QUICK_START.md).
 
 ## Overview
 
