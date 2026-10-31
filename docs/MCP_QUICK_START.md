@@ -1,258 +1,114 @@
-# MCP Server — Quick Start & Validation Guide
+# MCP Quick Start
 
-**Version**: see `src/__init__.py` (single source of truth)
-**Protocol**: MCP 2024-11-05, JSON-RPC 2.0
-**Transports**: STDIO (local) · HTTP POST (remote)
+- **Version**: see `src/__init__.py`
+- **Protocol**: MCP 2024-11-05, JSON-RPC 2.0
+- **Tools**: 31 MCP tools (full table below; this is the one canonical reference)
 
----
+## Connect
 
-## What's Available
+| Transport | Endpoint | Use when |
+|---|---|---|
+| HTTP | `https://llm-pricing-api.fly.dev/mcp` | Client supports remote servers (Cursor, VS Code, Claude Code, Claude Desktop connectors) |
+| STDIO via npx | `npx -y llm-pricing-mcp` | STDIO-only client, or you need to pass a service key from Claude Desktop |
+| STDIO local | `python mcp/server.py` | Offline or developing the server; always anonymous |
 
-31 MCP tools across two transports:
+- Client-specific setup: [Claude Desktop](CLAUDE_INTEGRATION.md) · [Perplexity](PERPLEXITY_INTEGRATION.md) · [VS Code](VS_CODE_INTEGRATION.md)
+- One-click "Add to Cursor / VS Code" buttons: [`/mcp-setup`](../static/mcp-setup/index.html) (deep links are best-effort; the JSON beside them always works)
 
-| Transport | Endpoint | Use case |
-|-----------|----------|----------|
-| HTTP POST | `https://llm-pricing-api.fly.dev/mcp` | Remote clients (Claude Desktop, Cursor, CI) |
-| STDIO (npx) | `npx -y llm-pricing-mcp` | STDIO-only clients, no Python/clone needed — bridges to the HTTP endpoint above |
-| STDIO (local) | `python mcp/server.py` | Runs the actual server locally; works offline on bundled static pricing (live refresh, `check_price_drift` and `ask_agent` need network) |
-
----
-
-## HTTP Transport (Remote)
-
-No install needed.
-
-### Test initialize
+## Try it over HTTP
 
 ```bash
-curl -X POST https://llm-pricing-api.fly.dev/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+curl -X POST https://llm-pricing-api.fly.dev/mcp -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"estimate_cost","arguments":{"model_name":"gpt-4o","input_tokens":1000,"output_tokens":500}}}'
 ```
 
-Expected response:
-```json
-{
-  "jsonrpc": "2.0",
-  "result": {
-    "protocolVersion": "2024-11-05",
-    "capabilities": {"tools": {}},
-    "serverInfo": {"name": "LLM Pricing MCP Server", "version": "<current release>"}
-  },
-  "id": 1
-}
-```
+- Swap the method for `initialize` (expect `protocolVersion: "2024-11-05"`) or `tools/list` (expect 31 entries).
+- `GET /mcp` returns server info; a notification (no `id`) returns HTTP 204.
 
-### List all 31 tools
-
-```bash
-curl -X POST https://llm-pricing-api.fly.dev/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
-```
-
-### Call a tool
-
-```bash
-curl -X POST https://llm-pricing-api.fly.dev/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0", "id": 3, "method": "tools/call",
-    "params": {
-      "name": "estimate_cost",
-      "arguments": {"model_name": "gpt-4o", "input_tokens": 1000, "output_tokens": 500}
-    }
-  }'
-```
-
-### Optional service key (v1.79.1)
-
-The 19 public tools need no credential. The four operator-only tools (`list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation`) need the server operator's key (`MCP_API_KEY`) on the connection; every other caller, including the chat agent and the local STDIO server, gets `error_code: "operator_key_required"` (v1.79.2). To view or delete a price alert you registered yourself, use the public `manage_price_alert` with the one-time `alert_token` that `register_price_alert` returned (v1.81.0). The 7 org-scoped usage/budget tools (`record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert`) need your service API key (`POST /billing/signup`) on the connection, as `x-api-key` or `Authorization: Bearer`, and act only on that key's org:
-
-```bash
-curl -X POST https://llm-pricing-api.fly.dev/mcp \
-  -H "Content-Type: application/json" -H "x-api-key: $LLM_PRICING_API_KEY" \
-  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"list_budget_alerts","arguments":{}}}'
-```
-
-Without a key → `error_code: "customer_key_required"`; another org's `org_id` → `error_code: "org_mismatch"` (both are `success: false` tool results, not JSON-RPC errors). The local STDIO server below is always anonymous, so these tools refuse there.
-
-### `dispatch` — run a request through the gateway (v1.80.0)
-
-`dispatch` sends a text chat request through the dispatch gateway and returns the completion, `usage` and the full `dispatch_receipt` — the same as `POST /v1/chat/completions` with a `dispatch` object. **It makes a real model call billed to your own provider keys**, stored once for your org with `POST /dispatch/keys`; spend is recorded against your org exactly as for HTTP.
-
-- **Auth**: your service key on the connection (`x-api-key` or `Authorization: Bearer`). Anonymous callers and the operator key get `error: "dispatch_requires_api_key"`; the local STDIO server (`python mcp/server.py`) returns `error: "dispatch_requires_hosted_mcp"` — use the hosted endpoint or the npx bridge.
-- **Arguments**: `prompt` (+ optional `system`) or `messages` (not both); optional `model`, `max_tokens`, `temperature`, `top_p`, `stop`, and the same `dispatch` policy object as HTTP (`objective`, `min_quality_score`, `allow`/`deny`, `max_request_cost_usd`, `failover`, `shadow`, `currency`, ...).
-- **Limits**: text-only, single-choice, non-streaming. Refusals carry HTTP's error codes (`no_eligible_candidate`, `budget_hard_stop`, `unsupported_feature`, `rate_limit_exceeded`, ...). MCP and HTTP dispatch share one per-customer rate limit.
-- **Timeout**: with failover a call can take longer than the npx bridge's 30 s default — set `LLM_PRICING_MCP_TIMEOUT_MS=120000`, and bound it with `dispatch.failover.timeout_ms` / `dispatch.failover.max_attempts`.
-
-```bash
-curl -X POST https://llm-pricing-api.fly.dev/mcp \
-  -H "Content-Type: application/json" -H "x-api-key: $LLM_PRICING_API_KEY" \
-  -d '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"dispatch","arguments":{"prompt":"Say hi","dispatch":{"objective":"cheapest"}}}}'
-```
-
----
-
-## STDIO Transport (npx, no clone)
-
-Add to any STDIO-only MCP client config:
+## npx bridge (STDIO, no clone)
 
 ```json
-{
-  "mcpServers": {
-    "llm-pricing": { "command": "npx", "args": ["-y", "llm-pricing-mcp"] }
-  }
-}
+{ "mcpServers": { "llm-pricing": {
+    "command": "npx", "args": ["-y", "llm-pricing-mcp"],
+    "env": { "LLM_PRICING_API_KEY": "<your-service-key>", "LLM_PRICING_MCP_TIMEOUT_MS": "120000" } } } }
 ```
 
-This is a zero-dependency bridge ([`npm/llm-pricing-mcp`](../npm/llm-pricing-mcp)) that forwards stdin/stdout to the HTTP endpoint above — no Python, clone, or local pricing data involved. Set `"env": { "LLM_PRICING_API_KEY": "<your-service-key>" }` (bridge 1.1.0+) to forward your service key as `x-api-key` for the usage/budget tools and `dispatch`; it is never logged. For `dispatch`, also set `"LLM_PRICING_MCP_TIMEOUT_MS": "120000"`.
+- Zero-dependency Node bridge to the HTTP endpoint; `env` is optional. See the [package README](../npm/llm-pricing-mcp/README.md).
+- The key is sent as `x-api-key` and never logged. The timeout is only needed for `dispatch`.
 
----
-
-## STDIO Transport (Local)
-
-### Setup
+## Local STDIO server
 
 ```bash
-git clone https://github.com/skakumanu/llm-pricing-mcp-server.git
-cd llm-pricing-mcp-server
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-### Start and send requests
-
-```bash
-python mcp/server.py
-# Server waits for JSON-RPC input on stdin
-
-# In another terminal (pipe input):
+git clone https://github.com/skakumanu/llm-pricing-mcp-server.git && cd llm-pricing-mcp-server
+python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python mcp/server.py
 ```
 
----
+- Works offline on bundled static pricing. Live refresh, `check_price_drift` and `ask_agent` need network.
+- Anonymous only: key-gated and operator tools refuse, and `dispatch` returns `dispatch_requires_hosted_mcp`.
 
-## All 31 Tools
+## Access levels
 
-| Tool | Required args | Optional args |
-|------|--------------|---------------|
-| `get_all_pricing` | — | `currency`, `country` |
-| `estimate_cost` | `model_name`, `input_tokens`, `output_tokens` | `currency`, `country` |
-| `compare_costs` | `model_names[]` (1-50), `input_tokens`, `output_tokens` | `currency`, `country` |
-| `predict_cost` | `prompt` | `task_type`, `top_n`, `cache_hit_ratio`, `require_function_calling`, `require_vision`, `min_context_tokens` |
-| `optimize_workload` | `workloads[]` | `monthly_budget_usd`, `min_quality_score` |
-| `recommend_model` | `description` | `task_type`, `max_cost_per_1m_tokens`, `min_quality_score`, `min_context_window`, `preferred_provider`, `prefer_low_latency`, `exclude_reasoning_models`, `ide_context`, `monthly_budget_usd`, `estimated_monthly_requests`, `avg_input_tokens`, `avg_output_tokens`, `currency`, `country` |
-| `check_price_drift` | — | `threshold_pct`, `provider`, `limit` |
-| `get_data_quality` | — | — |
-| `get_cache_stats` | — | — |
-| `get_ide_pricing` | — | `provider`, `max_monthly`, `inline_only` |
-| `get_performance_metrics` | — | `provider`, `include_cost` |
-| `get_use_cases` | — | `provider`, `currency`, `country` |
-| `get_telemetry` | — | `include_details`, `limit` |
-| `get_pricing_history` | — | `model_name`, `provider`, `days`, `limit` |
-| `get_pricing_trends` | — | `days`, `limit` |
-| `register_price_alert` | `url` | `threshold_pct`, `provider`, `model_name` |
-| `list_price_alerts` | — (operator key) | — |
-| `delete_price_alert` | `alert_id` (operator key) | — |
-| `manage_price_alert` | `action` (`view`/`delete`), `alert_token` | — |
-| `get_pricing_export_url` | — | `format`, `model_name`, `provider`, `days`, `limit` |
-| `list_conversations` | — (operator key) | `limit` |
-| `delete_conversation` | `conversation_id` (operator key) | — |
-| `ask_agent` | `message` | `conversation_id`, `autonomous` |
-| `record_usage` | `model_name`, `input_tokens`, `output_tokens` (service key) | `org_id`, `occurred_at`, `request_id`, `session_id` |
-| `get_usage_summary` | — (service key) | `org_id`, `days` |
-| `analyze_session_usage` | `session_id` (service key) | `org_id` |
-| `import_session_usage` | `session_id`, `entries[]` (service key) | `org_id` |
-| `register_budget_alert` | `url`, `threshold_usd` (service key) | `org_id`, `period_days` |
-| `list_budget_alerts` | — (service key) | — |
-| `delete_budget_alert` | `alert_id` (service key) | — |
-| `dispatch` | `prompt` or `messages` (service key + stored provider keys) | `system`, `model`, `max_tokens`, `temperature`, `top_p`, `stop`, `dispatch` |
+| Level | Count | Credential | Refusal without it |
+|---|---|---|---|
+| Public | 19 | none | — |
+| Service key | 7 + `dispatch` | your key from `POST /billing/signup`, as `x-api-key` or `Authorization: Bearer` | `customer_key_required`; another org's `org_id` gives `org_mismatch` |
+| Operator | 4 | server operator's `MCP_API_KEY` | `operator_key_required` (also for the chat agent and STDIO) |
 
----
+- Service-key tools act only on that key's org.
+- Refusals are `success: false` tool results, not JSON-RPC errors.
 
-## Validation Checklist
+## Tool reference (31)
 
-### ✅ HTTP transport
-```bash
-# Server info
-curl https://llm-pricing-api.fly.dev/mcp
+| Tool | Required | Key optional | Access |
+|---|---|---|---|
+| `get_all_pricing` | — | `currency`, `country` | public |
+| `estimate_cost` | `model_name`, `input_tokens`, `output_tokens` | `currency`, `country` | public |
+| `compare_costs` | `model_names[]` (1–50), `input_tokens`, `output_tokens` | `currency`, `country` | public |
+| `predict_cost` | `prompt` | `task_type`, `top_n`, `cache_hit_ratio`, `require_vision` | public |
+| `optimize_workload` | `workloads[]` | `monthly_budget_usd`, `min_quality_score` | public |
+| `recommend_model` | `description` | `task_type`, `max_cost_per_1m_tokens`, `min_quality_score`, `monthly_budget_usd` | public |
+| `check_price_drift` | — | `threshold_pct`, `provider`, `limit` | public |
+| `get_data_quality` | — | — | public |
+| `get_performance_metrics` | — | `provider`, `include_cost` | public |
+| `get_use_cases` | — | `provider`, `currency` | public |
+| `get_ide_pricing` | — | `provider`, `max_monthly`, `inline_only` | public |
+| `get_pricing_history` | — | `model_name`, `provider`, `days` | public |
+| `get_pricing_trends` | — | `days`, `limit` | public |
+| `get_pricing_export_url` | — | `format`, `model_name`, `provider`, `days` | public |
+| `register_price_alert` | `url` | `threshold_pct`, `provider`, `model_name` | public; returns a one-time `alert_token` |
+| `manage_price_alert` | `action` (`view`/`delete`), `alert_token` | — | public; the token is the credential |
+| `ask_agent` | `message` | `conversation_id`, `autonomous` | public |
+| `get_telemetry` | — | `include_details`, `limit` | public |
+| `get_cache_stats` | — | — | public |
+| `record_usage` | `model_name`, `input_tokens`, `output_tokens` | `org_id`, `session_id`, `occurred_at` | service key |
+| `import_session_usage` | `session_id`, `entries[]` | `org_id` | service key |
+| `get_usage_summary` | — | `org_id`, `days` | service key |
+| `analyze_session_usage` | `session_id` | `org_id` | service key |
+| `register_budget_alert` | `url`, `threshold_usd` | `org_id`, `period_days` | service key |
+| `list_budget_alerts` | — | — | service key |
+| `delete_budget_alert` | `alert_id` | — | service key |
+| `dispatch` | `prompt` or `messages` | `system`, `model`, `max_tokens`, `dispatch` | service key; hosted only |
+| `list_price_alerts` | — | — | operator |
+| `delete_price_alert` | `alert_id` | — | operator |
+| `list_conversations` | — | `limit` | operator |
+| `delete_conversation` | `conversation_id` | — | operator |
 
-# initialize
-curl -X POST https://llm-pricing-api.fly.dev/mcp -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
-# → result.protocolVersion == "2024-11-05"
+## `dispatch`
 
-# tools/list
-curl -X POST https://llm-pricing-api.fly.dev/mcp -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
-# → result.tools has 31 entries
-
-# tools/call
-curl -X POST https://llm-pricing-api.fly.dev/mcp -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_all_pricing","arguments":{}}}'
-# → result.content[0].type == "text"
-
-# Error handling — unknown method
-curl -X POST https://llm-pricing-api.fly.dev/mcp -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":4,"method":"unknown"}'
-# → error.code == -32601
-
-# Notification (no id, no response body)
-curl -X POST https://llm-pricing-api.fly.dev/mcp -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"initialized"}'
-# → HTTP 204 No Content
-```
-
-### ✅ Automated tests
-```bash
-pytest tests/test_mcp_http.py -v  # 12 tests covering all methods and error cases
-```
-
----
-
-## One-Click Install
-
-The [`/mcp-setup`](../static/mcp-setup/index.html) page has "Add to Cursor" / "Add to VS Code" buttons that open the client directly via its MCP deep-link scheme (`cursor://anysphere.cursor-deeplink/mcp/install`, `vscode:mcp/install`), pre-filled with the remote HTTP config below. These are best-effort — deep-link support varies by client version — so every button sits next to the plain JSON as a fallback that always works. Claude Desktop has no public deep-link scheme, so it uses the JSON config below.
-
-## Claude Desktop Config
-
-### Remote (no install)
-```json
-{
-  "mcpServers": {
-    "llm-pricing": {
-      "url": "https://llm-pricing-api.fly.dev/mcp"
-    }
-  }
-}
-```
-
-### Local STDIO
-```json
-{
-  "mcpServers": {
-    "llm-pricing": {
-      "command": "python",
-      "args": ["/absolute/path/to/llm-pricing-mcp-server/mcp/server.py"],
-      "cwd": "/absolute/path/to/llm-pricing-mcp-server",
-      "env": { "PYTHONUNBUFFERED": "1" }
-    }
-  }
-}
-```
-
----
+- Runs a chat request through the dispatch gateway, like `POST /v1/chat/completions` with a `dispatch` object. Returns the completion, `usage` and `dispatch_receipt`.
+- **Makes a real model call billed to your own provider keys**, stored once per org with `POST /dispatch/keys`.
+- Text-only, single choice, non-streaming. Shares one per-customer rate limit with HTTP dispatch.
+- Refusals: `dispatch_requires_api_key` (anonymous or operator key), `dispatch_requires_hosted_mcp` (STDIO), plus HTTP's codes (`no_eligible_candidate`, `budget_hard_stop`, ...).
+- Failover can outlast the bridge's 30 s default. Set `LLM_PRICING_MCP_TIMEOUT_MS=120000` and cap with `dispatch.failover.timeout_ms` / `max_attempts`.
 
 ## Troubleshooting
 
 | Issue | Fix |
-|-------|-----|
-| 401 on `/mcp` | Upgrade to v1.38.0+ — `/mcp` is now public |
-| `ModuleNotFoundError` (STDIO) | Run from repo root; activate venv |
-| No output from STDIO server | Expected — server waits for stdin |
-| `Model not found` | Call `get_all_pricing` first to see valid names |
+|---|---|
+| No output from the STDIO server | Expected: it waits for JSON-RPC on stdin |
+| `ModuleNotFoundError` (STDIO) | Run from the repo root with the venv active |
+| `Model not found` | Call `get_all_pricing` for valid names |
+| `-32601` error | Unknown JSON-RPC method |
 
----
-
-**See Also**: [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md) · [README.md](../README.md)
+Tests: `pytest tests/test_mcp_http.py -q`. More in [MCP_TESTING.md](MCP_TESTING.md).

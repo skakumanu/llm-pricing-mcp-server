@@ -4,7 +4,7 @@
 > (`llm-pricing-api`) deployed by the `deploy_fly` job in `.github/workflows/ci-cd.yml`;
 > there is no blue/green slot pair, load balancer switchover, Kubernetes cluster, or
 > container registry in this project (the Azure blue-green slot deploy was removed in
-> v1.34.0). See [DEPLOYMENT.md](DEPLOYMENT.md) for the real process. The `/health/*`,
+> v1.34.0). See [DEPLOYMENT.md](../DEPLOYMENT.md) for the real process. The `/health/*`,
 > `/deployment/*` and `/api/versions` endpoints described below do exist and work; the
 > orchestration examples (Docker, Kubernetes, AWS ALB) are illustrative only.
 > `/deployment/shutdown` and `/deployment/shutdown/status` are operator-only: they
@@ -630,4 +630,4 @@ docker stop -t 5 <container-id>  # Gives 5 more seconds then kills
 | Check compatibility | `curl http://localhost:8000/api/versions` |
 | Monitor health | `curl http://localhost:8000/health/detailed` |
 
-For questions or issues, refer to the main [README.md](../README.md) or open an issue on GitHub.
+For questions or issues, refer to the main [README.md](../../README.md) or open an issue on GitHub.
