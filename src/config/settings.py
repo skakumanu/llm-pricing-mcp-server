@@ -1,8 +1,30 @@
 """Configuration settings for the MCP server."""
 from pydantic import SecretStr
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 from typing import Optional
 from src import __version__
+
+
+# Env keys of settings that have been removed. A deployment's .env may still carry
+# them, so they are dropped before validation and startup is unaffected. Any other
+# unknown .env key (a typo such as MCP_APIKEY) still fails loudly under extra="forbid".
+RETIRED_ENV_KEYS = frozenset({
+    "anyscale_api_key",  # v1.81.2: provider retired
+})
+
+
+class _WithoutRetiredKeys(PydanticBaseSettingsSource):
+    """Wraps the .env source and drops RETIRED_ENV_KEYS (case-insensitive)."""
+
+    def __init__(self, settings_cls, inner: PydanticBaseSettingsSource):
+        super().__init__(settings_cls)
+        self._inner = inner
+
+    def get_field_value(self, field, field_name):  # unused: __call__ is overridden
+        return None, field_name, False
+
+    def __call__(self):
+        return {k: v for k, v in self._inner().items() if k.lower() not in RETIRED_ENV_KEYS}
 
 
 class Settings(BaseSettings):
@@ -115,14 +137,25 @@ class Settings(BaseSettings):
     # repr of Settings never shows it.
     provider_key_encryption_key: Optional[SecretStr] = None
 
-    # v1.81.2: "extra": "ignore" so a deployment whose .env still carries a key for a
-    # retired provider (see tests/test_provider_retirement.py) starts normally instead of failing with
-    # "Extra inputs are not permitted" at import.
+    # v1.82.1: back to "forbid" so an unknown .env key fails at startup instead of being
+    # silently ignored; retired keys are filtered out first (RETIRED_ENV_KEYS). Process
+    # environment variables were never affected: only names matching a field are read.
     model_config = {
         "env_file": ".env",
         "case_sensitive": False,
-        "extra": "ignore",
+        "extra": "forbid",
     }
+
+    @classmethod
+    def settings_customise_sources(
+        cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+    ):
+        return (
+            init_settings,
+            env_settings,
+            _WithoutRetiredKeys(settings_cls, dotenv_settings),
+            file_secret_settings,
+        )
 
 
 settings = Settings()
