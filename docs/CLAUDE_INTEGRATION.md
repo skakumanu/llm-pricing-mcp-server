@@ -1,7 +1,7 @@
 # Claude Desktop Integration
 
 - **Version**: see `src/__init__.py`
-- **Tools**: all 31 tools; see the [tool reference](MCP_QUICK_START.md#tool-reference-31) for args and access levels
+- **Tools**: all 32 tools; see the [tool reference](MCP_QUICK_START.md#tool-reference-32) for args and access levels
 
 ## Pick a setup
 
@@ -15,7 +15,7 @@
 
 - Open **Settings → Connectors → Add custom connector** and paste `https://llm-pricing-api.fly.dev/mcp`.
 - Remote servers go here only. A `url` entry in `claude_desktop_config.json` is ignored; that file only launches local commands.
-- The 19 public tools work immediately.
+- The 19 public tools work immediately, and `support_chat` answers general support questions (with no key it cannot describe your account).
 
 ## B. npx bridge (to pass your service key)
 
@@ -27,7 +27,7 @@ Add to `claude_desktop_config.json` (Settings → Developer → Edit Config), th
     "env": { "LLM_PRICING_API_KEY": "<your-service-key>", "LLM_PRICING_MCP_TIMEOUT_MS": "120000" } } } }
 ```
 
-- Get a free key with `POST /billing/signup`. Key-gated tools then act only on that key's org.
+- Get a free key with `POST /billing/signup`. Key-gated tools then act only on that key's org, and `support_chat` can describe your own plan, payment status and rate limit.
 - `LLM_PRICING_MCP_TIMEOUT_MS` matters only for `dispatch`.
 - Bridge options: [package README](../npm/llm-pricing-mcp/README.md).
 
@@ -48,7 +48,7 @@ Add to `claude_desktop_config.json` (Settings → Developer → Edit Config), th
 
 - Install first: clone, create a venv, `pip install -r requirements.txt` ([steps](MCP_QUICK_START.md#local-stdio-server)).
 - Use absolute paths; `~` and relative paths fail. On Windows, escape backslashes (`C:\\path\\to\\...`).
-- Anonymous: key-gated and operator tools refuse, and `dispatch` returns `dispatch_requires_hosted_mcp`.
+- Anonymous: key-gated and operator tools refuse, `dispatch` returns `dispatch_requires_hosted_mcp` and `support_chat` returns `support_requires_hosted_mcp`.
 - Fully quit and relaunch Claude; "llm-pricing" should show in the tools panel.
 
 ## Dispatch from Claude
@@ -57,6 +57,11 @@ Add to `claude_desktop_config.json` (Settings → Developer → Edit Config), th
 - **It makes a real model call billed to your own provider keys** (stored with `POST /dispatch/keys`).
 - Try: *"Use dispatch to answer 'what is MCP?' with the cheapest model scoring at least 70."*
 - Details and refusal codes: [MCP_QUICK_START.md § dispatch](MCP_QUICK_START.md#dispatch).
+
+## Support from Claude
+
+- `support_chat` answers questions about this service (plans, billing, keys, rate limits, how to connect) from the published [FAQ](FAQ.md); with setup B it also knows your own account. Anything it cannot do (refunds, disputes, a lost key) it escalates to the owner and returns a reference.
+- Try: *"Use support_chat to ask what plan I am on and what my rate limit is."*
 
 ## Example prompts
 

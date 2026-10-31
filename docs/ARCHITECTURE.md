@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.83.1 | **Last updated**: 2026-10-31
+**Version**: v1.84.1 | **Last updated**: 2026-10-31
 
 Canonical internals reference. Release history lives in `static/whats-new/`, not here.
 
@@ -8,7 +8,7 @@ Canonical internals reference. Release history lives in `static/whats-new/`, not
 
 ## System Overview
 
-FastAPI service that aggregates LLM pricing from 30 providers (600+ models) and serves it over REST and MCP, with a ReAct agent, a dispatch gateway, self-serve billing and 14 browser UIs.
+FastAPI service that aggregates LLM pricing from 30 providers (600+ models) and serves it over REST and MCP, with a ReAct pricing agent, a grounded support agent, a dispatch gateway, self-serve billing and 15 browser UIs.
 
 - **Deploy**: Fly.io app `llm-pricing-api` (shared-cpu-1x, 512 MB, volume at `/app/data`)
 - **CI/CD**: test → lint → OSV → bandit → gitleaks → Fly deploy (see [CI/CD](#cicd-pipeline))
@@ -16,7 +16,8 @@ FastAPI service that aggregates LLM pricing from 30 providers (600+ models) and 
 - **Dispatch gateway**: `POST /v1/chat/completions` + `dispatch` object executes the best eligible model on the caller's own provider key
 - **Local currency**: 13 currencies, additive `local_*` fields; pricing data itself stays USD
 - **Dev tooling (not deployed)**: `/release-feature` phase-agent pipeline (see `CLAUDE.md`); `scripts/audit_repo.py` customer-run cost auditor
-- **Orchestrator core (v1.83.0)**: operator-only `/orchestrator/*` — idempotent intake of GitHub events / schedules / owner requests, finite workflows with human checkpoints, run log, approval queue, budgets; executors are `orchestrator-intake.yml` and the owner on `/admin`; no LLM in v1
+- **Orchestrator core (v1.83.0)**: operator-only `/orchestrator/*` — idempotent intake of GitHub events / schedules / owner requests / payment events, finite workflows with human checkpoints, run log, approval queue, budgets; executors are `orchestrator-intake.yml`, the support agent and the owner on `/admin`; no LLM *step* runs inside a workflow
+- **Support agent (v1.84.0)**: `POST /support/chat` + `support_chat` MCP tool — identity-aware (`_resolve_mcp_caller`), grounded in `docs/FAQ.md` + the tier catalogue (`src/services/tiers.py`) + the caller's own account, escalates to an `owner_handoff` checkpoint in the orchestrator, spends under per-caller daily caps and the orchestrator ledger, and never changes billing
 
 ---
 
@@ -29,19 +30,19 @@ FastAPI service that aggregates LLM pricing from 30 providers (600+ models) and 
                                 │ HTTPS / STDIO
 ┌───────────────────────────────▼──────────────────────────────────────┐
 │ Presentation — src/main.py + mcp/                                    │
-│  REST API          MCP: 31 tools, STDIO + POST /mcp    14 UI pages   │
+│  REST API          MCP: 32 tools, STDIO + POST /mcp    15 UI pages   │
 │  security_middleware: operator / customer / global key, rate limit,  │
 │  body cap · per-bucket sliding window (src/services/rate_limiter.py) │
 └───────┬───────────────────────┬──────────────────────┬───────────────┘
 ┌───────▼──────────────┐ ┌──────▼─────────┐ ┌──────────▼──────────────┐
-│ Pricing & usage      │ │ Agent / RAG    │ │ Billing · Orchestrator  │
-│ PricingAggregator    │ │ ReAct loop     │ │ BillingService          │
-│ 30 provider impls    │ │ TF-IDF RAG     │ │ free signup → API key   │
-│ PriceOracle, Router  │ │ conv. memory   │ │ Stripe (optional)       │
-│ Usage/Budget/Alerts  │ │ Anthropic or   │ │ ProviderKeyStore        │
-│ WebhookGuard         │ │ OpenAI backend │ │ OrchestratorService     │
-│ Currency · Dispatch  │ └──────┬─────────┘ │ (runs, approvals, budget)│
-└───────┬──────────────┘        │           └──────────┬──────────────┘
+│ Pricing & usage      │ │ Agents / RAG   │ │ Billing · Orchestrator  │
+│ PricingAggregator    │ │ ReAct loop     │ │ BillingService, tiers   │
+│ 30 provider impls    │ │ PricingAgent   │ │ free signup → API key   │
+│ PriceOracle, Router  │ │ SupportAgent   │ │ Stripe (optional)       │
+│ Usage/Budget/Alerts  │ │ TF-IDF RAG     │ │ ProviderKeyStore        │
+│ WebhookGuard         │ │ conv. memory   │ │ OrchestratorService     │
+│ Currency · Dispatch  │ │ SupportBudget  │ │ (runs, approvals, budget)│
+└───────┬──────────────┘ └──────┬─────────┘ └──────────┬──────────────┘
 ┌───────▼───────────────────────▼──────────────────────▼───────────────┐
 │ Data: pricing_history.db · billing.db · orchestrator.db · caches     │
 └───────┬──────────────────────────────────────────────────────────────┘
@@ -85,24 +86,29 @@ src/
     dispatch_receipts.py    metadata-only receipts table + org-scoped export
     provider_key_store.py   encrypted per-org provider keys; CompositeKeyResolver
     rate_limiter.py         the one sliding-window store, shared by HTTP and MCP dispatch
-    billing_service.py      customers table, Stripe sync
+    billing_service.py      customers table (+ billing_status / past_due_since), stripe_events dedup, key rotation,
+                            effective_tier(); Stripe sync
+    tiers.py                single source of tier copy: prices, rate limits, support allowance, escalation
+                            priority, entitlement strings, checkout/portal flags (v1.84.0)
+    support_budget.py       per-caller daily LLM caps for the support agent + support_action() audit helper (v1.84.0)
     orchestrator_workflows.py  finite workflow definitions (validated at import), route(), redaction, templates
     orchestrator_store.py   orchestrator.db: runs, steps, events, approvals, append-only actions, spend, settings
     orchestrator_service.py the run engine: intake/dedup, step loop, checkpoints, executors, budgets, pause
     ide_pricing.py, telemetry.py, geolocation.py, data_fetcher.py, data_sources.py, deployment.py
 mcp/
   server.py                 STDIO transport (always anonymous; transport='stdio')
-  caller.py                 McpCaller + access levels PUBLIC / ORG_SCOPED / OPERATOR_ONLY / CUSTOMER_ONLY
-  tools/                    one module per tool + tool_manager.py + _locale.py
+  caller.py                 McpCaller + access levels PUBLIC / ORG_SCOPED / OPERATOR_ONLY / CUSTOMER_ONLY / IDENTITY_AWARE
+  tools/                    one module per tool + tool_manager.py + _locale.py (support_chat.py is identity-aware)
   schema_generator.py, schemas/   generated JSON-RPC schemas
-agent/                      pricing_agent.py, react_loop.py, llm_backend.py, conversation.py, tools.py
-rag/                        document_loader, chunker, in-memory TF-IDF vector_store, pipeline
-static/                     14 UI pages (see Design System); landing/ is served at /
+agent/                      pricing_agent.py, support_agent.py, support_tools.py, react_loop.py, llm_backend.py,
+                            conversation.py, tools.py
+rag/                        document_loader, chunker, in-memory TF-IDF vector_store, pipeline (optional doc allow-list)
+static/                     15 UI pages (see Design System); landing/ is served at /; faq/ is generated from docs/FAQ.md
 data/
   model_prices_snapshot.json  vendored registry snapshot (weekly refresh PR)
   exchange_rates.json         vendored USD rate table (weekly refresh PR)
   registry_models/<slug>.json registry-sourced models per provider (written only by pickup script)
-scripts/                    weekly audit scripts, validate_price_snapshot.py, sync_nav.py,
+scripts/                    weekly audit scripts, validate_price_snapshot.py, sync_nav.py, sync_faq.py,
                             quick_validate.py, audit_repo.py, promote_branch_content.sh,
                             release_notes_from_whats_new.py (deploy job → GitHub Release notes)
 npm/llm-pricing-mcp/        zero-dependency STDIO↔HTTP bridge published to npm
@@ -128,13 +134,13 @@ Checked in this order:
 
 | Step | Paths | Effect |
 |---|---|---|
-| 1. Operator-only request | GET/HEAD `/pricing/alerts`, `/agent/conversations`; DELETE `/pricing/alerts/{id}`, `/agent/conversations/{id}`; any method under `/orchestrator/` (`_OPERATOR_ONLY_PREFIXES`) | Decided first so the `/pricing` prefix bypass can't expose them |
-| 2. Full bypass | OPTIONS, static UIs, `/pricing*`, `/mcp`, `_unauthenticated_paths` | No auth, no limiter; `_public_body_capped_paths` (`/v1/chat/completions`, `/mcp`) still body-capped |
+| 1. Operator-only request | GET/HEAD `/pricing/alerts`, `/agent/conversations`; DELETE `/pricing/alerts/{id}`, `/agent/conversations/{id}`; any method under `/orchestrator/` and `/admin/customers/` (`_OPERATOR_ONLY_PREFIXES`; the latter is `/admin/customers/{id}/key/rotate`) | Decided first so the `/pricing` prefix bypass can't expose them |
+| 2. Full bypass | OPTIONS, static UIs (incl. `/faq`), `/pricing*`, `/mcp`, `_unauthenticated_paths` (incl. `/billing/config`) | No auth, no limiter; `_public_body_capped_paths` (`/v1/chat/completions`, `/mcp`) still body-capped |
 | 3. Operator key | step 1 + `_sensitive_paths` (`/deployment/shutdown*`, `/admin/customers`, `/admin/stats`, `/admin/rate-limits`) | Global `MCP_API_KEY` in `x-api-key` only (byte compare); 503 if unset. The three orchestrator executor routes (POST `/orchestrator/events`, GET `…/runs/{id}/actions`, POST `…/actions/{aid}/result`) also accept `ORCHESTRATOR_INTAKE_KEY`; it unlocks nothing else, but on those routes it carries the executor's owner assertion for GitHub events, so a `pull_request.opened` continuation is additionally bound to the repository the run was created from (`refused:repo_mismatch` otherwise) |
-| 4. Anonymous, rate-limited | `/agent/chat*`, `/billing/signup`, POST `/pricing/alerts`, `/pricing/alerts/self/*`, `/cost-estimate*` | Per-IP limit + body cap; a customer key on `/cost-estimate*` gets its tier limit |
-| 5. Service key | everything else | Billing customer key (tier from DB) or global key; 401 otherwise |
+| 4. Anonymous, rate-limited | `/agent/chat*`, `/support/chat`, `/support/escalations/status`, `/billing/signup`, POST `/pricing/alerts`, `/pricing/alerts/self/*`, `/cost-estimate*` | Per-IP limit + body cap; a customer key on `/cost-estimate*` and `/support/*` gets its tier limit (the support handlers resolve identity themselves via `_resolve_mcp_caller`) |
+| 5. Service key | everything else (incl. `/billing/me`, `/billing/key/rotate`) | Billing customer key (tier from DB) or global key; 401 otherwise |
 
-- Rate limit: 60 s sliding window per bucket (customer id, else `ip:tier`); free / pro / enterprise = 30 / 120 / 600 req/min.
+- Rate limit: 60 s sliding window per bucket (customer id, else `ip:tier`); free / pro / enterprise = 30 / 120 / 600 req/min. The tier is the **effective** tier (`billing_service.effective_tier`): a `past_due` customer past `BILLING_PAST_DUE_GRACE_DAYS` is served as free.
 - `X-Api-Key-Tier` is honoured only alongside a valid global key.
 - Handlers that need an org (`/dispatch/*`, dispatch mode) also require `request.state.customer`; the global key gets 403 there.
 
@@ -151,32 +157,49 @@ Checked in this order:
 - `get_data_quality` splits `confirmed_models` into `provider_confirmed` + `registry_sourced`; registry prices are never counted as provider-confirmed.
 
 ### MCP transports
-- **STDIO** (`mcp/server.py`) and **HTTP** (`POST /mcp`): JSON-RPC 2.0, protocol `2024-11-05`, 31 tools.
+- **STDIO** (`mcp/server.py`) and **HTTP** (`POST /mcp`): JSON-RPC 2.0, protocol `2024-11-05`, 32 tools.
 - **npx bridge** (`npm/llm-pricing-mcp`): forwards stdin lines to `POST /mcp`; optional `LLM_PRICING_API_KEY` → `x-api-key`. No tool logic of its own.
-- `ToolManager.execute_tool(name, args, caller)`; only HTTP `/mcp` resolves a caller, and only for non-PUBLIC tools.
+- `ToolManager.execute_tool(name, args, caller)`; only HTTP `/mcp` resolves a caller, and only for non-PUBLIC tools. The resolved customer caller carries the *effective* tier.
 
 | Access level | Tools | Caller needed |
 |---|---|---|
 | PUBLIC | the other 19 | none |
+| IDENTITY_AWARE (v1.84.0) | `support_chat` | none required; `authorize` never refuses, the tool receives the caller and answers about that customer's own account when it is one. STDIO refuses with `support_requires_hosted_mcp` |
 | ORG_SCOPED | `record_usage`, `import_session_usage`, `get_usage_summary`, `analyze_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert` | customer key (own org only) or operator |
 | OPERATOR_ONLY | `list_price_alerts`, `delete_price_alert`, `list_conversations`, `delete_conversation` | global `MCP_API_KEY` |
 | CUSTOMER_ONLY | `dispatch` | customer key; STDIO refuses with `dispatch_requires_hosted_mcp` |
 
 - Refusals are tool results (`success: false`): `customer_key_required`, `org_mismatch`, `operator_key_required`, `dispatch_requires_api_key`.
 
-### Agent (ReAct)
+### Agents (ReAct)
 ```
-message → react_loop (think → tool → observe) → llm_backend (Anthropic | OpenAI, AGENT_LLM_PROVIDER)
-        → conversation store (SQLite if CONVERSATION_DB_PATH, else memory) → SSE events
+message → react_loop (think → tool → observe; system_prompt per agent) → llm_backend (Anthropic | OpenAI, AGENT_LLM_PROVIDER;
+        LLMResponse.usage summed into LoopResult.usage) → conversation store (SQLite if CONVERSATION_DB_PATH, else memory)
 ```
-- `agent/tools.py` binds 27 of the 31 MCP tools; excludes `ask_agent`, `get_telemetry`, `get_cache_stats`, `dispatch`.
-- The agent is an anonymous caller: org-scoped and operator-only tools refuse at runtime.
-- Stored turns pass through `redact_alert_tokens()`.
+- **PricingAgent** (`/agent/chat*`, `ask_agent`): anonymous, pricing-scoped, SSE streaming. `agent/tools.py` binds 27 of the 32 MCP tools; excludes `ask_agent`, `support_chat`, `get_telemetry`, `get_cache_stats`, `dispatch`. Org-scoped and operator-only tools refuse at runtime. Stored turns pass through `redact_alert_tokens()`.
+- **SupportAgent** (v1.84.0, `agent/support_agent.py`; `POST /support/chat`, `support_chat`): sibling sharing the LLM backend and conversation store, own `SUPPORT_SYSTEM_PROMPT`, RAG over `SUPPORT_DOCS` (`FAQ.md`, `MCP_QUICK_START.md`, `CLAUDE_INTEGRATION.md`) only. Turn pipeline: server-minted `sup-<uuid4>` conversation id (400 if malformed) → `_sanitize_input` → `redact_support_text` (keys, Stripe ids, alert tokens, 32+ char tokens → `[redacted]`; emails kept in the operator-only store) → `is_instruction_like` flag (advisory) → `support_enabled` → orchestrator store present (else fallback `ledger_unavailable`) → per-caller daily cap (`support_budget.py`) + `OrchestratorService.budget_gate('support_triage')` (else fallback `spend_cap`) → ReAct with per-request tools (`agent/support_tools.py`: `faq_search`, `get_plan_catalog`, public `get_all_pricing` / `estimate_cost` / `get_data_quality`, `get_my_account`, `escalate_to_owner`, `check_escalation`; the caller is baked in, no tool takes an org/customer/email argument) → cost from usage × catalogue price → `record_agent_spend` → redacted reply stored → `support.answer` action record. The deterministic fallback still escalates an explicit "talk to a human" / security report.
+- Identity: HTTP `_resolve_mcp_caller(request)`; MCP via ToolManager; the agent never reads `request.state`.
 
 ### Billing (Stripe optional)
+- `GET /billing/config` (public): `tiers.catalog_payload(settings)` — `checkout_enabled` / `portal_enabled` (= Stripe secret set), per-tier `checkout_available` (price id set), `past_due_grace_days`, `tiers`; the agent's `get_plan_catalog` returns the same payload. `/billing`, the landing page and the agent render these exact strings; `tests/test_support_faq.py` pins them to each other and to `docs/FAQ.md`.
 - `POST /billing/signup` → new customer row → service key shown once (409 for an existing email).
-- `POST /billing/checkout` → Stripe session; `POST /billing/webhook` → verify signature → update tier.
-- Without `STRIPE_SECRET_KEY`, checkout/portal/webhook return 503; signup still works.
+- `POST /billing/checkout` → Stripe session; `GET /billing/portal` → Stripe customer portal (cancel, card, invoices). Without `STRIPE_SECRET_KEY` both return 503 with a "not enabled on this server" detail; signup, the dashboard and support still work.
+- `POST /billing/key/rotate` (current key) and `POST /admin/customers/{id}/key/rotate` (operator) → `rotate_api_key()`; the new key is shown once, the old one stops at once; action `billing.key_rotate` (actor `customer` | `owner`).
+- `/billing/me` adds `effective_tier`, `billing_status`, `past_due_since`, `rate_limit_per_minute`.
+- `POST /billing/webhook` → verify signature → `record_stripe_event(event.id)` (duplicate → `{ok, duplicate: true}`, nothing else) → state machine → one `billing.<event type>` action record (outcome `applied… | ignored | duplicate | escalated…`). If applying the event raises, the id is forgotten again (`forget_stripe_event`) and the handler returns 500 so Stripe's retry is processed rather than treated as a duplicate. A `charge.dispute.created` object has no `customer`; the handler reads it from the disputed Charge (`stripe.Charge.retrieve`):
+
+| Stripe event | Tier | `billing_status` | Escalation (`payment_event` → `support_escalation`) |
+|---|---|---|---|
+| `checkout.session.completed` | from metadata | `active` | — |
+| `customer.subscription.updated` | from price map | `past_due` if `status` is past_due/unpaid, else `active` | — |
+| `customer.subscription.deleted` | `free` | `active` | — |
+| `invoice.paid` | unchanged | `active` (clears `past_due_since`) | — |
+| `invoice.payment_failed` | unchanged (effective → free after `BILLING_PAST_DUE_GRACE_DAYS`) | `past_due` | `payment_failure` |
+| `charge.refunded` | unchanged | unchanged | `refund` |
+| `charge.dispute.created` (customer via the charge) | unchanged | unchanged | `billing_dispute` |
+| anything else | — | — | recorded `ignored` |
+
+- Stored tiers change only through Stripe events; the support agent and the owner queue never write a tier.
 
 ### Local currency
 - One dependency, `resolve_request_locale`: currency query > `X-Currency` > country query > `X-Country` > platform geo header > IP lookup (1 s) > USD.
@@ -229,7 +252,8 @@ DispatchService
 
 ### Orchestrator core (v1.83.0)
 ```
-trigger (GitHub event · schedule · owner request) ──► POST /orchestrator/events | POST /orchestrator/runs
+trigger (GitHub event · schedule · owner request · support escalation · Stripe payment event)
+  ──► POST /orchestrator/events | POST /orchestrator/runs | in-process intake_event() from the support agent / webhook
   dedup_key UNIQUE (INSERT OR IGNORE → SELECT): duplicate attaches, no new side effect
   route(trigger class, event type, owner signals) → workflow   ← titles/bodies never reach routing
   run orc_xxxxxxxxxxxx · steps from the definition (≤ 20; agents cannot add/reorder/skip)
@@ -242,19 +266,21 @@ trigger (GitHub event · schedule · owner request) ──► POST /orchestrator
   failure / block / deadline / max steps → status parked (reason + prior outputs); owner resumes or closes
   result ∈ {done, awaiting_owner, failed, deliberately_not_done}; public_summary is a template
 ```
-- **Workflows (code, `orchestrator_workflows.py`)**: `github_accepted_bug` (intake → annotate → `sdlc_run` checkpoint → one status comment), `release_notes_draft` and `support_triage` (specialist missing → forced `dry_run`, owner checkpoint "do manually or skip"), `weekly_price_audit` (parks on any failed job). `validate_registry()` runs at import and rejects `FORBIDDEN_ACTIONS` (`merge_pr`, `refund`, `charge`, `send_email`, `publish`, `push_branch`, `grant_permission`); the only executor action kind is `github_issue_comment_upsert`.
+- **Workflows (code, `orchestrator_workflows.py`)**: `github_accepted_bug` (intake → annotate → `sdlc_run` checkpoint → one status comment), `release_notes_draft` and `support_triage` (specialist missing → forced `dry_run`, owner checkpoint "do manually or skip"; `support_triage` is also the ledger workflow id for live support-chat spend), `support_escalation` (v1.84.0: intake → mandatory `owner_handoff` checkpoint; trigger classes `customer_message` with event `support.escalation`, `payment_event` with `charge.refunded` / `charge.dispute.created` / `invoice.payment_failed`, `owner_request`), `weekly_price_audit` (parks on any failed job). `validate_registry()` runs at import and rejects `FORBIDDEN_ACTIONS` (`merge_pr`, `refund`, `charge`, `send_email`, `publish`, `push_branch`, `grant_permission`); the only executor action kind is `github_issue_comment_upsert`.
+- **Support escalations (v1.84.0)**: dedup `msg:<conversation_id>` (one run per support conversation; a second attempt attaches and returns the same reference) or `stripe:<event id>`; actor kinds `support_agent` / `stripe`; structured inputs `category`, `priority`, `tier`, `identified`, `customer_ref` (org prefix), `conversation_ref`, `suggested_reply` (redacted, ≤ 500). The `owner_handoff` artifact is `{kind, label, priority, body (redacted ≤ 500), customer {identified, org_ref}, conversation_ref, instruction_like, suggested_reply}`; decisions are `done_manually` (with a reply note the customer can read) or `reject`, never `approve`; `approval_queue()` adds `priority` and sorts enterprise > pro > standard, then newest. `public_escalation_view(run_id)` → `{reference, status, owner_reply}` is all a customer ever sees (`POST /support/escalations/status`, `check_escalation`). No email, key or Stripe id reaches an artifact, event or action record.
+- **Support spend**: `record_agent_spend()` writes every support LLM call to `orch_spend` (`run_id conv:<id>`, workflow `support_triage`, default `budget.workflow_monthly_usd.support_triage` = 40); `budget_gate(workflow_id)` (factored out of `check_budget`) is asked before every call, so the global 150 USD/month ceiling and the /admin budget bars cover support. Action records written outside a run: `support.answer` (outcome `answered | fallback_cap | fallback_disabled | error`), `support.cap_hit`, `support.account_read`, `support.escalation`, `support.escalation_status`, `billing.key_rotate`, `billing.<stripe event>`.
 - **SDLC wrap**: the checkpoint shows `/release-feature Fix issue #N (orchestrator run orc_…)`; the skill stamps `Orchestrator-Run:` into the PR footer; `pull_request: opened` (same repo, owner) completes the checkpoint and approves the templated status comment (`decided_by: github_pr_marker`); the PR URL must be in the repository recorded on the run and match the event's PR number, so a leaked intake key cannot attach a foreign link. Merging stays the owner's.
 - **Concurrency**: approval decisions, executor results, resume/close and PR continuations run under the service's one `asyncio.Lock` and continue the run inside it, so two identical concurrent requests apply once (the second gets 409 / `already_recorded`). Time spent paused or waiting on the owner is credited back to the 24 h executing deadline; an owner resume after a `deadline` park grants a fresh window.
 - **Modes**: `standard` (mandatory kinds gate: merge, money, outbound, publish, audit_flag, missing_specialist), `supervised` (default; every external action gates), `dry_run` (actions rendered, never executed). A mode can only add supervision; `PUT /orchestrator/settings` answers 422 `specialist_missing` when a non-dry_run mode is set on a missing-specialist workflow.
-- **Owner control surface** (`/admin` Orchestrator block): approval queue (approve / reject / edit-then-approve / done manually / skip), parked runs (resume / close), run log + CSV, global pause (parks in-flight runs at the next step boundary; `/actions` returns `[]`; release does not resume parked runs), per-workflow mode, budget bars. `update_settings()` refuses and logs any call made from inside a run.
-- **Untrusted input**: `summarize_untrusted()` redacts `sk-`/`pk-`/`whsec_`/`AKIA`/Stripe-id/email/`lpa_` tokens, truncates (title 200, body 500) and sets `instruction_like` (advisory, logged, never routes). Owner identity for GitHub events is asserted by the Actions workflow from `sender.login == repository_owner`.
+- **Owner control surface** (`/admin` Orchestrator block): approval queue (approve / reject / edit-then-approve / done manually / skip; `owner_handoff` cards show priority, category, org prefix, conversation link and a "Reply to customer (they can read this)" textarea whose note becomes `owner_reply`), parked runs (resume / close), run log + CSV, global pause (parks in-flight runs at the next step boundary; `/actions` returns `[]`; release does not resume parked runs), per-workflow mode, budget bars. The Billing Customers table shows `billing_status` and a per-row "Rotate key". `update_settings()` refuses and logs any call made from inside a run.
+- **Untrusted input**: `summarize_untrusted()` redacts `sk-`/`pk-`/`whsec_`/`AKIA`/Stripe-id/email/`lpa_` tokens, truncates (title 200, body 500) and sets `instruction_like` (advisory, logged, never routes). `redact_untrusted_text(keep_emails=True)` is used only for the operator-only support conversation store. Owner identity for GitHub events is asserted by the Actions workflow from `sender.login == repository_owner`; `payment_event` types are set by the webhook handler, never by customer text.
 - **Notifications v1**: admin counters, the GitHub status comment, Actions step summary, WARNING logs. Email is a v1.1 follow-up; approvals are never accepted through a notification channel.
 
 ---
 
 ## UI Design System
 
-Pages: `/` (landing), `/chat`, `/calculator`, `/compare`, `/history`, `/trends`, `/widget`, `/ide-compare`, `/billing`, `/admin`, `/mcp-setup`, `/api-docs`, `/whats-new`, `/conversations` (operator key in-page).
+Pages: `/` (landing), `/chat` (Pricing | Support toggle; the optional service key lives in `sessionStorage` only), `/calculator`, `/compare`, `/history`, `/trends`, `/widget`, `/ide-compare`, `/billing`, `/faq` (generated by `scripts/sync_faq.py` from `docs/FAQ.md`), `/admin`, `/mcp-setup`, `/api-docs`, `/whats-new`, `/conversations` (operator key in-page).
 
 | Token | Value |
 |---|---|
@@ -278,11 +304,14 @@ Pages: `/` (landing), `/chat`, `/calculator`, `/compare`, `/history`, `/trends`,
 | DB | Tables | Notes |
 |---|---|---|
 | `pricing_history.db` | `pricing_snapshots`, `routing_savings`, `routing_feedback`, `usage_events`, `pricing_alerts`, `budget_alerts`, `dispatch_receipts` | Receipts are metadata only, purged after 90 days |
-| `billing.db` | `customers`, `provider_keys` | Provider keys stored as ciphertext + last-4 fingerprint |
-| `CONVERSATION_DB_PATH` (optional) | `conversations` | Unset on Fly → in-memory |
+| `billing.db` | `customers` (+ `billing_status`, `past_due_since` since v1.84.0), `stripe_events` (event-id dedup), `provider_keys` | Provider keys stored as ciphertext + last-4 fingerprint; new columns added by a `PRAGMA table_info`-guarded `ALTER TABLE` |
+| `CONVERSATION_DB_PATH` (optional) | `conversations` | Unset on Fly → in-memory. Support turns (`sup-…` ids) are stored with secrets redacted; the customer's own email is kept (operator-only view) |
 | `orchestrator.db` (`ORCHESTRATOR_DB_PATH`) | `orch_runs`, `orch_steps`, `orch_events`, `orch_approvals`, `orch_actions`, `orch_spend`, `orch_settings` | Rows purged after `ORCHESTRATOR_RUN_RETENTION_DAYS` (365); redacted I/O summaries nulled after `ORCHESTRATOR_IO_RETENTION_DAYS` (90); `orch_actions` is append-only |
 
-- All `.db` files are gitignored and live on the Fly volume (`/app/data`).
+- All `.db` files are gitignored and live on the Fly volume (`/app/data`). The mount hides the image's
+  `data/` tree, so the registry snapshot, registry-sourced model files and exchange-rate table are read
+  from the Dockerfile's copy under `/app/vendored` (`PRICE_SNAPSHOT_PATH`, `REGISTRY_MODELS_DIR`,
+  `EXCHANGE_RATES_PATH`; startup logs the registry-sourced model count, v1.84.1).
 - Never stored anywhere: prompts/completions, provider keys in plaintext, IPs, request headers.
 
 ---
@@ -311,17 +340,22 @@ Auth: **None** = public · **Rate-limited** = anonymous, per-IP limit + body cap
 | GET | `/pricing/alerts/signing-info` | None | Webhook HMAC info |
 | POST | `/agent/chat`, `/agent/chat/stream` | Rate-limited | Agent (blocking / SSE) |
 | GET/DELETE | `/agent/conversations[/{id}]` | Operator key | Conversation management |
+| POST | `/support/chat` | Rate-limited (customer key → tier bucket + identity) | Support assistant; `escalation.reference`, `fallback` on cap |
+| POST | `/support/escalations/status` | Rate-limited | `{reference}` in the body → `{reference, status, owner_reply}`; constant 404 |
 | POST | `/v1/chat/completions` | None (plain) / Customer key (dispatch) | OpenAI-compatible proxy; `dispatch` executes |
 | GET | `/dispatch/providers` | None | Executable providers, dispatchable models |
 | GET | `/dispatch/receipts` | Customer key | Org receipts (JSON/CSV) |
 | POST/GET/PUT/DELETE | `/dispatch/keys[/{provider}]` | Customer key | Stored provider keys |
 | GET | `/mcp` | None | MCP server info |
 | POST | `/mcp` | None (key per tool, see MCP table) | MCP JSON-RPC; 1 MB body cap |
+| GET | `/billing/config` | None | Tier catalogue, `checkout_enabled` / `portal_enabled`, grace days |
 | POST | `/billing/signup` | Rate-limited | Free-tier signup |
-| GET/POST | `/billing/me`, `/billing/checkout`, `/billing/portal` | Service key | Dashboard, Stripe checkout/portal |
-| POST | `/billing/webhook` | Stripe signature | Subscription sync |
+| GET/POST | `/billing/me`, `/billing/checkout`, `/billing/portal` | Service key | Dashboard (+ `effective_tier`, `billing_status`), Stripe checkout/portal (503 without Stripe) |
+| POST | `/billing/key/rotate` | Customer key | Rotate own service key (shown once) |
+| POST | `/billing/webhook` | Stripe signature | Subscription + payment-event sync (see Billing table); duplicates ignored |
 | GET | `/admin/stats`, `/admin/rate-limits`, `/admin/customers` | Operator key | Admin data |
-| POST | `/orchestrator/events` | Operator or intake key | Idempotent intake of one inbound item |
+| POST | `/admin/customers/{id}/key/rotate` | Operator key | Owner-side key rotation (shown once, audited) |
+| POST | `/orchestrator/events` | Operator or intake key | Idempotent intake of one inbound item (five trigger classes). `customer_message`/`support.escalation` and `payment_event` are refused here (`refused:untrusted_actor`): only the in-process support agent and Stripe webhook handler open escalations |
 | GET/POST | `/orchestrator/runs/{id}/actions`, `/orchestrator/runs/{id}/actions/{aid}/result` | Operator or intake key | Executor fetch / result (provenance echo + artifact hash) |
 | POST/GET | `/orchestrator/runs[/{id}]`, `/orchestrator/runs/{id}/resume`, `/orchestrator/runs/{id}/close` | Operator key | Owner request; run log (JSON/CSV); run detail; dead-letter controls |
 | GET/POST | `/orchestrator/approvals[/{id}]` | Operator key | Approval queue; approve / reject / edit_approve / done_manually / skip |

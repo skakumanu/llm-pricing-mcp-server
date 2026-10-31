@@ -585,8 +585,9 @@ window.LLMPCurrency = (function () {
 
   <!-- Available tools -->
   <div class="mcp-step" style="margin-bottom:0">
-    <div class="mcp-step-label">31 tools available</div>
+    <div class="mcp-step-label">32 tools available</div>
     <div class="mcp-tool-chips">
+      <span class="mcp-tool-chip">support_chat</span>
       <span class="mcp-tool-chip">get_all_pricing</span>
       <span class="mcp-tool-chip">estimate_cost</span>
       <span class="mcp-tool-chip">compare_costs</span>
@@ -606,18 +607,17 @@ window.LLMPCurrency = (function () {
 <!-- Pricing tiers -->
 <div class="section" id="pricing">
   <div class="section-label">Pricing</div>
-  <h2>Simple, usage-based plans</h2>
-  <p>Start free. Upgrade when you need higher rate limits or priority access.</p>
+  <h2>Simple, honest plans</h2>
+  <p>Start free. Paid plans raise your rate limit, your support assistant allowance and your place in the owner's escalation queue; the data and every tool are the same for everyone. Details in the <a href="/faq" style="color:var(--accent)">FAQ</a>.</p>
   <div class="tiers">
     <div class="tier">
       <h3>Free</h3>
       <div class="price">$0 <span>/mo</span></div>
       <ul>
         <li>30 requests / minute</li>
-        <li>Full router access</li>
-        <li>Live pricing data</li>
-        <li>Savings tracker</li>
-        <li>All tools & calculators</li>
+        <li>Live pricing, router and every tool</li>
+        <li>Support assistant: $0.50/day allowance</li>
+        <li>Escalations: standard priority</li>
       </ul>
       <a href="/billing" class="btn btn-outline">Get started free</a>
     </div>
@@ -627,10 +627,9 @@ window.LLMPCurrency = (function () {
       <div class="price">$29 <span>/mo</span></div>
       <ul>
         <li>120 requests / minute</li>
-        <li>Priority routing</li>
-        <li>Usage analytics</li>
-        <li>Per-org tracking</li>
-        <li>Email support</li>
+        <li>Everything in Free</li>
+        <li>Support assistant: $3.00/day allowance</li>
+        <li>Escalations: pro priority (ahead of free)</li>
       </ul>
       <a href="/billing" class="btn btn-primary">Upgrade to Pro</a>
     </div>
@@ -639,12 +638,11 @@ window.LLMPCurrency = (function () {
       <div class="price">$299 <span>/mo</span></div>
       <ul>
         <li>600 requests / minute</li>
-        <li>SLA guarantee</li>
-        <li>Dedicated support</li>
-        <li>Custom integrations</li>
-        <li>SSO & audit logs</li>
+        <li>Everything in Free</li>
+        <li>Support assistant: $10.00/day allowance</li>
+        <li>Escalations: enterprise priority (first in the queue)</li>
       </ul>
-      <a href="/billing" class="btn btn-outline">Contact sales</a>
+      <a href="/billing" class="btn btn-outline">Upgrade</a>
     </div>
   </div>
 </div>

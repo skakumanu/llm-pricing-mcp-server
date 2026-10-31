@@ -31,6 +31,10 @@ COPY docs/ ./docs/
 # and EXCHANGE_RATES_PATH in fly.toml points there (v1.76.0).
 COPY data/ ./data/
 COPY data/exchange_rates.json ./vendored/exchange_rates.json
+# v1.84.1: the same shadowing hid the registry snapshot and every registry-sourced model
+# file from production, so the whole data/ tree is also kept outside the mount and
+# PRICE_SNAPSHOT_PATH / REGISTRY_MODELS_DIR in fly.toml point there.
+COPY data/ ./vendored/data/
 COPY Procfile .
 COPY runtime.txt .
 

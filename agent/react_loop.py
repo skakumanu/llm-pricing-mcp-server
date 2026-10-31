@@ -1,9 +1,9 @@
 """ReAct (Reasoning + Acting) loop for multi-step agent workflows."""
 import logging
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Dict, List
+from typing import Any, AsyncIterator, Dict, List, Optional
 
-from agent.llm_backend import LLMBackend
+from agent.llm_backend import LLMBackend, LLMResponse
 from agent.tools import AgentTool
 from src.services.pricing_alerts import redact_alert_tokens
 
@@ -47,6 +47,8 @@ class LoopResult:
     """Output from a single ReAct loop execution."""
     final_answer: str
     tool_calls: List[Dict[str, Any]] = field(default_factory=list)
+    # v1.84.0: summed provider-reported usage across every LLM call of this run
+    usage: Dict[str, int] = field(default_factory=lambda: {"input_tokens": 0, "output_tokens": 0})
 
 
 def _sanitize_tool_args(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -70,11 +72,22 @@ def _sanitize_tool_args(args: Dict[str, Any]) -> Dict[str, Any]:
     return sanitized
 
 
+def _add_usage(total: Dict[str, int], response: Optional[LLMResponse]) -> None:
+    usage = getattr(response, "usage", None) or {}
+    if not isinstance(usage, dict):
+        return
+    for key in ("input_tokens", "output_tokens"):
+        value = usage.get(key)
+        if isinstance(value, int):
+            total[key] = total.get(key, 0) + value
+
+
 class ReActLoop:
     """Iteratively call the LLM, execute tool calls, and feed results back.
 
     Stops when the model produces a plain-text reply (no tool calls) or when
-    max_iterations is reached.
+    max_iterations is reached. ``system_prompt`` (v1.84.0) defaults to the pricing
+    analyst prompt; the support agent passes its own.
     """
 
     def __init__(
@@ -82,16 +95,19 @@ class ReActLoop:
         llm_backend: LLMBackend,
         tools: List[AgentTool],
         max_iterations: int = 5,
+        system_prompt: Optional[str] = None,
     ):
         self._llm = llm_backend
         self._tool_index: Dict[str, AgentTool] = {t.name: t for t in tools}
         self._tool_schemas = [t.to_llm_schema() for t in tools]
         self._max_iterations = max_iterations
+        self._system_prompt = system_prompt or SYSTEM_PROMPT
 
     async def run(self, messages: List[Dict[str, Any]]) -> LoopResult:
         """Run the ReAct loop and return the final answer with a full tool-call log."""
         all_tool_calls: List[Dict[str, Any]] = []
         working_messages = list(messages)
+        usage: Dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
 
         for iteration in range(self._max_iterations):
             logger.debug("ReAct iteration %d/%d", iteration + 1, self._max_iterations)
@@ -99,14 +115,16 @@ class ReActLoop:
             response = await self._llm.complete(
                 messages=working_messages,
                 tools=self._tool_schemas,
-                system=SYSTEM_PROMPT,
+                system=self._system_prompt,
             )
+            _add_usage(usage, response)
 
             # No tool calls → the model has produced its final answer
             if not response.tool_calls:
                 return LoopResult(
                     final_answer=response.content,
                     tool_calls=all_tool_calls,
+                    usage=usage,
                 )
 
             # Append the assistant's turn (using provider-native format)
@@ -149,12 +167,14 @@ class ReActLoop:
                 }
             ],
             tools=[],
-            system=SYSTEM_PROMPT,
+            system=self._system_prompt,
         )
+        _add_usage(usage, final_response)
 
         return LoopResult(
             final_answer=final_response.content,
             tool_calls=all_tool_calls,
+            usage=usage,
         )
 
     async def stream(self, messages: List[Dict[str, Any]]) -> AsyncIterator[Dict[str, Any]]:
@@ -166,6 +186,7 @@ class ReActLoop:
         """
         all_tool_calls: List[Dict[str, Any]] = []
         working_messages = list(messages)
+        usage: Dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
 
         for iteration in range(self._max_iterations):
             yield {"type": "thinking", "iteration": iteration + 1}
@@ -177,18 +198,19 @@ class ReActLoop:
             async for ev in self._llm.complete_stream(
                 messages=working_messages,
                 tools=self._tool_schemas,
-                system=SYSTEM_PROMPT,
+                system=self._system_prompt,
             ):
                 if ev["type"] == "token":
                     token_buffer.append(ev["text"])
                 elif ev["type"] == "response":
                     response = ev["response"]
+            _add_usage(usage, response)
 
             if not response.tool_calls:
                 # Final answer: emit buffered tokens then the full answer event.
                 for token in token_buffer:
                     yield {"type": "token", "text": token}
-                yield {"type": "answer", "text": response.content, "tool_calls": all_tool_calls}
+                yield {"type": "answer", "text": response.content, "tool_calls": all_tool_calls, "usage": usage}
                 return
 
             # Tool-call round: discard buffered tokens, process each tool.
@@ -231,11 +253,12 @@ class ReActLoop:
         async for ev in self._llm.complete_stream(
             messages=final_messages,
             tools=[],
-            system=SYSTEM_PROMPT,
+            system=self._system_prompt,
         ):
             if ev["type"] == "token":
                 yield {"type": "token", "text": ev["text"]}
             elif ev["type"] == "response":
                 final_response = ev["response"]
+        _add_usage(usage, final_response)
 
-        yield {"type": "answer", "text": final_response.content, "tool_calls": all_tool_calls}
+        yield {"type": "answer", "text": final_response.content, "tool_calls": all_tool_calls, "usage": usage}

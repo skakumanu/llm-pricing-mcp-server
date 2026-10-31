@@ -20,6 +20,40 @@ logger = logging.getLogger(__name__)
 REGISTRY_MODELS_DIR = Path(__file__).resolve().parents[2] / "data" / "registry_models"
 
 
+def registry_models_dir() -> Path:
+    """Runtime location of the registry-sourced model files.
+
+    ``settings.registry_models_dir`` overrides the repo path. On Fly the persistent volume is
+    mounted over ``/app/data`` and hides the image's copy; before v1.84.1 that silently dropped
+    every registry-sourced model from production (273 models served instead of 600+).
+    """
+    try:
+        from src.config.settings import settings
+        if settings.registry_models_dir:
+            return Path(settings.registry_models_dir)
+    except Exception:  # nosec B110 — settings unavailable (scripts, partial imports)
+        pass
+    return REGISTRY_MODELS_DIR
+
+
+def registry_models_inventory(base: Optional[Path] = None) -> Dict[str, object]:
+    """What the runtime can see: directory, whether it exists, files and model count.
+
+    Logged at startup so a deployment that cannot see its registry-sourced models says so
+    instead of quietly serving a smaller catalogue.
+    """
+    base = Path(base or registry_models_dir())
+    files = sorted(base.glob("*.json")) if base.is_dir() else []
+    models = 0
+    for f in files:
+        try:
+            doc = json.loads(f.read_text(encoding="utf-8"))
+            models += len(doc.get("models", {})) if isinstance(doc, dict) else 0
+        except Exception:  # nosec B110 — a broken file is reported as zero models
+            pass
+    return {"dir": str(base), "exists": base.is_dir(), "files": len(files), "models": models}
+
+
 def registry_models_slug(provider_name: str) -> str:
     """File stem for a provider's registry-sourced models JSON."""
     return provider_name.lower().replace(" ", "_").replace(".", "")
@@ -27,7 +61,7 @@ def registry_models_slug(provider_name: str) -> str:
 
 def registry_models_path(provider_name: str, out_dir: Optional[Path] = None) -> Path:
     """Where a provider's registry-sourced models JSON lives (it may not exist yet)."""
-    return Path(out_dir or REGISTRY_MODELS_DIR) / f"{registry_models_slug(provider_name)}.json"
+    return Path(out_dir or registry_models_dir()) / f"{registry_models_slug(provider_name)}.json"
 
 
 def render_registry_models_doc(doc: dict) -> bytes:
@@ -187,7 +221,10 @@ class BasePricingProvider(ABC):
     # -- registry-sourced models (data/registry_models/<slug>.json) --------------
 
     def _registry_models_path(self) -> Path:
-        return registry_models_path(self.provider_name, Path(self.REGISTRY_MODELS_DIR))
+        base = self.REGISTRY_MODELS_DIR
+        if base == REGISTRY_MODELS_DIR:  # untouched default: honour the deployment override
+            base = registry_models_dir()
+        return registry_models_path(self.provider_name, Path(base))
 
     def _load_registry_models(self) -> Dict[str, dict]:
         """The provider's registry-sourced models, ``{name: entry}``; ``{}`` when absent.

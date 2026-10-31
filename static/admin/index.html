@@ -447,10 +447,10 @@
     </div>
     <table class="data-table" id="cust-table">
       <thead>
-        <tr><th>Email</th><th>Tier</th><th>API Key</th><th>Org ID</th><th>Stripe</th><th>Joined</th></tr>
+        <tr><th>Email</th><th>Tier</th><th>Billing</th><th>API Key</th><th>Org ID</th><th>Stripe</th><th>Joined</th><th></th></tr>
       </thead>
       <tbody id="cust-body">
-        <tr class="empty-row"><td colspan="6">Loading…</td></tr>
+        <tr class="empty-row"><td colspan="8">Loading…</td></tr>
       </tbody>
     </table>
   </div>
@@ -788,7 +788,7 @@ function renderCustomers(data) {
 
   const cbody = document.getElementById("cust-body");
   if (customers.length === 0) {
-    cbody.innerHTML = '<tr class="empty-row"><td colspan="6">No customers yet — <a href="/billing" style="color:var(--accent)">sign up</a></td></tr>';
+    cbody.innerHTML = '<tr class="empty-row"><td colspan="8">No customers yet — <a href="/billing" style="color:var(--accent)">sign up</a></td></tr>';
     return;
   }
   cbody.innerHTML = customers.map(c => {
@@ -797,16 +797,34 @@ function renderCustomers(data) {
     const stripeIcon = c.stripe_customer_id
       ? `<span style="color:var(--success)" title="${esc(c.stripe_customer_id)}">✓</span>`
       : `<span style="color:var(--muted)">—</span>`;
+    const status = c.billing_status || "active";
+    const effective = c.effective_tier && c.effective_tier !== c.tier ? ` <span style="color:var(--danger)" title="served at the free limit (grace period over)">→ ${esc(c.effective_tier)}</span>` : "";
+    const statusPill = status === "past_due"
+      ? `<span class="pill pill-red">past due</span>${effective}`
+      : `<span class="pill pill-green">active</span>`;
     return `
       <tr>
         <td>${esc(c.email || "")}</td>
         <td><span style="color:${tierColor};font-weight:600;text-transform:uppercase;font-size:11px">${esc(c.tier)}</span></td>
+        <td>${statusPill}</td>
         <td class="mono" style="font-size:11px">${esc(c.api_key_preview || "")}</td>
         <td class="mono" style="font-size:11px;color:var(--muted)">${esc((c.org_id || "").slice(0, 8))}…</td>
         <td style="text-align:center">${stripeIcon}</td>
         <td style="color:var(--muted);font-size:12px">${joined}</td>
+        <td class="orch-actions"><button onclick="rotateCustomerKey('${esc(c.id)}', '${esc((c.org_id || "").slice(0, 8))}')" title="Issue a new service key (v1.84.0); the old one stops at once. Relay it to the customer yourself.">Rotate key</button></td>
       </tr>`;
   }).join("");
+}
+
+// v1.84.0 — owner-side key rotation for a customer who lost their key. Operator key only;
+// the new key is shown exactly once here and never stored by this page.
+async function rotateCustomerKey(customerId, orgRef) {
+  if (!confirm(`Rotate the service key for org ${orgRef}…? Their current key stops working immediately. Only do this after verifying the request yourself.`)) return;
+  try {
+    const data = await orchJson("/admin/customers/" + encodeURIComponent(customerId) + "/key/rotate", { method: "POST" });
+    prompt("New service key (shown once; copy it now and relay it to the customer by a channel you have verified):", data.api_key);
+    await loadAll();
+  } catch (e) { showError("Key rotation failed: " + e.message); }
 }
 
 // ── Orchestrator (v1.83.0) ─────────────────────────────────────────────────
@@ -904,14 +922,27 @@ function renderOrchApprovals(data) {
     if (a.recipient) artifact += `<div style="font-size:10px;color:var(--muted)">to ${esc(a.recipient)}</div>`;
     if ((a.advisory_tags || []).length) artifact += `<div style="font-size:10px;color:var(--warn)">advisory: ${esc(a.advisory_tags.join(", "))}</div>`;
     if (a.instruction_like) artifact += `<div style="font-size:10px;color:var(--warn)">instruction-like content logged (routing unaffected)</div>`;
+    // v1.84.0 — customer escalation card (owner_handoff): priority, category, opaque customer, conversation link.
+    let priorityPill = "";
+    if (art.kind === "owner_handoff") {
+      const prio = a.priority || art.priority || "standard";
+      const prioClass = { enterprise: "pill-red", pro: "pill-amber", standard: "pill-blue" }[prio] || "pill-blue";
+      priorityPill = `<div style="margin-top:4px"><span class="pill ${prioClass}" title="escalation priority (tier)">${esc(prio)}</span></div>`;
+      const cust = art.customer || {};
+      artifact += `<div style="font-size:11px;color:var(--muted);margin-top:4px">customer: ${cust.identified ? "identified · org " + esc(cust.org_ref || "?") + "…" : "anonymous"}`;
+      if (art.conversation_ref) artifact += ` · <a href="/conversations?id=${encodeURIComponent(art.conversation_ref)}" style="color:var(--accent)" title="operator-only conversation view">${esc(art.conversation_ref)}</a>`;
+      artifact += `</div>`;
+      if (art.suggested_reply) artifact += `<div style="font-size:11px;color:var(--muted);margin-top:4px">agent suggested: <em>${esc(truncate(art.suggested_reply, 220))}</em></div>`;
+      artifact += `<textarea id="reply-${esc(a.approval_id)}" rows="2" placeholder="Reply to customer (they can read this)" style="width:100%;margin-top:6px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 7px;font-size:11px;font-family:inherit"></textarea>`;
+    }
     const allowed = a.allowed_decisions || ["approve", "reject"];
     const buttons = allowed.map(d => {
-      const label = { approve: "Approve", reject: "Reject", edit_approve: "Edit + approve", done_manually: "Done manually", skip: "Skip" }[d] || d;
+      const label = { approve: "Approve", reject: "Reject", edit_approve: "Edit + approve", done_manually: art.kind === "owner_handoff" ? "Reply + done" : "Done manually", skip: "Skip" }[d] || d;
       return `<button class="${d === "reject" ? "danger" : ""}" onclick="orchDecide('${esc(a.approval_id)}', '${d}', '${esc(a.artifact_hash)}')">${label}</button>`;
     }).join("");
     return `<tr>
       <td class="mono" style="font-size:11px">${esc(a.run_id)}<div style="color:var(--muted)">${esc(a.workflow_id || "")} · ${esc(a.mode || "")}</div></td>
-      <td><span class="pill pill-amber">${esc(a.kind)}</span><div style="font-size:11px;color:var(--muted)">${esc(a.step_name || "")}</div></td>
+      <td><span class="pill pill-amber">${esc(a.kind)}</span><div style="font-size:11px;color:var(--muted)">${esc(a.step_name || "")}</div>${priorityPill}</td>
       <td style="font-size:12px;max-width:360px">${artifact}</td>
       <td class="orch-actions">${buttons}</td>
     </tr>`;
@@ -964,9 +995,17 @@ async function orchDecide(approvalId, decision, artifactHash) {
     if (!edited) return;
     body.artifact = { body: edited };
   } else if (decision === "reject" || decision === "skip" || decision === "done_manually") {
-    const note = prompt("Optional note for the run log:");
-    if (note === null) return;
-    if (note) body.note = note;
+    // v1.84.0: an owner_handoff card has its own reply textarea; that note is what the customer reads.
+    const replyBox = document.getElementById("reply-" + approvalId);
+    if (replyBox) {
+      const reply = replyBox.value.trim();
+      if (decision === "done_manually" && !reply && !confirm("Mark done without a reply to the customer?")) return;
+      if (reply) body.note = reply;
+    } else {
+      const note = prompt("Optional note for the run log:");
+      if (note === null) return;
+      if (note) body.note = note;
+    }
   }
   try {
     await orchJson("/orchestrator/approvals/" + encodeURIComponent(approvalId), { method: "POST", body: JSON.stringify(body) });

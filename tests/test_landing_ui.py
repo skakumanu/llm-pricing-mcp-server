@@ -43,7 +43,7 @@ def test_no_chip_for_operator_only_tool(landing, tool):
 
 
 def test_public_chips_and_tool_count_remain(landing):
-    assert "31 tools available" in landing
+    assert "32 tools available" in landing  # v1.84.0: + support_chat
     for tool in ("get_all_pricing", "estimate_cost", "register_price_alert", "manage_price_alert", "ask_agent"):
         assert f'<span class="mcp-tool-chip">{tool}</span>' in landing
 

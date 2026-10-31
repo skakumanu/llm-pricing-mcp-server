@@ -1,5 +1,6 @@
 """Main FastAPI application for LLM Pricing MCP Server."""
 import sys
+import hashlib
 import logging
 import signal
 import secrets
@@ -61,7 +62,11 @@ from src.services.usage_tracker import init_usage_tracker, get_usage_tracker  # 
 from src.services.session_recommendation import compute_session_recommendation  # noqa: E402
 from src.services.budget_alerts import init_budget_alert_service, get_budget_alert_service  # noqa: E402
 from src.services.webhook_guard import WebhookURLRejected, warn_if_private_targets_allowed  # noqa: E402
-from src.services.billing_service import init_billing_service, get_billing_service  # noqa: E402
+from src.services.billing_service import (  # noqa: E402
+    effective_tier as _effective_tier, init_billing_service, get_billing_service,
+)
+from src.services import tiers as _tiers  # noqa: E402
+from src.services.support_budget import support_action as _support_action  # noqa: E402
 from src.models.dispatch import ChatCompletionsRequest  # noqa: E402
 from src.services.dispatch_executors import HeaderKeyResolver  # noqa: E402
 from src.services.dispatch_receipts import init_dispatch_receipt_store, get_dispatch_receipt_store  # noqa: E402
@@ -90,7 +95,8 @@ from src.services.rate_limiter import (  # noqa: E402
 )
 from src.models.billing import (  # noqa: E402
     SignupRequest, SignupResponse, CheckoutRequest, CheckoutResponse,
-    BillingPortalResponse, CustomerDashboard,
+    BillingPortalResponse, CustomerDashboard, BillingConfigResponse, KeyRotateResponse,
+    SupportChatRequest, SupportChatResponse, EscalationStatusRequest,
 )
 from src.services.benchmark_service import enrich_models, set_cache_ttl  # noqa: E402
 from agent.conversation import init_conversation_store, get_conversation_store  # noqa: E402
@@ -103,13 +109,16 @@ from src.services.pricing_aggregator import (  # noqa: E402
     PROVIDER_COUNT, PricingAggregatorService, get_pricing_aggregator,
 )
 from src.services.cost_calculator import compute_token_cost  # noqa: E402
+from src.services.base_provider import registry_models_inventory  # noqa: E402
 from src.services.price_oracle import get_price_oracle  # noqa: E402
 from src.services.data_quality import compute_data_quality_report  # noqa: E402
 from src.services.telemetry import get_telemetry_service  # noqa: E402
 from src.services.deployment import get_deployment_manager  # noqa: E402
 from src.services.geolocation import GeolocationService  # noqa: E402
 from agent.pricing_agent import PricingAgent  # noqa: E402
+from agent.support_agent import SupportAgent  # noqa: E402
 from mcp.tools.tool_manager import ToolManager  # noqa: E402
+from mcp.tools import support_chat as _support_chat_tool  # noqa: E402
 from mcp.caller import ANONYMOUS, PUBLIC, McpCaller  # noqa: E402
 
 # Configure logging after settings are available
@@ -339,6 +348,14 @@ if _static_dir.exists():
             StaticFiles(directory=str(_whats_new_dir), html=True),
             name="whats_new_static",
         )
+    # v1.84.0: customer FAQ, generated from docs/FAQ.md by scripts/sync_faq.py
+    _faq_dir = _static_dir / "faq"
+    if _faq_dir.exists():
+        app.mount(
+            "/faq",
+            StaticFiles(directory=str(_faq_dir), html=True),
+            name="faq_static",
+        )
     # Admin page served directly (not as a static mount) so /admin/stats
     # and /admin/rate-limits API routes are not shadowed by StaticFiles.
 
@@ -419,14 +436,22 @@ _anonymous_rate_limited_paths = {
     # listed; now anonymous but throttled and body-capped (batch does one lookup per model).
     "/cost-estimate",
     "/cost-estimate/batch",
+    # v1.84.0: the support agent runs an LLM on the operator's key (its own per-caller daily
+    # caps apply on top of the limiter); the status lookup reads the orchestrator store.
+    "/support/chat",
+    "/support/escalations/status",
 }
 
 # Anonymous-throttled paths where a valid customer key, if sent, still gets that
-# customer's tier limit instead of the shared per-IP bucket. Only paths whose
-# handlers ignore request.state.customer belong here: it affects rate limiting only.
+# customer's tier limit instead of the shared per-IP bucket. This set affects rate
+# limiting only: handlers here must not *require* request.state.customer. The
+# cost-estimate handlers ignore it; the v1.84.0 support handlers resolve the caller
+# themselves from the connection headers (_resolve_mcp_caller), never from this state.
 _customer_tiered_anonymous_paths = {
     "/cost-estimate",
     "/cost-estimate/batch",
+    "/support/chat",
+    "/support/escalations/status",
 }
 
 # Public (no auth, no limiter) but still body-capped: /v1/chat/completions must stay
@@ -459,6 +484,8 @@ _unauthenticated_paths = {
     "/rate-limits/tiers",
     "/billing",
     "/billing/webhook",
+    # v1.84.0: public tier catalogue + checkout/portal availability for the billing page and agent
+    "/billing/config",
     # HTTP MCP transport — public so remote MCP clients (Claude Desktop, Cursor) can connect
     "/mcp",
     # Core pricing data — public read-only endpoints used by the frontend pages
@@ -507,7 +534,9 @@ _OPERATOR_ONLY_EXACT = {
 _OPERATOR_ONLY_DELETE_PREFIXES = ("/pricing/alerts/", "/agent/conversations/")
 # v1.83.0: every method under these prefixes is operator-only (run log, approval queue,
 # parked runs, settings, budget). Constant refusals, limiter and body cap are inherited.
-_OPERATOR_ONLY_PREFIXES = ("/orchestrator/",)
+# v1.84.0: /admin/customers/{id}/key/rotate (owner-side key rotation) joins them; the exact
+# path /admin/customers stays in _sensitive_paths.
+_OPERATOR_ONLY_PREFIXES = ("/orchestrator/", "/admin/customers/")
 
 # The three executor routes that also accept the separate ORCHESTRATOR_INTAKE_KEY
 # (GitHub Actions). The intake key unlocks nothing else, but through these three routes it can
@@ -622,7 +651,7 @@ async def security_middleware(request: Request, call_next):
             or path.startswith("/providers") or path.startswith("/landing")
             or path.startswith("/mcp")
             or path.startswith("/mcp-setup") or path.startswith("/api-docs")
-            or path.startswith("/whats-new")
+            or path.startswith("/whats-new") or path.startswith("/faq")
             or path == "/admin" or path in _unauthenticated_paths
         )
     ):
@@ -712,7 +741,8 @@ async def security_middleware(request: Request, call_next):
         )
         _customer = getattr(request.state, "customer", None)
         if _customer:
-            tier = _customer.tier
+            # v1.84.0: a past-due customer past the grace period is served at the free limit.
+            tier = _effective_tier(_customer, settings.billing_past_due_grace_days)
             bucket_key = _customer.id
         else:
             # X-Api-Key-Tier is self-declared, so it only counts from a caller
@@ -1055,17 +1085,57 @@ async def get_pricing_agent() -> PricingAgent:
     return _pricing_agent
 
 
+_support_agent: Optional[SupportAgent] = None
+_support_agent_lock = asyncio.Lock()
+
+
+async def get_support_agent() -> SupportAgent:
+    """Lazy-initialize and return the singleton SupportAgent (v1.84.0).
+
+    Shares the ToolManager with the PricingAgent so the wrapped public pricing tools use one
+    pricing cache. Raises ValueError if the LLM key is not configured, RuntimeError while
+    shutting down.
+    """
+    global _support_agent, _tool_manager
+
+    if deployment_manager.is_shutting_down():
+        raise RuntimeError("Service is shutting down; agent requests are not accepted.")
+
+    if _support_agent is None:
+        async with _support_agent_lock:
+            if _support_agent is None:
+                logger.info("Initializing SupportAgent...")
+                if _tool_manager is None:
+                    _tool_manager = ToolManager()
+                agent = SupportAgent(tool_manager=_tool_manager)
+                try:
+                    await agent.initialize()
+                except ValueError:
+                    logger.warning("SupportAgent init failed: API key not configured")
+                    raise
+                _tool_manager.set_support_agent(agent)
+                _support_agent = agent
+                logger.info("SupportAgent initialized successfully")
+
+    return _support_agent
+
+
 # ---------------------------------------------------------------------------
 # Pricing history — background snapshot loop + startup
 # ---------------------------------------------------------------------------
 
 async def _prewarm_agent() -> None:
-    """Background task: initialize the PricingAgent at startup to avoid cold-start latency."""
+    """Background task: initialize both agents at startup to avoid cold-start latency."""
     try:
         await get_pricing_agent()
         logger.info("PricingAgent pre-warm complete")
     except Exception as exc:
         logger.warning("PricingAgent pre-warm failed (will retry on first request): %s", exc)
+    try:
+        await get_support_agent()
+        logger.info("SupportAgent pre-warm complete")
+    except Exception as exc:
+        logger.warning("SupportAgent pre-warm failed (will retry on first request): %s", exc)
 
 
 async def _pricing_snapshot_loop() -> None:
@@ -1110,6 +1180,13 @@ async def startup_pricing_history() -> None:
         logger.error("Provider key store init failed (stored keys disabled): %s", type(exc).__name__)
     await init_pricing_history_service(settings.pricing_history_db_path)
     logger.info("Pricing history service initialized at %s", settings.pricing_history_db_path)
+    # v1.83.2: say loudly whether the registry-sourced catalogue is visible at runtime.
+    _inv = registry_models_inventory()
+    if _inv["models"]:
+        logger.info("Registry-sourced models: %d across %d file(s) at %s", _inv["models"], _inv["files"], _inv["dir"])
+    else:
+        logger.warning("No registry-sourced models visible at %s (exists=%s); the catalogue is curated-only. "
+                       "On Fly set REGISTRY_MODELS_DIR to the image copy outside the volume mount.", _inv["dir"], _inv["exists"])
     await init_pricing_alert_service(settings.pricing_history_db_path)
     logger.info("Pricing alert service initialized")
     await init_savings_tracker(settings.pricing_history_db_path)
@@ -2807,9 +2884,7 @@ async def router_recommend_stream(req: RouterRequest, request: Request):
 async def rate_limit_tiers():
     """Return the rate limit (requests/minute) for each API key tier."""
     return {
-        "free": settings.rate_limit_free,
-        "pro": settings.rate_limit_pro,
-        "enterprise": settings.rate_limit_enterprise,
+        **{tier: _tiers.rate_limit_for(tier, settings) for tier in _tiers.TIER_IDS},
         "default": settings.rate_limit_per_minute,
     }
 
@@ -2868,6 +2943,18 @@ async def billing_signup(req: SignupRequest):
     )
 
 
+@app.get("/billing/config", response_model=BillingConfigResponse, tags=["Billing"])
+async def billing_config():
+    """
+    Public tier catalogue and what this server can sell (v1.84.0).
+
+    `checkout_enabled` / `portal_enabled` are true only when Stripe is configured; each
+    tier's `checkout_available` additionally needs its Stripe price id. The entitlement
+    strings are the exact copy shown on /billing, the landing page and by the support agent.
+    """
+    return BillingConfigResponse(**_tiers.catalog_payload(settings))
+
+
 @app.post("/billing/checkout", response_model=CheckoutResponse, tags=["Billing"])
 async def billing_checkout(req: CheckoutRequest, request: Request):
     """
@@ -2877,7 +2964,7 @@ async def billing_checkout(req: CheckoutRequest, request: Request):
     Returns 503 if Stripe is not configured.
     """
     if not settings.stripe_secret_key:
-        raise HTTPException(status_code=503, detail="Stripe not configured")
+        raise HTTPException(status_code=503, detail="Checkout is not enabled on this server (Stripe not configured)")
 
     customer = getattr(request.state, "customer", None)
     if customer is None:
@@ -2930,41 +3017,156 @@ async def billing_webhook(request: Request):
 
     billing = get_billing_service()
     price_map = _price_tier_map()
-    event_type = event["type"]
+    event_type = str(event["type"])
+    event_id = event.get("id")
+    obj = (event.get("data") or {}).get("object") or {}
 
+    # Action-record target for events with no resolvable customer: an opaque digest of the Stripe
+    # event id (the id itself is never stored outside stripe_events).
+    event_ref = f"stripe_event:{hashlib.sha256(str(event_id).encode('utf-8')).hexdigest()[:12]}" if event_id else None
+
+    # v1.84.0: Stripe redelivers; the event id is recorded first (atomic INSERT OR IGNORE) so a
+    # duplicate does nothing. If applying the event then fails, the id is forgotten again so
+    # Stripe's retry can complete the work instead of being swallowed as a duplicate.
+    if event_id and not await billing.record_stripe_event(event_id, event_type):
+        await _support_action(f"billing.{event_type}", "duplicate", actor="stripe", target=event_ref,
+                              trigger="stripe:webhook")
+        return {"ok": True, "duplicate": True}
+    try:
+        return await _apply_stripe_event(billing, price_map, event_id, event_type, obj, event_ref)
+    except Exception:
+        if event_id:
+            await billing.forget_stripe_event(event_id)
+        raise
+
+
+async def _apply_stripe_event(billing, price_map, event_id, event_type: str, obj: dict, event_ref) -> dict:
+    outcome = "ignored"
+    customer = None
     if event_type == "checkout.session.completed":
-        session = event["data"]["object"]
-        customer_id = session.get("metadata", {}).get("customer_id")
-        tier = session.get("metadata", {}).get("tier", "pro")
-        stripe_customer_id = session.get("customer")
-        stripe_subscription_id = session.get("subscription")
+        customer_id = (obj.get("metadata") or {}).get("customer_id")
+        tier = (obj.get("metadata") or {}).get("tier", "pro")
         if customer_id:
             await billing.update_tier(
-                customer_id,
-                tier,
-                stripe_customer_id=stripe_customer_id,
-                stripe_subscription_id=stripe_subscription_id,
+                customer_id, tier,
+                stripe_customer_id=obj.get("customer"),
+                stripe_subscription_id=obj.get("subscription"),
+                billing_status="active",
             )
+            customer = await billing.get_customer_by_id(customer_id)
+            outcome = f"applied:{tier}"
 
     elif event_type == "customer.subscription.updated":
-        sub = event["data"]["object"]
-        stripe_customer_id = sub.get("customer")
-        price_id = sub["items"]["data"][0]["price"]["id"] if sub.get("items", {}).get("data") else None
+        price_id = obj["items"]["data"][0]["price"]["id"] if (obj.get("items") or {}).get("data") else None
         tier = price_map.get(price_id, "free")
-        if stripe_customer_id:
-            customer = await billing.get_customer_by_stripe_id(stripe_customer_id)
-            if customer:
+        customer = await _stripe_customer(billing, obj.get("customer"))
+        if customer:
+            status = "past_due" if obj.get("status") in ("past_due", "unpaid") else "active"
+            if status == "past_due":
                 await billing.update_tier(customer.id, tier)
+                if customer.billing_status != "past_due":
+                    await billing.set_billing_status(customer.id, "past_due")
+            else:
+                await billing.update_tier(customer.id, tier, billing_status="active")
+            outcome = f"applied:{tier}:{status}"
 
     elif event_type == "customer.subscription.deleted":
-        sub = event["data"]["object"]
-        stripe_customer_id = sub.get("customer")
-        if stripe_customer_id:
-            customer = await billing.get_customer_by_stripe_id(stripe_customer_id)
-            if customer:
-                await billing.update_tier(customer.id, "free")
+        customer = await _stripe_customer(billing, obj.get("customer"))
+        if customer:
+            await billing.update_tier(customer.id, "free", billing_status="active")
+            outcome = "applied:free"
 
+    elif event_type == "invoice.paid":
+        customer = await _stripe_customer(billing, obj.get("customer"))
+        if customer:
+            await billing.set_billing_status(customer.id, "active")
+            outcome = "applied:active"
+
+    elif event_type == "invoice.payment_failed":
+        customer = await _stripe_customer(billing, obj.get("customer"))
+        if customer:
+            if customer.billing_status != "past_due":
+                await billing.set_billing_status(customer.id, "past_due")
+            await _stripe_escalation(event_id, event_type, customer, "payment_failure")
+            outcome = "escalated:past_due"
+
+    elif event_type == "charge.refunded":
+        customer = await _stripe_customer(billing, obj.get("customer"))
+        if customer:
+            await _stripe_escalation(event_id, event_type, customer, "refund")
+            outcome = "escalated"
+
+    elif event_type == "charge.dispute.created":
+        # A Dispute object carries no customer field, only the disputed charge.
+        customer = await _stripe_customer(billing, await _stripe_customer_id_for_dispute(obj))
+        if customer:
+            await _stripe_escalation(event_id, event_type, customer, "billing_dispute")
+            outcome = "escalated"
+
+    await _support_action(
+        f"billing.{event_type}", outcome, actor="stripe", trigger="stripe:webhook",
+        target=f"org:{customer.org_id[:8]}" if customer else event_ref,
+    )
     return {"ok": True}
+
+
+async def _stripe_customer(billing, stripe_customer_id):
+    if not stripe_customer_id:
+        return None
+    if isinstance(stripe_customer_id, dict):  # expanded object
+        stripe_customer_id = stripe_customer_id.get("id")
+    return await billing.get_customer_by_stripe_id(stripe_customer_id)
+
+
+async def _stripe_customer_id_for_dispute(dispute: dict):
+    """Stripe customer id behind a Dispute: its own ``customer`` if present (not in the real
+    object), else read from the disputed Charge. A failed lookup raises so the webhook returns
+    500 and Stripe retries (the event id is forgotten by the caller)."""
+    if dispute.get("customer"):
+        return dispute["customer"]
+    charge_id = dispute.get("charge")
+    if isinstance(charge_id, dict):
+        return charge_id.get("customer")
+    if not charge_id:
+        return None
+    import stripe  # local import — optional dependency
+    charge = await asyncio.to_thread(stripe.Charge.retrieve, str(charge_id))
+    return charge.get("customer")
+
+
+async def _stripe_escalation(event_id, event_type: str, customer, category: str) -> None:
+    """v1.84.0: open a support_escalation run for a Stripe payment event (refund, dispute, failed
+    renewal). Trigger class payment_event, actor stripe, dedup on the Stripe event id. The artifact
+    names the customer by org prefix only."""
+    try:
+        svc = get_orchestrator_service()
+    except RuntimeError:
+        logger.error("Stripe %s for org %s not escalated: orchestrator not initialised", event_type,
+                     customer.org_id[:8])
+        return
+    dedup = f"stripe:{event_id}" if event_id else f"stripe:{event_type}:{customer.org_id[:8]}:{int(time.time())}"
+    tier = _effective_tier(customer, settings.billing_past_due_grace_days)
+    payload = {
+        "trigger_class": "payment_event",
+        "event_type": event_type,
+        "dedup_key": dedup,
+        "actor": "stripe",
+        "actor_is_owner": False,
+        "source": {"kind": "stripe", "ref": event_type},
+        "data": {
+            "title": f"stripe {event_type}",
+            "body": f"Stripe reported {event_type} for customer {customer.org_id[:8]} (plan {customer.tier}).",
+            "category": category,
+            "priority": _tiers.escalation_priority_for(customer.tier),
+            "tier": tier,
+            "identified": True,
+            "customer_ref": customer.org_id[:8],
+        },
+    }
+    try:
+        await svc.intake_event(payload, actor_kind="stripe")
+    except OrchestratorError as exc:
+        logger.error("Stripe %s escalation refused: %s", event_type, exc.code)
 
 
 @app.get("/billing/portal", response_model=BillingPortalResponse, tags=["Billing"])
@@ -2975,7 +3177,8 @@ async def billing_portal(request: Request):
     Returns 503 if Stripe is not configured.
     """
     if not settings.stripe_secret_key:
-        raise HTTPException(status_code=503, detail="Stripe not configured")
+        raise HTTPException(status_code=503,
+                            detail="The billing portal is not enabled on this server (Stripe not configured)")
 
     customer = getattr(request.state, "customer", None)
     if customer is None:
@@ -3015,6 +3218,7 @@ async def billing_me(request: Request):
         savings_per_1m = 0.0
         acceptance_rate = None
 
+    eff = _effective_tier(customer, settings.billing_past_due_grace_days)
     return CustomerDashboard(
         email=customer.email,
         tier=customer.tier,
@@ -3023,6 +3227,61 @@ async def billing_me(request: Request):
         router_calls_30d=router_calls,
         savings_per_1m_30d=savings_per_1m,
         acceptance_rate=acceptance_rate,
+        effective_tier=eff,
+        billing_status=getattr(customer, "billing_status", "active") or "active",
+        past_due_since=getattr(customer, "past_due_since", None),
+        rate_limit_per_minute=_tiers.rate_limit_for(eff, settings),
+    )
+
+
+@app.post("/billing/key/rotate", response_model=KeyRotateResponse, tags=["Billing"])
+async def billing_key_rotate(request: Request):
+    """
+    Rotate the calling customer's service key (v1.84.0).
+
+    Needs the *current* key in `x-api-key` (the operator key alone is 401, like `/billing/me`).
+    The old key stops working immediately; the new one is shown once, here. Without the
+    current key there is no self-serve recovery: ask the support assistant to escalate.
+    """
+    customer = getattr(request.state, "customer", None)
+    if customer is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    new_key = await get_billing_service().rotate_api_key(customer.id)
+    if not new_key:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    await _support_action("billing.key_rotate", "rotated", actor="customer", target=f"org:{customer.org_id[:8]}",
+                          trigger="http:/billing/key/rotate")
+    return KeyRotateResponse(
+        api_key=new_key, org_id=customer.org_id,
+        message="Your service key was rotated. Save the new key now: it is shown only once and the old key "
+                "no longer works.",
+    )
+
+
+@app.post("/admin/customers/{customer_id}/key/rotate", response_model=KeyRotateResponse, tags=["Admin"])
+async def admin_customer_key_rotate(customer_id: str):
+    """
+    Operator-side key rotation for a customer who lost their key (v1.84.0).
+
+    Operator key only (constant 401 for anyone else). The new key is shown once, here; the
+    owner relays it to the customer by a channel they have verified themselves. Audited as
+    `billing.key_rotate` with actor `owner`.
+    """
+    try:
+        billing = get_billing_service()
+    except RuntimeError:
+        raise HTTPException(status_code=503, detail="Billing service not initialized")
+    customer = await billing.get_customer_by_id(customer_id)
+    if customer is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    new_key = await billing.rotate_api_key(customer.id)
+    if not new_key:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    await _support_action("billing.key_rotate", "rotated", actor="owner", target=f"org:{customer.org_id[:8]}",
+                          trigger="http:/admin/customers/{id}/key/rotate")
+    return KeyRotateResponse(
+        api_key=new_key, org_id=customer.org_id,
+        message="Key rotated by the operator. Relay it to the customer once; the old key no longer works.",
     )
 
 
@@ -3182,6 +3441,95 @@ async def agent_chat(request: AgentChatRequest):
         tool_calls=response.tool_calls,
         sources=response.sources,
     )
+
+
+# ------------------------------------------------------------------
+# Support agent (v1.84.0)
+# ------------------------------------------------------------------
+
+def _client_ip_for_support(request: Request) -> str:
+    """Bucket key for the anonymous support spend cap and daily escalation limit.
+
+    Fly-Client-IP first (set by the Fly proxy, not spoofable by the client), then the same
+    fallback chain as the rate limiter. A client-prepended X-Forwarded-For hop must not mint a
+    fresh bucket per request, or the anonymous caps would not bound anything. Only ever an
+    in-memory key: not stored, not logged, not echoed.
+    """
+    return (
+        request.headers.get("fly-client-ip")
+        or request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        or request.headers.get("x-real-ip")
+        or (request.client.host if request.client else None)
+        or "unknown"
+    )
+
+
+@app.post("/support/chat", response_model=SupportChatResponse, tags=["Support"])
+async def support_chat(body: SupportChatRequest, request: Request):
+    """
+    Customer support assistant: plans, billing, keys, rate limits, how-to, FAQ.
+
+    Anonymous but rate-limited. A customer service key in `x-api-key` (or `Authorization:
+    Bearer`) identifies the caller, so the assistant can describe *that* customer's own plan,
+    payment status, rate limit and key preview; anonymous callers get general answers and are
+    told how to identify themselves. Answers are grounded in /faq and the plan catalogue; the
+    assistant never changes billing, never reveals keys, and escalates anything outside its
+    authority to the owner with a reference (`escalation`). Per-caller daily LLM caps by tier;
+    a cap hit returns 200 with `fallback: "spend_cap"` and FAQ links. `conversation_id` must be
+    one this endpoint minted (400 otherwise). 503 when the LLM key is not configured.
+    """
+    try:
+        agent = await get_support_agent()
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    caller = await _resolve_mcp_caller(request)
+    try:
+        response = await asyncio.wait_for(
+            agent.chat(body.message, body.conversation_id, caller=caller,
+                       client_ip=_client_ip_for_support(request), trigger="http:/support/chat"),
+            timeout=120.0,
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="conversation_id must be one returned by a previous reply")
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="The support assistant timed out. Please try again.")
+    except Exception as exc:
+        # No traceback and no message text: the exception may quote the customer's message.
+        logger.error("SupportAgent error (%s)", type(exc).__name__)
+        raise HTTPException(
+            status_code=500,
+            detail="The support assistant encountered an internal error. Please try again or see /faq.",
+        ) from exc
+    return SupportChatResponse(
+        reply=response.reply, conversation_id=response.conversation_id, identified=response.identified,
+        tier=response.tier, escalation=response.escalation, fallback=response.fallback, sources=response.sources,
+    )
+
+
+@app.post("/support/escalations/status", tags=["Support"])
+async def support_escalation_status(body: EscalationStatusRequest, request: Request):
+    """
+    Status of an escalation by its reference (in the body, never the URL).
+
+    Returns `{reference, status, owner_reply}`; `owner_reply` is the note the owner left when
+    answering. Unknown, malformed or non-escalation references all get the same 404.
+    """
+    from src.services.orchestrator_workflows import RUN_ID_RE
+    reference = body.reference.strip()
+    view = None
+    if RUN_ID_RE.match(reference):
+        try:
+            view = await get_orchestrator_service().public_escalation_view(reference)
+        except RuntimeError:
+            view = None
+    caller = await _resolve_mcp_caller(request)
+    await _support_action("support.escalation_status", "found" if view else "unknown",
+                          actor="customer" if caller.is_customer else "anonymous",
+                          target=reference if view else None, trigger="http:/support/escalations/status",
+                          provenance={"identified": caller.is_customer})
+    if view is None:
+        raise HTTPException(status_code=404, detail="No escalation matches this reference.")
+    return view
 
 
 @app.post("/agent/chat/stream", tags=["Agent"])
@@ -3814,6 +4162,8 @@ async def admin_customers():
             "id": c.id,
             "email": c.email,
             "tier": c.tier,
+            "effective_tier": _effective_tier(c, settings.billing_past_due_grace_days),
+            "billing_status": getattr(c, "billing_status", "active") or "active",
             "org_id": c.org_id,
             "api_key_preview": c.api_key[:8] + "...",
             "stripe_customer_id": c.stripe_customer_id,
@@ -4597,6 +4947,22 @@ async def _get_http_mcp_tool_manager() -> ToolManager:
     return _http_mcp_tool_manager
 
 
+# Agent-backed MCP tools and the singleton getter that supplies their agent. The hosted /mcp
+# ToolManager is separate from the agents' own, so the agent is bound here on first use;
+# a getter that raises (LLM key missing) leaves the tool reporting *_unavailable itself.
+_HTTP_MCP_AGENT_TOOLS = {"support_chat": lambda: get_support_agent(), "ask_agent": lambda: get_pricing_agent()}
+
+
+async def _bind_http_mcp_agent(tm: ToolManager, name: str) -> None:
+    getter = _HTTP_MCP_AGENT_TOOLS.get(name)
+    if getter is None or tm.agent_bound(name):
+        return
+    try:
+        tm.set_agent(name, await getter())
+    except Exception as exc:
+        logger.warning("MCP %s: agent not available (%s)", name, type(exc).__name__)
+
+
 def _mcp_ok(request_id, result: Any) -> dict:
     resp: dict = {"jsonrpc": "2.0", "result": result}
     if request_id is not None:
@@ -4637,7 +5003,8 @@ async def _resolve_mcp_caller(request: Optional[Request]) -> McpCaller:
         customer = None  # billing not initialised or lookup failed: anonymous, silently
     if customer is None:
         return ANONYMOUS
-    return McpCaller.from_customer(customer)
+    # v1.84.0: the caller's tier is the effective one (free once past_due exceeds the grace period).
+    return McpCaller.from_customer(customer, tier=_effective_tier(customer, settings.billing_past_due_grace_days))
 
 
 async def _handle_mcp_request(body: dict, request: Optional[Request] = None) -> Optional[dict]:
@@ -4679,11 +5046,19 @@ async def _handle_mcp_request(body: dict, request: Optional[Request] = None) -> 
             return _mcp_err(request_id, -32602, "Invalid params: name is required")
         tm = await _get_http_mcp_tool_manager()
         name = params["name"]
+        await _bind_http_mcp_agent(tm, name)
         if tm.caller_access(name) == PUBLIC:
             result = await tm.execute_tool(name, params.get("arguments", {}))
         else:
             caller = await _resolve_mcp_caller(request)
-            result = await tm.execute_tool(name, params.get("arguments", {}), caller=caller)
+            # v1.84.0: the connection's address keys the anonymous support spend bucket (same rule
+            # as /support/chat); set for this call only and reset right after.
+            token = _support_chat_tool.client_address.set(
+                _client_ip_for_support(request) if request is not None else None)
+            try:
+                result = await tm.execute_tool(name, params.get("arguments", {}), caller=caller)
+            finally:
+                _support_chat_tool.client_address.reset(token)
         return _mcp_ok(request_id, {
             "content": [{"type": "text", "text": _json.dumps(result, indent=2)}],
         })

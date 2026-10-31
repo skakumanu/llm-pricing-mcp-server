@@ -194,6 +194,7 @@ def test_webhook_subscription_deleted():
     mock_billing = MagicMock()
     mock_billing.get_customer_by_stripe_id = AsyncMock(return_value=customer)
     mock_billing.update_tier = AsyncMock()
+    mock_billing.record_stripe_event = AsyncMock(return_value=True)  # v1.84.0: event-id dedup
 
     import stripe
     with patch("src.main.settings") as ms:
@@ -208,6 +209,7 @@ def test_webhook_subscription_deleted():
         ms.rate_limit_pro = 120
         ms.rate_limit_enterprise = 600
         ms.max_body_bytes = 1_000_000
+        ms.billing_past_due_grace_days = 14
         with patch.object(stripe.Webhook, "construct_event", return_value=fake_event):
             with patch("src.main.get_billing_service", return_value=mock_billing):
                 client = _client()
@@ -217,4 +219,5 @@ def test_webhook_subscription_deleted():
                     headers={"stripe-signature": "t=1,v1=abc"},
                 )
     assert resp.status_code == 200
-    mock_billing.update_tier.assert_called_once_with(customer.id, "free")
+    # v1.84.0: cancellation returns the customer to free AND clears any past_due state.
+    mock_billing.update_tier.assert_called_once_with(customer.id, "free", billing_status="active")

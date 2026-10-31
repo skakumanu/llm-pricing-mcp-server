@@ -51,11 +51,13 @@
       padding: 0.4rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; transition: all 0.15s;
     }
     .billing-subnav button:hover, .billing-subnav button.active { border-color: var(--accent); color: var(--accent); }
+    .billing-subnav button[disabled] { opacity: .45; cursor: not-allowed; }
     main { max-width: 720px; margin: 2rem auto; padding: 0 1.25rem; }
     .panel { display: none; }
     .panel.active { display: block; }
     h2 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
     p.sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+    p.sub a, .help-links a { color: var(--accent); text-decoration: none; }
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -94,13 +96,14 @@
       white-space: nowrap;
     }
     .btn:hover { opacity: .85; }
-    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn:disabled, .btn[disabled] { opacity: .4; cursor: not-allowed; }
     .btn.secondary {
       background: transparent;
       border: 1px solid var(--border);
       color: var(--muted);
     }
     .btn.secondary:hover { border-color: var(--accent); color: var(--accent); opacity: 1; }
+    .btn.danger { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
     .result-box {
       background: var(--surface2);
       border: 1px solid var(--border);
@@ -143,6 +146,9 @@
     .badge-free { background: rgba(136,146,164,.15); color: var(--muted); }
     .badge-pro { background: rgba(124,106,247,.15); color: var(--accent); }
     .badge-enterprise { background: rgba(237,137,54,.15); color: var(--warn); }
+    .status-pill { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+    .status-active { background: rgba(72,187,120,.15); color: var(--success); }
+    .status-past_due { background: rgba(245,101,101,.15); color: var(--danger); }
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -181,31 +187,18 @@
     .tier-card ul li { margin-bottom: 4px; }
     .error-msg { color: var(--danger); font-size: 12px; margin-top: 6px; }
     .success-msg { color: var(--success); font-size: 12px; margin-top: 6px; }
-    .coming-soon-msg { color: var(--warn); font-size: 12px; margin-top: 6px; }
-    .beta-banner {
-      background: rgba(237,137,54,.08);
-      border-bottom: 1px solid rgba(237,137,54,.25);
-      padding: 9px 1.5rem;
-      font-size: 12px;
-      color: var(--warn);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .beta-banner strong { font-weight: 600; }
-    .coming-soon-overlay {
-      background: rgba(237,137,54,.07);
-      border: 1px solid rgba(237,137,54,.2);
+    .notice-msg { color: var(--warn); font-size: 12px; margin-top: 6px; }
+    .warn-box {
+      background: rgba(245,101,101,.07);
+      border: 1px solid rgba(245,101,101,.25);
       border-radius: 7px;
       padding: 10px 14px;
       font-size: 12px;
-      color: var(--warn);
-      margin-bottom: 14px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      color: var(--danger);
+      margin: 10px 0;
+      display: none;
     }
-    .btn[disabled] { opacity: .4; cursor: not-allowed; }
+    .help-links { font-size: 12px; color: var(--muted); margin-top: 18px; }
     .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; }
     @keyframes spin { to { transform: rotate(360deg); } }
     @media (max-width: 600px) {
@@ -247,18 +240,14 @@
   <button class="active" onclick="showPanel('signup')">Sign Up</button>
   <button onclick="showPanel('dashboard')">Dashboard</button>
   <button onclick="showPanel('upgrade')">Upgrade</button>
-  <button onclick="openPortal()" title="Coming soon — not available during beta" style="opacity:.45;cursor:not-allowed;">Manage Billing</button>
-</div>
-<div class="beta-banner">
-  <span>🚧</span>
-  <span><strong>Beta:</strong> Free tier is live. Paid plans are coming soon — sign up now to secure your spot.</span>
+  <button id="portal-btn" onclick="openPortal()" title="Loading…">Manage Billing</button>
 </div>
 <main>
 
   <!-- ── SIGNUP PANEL ── -->
   <div id="panel-signup" class="panel active">
     <h2>Get your free API key</h2>
-    <p class="sub">Sign up with your email to receive instant access. Free during beta — paid tiers coming soon. No credit card required, ever for the free tier. Your API key is shown once, right here, so save it somewhere safe. Already signed up? Paste your key on the Dashboard tab.</p>
+    <p class="sub">Sign up with your email to receive instant access. The Free plan needs no credit card. Your API key is shown once, right here, so save it somewhere safe. Already signed up? Paste your key on the Dashboard tab. Questions? See the <a href="/faq">FAQ</a>.</p>
     <div class="card">
       <label for="signup-email">Email address</label>
       <input type="email" id="signup-email" placeholder="you@company.com">
@@ -281,7 +270,7 @@
   <!-- ── DASHBOARD PANEL ── -->
   <div id="panel-dashboard" class="panel">
     <h2>Dashboard</h2>
-    <p class="sub">Enter your API key to view usage and savings.</p>
+    <p class="sub">Enter your API key to view your plan, payment status, usage and savings.</p>
     <div class="card">
       <label for="dash-key">API key</label>
       <div class="copy-row">
@@ -292,30 +281,43 @@
     </div>
     <div id="dash-result" style="display:none;">
       <div class="card" style="margin-bottom:0.5rem;">
-        <div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.8rem;">
+        <div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.8rem;flex-wrap:wrap;">
           <strong id="dash-email"></strong>
           <span class="tier-badge" id="dash-tier-badge"></span>
+          <span class="status-pill" id="dash-status-pill"></span>
         </div>
+        <div class="warn-box" id="dash-past-due"></div>
         <div style="font-size:0.85rem;color:var(--muted);">Org ID: <code id="dash-org"></code></div>
         <div style="font-size:0.85rem;color:var(--muted);margin-top:0.3rem;">Key: <code id="dash-key-preview"></code></div>
+        <div style="font-size:0.85rem;color:var(--muted);margin-top:0.3rem;">Rate limit: <span id="dash-rate-limit"></span> requests / minute</div>
       </div>
       <div class="stats-grid">
         <div class="stat"><div class="value" id="dash-calls">–</div><div class="label">Router calls (30d)</div></div>
         <div class="stat"><div class="value" id="dash-savings">–</div><div class="label">Savings /1M tokens</div></div>
         <div class="stat"><div class="value" id="dash-acceptance">–</div><div class="label">Acceptance rate</div></div>
       </div>
-      <button class="btn secondary" style="margin-top:1rem;" onclick="showPanel('upgrade')">Upgrade Plan</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn secondary" style="margin-top:1rem;" onclick="showPanel('upgrade')">Upgrade Plan</button>
+        <button class="btn danger" style="margin-top:1rem;" onclick="rotateKey()"><span id="rotate-spin"></span> Rotate key</button>
+      </div>
+      <div class="error-msg" id="rotate-error"></div>
+      <div class="result-box" id="rotate-result">
+        <div style="margin-bottom:0.6rem;"><strong>Your new API key</strong> — the old key no longer works.</div>
+        <div class="copy-row">
+          <input type="text" id="rotate-key-display" readonly>
+          <button class="copy-btn" onclick="copyKey('rotate-key-display')">Copy</button>
+        </div>
+        <div class="success-msg" style="margin-top:0.6rem;" id="rotate-msg"></div>
+      </div>
+      <div class="help-links">Need help? <a href="/chat?mode=support">Ask the support assistant</a> · <a href="/faq">Read the FAQ</a>. Lost your key and can't load this page? The assistant can escalate a key-recovery request to the owner.</div>
     </div>
   </div>
 
   <!-- ── UPGRADE PANEL ── -->
   <div id="panel-upgrade" class="panel">
     <h2>Choose a plan</h2>
-    <p class="sub">Paid tiers are coming soon. Sign up for free now to secure early-adopter access when they launch.</p>
-    <div class="coming-soon-overlay">
-      <span>🔜</span>
-      <span>Paid plans are not yet active. Your free signup puts you on the waitlist — you'll be notified when Pro and Enterprise launch.</span>
-    </div>
+    <p class="sub">Plans differ in rate limit, support assistant allowance and escalation priority; everything else is the same for everyone. Checkout and the billing portal run on Stripe. Details in the <a href="/faq">FAQ</a>.</p>
+    <div class="notice-msg" id="checkout-notice" style="margin-bottom:10px;display:none;"></div>
     <div style="margin-bottom:1rem;">
       <label for="upgrade-key">Your API key (for checkout)</label>
       <input type="text" id="upgrade-key" placeholder="Paste your API key">
@@ -325,9 +327,10 @@
         <h3>Free</h3>
         <div class="price">$0 <span>/mo</span></div>
         <ul>
-          <li>30 req/min</li>
-          <li>Router access</li>
-          <li>Savings tracker</li>
+          <li>30 requests / minute</li>
+          <li>Live pricing, router and every tool</li>
+          <li>Support assistant: $0.50/day allowance</li>
+          <li>Escalations: standard priority</li>
         </ul>
         <button class="btn secondary" disabled>Current</button>
       </div>
@@ -335,36 +338,40 @@
         <h3>Pro</h3>
         <div class="price">$29 <span>/mo</span></div>
         <ul>
-          <li>120 req/min</li>
-          <li>Priority routing</li>
-          <li>Usage analytics</li>
+          <li>120 requests / minute</li>
+          <li>Everything in Free</li>
+          <li>Support assistant: $3.00/day allowance</li>
+          <li>Escalations: pro priority (ahead of free)</li>
         </ul>
-        <button class="btn" disabled title="Coming soon">Coming Soon</button>
-        <div class="coming-soon-msg" id="pro-error"></div>
+        <button class="btn" id="checkout-pro" disabled onclick="doCheckout('pro')"><span id="pro-spin"></span> Upgrade to Pro</button>
+        <div class="error-msg" id="pro-error"></div>
       </div>
       <div class="tier-card">
         <h3>Enterprise</h3>
         <div class="price">$299 <span>/mo</span></div>
         <ul>
-          <li>600 req/min</li>
-          <li>SLA guarantee</li>
-          <li>Dedicated support</li>
+          <li>600 requests / minute</li>
+          <li>Everything in Free</li>
+          <li>Support assistant: $10.00/day allowance</li>
+          <li>Escalations: enterprise priority (first in the queue)</li>
         </ul>
-        <button class="btn" disabled title="Coming soon">Coming Soon</button>
-        <div class="coming-soon-msg" id="ent-error"></div>
+        <button class="btn" id="checkout-enterprise" disabled onclick="doCheckout('enterprise')"><span id="ent-spin"></span> Upgrade to Enterprise</button>
+        <div class="error-msg" id="ent-error"></div>
       </div>
     </div>
+    <div class="help-links">Cancel, change your card or download invoices with <strong>Manage Billing</strong> above (Stripe customer portal). Refunds and disputes are reviewed by the owner: ask the <a href="/chat?mode=support">support assistant</a> to escalate.</div>
   </div>
 
 </main>
 <script>
   let _apiKey = '';
+  let _config = null;
 
   function showPanel(name) {
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.billing-subnav button').forEach(b => b.classList.remove('active'));
     document.getElementById('panel-' + name).classList.add('active');
-    const btns = document.querySelectorAll('nav button');
+    const btns = document.querySelectorAll('.billing-subnav button');
     const idx = { signup: 0, dashboard: 1, upgrade: 2 };
     if (idx[name] !== undefined) btns[idx[name]].classList.add('active');
   }
@@ -377,6 +384,35 @@
 
   function badgeClass(tier) {
     return { free: 'badge-free', pro: 'badge-pro', enterprise: 'badge-enterprise' }[tier] || 'badge-free';
+  }
+
+  // GET /billing/config decides what this server can sell: buttons are enabled only when
+  // Stripe checkout exists and the tier has a price id; the portal only when Stripe is set.
+  async function loadConfig() {
+    try {
+      const res = await fetch('/billing/config');
+      _config = await res.json();
+    } catch (e) {
+      _config = { checkout_enabled: false, portal_enabled: false, tiers: [] };
+    }
+    const notice = document.getElementById('checkout-notice');
+    const byId = {};
+    (_config.tiers || []).forEach(t => { byId[t.id] = t; });
+    for (const tier of ['pro', 'enterprise']) {
+      const btn = document.getElementById('checkout-' + tier);
+      const available = !!(_config.checkout_enabled && byId[tier] && byId[tier].checkout_available);
+      btn.disabled = !available;
+      btn.title = available ? '' : 'Checkout unavailable on this server';
+    }
+    if (!_config.checkout_enabled) {
+      notice.textContent = 'Checkout unavailable on this server: Stripe is not configured, so paid plans cannot be bought here.';
+      notice.style.display = 'block';
+    } else {
+      notice.style.display = 'none';
+    }
+    const portal = document.getElementById('portal-btn');
+    portal.disabled = !_config.portal_enabled;
+    portal.title = _config.portal_enabled ? 'Cancel, change card, invoices (Stripe portal)' : 'Billing portal unavailable on this server (Stripe not configured)';
   }
 
   async function doSignup() {
@@ -417,6 +453,7 @@
     const errEl = document.getElementById('dash-error');
     const resultEl = document.getElementById('dash-result');
     errEl.textContent = '';
+    errEl.style.color = '';
     resultEl.style.display = 'none';
     if (!key) { errEl.textContent = 'Please enter your API key.'; return; }
     const spin = document.getElementById('dash-spin');
@@ -431,12 +468,54 @@
       const badge = document.getElementById('dash-tier-badge');
       badge.textContent = data.tier;
       badge.className = 'tier-badge ' + badgeClass(data.tier);
+      const status = data.billing_status || 'active';
+      const pill = document.getElementById('dash-status-pill');
+      pill.textContent = status === 'past_due' ? 'payment past due' : 'active';
+      pill.className = 'status-pill status-' + status;
+      const warn = document.getElementById('dash-past-due');
+      if (status === 'past_due') {
+        const grace = (_config && _config.past_due_grace_days) || 14;
+        warn.textContent = (data.effective_tier !== data.tier)
+          ? 'A renewal payment failed more than ' + grace + ' days ago, so your account is served at the Free rate limit until the invoice is paid. Update your card in Manage Billing.'
+          : 'A renewal payment failed. You keep your plan for ' + grace + ' days; update your card in Manage Billing so Stripe can retry.';
+        warn.style.display = 'block';
+      } else {
+        warn.style.display = 'none';
+      }
       document.getElementById('dash-org').textContent = data.org_id;
       document.getElementById('dash-key-preview').textContent = data.api_key_preview;
+      document.getElementById('dash-rate-limit').textContent = data.rate_limit_per_minute != null ? data.rate_limit_per_minute : '–';
       document.getElementById('dash-calls').textContent = data.router_calls_30d;
       document.getElementById('dash-savings').textContent = data.savings_per_1m_30d != null ? '$' + data.savings_per_1m_30d.toFixed(2) : '–';
       document.getElementById('dash-acceptance').textContent = data.acceptance_rate != null ? (data.acceptance_rate * 100).toFixed(0) + '%' : '–';
+      document.getElementById('rotate-result').style.display = 'none';
       resultEl.style.display = 'block';
+    } catch (e) {
+      errEl.textContent = 'Network error. Please try again.';
+    } finally {
+      spin.innerHTML = '';
+    }
+  }
+
+  async function rotateKey() {
+    const key = document.getElementById('dash-key').value.trim() || _apiKey;
+    const errEl = document.getElementById('rotate-error');
+    errEl.textContent = '';
+    if (!key) { errEl.textContent = 'Load the dashboard with your current key first.'; return; }
+    if (!confirm('Rotate your service key? The current key stops working immediately and every client using it must be updated.')) return;
+    const spin = document.getElementById('rotate-spin');
+    spin.innerHTML = '<span class="spinner"></span>';
+    try {
+      const res = await fetch('/billing/key/rotate', { method: 'POST', headers: { 'x-api-key': key } });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.detail || 'Rotation failed.'; return; }
+      _apiKey = data.api_key;
+      document.getElementById('dash-key').value = data.api_key;
+      document.getElementById('upgrade-key').value = data.api_key;
+      document.getElementById('rotate-key-display').value = data.api_key;
+      document.getElementById('rotate-msg').textContent = data.message;
+      document.getElementById('rotate-result').style.display = 'block';
+      document.getElementById('dash-key-preview').textContent = data.api_key.slice(0, 8) + '...';
     } catch (e) {
       errEl.textContent = 'Network error. Please try again.';
     } finally {
@@ -458,12 +537,6 @@
         body: JSON.stringify({ tier }),
       });
       const data = await res.json();
-      if (res.status === 503) {
-        const el = document.getElementById(errId);
-        el.textContent = 'Paid tiers are coming soon — you\'re on the waitlist!';
-        el.className = 'coming-soon-msg';
-        return;
-      }
       if (!res.ok) { document.getElementById(errId).textContent = data.detail || 'Checkout failed.'; return; }
       window.location.href = data.checkout_url;
     } catch (e) {
@@ -481,7 +554,6 @@
     try {
       const res = await fetch('/billing/portal', { headers: { 'x-api-key': key } });
       const data = await res.json();
-      if (res.status === 503) { alert('Billing portal is coming soon — not yet active during beta.'); return; }
       if (!res.ok) { alert(data.detail || 'Portal unavailable.'); return; }
       window.location.href = data.portal_url;
     } catch (e) {
@@ -489,12 +561,18 @@
     }
   }
 
+  loadConfig();
+
   // Auto-detect ?success or ?cancel from Stripe redirect
   const params = new URLSearchParams(location.search);
   if (params.get('success')) {
     showPanel('dashboard');
     document.getElementById('dash-error').style.color = 'var(--success)';
     document.getElementById('dash-error').textContent = 'Subscription activated! Enter your API key to refresh.';
+  } else if (params.get('cancel')) {
+    showPanel('upgrade');
+    document.getElementById('checkout-notice').textContent = 'Checkout was cancelled; nothing was charged.';
+    document.getElementById('checkout-notice').style.display = 'block';
   }
 </script>
 </body>

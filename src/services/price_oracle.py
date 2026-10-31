@@ -43,6 +43,23 @@ REGISTRY_URL = (
 )
 SNAPSHOT_PATH = Path(__file__).resolve().parents[2] / "data" / "model_prices_snapshot.json"
 
+
+def snapshot_path() -> Path:
+    """Where the vendored registry snapshot lives at runtime.
+
+    ``settings.price_snapshot_path`` overrides the repo path: on Fly the persistent volume is
+    mounted over ``/app/data`` and hides the image's copy, so fly.toml points this at the
+    duplicate the Dockerfile keeps under ``/app/vendored``. Imported lazily so this module
+    stays usable from the audit scripts without a settings context.
+    """
+    try:
+        from src.config.settings import settings
+        if settings.price_snapshot_path:
+            return Path(settings.price_snapshot_path)
+    except Exception:  # nosec B110 — settings unavailable (scripts, partial imports)
+        pass
+    return SNAPSHOT_PATH
+
 DEFAULT_TTL_SECONDS = 86_400  # 24h
 DRIFT_THRESHOLD_PCT = 5.0
 
@@ -227,7 +244,7 @@ class PriceOracle:
         source = REGISTRY_URL
         if raw is None:
             raw = self._read_snapshot()
-            source = str(SNAPSHOT_PATH)
+            source = str(snapshot_path())
 
         if not raw:
             logger.warning("Price oracle unavailable: no remote data and no usable snapshot")
@@ -261,10 +278,10 @@ class PriceOracle:
 
     def _read_snapshot(self) -> Optional[Dict[str, Any]]:
         try:
-            with SNAPSHOT_PATH.open(encoding="utf-8") as fh:
+            with snapshot_path().open(encoding="utf-8") as fh:
                 return json.load(fh)
         except Exception as e:
-            logger.warning("Price snapshot unreadable at %s: %s", SNAPSHOT_PATH, e)
+            logger.warning("Price snapshot unreadable at %s: %s", snapshot_path(), e)
             return None
 
     @staticmethod

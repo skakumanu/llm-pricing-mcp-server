@@ -11,6 +11,7 @@ Project overview and quick start: [README.md](../README.md). Release notes: `/wh
 | [LIVE_DATA_FETCHING.md](LIVE_DATA_FETCHING.md) | How a price gets into the catalogue (stages, oracle, drift) |
 | [BACKWARDS_COMPATIBILITY.md](BACKWARDS_COMPATIBILITY.md) | API v1 change policy: additive only |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | How a release reaches Fly.io; settings, secrets, operations |
+| [FAQ.md](FAQ.md) | Customer-facing FAQ (plans, billing, keys, rate limits, data accuracy, help); source of `/faq` and the support agent's knowledge base |
 | [MCP_QUICK_START.md](MCP_QUICK_START.md) | Connect an MCP client; canonical tool reference |
 | [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md) | Claude Desktop setup |
 | [PERPLEXITY_INTEGRATION.md](PERPLEXITY_INTEGRATION.md) | Perplexity desktop setup |
@@ -26,6 +27,7 @@ Project overview and quick start: [README.md](../README.md). Release notes: `/wh
 |---|---|
 | Set up the project? | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Connect an MCP client? | [MCP_QUICK_START.md](MCP_QUICK_START.md) |
+| Plans, billing, keys, how to get help? | [FAQ.md](FAQ.md) (served at `/faq`) |
 | How does deploy work? | [DEPLOYMENT.md](DEPLOYMENT.md) (CI/CD on merge to `master`) |
 | What must happen before a commit? | `CLAUDE.md` release checklist |
 | Where is endpoint X / service Y? | [ARCHITECTURE.md](ARCHITECTURE.md) |

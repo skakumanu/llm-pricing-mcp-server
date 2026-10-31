@@ -265,7 +265,7 @@ def _mcp_error_payload(result):
 
 def test_tools_list_includes_dispatch_and_has_31(env):
     tools = _rpc("tools/list").json()["result"]["tools"]
-    assert len(tools) == 31
+    assert len(tools) == 32  # v1.84.0: + support_chat
     by_name = {t["name"]: t for t in tools}
     desc = by_name["dispatch"]["description"]
     assert "REAL model call" in desc and "your own provider keys" in desc

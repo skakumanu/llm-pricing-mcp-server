@@ -444,9 +444,10 @@ class TestPublicToolParity:
         anon = _rpc("tools/list").json()["result"]["tools"]
         keyed = _rpc("tools/list", headers=_headers("x-api-key", KEY_A)).json()["result"]["tools"]
         op = _rpc("tools/list", headers=_headers("bearer", OPERATOR_KEY)).json()["result"]["tools"]
-        assert len(anon) == 31
+        assert len(anon) == 32  # v1.84.0: + support_chat (identity-aware, listed for every caller)
         assert anon == keyed == op
-        public = [t for t in anon if t["name"] not in RESTRICTED_TOOLS]
+        # v1.84.0: support_chat is identity-aware (neither public nor restricted) and listed for everyone.
+        public = [t for t in anon if t["name"] not in RESTRICTED_TOOLS and t["name"] != "support_chat"]
         assert len(public) == 19
         env.billing.get_customer_by_api_key.assert_not_awaited()
 

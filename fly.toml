@@ -18,6 +18,10 @@ primary_region = 'iad'
   # The volume mount shadows the image's /app/data, so the vendored
   # exchange-rate table is read from the copy the Dockerfile puts outside it.
   EXCHANGE_RATES_PATH = "/app/vendored/exchange_rates.json"
+  # v1.84.1: same reason — the registry snapshot and registry-sourced model files must be
+  # read from the image copy outside the mount, or production serves a 273-model catalogue.
+  PRICE_SNAPSHOT_PATH = "/app/vendored/data/model_prices_snapshot.json"
+  REGISTRY_MODELS_DIR = "/app/vendored/data/registry_models"
   # Orchestrator core (v1.83.0): runs, approvals, action records, spend and settings.
   # ORCHESTRATOR_INTAKE_KEY is a Fly secret, never set here.
   ORCHESTRATOR_DB_PATH = "/app/data/orchestrator.db"
