@@ -1,8 +1,10 @@
 """MCP Tool: Optimize a multi-task workload across models instead of picking one."""
 from typing import Any, Dict, List, Optional
 
+from mcp.tools._client import client_response_fields, no_runnable_model_error, resolve_tool_client
 from src.services.benchmark_service import enrich_models
 from src.services.pricing_aggregator import PricingAggregatorService
+from src.services.client_models import eligible_models
 from src.services.portfolio_optimizer import Workload, optimize
 from src.services.task_profiles import get_task_description, list_task_types
 
@@ -90,6 +92,12 @@ class OptimizeWorkloadTool:
                 return {"success": False, "error": "No pricing data available"}
             models = await enrich_models(models)
 
+            client_res = resolve_tool_client(arguments)
+            if client_res.entry is not None:
+                models = eligible_models(client_res.entry, models)
+                if not models:
+                    return no_runnable_model_error(client_res, 0)
+
             result = optimize(
                 models=models,
                 workloads=workloads,
@@ -102,6 +110,7 @@ class OptimizeWorkloadTool:
                     "success": False,
                     "error": "No workload could be satisfied with the given constraints",
                     "unsatisfiable": result.unsatisfiable,
+                    **client_response_fields(client_res),
                 }
 
             allocations = [
@@ -166,6 +175,7 @@ class OptimizeWorkloadTool:
                     f"Reduce volume, relax quality floors, or raise the budget."
                 )
 
+            response.update(client_response_fields(client_res))
             return response
 
         except (TypeError, ValueError) as e:

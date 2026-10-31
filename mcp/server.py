@@ -10,6 +10,7 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from mcp.tools._client import handshake_client  # noqa: E402
 from mcp.tools.tool_manager import TRANSPORT_STDIO, ToolManager  # noqa: E402
 from src import __version__  # noqa: E402
 from src.services.pricing_aggregator import PricingAggregatorService, get_pricing_aggregator  # noqa: E402
@@ -46,6 +47,8 @@ class MCPServer:
         self.tool_manager = ToolManager(aggregator=aggregator, transport=TRANSPORT_STDIO)
         self.telemetry = get_telemetry_service()
         self.request_id_counter = 0
+        # v1.85.0: clientInfo.name from `initialize` (the STDIO process serves one client)
+        self._client_name: Optional[str] = None
         logger.info(f"Initializing {self.name} v{self.version}")
 
     async def run(self):
@@ -151,6 +154,9 @@ class MCPServer:
 
         # Handle different methods
         if method == "initialize":
+            client_info = params.get("clientInfo") if isinstance(params, dict) else None
+            name = client_info.get("name") if isinstance(client_info, dict) else None
+            self._client_name = name[:100] if isinstance(name, str) and name else None
             return self._success_response(request_id, self._get_initialization_response())
 
         elif method == "initialized":
@@ -183,7 +189,11 @@ class MCPServer:
             # org-scoped tools refuse with customer_key_required, the four
             # operator-only tools (v1.79.2) with operator_key_required, and dispatch
             # (v1.80.0) with dispatch_requires_hosted_mcp.
-            result = await self.tool_manager.execute_tool(tool_name, tool_arguments)
+            token = handshake_client.set(self._client_name)
+            try:
+                result = await self.tool_manager.execute_tool(tool_name, tool_arguments)
+            finally:
+                handshake_client.reset(token)
 
             # Wrap result in MCP content format
             mcp_result = {

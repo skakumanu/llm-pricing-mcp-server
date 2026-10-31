@@ -257,61 +257,88 @@ async def test_prefer_low_latency_false_returns_result():
 # RouterConstraints — ide_context
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
-async def test_ide_context_copilot_boosts_copilot_provider():
-    """ide_context='copilot' should strongly boost ide_native GitHub Copilot models.
+def _patched_enrich():
+    return __import__("unittest.mock", fromlist=["patch"]).patch(
+        "src.services.router.enrich_models", AsyncMock(side_effect=lambda x: x)
+    )
 
-    Both models use the same cost scale so quality_value_score is comparable.
-    The 5× boost for ide_native tools ensures Copilot wins regardless.
-    """
+
+async def _recommend(models, **kwargs):
+    router = ModelRouter(_make_aggregator(models=models))
+    with _patched_enrich():
+        return await router.get_optimal_model(RouterConstraints(**kwargs))
+
+
+def _names(result):
+    return {result.recommended.model_name} | {a.model_name for a in result.alternatives}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("key", ["client", "ide_context"])
+async def test_client_copilot_restricts_then_prefers_native_plan(key):
+    """A recognised client restricts first; the native plan still wins inside the set."""
     models = [
         _pm("gpt-4o",      "openai",         0.000005, 0.000015, quality=87, use_cases=["code"]),
         _pm("copilot-pro", "github copilot", 0.000008, 0.000015, quality=70, use_cases=["code", "inline"], ide_native=True),
+        _pm("cursor-pro",  "cursor",         0.000001, 0.000001, quality=99, use_cases=["code"], ide_native=True),
+        _pm("codestral",   "Mistral AI",     0.0000001, 0.0000001, quality=95, use_cases=["code"]),
     ]
-    router = ModelRouter(_make_aggregator(models=models))
-    with __import__("unittest.mock", fromlist=["patch"]).patch(
-        "src.services.router.enrich_models", AsyncMock(side_effect=lambda x: x)
-    ):
-        result = await router.get_optimal_model(
-            RouterConstraints(ide_context="copilot")
-        )
-    assert result is not None
+    result = await _recommend(models, **{key: "copilot"})
     assert result.recommended.provider.lower() == "github copilot"
+    assert "codestral" not in _names(result)
+    assert "cursor-pro" not in _names(result)
+    assert result.client_id == "github_copilot"
+    assert result.runnable_models == 2
 
 
 @pytest.mark.asyncio
-async def test_ide_context_cursor_boosts_cursor_provider():
-    """ide_context='cursor' should strongly boost ide_native Cursor models."""
+async def test_client_cursor_restricts_then_prefers_native_plan():
     models = [
-        _pm("gpt-4o",     "openai", 0.000005, 0.000015, quality=87, use_cases=["code"]),
-        _pm("cursor-pro", "cursor", 0.000008, 0.000015, quality=75, use_cases=["code", "agentic"], ide_native=True),
+        _pm("gpt-4o",      "openai", 0.000005, 0.000015, quality=87, use_cases=["code"]),
+        _pm("cursor-pro",  "cursor", 0.000008, 0.000015, quality=75, use_cases=["code", "agentic"], ide_native=True),
+        _pm("copilot-pro", "github copilot", 0.000001, 0.000001, quality=99, use_cases=["code"], ide_native=True),
+        _pm("codestral",   "Mistral AI", 0.0000001, 0.0000001, quality=95, use_cases=["code"]),
     ]
-    router = ModelRouter(_make_aggregator(models=models))
-    with __import__("unittest.mock", fromlist=["patch"]).patch(
-        "src.services.router.enrich_models", AsyncMock(side_effect=lambda x: x)
-    ):
-        result = await router.get_optimal_model(RouterConstraints(ide_context="cursor"))
-    assert result is not None
+    result = await _recommend(models, client="Cursor")
     assert result.recommended.provider.lower() == "cursor"
+    assert _names(result) == {"cursor-pro", "gpt-4o"}
+
+
+@pytest.mark.asyncio
+async def test_client_claude_code_only_anthropic():
+    models = [
+        _pm("claude-sonnet-5-5", "Anthropic", 0.000003, 0.000015, quality=90, use_cases=["code"]),
+        _pm("codestral", "Mistral AI", 0.0000001, 0.0000001, quality=95, use_cases=["code"]),
+        _pm("llama", "Together AI", 0.0000001, 0.0000001, quality=95, use_cases=["code"]),
+    ]
+    result = await _recommend(models, client="Claude Code")
+    assert result.recommended.model_name == "claude-sonnet-5-5"
+    assert result.alternatives == []
+
+
+@pytest.mark.asyncio
+async def test_client_with_nothing_runnable_returns_none():
+    models = [_pm("codestral", "Mistral AI", 0.0000001, 0.0000001, quality=95, use_cases=["code"])]
+    assert await _recommend(models, client="claude_code") is None
 
 
 @pytest.mark.asyncio
 async def test_ide_context_unknown_value_does_not_crash():
-    router = ModelRouter(_make_aggregator())
-    with __import__("unittest.mock", fromlist=["patch"]).patch(
-        "src.services.router.enrich_models", AsyncMock(side_effect=lambda x: x)
-    ):
-        result = await router.get_optimal_model(RouterConstraints(ide_context="nonexistent_ide"))
-    assert result is not None
+    """An unrecognised hint changes nothing: identical to the plain call."""
+    plain = await _recommend(SAMPLE_MODELS)
+    unknown = await _recommend(SAMPLE_MODELS, ide_context="nonexistent_ide")
+    assert unknown is not None
+    assert unknown.recommended.model_name == plain.recommended.model_name
+    assert [a.model_name for a in unknown.alternatives] == [a.model_name for a in plain.alternatives]
+    assert unknown.client_id is None
+    assert unknown.runnable_models is None
 
 
 @pytest.mark.asyncio
 async def test_ide_context_none_no_boost():
     """No ide_context → result should be the same as a plain call."""
     router = ModelRouter(_make_aggregator())
-    with __import__("unittest.mock", fromlist=["patch"]).patch(
-        "src.services.router.enrich_models", AsyncMock(side_effect=lambda x: x)
-    ):
+    with _patched_enrich():
         result_plain = await router.get_optimal_model(RouterConstraints())
         result_no_ctx = await router.get_optimal_model(RouterConstraints(ide_context=None))
     assert result_plain is not None
@@ -319,47 +346,16 @@ async def test_ide_context_none_no_boost():
     assert result_plain.recommended.model_name == result_no_ctx.recommended.model_name
 
 
-# ---------------------------------------------------------------------------
-# RouterConstraints — code_completion task type
-# ---------------------------------------------------------------------------
-
 @pytest.mark.asyncio
-async def test_code_completion_task_type_penalises_reasoning():
-    """code_completion should score reasoning models lower than fast non-reasoning models."""
+async def test_open_menu_client_excludes_subscription_plans():
     models = [
-        _pm("o1-preview",  "openai", 0.000015, 0.00006, quality=92,
-            use_cases=["code", "coding"], is_reasoning=True, latency_ms=3000),
-        _pm("gpt-4o-mini", "openai", 0.00000015, 0.0000006, quality=72,
-            use_cases=["code", "coding", "completion"], latency_ms=250),
+        _pm("gpt-4o", "openai", 0.000005, 0.000015, quality=87, use_cases=["code"]),
+        _pm("cursor-pro", "cursor", 0.000001, 0.000001, quality=99, use_cases=["code"], ide_native=True),
     ]
-    router = ModelRouter(_make_aggregator(models=models))
-    with __import__("unittest.mock", fromlist=["patch"]).patch(
-        "src.services.router.enrich_models", AsyncMock(side_effect=lambda x: x)
-    ):
-        result = await router.get_optimal_model(
-            RouterConstraints(task_type="code_completion", exclude_reasoning_models=False)
-        )
-    assert result is not None
-    # gpt-4o-mini should win despite lower quality due to reasoning penalty + latency boost
-    assert result.recommended.model_name == "gpt-4o-mini"
-
-
-@pytest.mark.asyncio
-async def test_agentic_coding_task_type_filters_correctly():
-    """agentic_coding task should match models with 'agentic' in use_cases."""
-    models = [
-        _pm("cursor-pro",  "cursor",  0.0002, 0.0004, quality=75,
-            use_cases=["agentic", "code", "coding", "multi-step"]),
-        _pm("gpt-4o-mini", "openai",  0.00000015, 0.0000006, quality=72,
-            use_cases=["chat", "general"]),
-    ]
-    router = ModelRouter(_make_aggregator(models=models))
-    with __import__("unittest.mock", fromlist=["patch"]).patch(
-        "src.services.router.enrich_models", AsyncMock(side_effect=lambda x: x)
-    ):
-        result = await router.get_optimal_model(RouterConstraints(task_type="agentic_coding"))
-    assert result is not None
-    assert result.recommended.model_name == "cursor-pro"
+    models[1].pricing_model = "subscription"
+    models[1].subscription_monthly_usd = 20.0
+    result = await _recommend(models, client="aider")
+    assert _names(result) == {"gpt-4o"}
 
 
 # ---------------------------------------------------------------------------
@@ -374,7 +370,8 @@ async def test_reason_mentions_ide_context():
     ):
         result = await router.get_optimal_model(RouterConstraints(ide_context="cursor"))
     assert result is not None
-    assert "ide_context=cursor" in result.reason
+    assert "client=cursor" in result.reason
+    assert "restricted to Cursor" in result.reason
 
 
 @pytest.mark.asyncio

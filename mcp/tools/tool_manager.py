@@ -1,5 +1,6 @@
 """Tool management for MCP server."""
 from typing import Dict, Any, Optional
+from src.services.client_models import recognised_client_ids
 from src.services.cost_calculator import MAX_COMPARE_MODELS
 from src.services.pricing_aggregator import PricingAggregatorService
 from mcp.tools.get_all_pricing import GetAllPricingTool
@@ -37,6 +38,28 @@ from mcp.tools.support_chat import SupportChatTool
 from src.services.currency import SUPPORTED_CURRENCIES
 from src.models.dispatch import DispatchPolicy
 from mcp.caller import ANONYMOUS, OPERATOR_ONLY_NOTE, PUBLIC, McpCaller, authorize
+
+# v1.85.0 — optional on the three model-selection tools. Always pass it so the
+# answer only names models your tool can run.
+_CLIENT_PROPERTIES = {
+    "client": {
+        "type": "string",
+        "description": (
+            "Your MCP client / coding tool, so only models it can run are considered. "
+            f"Recognised: {', '.join(recognised_client_ids())}. Case- and "
+            "separator-insensitive ('Claude Code' = claude_code). Order: explicit client > "
+            "legacy ide_context > client inferred from the MCP handshake (hosted server, best "
+            "effort) > none. Unknown names return an unfiltered result plus a note."
+        ),
+    },
+}
+
+_CLIENT_SENTENCE = (
+    " Pass client (e.g. 'claude_code', 'cursor', 'github_copilot', 'cline') so the answer "
+    "is restricted to models that tool can run; omit it and the hosted server tries to infer "
+    "it from the MCP handshake, otherwise every priceable model is considered. An explicit "
+    "client always wins."
+)
 
 # v1.76.0 — optional on the five pricing-output tools. MCP never detects a
 # location (no visitor IP on STDIO); omitting both yields exactly the USD output.
@@ -201,7 +224,12 @@ class ToolManager:
             "compare_costs": {
                 "instance": CompareCostsTool(aggregator=self.aggregator),
                 "name": "compare_costs",
-                "description": "Compare costs for multiple LLM models",
+                "description": (
+                    "Compare costs for multiple LLM models. Every named model is priced; pass "
+                    "client (e.g. 'claude_code') to also flag each model runnable_in_client "
+                    "(it never filters here). Recognised clients: "
+                    + ", ".join(recognised_client_ids()) + "."
+                ),
                 "input_schema": {
                     "type": "object",
                     "properties": {
@@ -221,6 +249,7 @@ class ToolManager:
                             "description": "Number of output tokens",
                             "minimum": 0,
                         },
+                        **_CLIENT_PROPERTIES,
                         **_LOCALE_PROPERTIES,
                     },
                     "required": ["model_names", "input_tokens", "output_tokens"],
@@ -660,6 +689,8 @@ class ToolManager:
                     "deployment. If a monthly budget is given, leftover headroom is spent on the "
                     "most cost-efficient quality upgrades. Use when the user asks how to cut LLM "
                     "spend across several task types, or whether tiered model routing is worth it."
+                    + _CLIENT_SENTENCE
+                    + " Recognised clients: " + ", ".join(recognised_client_ids()) + "."
                 ),
                 "input_schema": {
                     "type": "object",
@@ -743,6 +774,7 @@ class ToolManager:
                             "minimum": 0,
                             "maximum": 100,
                         },
+                        **_CLIENT_PROPERTIES,
                     },
                     "required": ["workloads"],
                 },
@@ -759,7 +791,10 @@ class ToolManager:
                     "Returns the best match plus up to 3 alternatives. Read-only — use "
                     "predict_cost first if you also want per-model cost estimates for an actual "
                     "prompt, and optimize_workload if you have several distinct task types to "
-                    "route at once."
+                    "route at once. Restricts (not just boosts) the candidate set to models your "
+                    "client can run before ranking."
+                    + _CLIENT_SENTENCE
+                    + " Recognised clients: " + ", ".join(recognised_client_ids()) + "."
                 ),
                 "input_schema": {
                     "type": "object",
@@ -816,13 +851,10 @@ class ToolManager:
                             "description": "Exclude slow thinking/reasoning models (default: false)",
                             "default": False,
                         },
+                        **_CLIENT_PROPERTIES,
                         "ide_context": {
                             "type": "string",
-                            "description": (
-                                "IDE context hint — boosts IDE-native tools: "
-                                "'copilot' | 'cursor' | 'windsurf' | 'claude_code' | "
-                                "'jetbrains' | 'amazon_q'"
-                            ),
+                            "description": "Deprecated alias of client (same values, same meaning).",
                         },
                         "monthly_budget_usd": {
                             "type": "number",
