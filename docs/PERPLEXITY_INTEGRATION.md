@@ -276,8 +276,6 @@ All endpoints are also accessible directly via HTTP — no MCP required. The bas
 | GET | `/pricing/history/export` | CSV or JSON export |
 | GET | `/pricing/alerts/signing-info` | Webhook signing key info |
 | GET | `/rate-limits/tiers` | API tier definitions (free/pro/enterprise) |
-| GET | `/admin/stats` | Aggregated server statistics |
-| GET | `/admin/rate-limits` | Current rate-limit state |
 | GET | `/mcp` | HTTP MCP server info |
 | POST | `/mcp` | HTTP MCP JSON-RPC 2.0 endpoint |
 | POST | `/agent/chat` | Blocking agent chat (rate-limited) |
@@ -318,6 +316,8 @@ A free signup key is not enough for these; they list or delete every caller's re
 | DELETE | `/pricing/alerts/{id}` | Delete a price alert |
 | GET | `/agent/conversations` | List agent conversations |
 | DELETE | `/agent/conversations/{id}` | Delete a conversation |
+| GET | `/admin/stats` | Aggregated server statistics (v1.81.4: operator only) |
+| GET | `/admin/rate-limits` | Top rate-limit consumers (v1.81.4: operator only) |
 
 ### Get a Free API Key
 
