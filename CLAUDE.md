@@ -142,22 +142,48 @@ bumped in one place (MCP `serverInfo`, a doc header, `settings.app_version`) but
 exactly the class of bug that shipped for months before this guard existed. Do not skip it because
 "it's just a docs change" or "the version didn't move" — the guard is what proves that.
 
-### 9. Update `static/whats-new/index.html` for user-facing releases
+### 9. Update `static/whats-new/index.html` — every version gets an entry
 
 Add a new release entry at the **top** of the list (mark it `class="release latest"` and remove
-that class from the previous top entry) whenever a commit ships something a customer would
-notice: a new endpoint, MCP tool, UI page, or behavior change. Follow the existing entry format
-(version badge, date, tag, title, change list, optional stats-strip) — copy an existing entry as
-a template rather than inventing new markup.
+that class from the previous top entry) for **every version bump**. The deploy job publishes the
+GitHub Release for a version from this entry (`scripts/release_notes_from_whats_new.py`), and
+`tests/test_new_providers.py` pins the top entry to `src/__init__.py` — a version without an
+entry fails CI and has no release notes. Follow the existing entry format (version badge, date,
+tag, title, change list, optional stats-strip) — copy an existing entry as a template.
 
-**Skip this step** for internal-only changes a customer never sees: docs fixes, dead-code
-removal, CI/test changes, internal refactors. When in doubt, ask "would someone reading this page
-learn something new about the product?" — if no, skip it.
+Customer-visible changes (new endpoint, MCP tool, UI page, behavior change) get a full entry.
+Internal-only changes (docs, CI/test, refactors) get a one-bullet entry tagged `Docs` or `Fix`
+that says plainly that the product's behavior is unchanged.
 
 Past entries are a historical record — never rewrite an old entry's content to match current
 reality (e.g. don't update an old entry's tool count when the total changes later). Only ever
 append new entries; this file is otherwise excluded from `tests/test_tool_registry.py`'s
 doc-sync checks for exactly this reason.
+
+### 10. Documentation sync — MANDATORY for every feature and fix
+
+Documentation ships **in the same PR** as the code it describes, never in a follow-up. GitHub
+shows `master`, so a docs change is not "released" until it is promoted; promote docs-only
+changes promptly instead of holding them for the next feature.
+
+Update every document that describes the surface you touched:
+
+| You changed | Update |
+|---|---|
+| HTTP endpoint (new, removed, auth class, request/response shape) | `docs/ARCHITECTURE.md` endpoint map · `static/api-docs/index.html` · README access/endpoint tables · `docs/PERPLEXITY_INTEGRATION.md` if it lists the route |
+| MCP tool (new, removed, arguments, access level) | tool description in `mcp/tools/tool_manager.py` · `docs/MCP_QUICK_START.md` tool table · `static/mcp-setup/index.html` · README tool table · `docs/CLAUDE_INTEGRATION.md` access tables |
+| Setting / env var | `.env.example` (commented, placeholder value) · README Configuration · `docs/DEPLOYMENT.md` if it is a production secret |
+| Browser UI page | README UI list · `docs/ARCHITECTURE.md` · nav (`scripts/sync_nav.py`) |
+| Provider added/removed | provider counts everywhere (`tests/test_new_providers.py` pins them) |
+| Bug fix | `static/whats-new/index.html` entry (step 9) · correct any doc that described the old behavior |
+| CI job, workflow, deployment step | `docs/ARCHITECTURE.md` CI/CD section · `docs/DEPLOYMENT.md` · `docs/HOUSEKEEPING.md` workflow table |
+| Anything | `static/whats-new/index.html` (step 9) · README test count (step 3) |
+
+`tests/test_docs_sync.py` enforces the mechanical parts: every API route appears in the
+ARCHITECTURE endpoint map and on `/api-docs`; every MCP tool appears in `MCP_QUICK_START.md` and
+on `/mcp-setup`; every setting appears in `.env.example` or the README/DEPLOYMENT/ARCHITECTURE;
+the current version has a What's New entry that renders as release notes. It does not check prose
+accuracy — read what the doc says about the thing you changed and fix it.
 
 ---
 
