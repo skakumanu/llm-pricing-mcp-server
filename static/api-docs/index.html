@@ -287,18 +287,26 @@
       </div>
 
       <div class="endpoint-group">
+        <h3>Support (v1.84.0)</h3>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/support/chat</span><span class="ep-desc">Customer support assistant: plans, billing, keys, rate limits, how-to, FAQ. Anonymous but rate-limited; send your service key (<code>x-api-key</code>) to get answers about your own account. Grounded in <a href="/faq">/faq</a>; escalates refunds, disputes, lost keys and "talk to a human" to the owner and returns <code>escalation.reference</code>. Per-caller daily LLM caps by tier; a cap hit answers with <code>fallback: "spend_cap"</code> and links. Body <code>{message, conversation_id?}</code>; <code>conversation_id</code> must be one this endpoint minted (400 otherwise)</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/support/escalations/status</span><span class="ep-desc">Status of an escalation by its reference, sent in the body <code>{reference}</code> (never the URL): <code>{reference, status, owner_reply}</code>. Unknown references get one constant 404</span></div>
+      </div>
+
+      <div class="endpoint-group">
         <h3>MCP (Model Context Protocol)</h3>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/mcp</span><span class="ep-desc">MCP server info and config snippet</span></div>
-        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/mcp</span><span class="ep-desc">MCP JSON-RPC 2.0 endpoint — all 31 tools</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/mcp</span><span class="ep-desc">MCP JSON-RPC 2.0 endpoint — all 32 tools</span></div>
       </div>
 
       <div class="endpoint-group">
         <h3>Billing</h3>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/billing/config</span><span class="ep-desc">Public plan catalogue (prices, rate limits, support allowance, escalation priority, entitlement strings) plus <code>checkout_enabled</code> / <code>portal_enabled</code> (Stripe configured) and <code>past_due_grace_days</code> (v1.84.0)</span></div>
         <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/signup</span><span class="ep-desc">Free tier signup — returns API key once (409 if email already registered)</span></div>
-        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/billing/me</span><span class="ep-desc">Usage dashboard (calls, savings, tier)</span><span class="ep-auth">API key</span></div>
-        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/checkout</span><span class="ep-desc">Create Stripe Checkout session</span><span class="ep-auth">API key</span></div>
-        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/billing/portal</span><span class="ep-desc">Stripe billing self-serve portal</span><span class="ep-auth">API key</span></div>
-        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/webhook</span><span class="ep-desc">Stripe webhook receiver</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/billing/me</span><span class="ep-desc">Usage dashboard (calls, savings, tier, <code>billing_status</code>, <code>effective_tier</code>, rate limit)</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/key/rotate</span><span class="ep-desc">Rotate your service key with the current one (v1.84.0): the old key stops at once, the new one is shown once. No current key = no self-serve recovery; ask the support assistant to escalate</span><span class="ep-auth">Customer key</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/checkout</span><span class="ep-desc">Create Stripe Checkout session (503 "Checkout is not enabled on this server" without Stripe)</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/billing/portal</span><span class="ep-desc">Stripe customer portal: cancel, change card, invoices (503 without Stripe)</span><span class="ep-auth">API key</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/billing/webhook</span><span class="ep-desc">Stripe webhook receiver: checkout completed, subscription updated/deleted, invoice paid/payment failed (past_due + escalation), charge refunded and dispute created (escalations); duplicate event ids are ignored</span></div>
       </div>
 
       <div class="endpoint-group">
@@ -306,7 +314,8 @@
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/telemetry</span><span class="ep-desc">Server usage metrics and analytics</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/admin/stats</span><span class="ep-desc">Aggregated server statistics</span><span class="ep-auth">Operator key</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/admin/rate-limits</span><span class="ep-desc">Top rate-limit consumers</span><span class="ep-auth">Operator key</span></div>
-        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/admin/customers</span><span class="ep-desc">All billing customers (emails, org ids, Stripe ids)</span><span class="ep-auth">Operator key</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/admin/customers</span><span class="ep-desc">All billing customers (emails, org ids, Stripe ids, billing status)</span><span class="ep-auth">Operator key</span></div>
+        <div class="endpoint-row"><span class="method POST">POST</span><span class="ep-path">/admin/customers/{id}/key/rotate</span><span class="ep-desc">Owner-side key rotation for a verified customer who lost their key (v1.84.0): new key shown once, audited as <code>billing.key_rotate</code></span><span class="ep-auth">Operator key</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/cache-stats</span><span class="ep-desc">Router recommendation-cache hit/miss stats</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/telemetry/ide-savings</span><span class="ep-desc">IDE subscription savings telemetry</span><span class="ep-auth">API key</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/deployment/metadata</span><span class="ep-desc">Deployment version and API-versioning metadata</span><span class="ep-auth">API key</span></div>

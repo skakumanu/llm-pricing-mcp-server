@@ -191,7 +191,7 @@
       </div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.75rem 1.1rem;font-size:.82rem;">
         <div style="color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">Tools</div>
-        <span style="color:var(--success);font-weight:600">31 tools · No key needed for pricing tools</span>
+        <span style="color:var(--success);font-weight:600">32 tools · No key needed for pricing tools</span>
       </div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.75rem 1.1rem;font-size:.82rem;" id="npm-package-card">
         <div style="color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem">npm package</div>
@@ -237,7 +237,7 @@
           <div class="step-num">2</div>
           <div class="step-body" id="mcp-service-key">
             <h4>Optional: add your service key</h4>
-            <p>The 18 pricing and routing tools need no key. The four alert and conversation management tools marked <span style="color:var(--warn);font-weight:600">operator only</span> list or delete every subscriber's and visitor's data, so they need the server operator's key (<code>MCP_API_KEY</code>); anyone else gets <code>operator_key_required</code>. The 7 usage and budget tools marked <span style="color:var(--warn);font-weight:600">needs key</span> below read or write your org's data, so they need your service API key (free at <a href="/billing">/billing</a>, <code>POST /billing/signup</code>) sent on the MCP connection as <code>x-api-key</code> or <code>Authorization: Bearer</code>. They then act only on that key's org: <code>org_id</code> defaults to it, and another org's is refused (<code>org_mismatch</code>). Without a key they return <code>customer_key_required</code>. The <code>dispatch</code> tool also needs your service key, plus at least one provider key stored for your org (<code>POST /dispatch/keys</code>): it makes a real model call billed to those keys; without a customer key it returns <code>dispatch_requires_api_key</code>.</p>
+            <p>The 18 pricing and routing tools need no key. The four alert and conversation management tools marked <span style="color:var(--warn);font-weight:600">operator only</span> list or delete every subscriber's and visitor's data, so they need the server operator's key (<code>MCP_API_KEY</code>); anyone else gets <code>operator_key_required</code>. The 7 usage and budget tools marked <span style="color:var(--warn);font-weight:600">needs key</span> below read or write your org's data, so they need your service API key (free at <a href="/billing">/billing</a>, <code>POST /billing/signup</code>) sent on the MCP connection as <code>x-api-key</code> or <code>Authorization: Bearer</code>. They then act only on that key's org: <code>org_id</code> defaults to it, and another org's is refused (<code>org_mismatch</code>). Without a key they return <code>customer_key_required</code>. The <code>dispatch</code> tool also needs your service key, plus at least one provider key stored for your org (<code>POST /dispatch/keys</code>): it makes a real model call billed to those keys; without a customer key it returns <code>dispatch_requires_api_key</code>. The <code>support_chat</code> tool works without a key (general answers) and, with your service key, can describe your own plan, payment status and rate limit; it is the one tool that is identity-aware rather than key-gated.</p>
             <div class="code-block solo">{
   <span class="key">"mcpServers"</span>: {
     <span class="key">"llm-pricing"</span>: {
@@ -254,7 +254,7 @@
           <div class="step-num">3</div>
           <div class="step-body">
             <h4>Restart your client</h4>
-            <p>After saving the config, restart VS Code / Cursor. The 31 tools will appear automatically. (Claude Desktop adds remote servers under Settings → Connectors instead — see its tab.)</p>
+            <p>After saving the config, restart VS Code / Cursor. The 32 tools will appear automatically. (Claude Desktop adds remote servers under Settings → Connectors instead — see its tab.)</p>
           </div>
         </div>
         <div class="step">
@@ -303,7 +303,7 @@ LLM_PRICING_API_KEY=&lt;your-service-key&gt;                  <span class="cmt">
           <div class="step-num">3</div>
           <div class="step-body">
             <h4>Restart your client</h4>
-            <p>The 31 tools appear automatically. Package: <a href="https://www.npmjs.com/package/llm-pricing-mcp" style="color:var(--accent)">npmjs.com/package/llm-pricing-mcp</a> (MIT), listed in the MCP Registry as <code>io.github.skakumanu/llm-pricing-mcp-server</code>.</p>
+            <p>The 32 tools appear automatically. Package: <a href="https://www.npmjs.com/package/llm-pricing-mcp" style="color:var(--accent)">npmjs.com/package/llm-pricing-mcp</a> (MIT), listed in the MCP Registry as <code>io.github.skakumanu/llm-pricing-mcp-server</code>.</p>
           </div>
         </div>
       </div>
@@ -404,7 +404,7 @@ pip install -r requirements.txt</div>
             <div class="step-num">4</div>
             <div class="step-body">
               <h4>Enable the tools in Agent mode</h4>
-              <p>Open the Copilot Chat panel, switch to <em>Agent</em> mode, then click the tools icon and enable <strong>llm-pricing</strong>. All 31 tools become available to the agent.</p>
+              <p>Open the Copilot Chat panel, switch to <em>Agent</em> mode, then click the tools icon and enable <strong>llm-pricing</strong>. All 32 tools become available to the agent.</p>
             </div>
           </div>
         </div>
@@ -517,14 +517,14 @@ pip install -r requirements.txt</div>
           <div class="step-num">2</div>
           <div class="step-body">
             <h4>Restart Perplexity</h4>
-            <p>After saving, restart the desktop app. All 31 pricing tools will be available in your conversations.</p>
+            <p>After saving, restart the desktop app. All 32 pricing tools will be available in your conversations.</p>
           </div>
         </div>
         <div class="step">
           <div class="step-num">3</div>
           <div class="step-body">
             <h4>Verify</h4>
-            <p>Ask: <em>"What LLM pricing tools do you have available?"</em> — Perplexity should list all 31 tools.</p>
+            <p>Ask: <em>"What LLM pricing tools do you have available?"</em> — Perplexity should list all 32 tools.</p>
           </div>
         </div>
       </div>
@@ -532,10 +532,10 @@ pip install -r requirements.txt</div>
 
   </div><!-- /section -->
 
-  <!-- All 31 tools -->
+  <!-- All 32 tools -->
   <div class="section">
     <div class="section-label">Available Tools</div>
-    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">All 31 tools are accessible via MCP. <span style="color:var(--accent)">Purple</span> = required arg · <span style="color:var(--muted)">Grey</span> = optional · <span style="color:var(--warn)">needs key</span> = send your service key on the connection (<a href="#mcp-service-key">how</a>); these act only on your own org. <code>import_session_usage</code> needs the key too, and <code>dispatch</code> spends on your own stored provider keys.</p>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">All 32 tools are accessible via MCP. <span style="color:var(--accent)">Purple</span> = required arg · <span style="color:var(--muted)">Grey</span> = optional · <span style="color:var(--warn)">needs key</span> = send your service key on the connection (<a href="#mcp-service-key">how</a>); these act only on your own org. <code>import_session_usage</code> needs the key too, and <code>dispatch</code> spends on your own stored provider keys.</p>
     <div class="tool-grid">
       <div class="tool-card">
         <div class="tool-name">get_all_pricing</div>
@@ -651,6 +651,11 @@ pip install -r requirements.txt</div>
         <div class="tool-name">ask_agent</div>
         <div class="tool-desc">Ask the ReAct AI pricing agent a natural-language question.</div>
         <div class="tool-args"><span class="req">message</span><span>session_id</span></div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">support_chat<span class="needs-key" title="Works for everyone; with your service key on the connection it can describe your own account. The local STDIO server refuses with support_requires_hosted_mcp">key optional</span></div>
+        <div class="tool-desc">Customer support assistant for this service: plans and prices, sign-up, upgrade or cancel, invoices, service keys (rotation, lost key), rate limits, connecting over MCP/REST, data accuracy. Grounded in <a href="/faq">/faq</a> and the plan catalogue; with your key it knows your own plan, payment status and rate limit. Never reveals keys or other customers' data, never changes billing; refunds, disputes, lost keys and "talk to a human" are escalated to the owner with a reference. Capped per caller per day (a cap hit returns FAQ links instead of an LLM answer).</div>
+        <div class="tool-args"><span class="req">message</span><span>conversation_id</span></div>
       </div>
       <div class="tool-card">
         <div class="tool-name">record_usage<span class="needs-key" title="Needs your service API key on the MCP connection; acts only on your own org">needs key</span></div>

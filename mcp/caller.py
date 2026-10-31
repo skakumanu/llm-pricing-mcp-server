@@ -19,6 +19,10 @@ through a ``caller_access`` class attribute:
   anonymous and operator callers are refused (dispatch substitutes HTTP's
   ``dispatch_requires_api_key`` via its ``access_refusal()``), and on STDIO the
   ToolManager returns the tool's ``stdio_refusal()`` before authorising.
+- ``IDENTITY_AWARE`` (v1.84.0, the ``support_chat`` tool): every caller is allowed and
+  the tool receives the caller so it can answer about *that* customer's own account
+  (anonymous callers get general answers). ``authorize`` never refuses it; STDIO still
+  returns the tool's ``stdio_refusal()`` because a local process has no identity.
 
 This module deliberately imports nothing from ``src.main`` so other transports and
 tools can reuse it. A caller never holds a credential: ``from_customer`` copies only
@@ -36,6 +40,7 @@ PUBLIC = "public"
 ORG_SCOPED = "org_scoped"
 CUSTOMER_ONLY = "customer_only"
 OPERATOR_ONLY = "operator_only"
+IDENTITY_AWARE = "identity_aware"
 
 ORG_MISMATCH_ERROR = "A customer key can only act on its own org; omit org_id or pass your own."
 CUSTOMER_KEY_REQUIRED_ERROR = (
@@ -85,13 +90,17 @@ class McpCaller:
         return cls(kind=KIND_OPERATOR)
 
     @classmethod
-    def from_customer(cls, record: Any) -> "McpCaller":
-        """Build a customer caller from a billing CustomerRecord (id, org_id, tier only)."""
+    def from_customer(cls, record: Any, tier: Optional[str] = None) -> "McpCaller":
+        """Build a customer caller from a billing CustomerRecord (id, org_id, tier only).
+
+        ``tier`` (v1.84.0) overrides the stored tier with the *effective* one
+        (``billing_service.effective_tier``: free once a failed renewal passes the grace period).
+        """
         return cls(
             kind=KIND_CUSTOMER,
             customer_id=getattr(record, "id", None),
             org_id=getattr(record, "org_id", None),
-            tier=getattr(record, "tier", None),
+            tier=tier if tier is not None else getattr(record, "tier", None),
         )
 
 
@@ -136,7 +145,7 @@ def authorize(
     caller: Optional[McpCaller], access: str, arguments: Optional[Dict[str, Any]]
 ) -> Optional[Dict[str, Any]]:
     """Return a refusal result if ``caller`` may not run a tool with ``access``, else None."""
-    if access == PUBLIC:
+    if access in (PUBLIC, IDENTITY_AWARE):
         return None
     caller = caller or ANONYMOUS
     if access == OPERATOR_ONLY:

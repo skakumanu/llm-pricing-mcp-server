@@ -16,6 +16,8 @@ import time
 from collections import defaultdict, deque
 from typing import Any, Deque, Dict
 
+from src.services.tiers import rate_limit_for
+
 logger = logging.getLogger(__name__)
 
 _rate_limit_store: Dict[str, Deque[float]] = defaultdict(deque)
@@ -50,12 +52,7 @@ async def rate_limit_allow(bucket_key: str, tier: str, cfg: Any) -> bool:
     authenticated customer's id and tier. Same store, same lock. ``cfg`` supplies the
     tier limits (rate_limit_free / _pro / _enterprise / _per_minute).
     """
-    _tier_limits = {
-        "free": cfg.rate_limit_free,
-        "pro": cfg.rate_limit_pro,
-        "enterprise": cfg.rate_limit_enterprise,
-    }
-    tier_limit = _tier_limits.get(tier, cfg.rate_limit_per_minute)
+    tier_limit = rate_limit_for(tier, cfg)  # the one tier -> req/min map (src/services/tiers.py)
     now = time.time()
     window_start = now - 60
     async with _rate_limit_lock:

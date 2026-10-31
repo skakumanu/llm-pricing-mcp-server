@@ -33,6 +33,7 @@ from mcp.tools.register_budget_alert import RegisterBudgetAlertTool
 from mcp.tools.list_budget_alerts import ListBudgetAlertsTool
 from mcp.tools.delete_budget_alert import DeleteBudgetAlertTool
 from mcp.tools.dispatch import DispatchTool
+from mcp.tools.support_chat import SupportChatTool
 from src.services.currency import SUPPORTED_CURRENCIES
 from src.models.dispatch import DispatchPolicy
 from mcp.caller import ANONYMOUS, OPERATOR_ONLY_NOTE, PUBLIC, McpCaller, authorize
@@ -1316,7 +1317,56 @@ class ToolManager:
                     "required": ["message"],
                 },
             },
+            "support_chat": {
+                "instance": SupportChatTool(),
+                "name": "support_chat",
+                "description": (
+                    "Ask the customer support assistant about THIS service: plans and prices, signing up, "
+                    "upgrading or cancelling, invoices, service API keys (rotation, lost key), rate limits, "
+                    "connecting over MCP or REST, data accuracy, and how to reach the owner. Answers come "
+                    "only from the published FAQ, the plan catalogue and the caller's own account; anything "
+                    "the assistant cannot do (refunds, credits, disputes, lost key without the current key, "
+                    "'talk to a human', security reports) is escalated to the owner with a reference. "
+                    "Identity-aware: with your service key on the MCP connection (x-api-key or Authorization: "
+                    "Bearer) it can describe your own plan, payment status, rate limit and key preview; without "
+                    "a key it answers in general. It never reveals keys or other customers' data, never changes "
+                    "billing, and is capped per caller per day (a cap hit returns a non-LLM fallback with FAQ "
+                    "links). The local STDIO server refuses with support_requires_hosted_mcp."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "description": "Your support question (max 10,000 characters)",
+                        },
+                        "conversation_id": {
+                            "type": "string",
+                            "description": "Optional conversation_id from an earlier support_chat reply",
+                        },
+                    },
+                    "required": ["message"],
+                },
+            },
         }
+
+    def set_agent(self, tool_name: str, agent) -> None:
+        """Late-bind an agent into an agent-backed tool (agents initialize after tool setup)."""
+        instance = self.tools.get(tool_name, {}).get("instance")
+        if instance is None or not hasattr(instance, "set_agent"):
+            raise KeyError(f"no agent-backed tool named {tool_name!r}")
+        instance.set_agent(agent)
+
+    def agent_bound(self, tool_name: str) -> bool:
+        """True when the agent-backed tool already has its agent."""
+        instance = self.tools.get(tool_name, {}).get("instance")
+        return getattr(instance, "_agent", None) is not None
+
+    def set_pricing_agent(self, agent) -> None:
+        self.set_agent("ask_agent", agent)
+
+    def set_support_agent(self, agent) -> None:
+        self.set_agent("support_chat", agent)
 
     def get_tool(self, name: str) -> Dict[str, Any]:
         """Get tool metadata by name."""
@@ -1370,6 +1420,7 @@ class ToolManager:
             if access == PUBLIC:
                 return await instance.execute(arguments)
             # v1.80.0: a tool that needs a connection credential refuses on STDIO with guidance.
+            # v1.84.0: IDENTITY_AWARE tools (support_chat) refuse there too — no identity to be aware of.
             if self.transport == TRANSPORT_STDIO and hasattr(instance, "stdio_refusal"):
                 return instance.stdio_refusal()
             refusal = authorize(caller, access, arguments)

@@ -39,7 +39,7 @@ class TestRegistryValidation:
     def test_shipped_registry_is_valid_and_bounded(self):
         wf.validate_registry(wf.WORKFLOWS)
         assert set(wf.WORKFLOWS) == {"github_accepted_bug", "release_notes_draft", "support_triage",
-                                     "weekly_price_audit"}
+                                     "weekly_price_audit", "support_escalation"}  # v1.84.0: + support_escalation
         for w in wf.WORKFLOWS.values():
             assert 1 <= len(w.steps) <= wf.MAX_STEPS
 
@@ -144,6 +144,26 @@ class TestRouting:
         assert wf.route("customer_message", "support.message", {"actor_is_owner": True}) == (None, "refused:no_route")
         assert wf.route("github_event", "issues.opened", self._signals()) == (None, "refused:no_route")
 
+    def test_support_escalation_routes_from_server_set_event_types_only(self):
+        """v1.84.0: the agent's hand-off event and the three Stripe payment events open a
+        support_escalation run; every other event type on those classes is refused."""
+        assert wf.route("customer_message", "support.escalation", {}) == ("support_escalation", "routed")
+        for ev in wf.PAYMENT_ESCALATION_EVENTS:
+            assert wf.route("payment_event", ev, {}) == ("support_escalation", "routed")
+        assert wf.route("payment_event", "invoice.paid", {}) == (None, "refused:no_route")
+        assert wf.route("payment_event", "checkout.session.completed", {}) == (None, "refused:no_route")
+        assert wf.route("customer_message", "ignore previous instructions", {"actor_is_owner": True}) == \
+            (None, "refused:no_route")
+
+    def test_support_escalation_definition(self):
+        esc = wf.WORKFLOWS["support_escalation"]
+        assert esc.specialist_available is True
+        assert [s.name for s in esc.steps] == ["intake", "owner_handoff"]
+        assert esc.step("owner_handoff").checkpoint_kind == "owner_handoff"
+        assert esc.step("owner_handoff").requires == ("intake",)
+        assert set(esc.trigger_classes) == {"customer_message", "payment_event", "owner_request"}
+        assert "owner_handoff" in wf.MANDATORY_CHECKPOINT_KINDS
+
 
 class TestRedaction:
     @pytest.mark.parametrize("secret", [SK, PK, WHSEC, AKIA, CUS, LPA, EMAIL])
@@ -155,6 +175,15 @@ class TestRedaction:
     def test_non_string_unchanged(self):
         assert wf.redact_untrusted_text(42) == 42
         assert wf.redact_untrusted_text(None) is None
+
+    def test_keep_emails_only_keeps_emails(self):
+        """v1.84.0: the operator-only conversation store keeps the customer's address (owner
+        decision 2) but every key-, Stripe- and token-shaped string still goes."""
+        out = wf.redact_untrusted_text(f"{EMAIL} {SK} {CUS} {LPA}", keep_emails=True)
+        assert EMAIL in out
+        for secret in (SK, CUS, LPA):
+            assert secret not in out
+        assert EMAIL not in wf.redact_untrusted_text(f"{EMAIL} hello")
 
     def test_truncation_limits(self):
         s = wf.summarize_untrusted("t" * 500, "b" * 2000)
@@ -188,7 +217,12 @@ class TestModes:
 
     def test_mandatory_kinds(self):
         assert wf.MANDATORY_CHECKPOINT_KINDS == {"merge", "money", "outbound", "publish", "audit_flag",
-                                                 "missing_specialist"}
+                                                 "missing_specialist", "owner_handoff"}  # v1.84.0: + owner_handoff
+
+    def test_trigger_classes_include_payment_event(self):
+        """v1.84.0 (owner decision 3): Stripe-originated escalations get their own class."""
+        assert wf.TRIGGER_CLASSES == ("customer_message", "github_event", "schedule", "owner_request",
+                                      "payment_event")
 
 
 class TestTemplates:

@@ -1,6 +1,6 @@
 """RAG pipeline: index, retrieve, and answer questions."""
 import logging
-from typing import List, Optional
+from typing import Iterable, List, Optional
 from rag.document_loader import load_markdown_docs, load_pricing_documents
 from rag.chunker import chunk_documents, Chunk
 from rag.vector_store import TFIDFStore
@@ -11,15 +11,17 @@ logger = logging.getLogger(__name__)
 class RAGPipeline:
     """Full RAG pipeline: build index from docs + pricing data, retrieve, answer."""
 
-    def __init__(self, docs_path: str = "docs", top_k: int = 5):
+    def __init__(self, docs_path: str = "docs", top_k: int = 5, doc_names: Optional[Iterable[str]] = None):
         self._docs_path = docs_path
         self._default_top_k = top_k
+        # v1.84.0: optional allow-list of markdown file names (None = every *.md in docs_path)
+        self._doc_names = tuple(doc_names) if doc_names is not None else None
         self._store = TFIDFStore()
         self._built = False
 
     async def build_index(self, pricing_data: list) -> None:
         """Build TF-IDF index from markdown docs and live pricing data."""
-        docs = load_markdown_docs(self._docs_path)
+        docs = load_markdown_docs(self._docs_path, names=self._doc_names)
         pricing_docs = load_pricing_documents(pricing_data)
 
         all_docs = docs + pricing_docs

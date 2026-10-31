@@ -339,7 +339,7 @@ class TestRestOfMcpUnchanged:
         anon = _rpc("tools/list").json()["result"]["tools"]
         cust = _rpc("tools/list", headers=_headers("x-api-key", CUSTOMER_KEY)).json()["result"]["tools"]
         op = _rpc("tools/list", headers=_headers("bearer", OPERATOR_KEY)).json()["result"]["tools"]
-        assert len(anon) == 31  # v1.81.0: + manage_price_alert
+        assert len(anon) == 32  # v1.81.0: + manage_price_alert; v1.84.0: + support_chat
         assert anon == cust == op
         names = {t["name"] for t in anon}
         assert set(OPERATOR_ONLY_TOOLS) <= names

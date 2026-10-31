@@ -3,7 +3,7 @@
 [![CI/CD Pipeline](https://github.com/skakumanu/llm-pricing-mcp-server/workflows/CI%2FCD%20Pipeline/badge.svg)](https://github.com/skakumanu/llm-pricing-mcp-server/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-LLM pricing you can verify, route on, and act on: **31 MCP tools**, a REST API and browser UIs over pricing data from **30 LLM providers**.
+LLM pricing you can verify, route on, and act on: **32 MCP tools**, a REST API and browser UIs over pricing data from **30 LLM providers**.
 
 **Live at**: https://llm-pricing-api.fly.dev · **API reference**: [/api-docs](https://llm-pricing-api.fly.dev/api-docs) · **Swagger**: [/docs](https://llm-pricing-api.fly.dev/docs)
 
@@ -17,7 +17,8 @@ LLM pricing you can verify, route on, and act on: **31 MCP tools**, a REST API a
 - **Tracks real spend**: records usage, analyzes sessions, fires budget alerts.
 - **Price alerts**: webhooks on price changes, self-managed with an `alert_token`.
 - **Local currency**: optional `currency` / `country` on pricing and estimates (13 currencies).
-- **Many surfaces**: MCP (STDIO + HTTP), REST, chat agent, calculator / compare / history UIs, billing dashboard.
+- **Many surfaces**: MCP (STDIO + HTTP), REST, chat agent, calculator / compare / history UIs, billing dashboard, FAQ (`/faq`).
+- **Customer support**: a grounded support assistant (Support mode on `/chat`, `support_chat` MCP tool) that knows the FAQ, the plan catalogue and your own account, and escalates anything it cannot do to the owner with a reference.
 - **Retired providers**: Anyscale (2026-10)
 
 ---
@@ -61,7 +62,7 @@ uvicorn src.main:app --reload --port 8000   # REST + POST /mcp; STDIO server: py
 
 ## MCP tools
 
-All 31 tools are listed over `POST /mcp` and STDIO. MCP protocol version `2024-11-05`.
+All 32 tools are listed over `POST /mcp` and STDIO. MCP protocol version `2024-11-05`.
 
 | Group | Tools |
 |---|---|
@@ -71,9 +72,9 @@ All 31 tools are listed over `POST /mcp` and STDIO. MCP protocol version `2024-1
 | History | `get_pricing_history`, `get_pricing_trends`, `get_telemetry` |
 | Price alerts | `register_price_alert`, `manage_price_alert`, `list_price_alerts`, `delete_price_alert` |
 | Usage and budget | `record_usage`, `get_usage_summary`, `analyze_session_usage`, `import_session_usage`, `register_budget_alert`, `list_budget_alerts`, `delete_budget_alert` |
-| Agent and dispatch | `ask_agent`, `list_conversations`, `delete_conversation`, `dispatch` |
+| Agent, support and dispatch | `ask_agent`, `support_chat`, `list_conversations`, `delete_conversation`, `dispatch` |
 
-The chat agent binds 27 of the 31 MCP tools (all except `ask_agent`, `get_telemetry`, `get_cache_stats` and `dispatch`).
+The chat agent binds 27 of the 32 MCP tools (all except `ask_agent`, `support_chat`, `get_telemetry`, `get_cache_stats` and `dispatch`).
 
 ---
 
@@ -114,6 +115,12 @@ The chat agent binds 27 of the 31 MCP tools (all except `ask_agent`, `get_teleme
 - `POST /usage` records actual spend. `GET /usage/summary` and `GET /usage/session/{session_id}` analyze it.
 - Budget alerts (`POST /usage/alerts`) fire a webhook at a threshold; `hard_stop: true` also blocks dispatch for your org.
 
+### Customer support and plans
+- Support mode on [/chat](https://llm-pricing-api.fly.dev/chat?mode=support) and the `support_chat` MCP tool answer plan, billing, key, rate-limit and how-to questions only from the published [FAQ](https://llm-pricing-api.fly.dev/faq) (`docs/FAQ.md`), the plan catalogue (`GET /billing/config`) and, with your service key, your own account. No invented prices, policies or response times.
+- Everything outside its authority (refunds, credits, disputes, failed payments, a lost key without the current key, bug/feature/security reports, "talk to a human") becomes an escalation in the owner's operator-only queue with a reference; `POST /support/escalations/status` returns the owner's reply.
+- Plans describe only what is implemented: rate limit, support assistant allowance and escalation priority. Upgrade and Manage Billing work when Stripe is configured; `POST /billing/key/rotate` rotates a key with the current one; the Stripe webhook handles failed renewals (14-day grace, then the free limit), refunds and disputes, and ignores duplicate deliveries.
+- Spend: per-caller daily LLM caps by tier (anonymous strictest) under the orchestrator's global monthly ceiling; a cap hit returns a non-LLM fallback with FAQ links. Every support action leaves an operator-only, append-only record.
+
 ### Orchestrator core (operator-only)
 - One place where the operator's inbound work (GitHub issues/PRs, the weekly price audit, owner requests) is accepted exactly once, routed by trigger class and owner-applied labels only, and held at human checkpoints.
 - `/orchestrator/*` plus an Orchestrator block on `/admin`: approval queue, parked runs, run log (CSV), global pause, per-workflow mode, budgets. Nothing merges, moves money or sends anything without a recorded approval.
@@ -125,9 +132,9 @@ The chat agent binds 27 of the 31 MCP tools (all except `ask_agent`, `get_teleme
 
 | Access | Who | What it unlocks |
 |---|---|---|
-| Public | Anyone | Pricing, estimates, data quality, history, registering a price alert, the chat agent: 19 public MCP tools |
-| Service key | You (free: `POST /billing/signup`) | Usage/budget tools and endpoints, router, `dispatch`, `/dispatch/keys`; acts only on your own org |
-| Operator key | Server operator (`MCP_API_KEY`) | Listing/deleting all price alerts and conversations, admin customer list, every `/orchestrator/*` route |
+| Public | Anyone | Pricing, estimates, data quality, history, registering a price alert, the chat agent, the support assistant in general mode: 19 public MCP tools + the identity-aware `support_chat` |
+| Service key | You (free: `POST /billing/signup`) | Usage/budget tools and endpoints, router, `dispatch`, `/dispatch/keys`, `/billing/me`, `/billing/key/rotate`; acts only on your own org, and `support_chat` / `POST /support/chat` can describe your own account |
+| Operator key | Server operator (`MCP_API_KEY`) | Listing/deleting all price alerts and conversations, admin customer list and owner-side key rotation (`/admin/customers/{id}/key/rotate`), every `/orchestrator/*` route |
 | Intake key | GitHub Actions executor (`ORCHESTRATOR_INTAKE_KEY`) | Only `POST /orchestrator/events`, `GET /orchestrator/runs/{id}/actions`, `POST …/actions/{aid}/result`; it carries the workflow's owner assertion for GitHub events, so treat it as a secret |
 
 - Send keys as `x-api-key: <your-key>` (MCP also accepts `Authorization: Bearer <your-key>`).
@@ -151,6 +158,12 @@ Set via environment variables or `.env`. An unknown key in `.env` stops startup 
 | `ORCHESTRATOR_DB_PATH` | Orchestrator SQLite file (runs, approvals, action records, spend, settings) |
 | `ORCHESTRATOR_INTAKE_KEY` | Separate credential for the GitHub Actions executor; accepted on three routes only |
 | `ORCHESTRATOR_RUN_RETENTION_DAYS` / `ORCHESTRATOR_IO_RETENTION_DAYS` | Orchestrator retention: rows (365) and redacted I/O summaries (90) |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_ID_PRO` / `STRIPE_PRICE_ID_ENTERPRISE` | Paid tiers; checkout, portal and webhook stay 503 until set (`GET /billing/config` reports it) |
+| `BILLING_PAST_DUE_GRACE_DAYS` | Days a failed renewal keeps the paid tier before the account is served at the free limit (14) |
+| `SUPPORT_ENABLED` | `false` turns the support assistant into a FAQ-and-escalation fallback (default `true`) |
+| `SUPPORT_DAILY_CAP_ANONYMOUS_USD` / `_FREE_USD` / `_PRO_USD` / `_ENTERPRISE_USD` | Per-caller daily LLM allowance for support by tier (0.10 / 0.50 / 3.00 / 10.00) |
+| `SUPPORT_MAX_ESCALATIONS_PER_DAY` | Escalations an identified customer may open per day (3; anonymous callers get 1) |
+| `SUPPORT_FALLBACK_PRICE_PER_1M_IN_USD` / `SUPPORT_FALLBACK_PRICE_PER_1M_OUT_USD` | Price a support turn when `AGENT_MODEL` is not in the catalogue (3.0 / 15.0) |
 
 Full list: `src/config/settings.py`. Production settings: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
@@ -162,7 +175,7 @@ Full list: `src/config/settings.py`. Production settings: [docs/DEPLOYMENT.md](d
 pytest tests/ -q
 ```
 
-- 3348 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 3511 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 - Git Flow: `feature/*` → `develop` → `master`. See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 - Internals, services, data stores and CI: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Deploys to Fly.io from `master` when all CI gates pass: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
@@ -174,5 +187,6 @@ pytest tests/ -q
 - [docs/INDEX.md](docs/INDEX.md): every doc
 - [docs/archive/README.md](docs/archive/README.md): historical docs (blue-green deployment, MCP validation report)
 - [/whats-new](https://llm-pricing-api.fly.dev/whats-new): release notes
+- [/faq](https://llm-pricing-api.fly.dev/faq): plans, billing, keys, rate limits, how to get help
 - [/mcp-setup](https://llm-pricing-api.fly.dev/mcp-setup): MCP integration hub
 - License: MIT, see [LICENSE](LICENSE)

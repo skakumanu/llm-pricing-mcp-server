@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FAQ — LLM Pricing API</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3347;
+      --accent: #7c6af7;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --success: #48bb78;
+      --warn: #ed8936;
+      --danger: #f56565;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 1.6; }
+    /* ── Shared nav (identical on every page; scripts/sync_nav.py, tests/test_nav_consistency.py) ── */
+    .main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;border-bottom:1px solid #23263a;position:sticky;top:0;z-index:200;gap:.5rem;flex-shrink:0}
+    .nav-brand{font-weight:700;color:#7c6af7;text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
+    .nav-spacer{flex:1}
+    .nav-links{display:flex;align-items:center;gap:.125rem}
+    .nav-links a{color:#8b93a5;text-decoration:none;padding:.35rem .6rem;border-radius:6px;font-size:.8rem;white-space:nowrap;transition:all .15s;border:none}
+    .nav-links a:hover{background:#1a1d2e;color:#e5e7eb}
+    .nav-links a.active{background:#1a1d2e;color:#7c6af7;font-weight:600}
+    .nav-links a.nav-cta{margin-left:.35rem;border:1px solid #7c6af7;color:#7c6af7}
+    .nav-links a.nav-cta:hover{background:#7c6af7;color:#fff}
+    .nav-toggle{display:none;background:none;border:1px solid #2a2d3a;color:#9ca3af;font-size:1.1rem;cursor:pointer;padding:.25rem .5rem;border-radius:6px;line-height:1;flex-shrink:0}
+    @media(max-width:760px){
+      .nav-toggle{display:block}
+      .nav-links{display:none;position:absolute;top:52px;left:0;right:0;flex-direction:column;align-items:stretch;background:#0f1117;border-bottom:1px solid #23263a;padding:.5rem 1rem;gap:.25rem;z-index:199}
+      .nav-links.open{display:flex}
+      .nav-links a{padding:.6rem .75rem;font-size:.875rem}
+      .nav-links a.nav-cta{margin-left:0;text-align:center}
+    }
+    /* ── FAQ page ── */
+    .container { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+    .faq h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+    .faq h2 { font-size: 18px; font-weight: 600; margin: 32px 0 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+    .faq p { color: var(--muted); margin: 0 0 10px; }
+    .faq h1 + p { font-size: 15px; }
+    .faq ul { margin: 0 0 12px 1.2rem; color: var(--text); }
+    .faq li { margin: 4px 0; overflow-wrap: anywhere; }
+    .faq a { color: var(--accent); text-decoration: none; }
+    .faq a:hover { text-decoration: underline; }
+    .faq code { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 0 .35em; font-size: .9em; }
+    .faq table { border-collapse: collapse; width: 100%; margin: 10px 0 14px; font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .faq th, .faq td { border-bottom: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+    .faq th { background: var(--surface2); font-weight: 600; }
+    .faq-help { margin-top: 36px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .faq-help a.btn { background: var(--accent); color: #fff; padding: 8px 14px; border-radius: 7px; font-weight: 600; text-decoration: none; }
+    .faq-help a.btn.secondary { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+    .faq-help a.btn.secondary:hover { border-color: var(--accent); color: var(--accent); }
+  </style>
+</head>
+<body>
+<nav class="main-nav">
+  <a href="/" class="nav-brand">⚡ LLM Pricing</a>
+  <span class="nav-spacer"></span>
+  <div class="nav-links" id="navLinks">
+    <a href="/calculator">Calculator</a>
+    <a href="/compare">Compare</a>
+    <a href="/trends">Trends</a>
+    <a href="/chat">Chat</a>
+    <a href="/mcp-setup">MCP</a>
+    <a href="/api-docs">API</a>
+    <a href="/whats-new">What's New</a>
+    <a href="/billing" class="nav-cta">Sign in</a>
+  </div>
+  <button class="nav-toggle" id="navToggle" aria-label="Menu" aria-expanded="false" aria-controls="navLinks">☰</button>
+</nav>
+<script>
+(function(){
+  var t=document.getElementById('navToggle'),l=document.getElementById('navLinks');
+  if(!t||!l)return;
+  t.onclick=function(){var o=l.classList.toggle('open');t.setAttribute('aria-expanded',o?'true':'false');};
+  var p=location.pathname.replace(/\/$/,'')||'/';
+  l.querySelectorAll('a').forEach(function(a){
+    var h=a.getAttribute('href');
+    if(h===p||h===p+'/')a.classList.add('active');
+    a.addEventListener('click',function(){l.classList.remove('open');t.setAttribute('aria-expanded','false');});
+  });
+})();
+</script>
+
+<div class="container">
+  <div class="faq">
+<!-- faq:start (generated from docs/FAQ.md by scripts/sync_faq.py; do not edit by hand) -->
+<h1>Frequently asked questions</h1>
+<p>Published answers about the LLM Pricing API service: plans, billing, service keys, rate limits, data accuracy and how to get help. The support assistant on <a href="/chat">/chat</a> (Support mode) and the <code>support_chat</code> MCP tool answer only from this page, the plan catalogue and your own account; if something is not here, they will say so and offer to escalate to the owner.</p>
+<h2 id="what-is-this-service">What is this service?</h2>
+<ul>
+<li>Verified LLM pricing for 600+ models across 30 providers, served over REST, MCP (STDIO and <code>POST /mcp</code>) and browser tools (calculator, compare, trends, chat).</li>
+<li>Every curated price is checked against an external registry; a price that drifts more than 5% is withheld rather than served. <a href="/data-quality">/data-quality</a> shows the current confirmed percentage.</li>
+<li>A routing engine recommends a model by cost and quality, and the dispatch gateway can run the best eligible model on your own provider keys.</li>
+</ul>
+<h2 id="plans-and-prices">Plans and prices</h2>
+<table><thead><tr><th>Plan</th><th>Price</th><th>Rate limit</th><th>Support assistant allowance</th><th>Escalation priority</th></tr></thead>
+<tbody><tr><td>Free</td><td>$0 / month</td><td>30 requests / minute</td><td>$0.50 / day</td><td>standard</td></tr><tr><td>Pro</td><td>$29 / month</td><td>120 requests / minute</td><td>$3.00 / day</td><td>pro (ahead of free)</td></tr><tr><td>Enterprise</td><td>$299 / month</td><td>600 requests / minute</td><td>$10.00 / day</td><td>enterprise (first in the queue)</td></tr></tbody></table>
+<ul>
+<li>The rate limit applies per service key across REST, <code>POST /mcp</code> and dispatch.</li>
+<li>The support assistant allowance is how much LLM-backed support you can use per day (UTC). Anonymous visitors share a stricter allowance ($0.10 / day per address). When it is used up you still get FAQ links and can ask to be escalated to the owner.</li>
+<li>Escalation priority decides the order of the owner's queue, not a response time. Response time is best effort on every plan.</li>
+<li>Nothing else differs between plans. Pricing data, the router, the calculators and every MCP tool are the same for everyone.</li>
+</ul>
+<h2 id="signing-up-and-your-service-key">Signing up and your service key</h2>
+<ul>
+<li>Sign up with your email on <a href="/billing">/billing</a> (or <code>POST /billing/signup</code>). You get a free-tier service key immediately. No credit card.</li>
+<li>The key is shown exactly once. Save it. Nobody, including the owner, can display it again.</li>
+<li>Send it as the <code>x-api-key</code> header (REST and <code>POST /mcp</code>) or <code>Authorization: Bearer &lt;key&gt;</code>; the npx bridge reads <code>LLM_PRICING_API_KEY</code>.</li>
+<li>Signing up again with the same email returns an error and never a key.</li>
+</ul>
+<h2 id="i-lost-my-key-or-think-it-leaked">I lost my key or think it leaked</h2>
+<ul>
+<li>If you still have the current key: open the Dashboard tab on <a href="/billing">/billing</a>, load it, and press <strong>Rotate key</strong> (or <code>POST /billing/key/rotate</code> with the key). The old key stops working immediately and the new one is shown once.</li>
+<li>If you no longer have the key: there is no self-serve recovery in this phase. Ask the support assistant to escalate a key-recovery request; the owner verifies you and relays a new key by a channel they can verify. Never paste a key into chat.</li>
+<li>If you pasted a key or other secret anywhere by mistake, rotate it.</li>
+</ul>
+<h2 id="upgrading-cancelling-invoices-and-cards">Upgrading, cancelling, invoices and cards</h2>
+<ul>
+<li>Upgrade: Upgrade tab on <a href="/billing">/billing</a> with your key. Checkout is handled by Stripe. When Stripe is not configured on a server the buttons say so and nothing can be bought.</li>
+<li>Cancel, change your card, download invoices: <strong>Manage Billing</strong> on <a href="/billing">/billing</a> opens the Stripe customer portal for your account. Cancelling returns you to Free at the end of the paid period.</li>
+<li>The support assistant explains and points you to these flows. It never changes your plan, card or invoices itself.</li>
+</ul>
+<h2 id="a-payment-failed">A payment failed</h2>
+<ul>
+<li>When a renewal payment fails you keep your paid tier for a 14-day grace period while your billing status is <code>past_due</code>. Update your card in Manage Billing and Stripe retries. Once the invoice is paid your status returns to <code>active</code>.</li>
+<li>After the grace period your account is served at the Free rate limit until the invoice is paid. Your stored plan is not deleted; it comes back when Stripe reports the payment.</li>
+<li>Every failed renewal, refund and dispute is also placed in the owner's queue so they can follow up.</li>
+</ul>
+<h2 id="refunds-double-charges-and-disputes">Refunds, double charges and disputes</h2>
+<ul>
+<li>The support assistant cannot refund, credit, discount or change a tier. Ask it anyway: it escalates the request to the owner with a reference and tells you so. The owner reviews every refund or dispute personally.</li>
+<li>Keep the reference. You can check its status on <a href="/chat">/chat</a> (Support mode) with "what is the status of escalation orc_...".</li>
+</ul>
+<h2 id="rate-limits">Rate limits</h2>
+<ul>
+<li>Free 30, Pro 120, Enterprise 600 requests per minute per service key. Anonymous requests share a per-address limit. The current numbers are also at <code>GET /rate-limits/tiers</code>.</li>
+<li>Over the limit you get HTTP 429; wait a minute and retry.</li>
+</ul>
+<h2 id="how-accurate-is-the-pricing-data">How accurate is the pricing data?</h2>
+<ul>
+<li><a href="/data-quality">/data-quality</a> and the <code>get_data_quality</code> tool report the share of models with a confirmed, fresh price, how many are withheld for drift, how many are unpriced and how many are stale. <code>check_price_drift</code> lists individual disputes.</li>
+<li>Every price carries its source (<code>provider</code> or <code>registry</code>). Providers bill in USD; local-currency figures are additive conversions.</li>
+</ul>
+<h2 id="connecting-a-client">Connecting a client</h2>
+<ul>
+<li>MCP: <a href="/mcp-setup">/mcp-setup</a> has copy-paste configs for Claude Desktop, Cursor, VS Code and Perplexity. The hosted endpoint is <code>https://llm-pricing-api.fly.dev/mcp</code>; <code>npx -y llm-pricing-mcp</code> bridges STDIO-only clients.</li>
+<li>REST: <a href="/api-docs">/api-docs</a> lists every endpoint with its access level; <a href="/docs">/docs</a> is the OpenAPI UI.</li>
+</ul>
+<h2 id="what-can-the-support-assistant-do-and-what-can-t-it">What can the support assistant do, and what can't it?</h2>
+<ul>
+<li>It can: explain plans, prices and limits; describe your own account when you send your key (plan, payment status, rate limit, key preview, 30-day savings); point you to sign-up, upgrade, Manage Billing and key rotation; answer how-to questions from the setup guides; answer general LLM pricing questions; escalate to the owner.</li>
+<li>It cannot: see or change anyone else's account; refund, credit, discount or change a plan; reveal a key; promise a response time; recover a key without the current one.</li>
+<li>Your messages are treated as data. Text that asks the assistant to ignore its rules, grant access or reveal other customers' data has no effect and is flagged in the owner's audit record.</li>
+<li>Keys, tokens and other secrets you paste are redacted before the assistant reads them and are never repeated back.</li>
+</ul>
+<h2 id="how-do-i-reach-a-human">How do I reach a human?</h2>
+<ul>
+<li>Tell the support assistant "talk to a human" (or describe a bug, a feature request or a security problem). It opens an escalation in the owner's queue and gives you a reference. Security reports are never posted publicly.</li>
+<li>The owner replies as soon as possible; response time is best effort and is not a plan feature. Check the status any time with the reference.</li>
+</ul>
+<!-- faq:end -->
+  </div>
+  <div class="faq-help">
+    <span style="color:var(--muted)">Still stuck?</span>
+    <a class="btn" href="/chat?mode=support">Ask the support assistant</a>
+    <a class="btn secondary" href="/billing">Billing dashboard</a>
+    <a class="btn secondary" href="/mcp-setup">MCP setup</a>
+    <a class="btn secondary" href="/api-docs">API reference</a>
+  </div>
+</div>
+
+</body>
+</html>
