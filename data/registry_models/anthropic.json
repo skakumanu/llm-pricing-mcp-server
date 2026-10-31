@@ -1,0 +1,128 @@
+{
+ "generated_by": "scripts/pickup_registry_models.py",
+ "models": {
+  "claude-fable-5-1": {
+   "added_on": "2026-10-31",
+   "context_window": 1000000,
+   "input": 0.01,
+   "output": 0.05,
+   "price_as_of": "2026-10-31",
+   "price_source_kind": "registry",
+   "registry_key": "claude-fable-5-1",
+   "supports_function_calling": true,
+   "supports_vision": true
+  },
+  "claude-haiku-4-5": {
+   "added_on": "2026-10-31",
+   "context_window": 200000,
+   "input": 0.001,
+   "output": 0.005,
+   "price_as_of": "2026-10-31",
+   "price_source_kind": "registry",
+   "registry_key": "claude-haiku-4-5",
+   "supports_function_calling": true,
+   "supports_vision": true
+  },
+  "claude-haiku-5-5": {
+   "added_on": "2026-10-31",
+   "context_window": 1000000,
+   "input": 0.0001,
+   "output": 0.0005,
+   "price_as_of": "2026-10-31",
+   "price_source_kind": "registry",
+   "registry_key": "claude-haiku-5-5",
+   "supports_function_calling": true,
+   "supports_vision": true
+  },
+  "claude-mythos-5": {
+   "added_on": "2026-10-31",
+   "context_window": 1000000,
+   "input": 0.01,
+   "output": 0.05,
+   "price_as_of": "2026-10-31",
+   "price_source_kind": "registry",
+   "registry_key": "claude-mythos-5",
+   "supports_function_calling": true,
+   "supports_vision": true
+  },
+  "claude-mythos-5-1": {
+   "added_on": "2026-10-31",
+   "context_window": 1000000,
+   "input": 0.01,
+   "output": 0.05,
+   "price_as_of": "2026-10-31",
+   "price_source_kind": "registry",
+   "registry_key": "claude-mythos-5-1",
+   "supports_function_calling": true,
+   "supports_vision": true
+  },
+  "claude-opus-4-5": {
+   "added_on": "2026-10-31",
+   "context_window": 200000,
+   "input": 0.005,
+   "output": 0.025,
+   "price_as_of": "2026-10-31",
+   "price_source_kind": "registry",
+   "registry_key": "claude-opus-4-5",
+   "supports_function_calling": true,
+   "supports_vision": true
+  },
+  "claude-opus-4-7": {
+   "added_on": "2026-10-31",
+   "context_window": 1000000,
+   "input": 0.005,
+   "output": 0.025,
+   "price_as_of": "2026-10-31",
+   "price_source_kind": "registry",
+   "registry_key": "claude-opus-4-7",
+   "supports_function_calling": true,
+   "supports_vision": true
+  },
+  "claude-opus-4-8": {
+   "added_on": "2026-10-31",
+   "context_window": 1000000,
+   "input": 0.005,
+   "output": 0.025,
+   "price_as_of": "2026-10-31",
+   "price_source_kind": "registry",
+   "registry_key": "claude-opus-4-8",
+   "supports_function_calling": true,
+   "supports_vision": true
+  },
+  "claude-opus-5-5": {
+   "added_on": "2026-10-31",
+   "context_window": 1000000,
+   "input": 0.004,
+   "output": 0.02,
+   "price_as_of": "2026-10-31",
+   "price_source_kind": "registry",
+   "registry_key": "claude-opus-5-5",
+   "supports_function_calling": true,
+   "supports_vision": true
+  },
+  "claude-sonnet-4-5": {
+   "added_on": "2026-10-31",
+   "context_window": 200000,
+   "input": 0.003,
+   "output": 0.015,
+   "price_as_of": "2026-10-31",
+   "price_source_kind": "registry",
+   "registry_key": "claude-sonnet-4-5",
+   "supports_function_calling": true,
+   "supports_vision": true
+  },
+  "claude-sonnet-5-5": {
+   "added_on": "2026-10-31",
+   "context_window": 1000000,
+   "input": 0.002,
+   "output": 0.01,
+   "price_as_of": "2026-10-31",
+   "price_source_kind": "registry",
+   "registry_key": "claude-sonnet-5-5",
+   "supports_function_calling": true,
+   "supports_vision": true
+  }
+ },
+ "provider": "Anthropic",
+ "registry_provider": "anthropic"
+}

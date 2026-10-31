@@ -105,7 +105,7 @@ phase('Review')
 const DIMENSIONS = ['correctness', 'security', 'simplification']
 const reviews = await parallel(
   DIMENSIONS.map((d) => () =>
-    agent(reviewPrompt(d), { agentType: 'phase-review', phase: 'Review', label: `review:${d}`, schema: REVIEW_SCHEMA })
+    agent(reviewPrompt(d), { agentType: d === 'security' ? 'phase-review-security' : 'phase-review', phase: 'Review', label: `review:${d}`, schema: REVIEW_SCHEMA })
   )
 )
 const findings = reviews.filter(Boolean).flatMap((r) => r.findings || [])
