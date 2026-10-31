@@ -161,6 +161,7 @@ git diff --staged --name-only | grep -E "\.(db|env|pem|key|p12|pfx|secret)$"
 
 3. **Use `.env` for Local Development:**
    - Copy `.env.example` to `.env` (`.env` is already in `.gitignore`)
+   - Only known setting names belong in `.env`: an unknown key fails startup (v1.82.1). When you remove a setting, add its env key to `RETIRED_ENV_KEYS` in `src/config/settings.py` so existing `.env` files keep working
    - Keep `.env.example` limited to dummy values
    - Document required environment variables in README
 
