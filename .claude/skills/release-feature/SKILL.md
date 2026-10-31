@@ -85,6 +85,15 @@ Call the `Workflow` tool with `name: "release-feature"` (the script lives at `.c
 
 This is an explicit, deliberate multi-agent orchestration step — calling `Workflow` here is expected and intended by this skill, not something to second-guess.
 
+**Orchestrator-run marker (v1.83.0).** When `$ARGUMENTS` contain an orchestrator run id matching `orc_[a-z0-9]{12}` and/or a GitHub issue reference `#N` (the orchestrator's `sdlc_run` checkpoint hands the owner the exact command `/release-feature Fix issue #N (orchestrator run orc_xxxxxxxxxxxx)`), append these lines to `attribution.prFooter`, each on its own line, before the generated-with footer:
+
+```
+Refs #N
+Orchestrator-Run: orc_xxxxxxxxxxxx
+```
+
+The `Orchestrator-Run:` line is what `.github/workflows/orchestrator-intake.yml` parses from the PR body on `pull_request: opened` to complete that run's checkpoint and post its single status comment on the issue. Nothing else changes: the pipeline still ends at an open PR against `develop` that only the owner merges. When invoked without such arguments, omit both lines — the skill works exactly as before outside the orchestrator.
+
 ### 5. Report back
 
 Once the workflow returns, summarize for the user in a few lines:
