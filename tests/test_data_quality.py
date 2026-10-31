@@ -6,6 +6,7 @@ model's price_confirmed/price_as_of fields themselves or calling
 check_price_drift, which lists individual disputes rather than a summary.
 """
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -17,6 +18,9 @@ sys.path.insert(0, str(project_root))
 from src.models.pricing import PricingMetrics  # noqa: E402
 from src.services.data_quality import compute_data_quality_report  # noqa: E402
 from mcp.tools.get_data_quality import GetDataQualityTool  # noqa: E402
+
+# Relative to today so "fresh" fixtures never age past PRICE_STALE_AFTER_DAYS.
+FRESH_DATE = (date.today() - timedelta(days=1)).isoformat()
 
 
 def _pm(name, provider="P", inp=1.0, out=2.0, confirmed=True,
@@ -46,8 +50,8 @@ class FakeOracle:
 class TestComputeDataQualityReport:
     def test_all_confirmed_and_fresh(self):
         models = [
-            _pm("a", price_as_of="2026-08-01"),
-            _pm("b", price_as_of="2026-08-01"),
+            _pm("a", price_as_of=FRESH_DATE),
+            _pm("b", price_as_of=FRESH_DATE),
         ]
         report = compute_data_quality_report(models, FakeOracle())
         assert report.total_models == 2
@@ -69,7 +73,7 @@ class TestComputeDataQualityReport:
 
     def test_stale_only_counted_among_confirmed(self):
         stale = _pm("stale", confirmed=True, price_as_of="2020-01-01")
-        fresh = _pm("fresh", confirmed=True, price_as_of="2026-08-01")
+        fresh = _pm("fresh", confirmed=True, price_as_of=FRESH_DATE)
         report = compute_data_quality_report([stale, fresh], FakeOracle())
         assert report.stale_models == 1
         assert report.stale_pct == pytest.approx(50.0)
@@ -78,7 +82,7 @@ class TestComputeDataQualityReport:
         """Subscription-priced IDE tools have no registry to drift against —
         including them would just dilute the signal."""
         subscription = _pm("copilot", pricing_model="subscription", inp=0.0, out=0.0, confirmed=False)
-        priced = _pm("gpt-4o", price_as_of="2026-08-01")
+        priced = _pm("gpt-4o", price_as_of=FRESH_DATE)
         report = compute_data_quality_report([subscription, priced], FakeOracle())
         assert report.total_models == 1
 
@@ -89,7 +93,7 @@ class TestComputeDataQualityReport:
         assert report.stale_pct == 0.0
 
     def test_as_dict_rounds_percentages(self):
-        models = [_pm("a", price_as_of="2026-08-01"), _pm("b", inp=0.0, out=0.0, confirmed=False)]
+        models = [_pm("a", price_as_of=FRESH_DATE), _pm("b", inp=0.0, out=0.0, confirmed=False)]
         report = compute_data_quality_report(models, FakeOracle())
         d = report.as_dict()
         assert d["confirmed_pct"] == 50.0
@@ -110,11 +114,11 @@ class TestComputeDataQualityReport:
 class TestProviderVsRegistrySplit:
     def _models(self):
         return [
-            _pm("a", price_as_of="2026-08-01"),
-            _pm("b", price_as_of="2026-08-01"),
-            _pm("r1", price_as_of="2026-08-01", kind="registry", registry_key="x/r1"),
-            _pm("r2", price_as_of="2026-08-01", kind="registry", registry_key="x/r2"),
-            _pm("r3", price_as_of="2026-08-01", kind="registry", registry_key="x/r3"),
+            _pm("a", price_as_of=FRESH_DATE),
+            _pm("b", price_as_of=FRESH_DATE),
+            _pm("r1", price_as_of=FRESH_DATE, kind="registry", registry_key="x/r1"),
+            _pm("r2", price_as_of=FRESH_DATE, kind="registry", registry_key="x/r2"),
+            _pm("r3", price_as_of=FRESH_DATE, kind="registry", registry_key="x/r3"),
             _pm("withheld", inp=9.0, confirmed=False),
             _pm("never", inp=0.0, out=0.0, confirmed=False),
         ]
@@ -149,8 +153,8 @@ class TestProviderVsRegistrySplit:
         assert "2 provider-confirmed, 3 registry-sourced." in r.summary
 
     def test_summary_split_also_on_all_confirmed_catalogue(self):
-        r = compute_data_quality_report([_pm("a", price_as_of="2026-08-01"),
-                                         _pm("r", price_as_of="2026-08-01", kind="registry", registry_key="x/r")],
+        r = compute_data_quality_report([_pm("a", price_as_of=FRESH_DATE),
+                                         _pm("r", price_as_of=FRESH_DATE, kind="registry", registry_key="x/r")],
                                         FakeOracle())
         assert r.summary.startswith("All 2 priced models")
         assert "1 provider-confirmed, 1 registry-sourced." in r.summary
@@ -188,7 +192,7 @@ class TestProviderVsRegistrySplit:
 @pytest.mark.asyncio
 class TestGetDataQualityTool:
     async def test_returns_success_with_report_fields(self):
-        models = [_pm("a", price_as_of="2026-08-01")]
+        models = [_pm("a", price_as_of=FRESH_DATE)]
         tool = GetDataQualityTool()
         tool.service = AsyncMock()
         tool.service.get_all_pricing_async = AsyncMock(return_value=(models, []))
