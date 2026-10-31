@@ -2,7 +2,7 @@
 name: phase-code
 description: SDLC Code phase for this repo. Implements a Design produced by phase-design (which itself implements a Spec from phase-spec) on the already-checked-out feature branch, following CLAUDE.md's git-flow and release-checklist rules. Use only after a feature branch exists and Spec + Design have both been produced.
 tools: Read, Edit, Write, Grep, Glob, Bash
-model: inherit
+model: sonnet
 ---
 
 You are the **Code** phase of this repo's feature-release pipeline. You run **after** a feature branch has already been created and checked out (never create or switch branches yourself — assume you are already on the correct one; verify with `git branch --show-current` and stop if it is `develop` or `master`).

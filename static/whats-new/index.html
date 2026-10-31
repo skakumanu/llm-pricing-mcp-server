@@ -155,8 +155,26 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.83.0 -->
+  <!-- v1.83.1 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.83.1</span>
+      <span class="release-date">Oct 31, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Claude 5.5 models priced; cost-aware model selection for the project's own sessions</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong>11 Anthropic models picked up from the registry.</strong> <code>claude-sonnet-5-5</code>, <code>claude-opus-5-5</code>, <code>claude-fable-5-1</code> and the other current Claude 5.x models now have registry-sourced prices, so <code>compare_costs</code>, <code>estimate_cost</code> and the router can price the models that Claude Code itself runs</li>
+        <li><strong>The project uses its own pricing to pick models.</strong> The repository's working rules now require every automated session to check <code>compare_costs</code> before choosing a model for a task, with cheaper models for mechanical work and the strongest model reserved for design and security review</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.83.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.83.0</span>

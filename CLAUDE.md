@@ -213,6 +213,36 @@ Deploy to Fly.io only proceeds when all five pass.
 
 ---
 
+## Model Selection — use the LLM Pricing MCP in every session
+
+This repo's own product is the cost oracle for the sessions that build it. Before launching a
+subagent or a Workflow, pick the **cheapest model that meets the task's quality bar**, and use the
+`llm-pricing` MCP (`compare_costs`, `recommend_model`, `estimate_cost`) to check the price of the
+candidates rather than guessing. Record the choice (and why) in the PR body for pipeline runs.
+
+Default mapping (owner decision 2026-10-31, "Balanced"; override per task when the work demands it):
+
+| Work | Model |
+|---|---|
+| Monitors, CI watching, greps, link checks, doc audits, release-notes drafting, sync/promotion mechanics | `haiku` |
+| Code phase, correctness and simplification reviews, Test & Release | `sonnet` |
+| Spec, Design, security review, anything touching auth, billing, secrets or money | session model (`inherit`) |
+
+- The phase agents carry this in their `model:` frontmatter (`phase-code`, `phase-review`,
+  `phase-test` → `sonnet`; `phase-spec`, `phase-design`, `phase-review-security` → `inherit`).
+  The release workflow uses `phase-review-security` for the security dimension.
+- Pass `model` explicitly on every ad-hoc `Agent` call; never leave a mechanical task on the
+  session model by default.
+- Keep the Anthropic catalogue current so the MCP can price the models these sessions run
+  (`claude-haiku-5-5`, `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-fable-5-1`): the weekly
+  pickup adds registry-sourced entries, and `compare_costs` must return a price, not
+  "not found", for each of them.
+- Measured 2026-10-31 with `compare_costs` (1M in / 150k out): `claude-haiku-5-5` $0.18,
+  `claude-sonnet-5-5` $3.50, `claude-opus-5-5` $7.00, `claude-fable-5-1` $17.50 — a 100x spread
+  between the cheapest and the most capable, which is why the mapping matters.
+
+---
+
 ## AI-Native SDLC Pipeline (Phase Agents)
 
 For a feature (not a trivial one-line fix), this repo has a phase-agent pipeline instead of one
