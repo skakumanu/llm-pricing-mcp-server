@@ -37,7 +37,7 @@ Most LLM pricing tools are a static lookup table. This one checks its own number
 - Actual usage/spend tracking (`POST /usage`, `GET /usage/summary`) — the real-cost counterpart to `/cost-estimate`; tag events with `session_id` and analyze one session on demand (`GET /usage/session/{session_id}`) for a grounded recommendation with estimated savings
 - OpenAI-compatible proxy (`POST /v1/chat/completions`) for drop-in SDK integration
 - Dispatch gateway (v1.77.0): add a `dispatch` policy and your own provider keys to that same endpoint and the best eligible model is executed for real — failover that never drops below your quality floor, a receipt with the chosen model, reason, actual cost and savings, budget hard stops, shadow A/B and an org-scoped audit export; since v1.79.0 provider keys can be stored once per org (`/dispatch/keys`, encrypted at rest) so callers need only their service key — see [Dispatch gateway](#dispatch-gateway)
-- Webhook alerts for price changes and budget-spend thresholds (`POST /usage/alerts`, HMAC-SHA256 signed; `hard_stop: true` also blocks dispatch for the org once reached). Since v1.80.1 the webhook URL must be a **public https URL**: http, private/loopback/link-local/cloud-metadata/internal hosts (in any IP spelling, or via a hostname resolving to one) and unresolvable hosts are refused with 422 `invalid_webhook_url` (MCP: `error_code: invalid_webhook_url`); redirects are never followed
+- Webhook alerts for price changes and budget-spend thresholds (`POST /usage/alerts`, HMAC-SHA256 signed when the operator sets `WEBHOOK_SECRET`; `hard_stop: true` also blocks dispatch for the org once reached). Since v1.80.1 the webhook URL must be a **public https URL**: http, private/loopback/link-local/cloud-metadata/internal hosts (in any IP spelling, or via a hostname resolving to one) and unresolvable hosts are refused with 422 `invalid_webhook_url` (MCP: `error_code: invalid_webhook_url`); redirects are never followed
 - Self-service price alerts (v1.81.0): registering a price alert (HTTP, MCP or the chat agent) returns a one-time `alert_token`. Save it — it is shown only once and stored only as a SHA-256 hash, so nobody (not even the operator) can recover it. With it, and no account or API key, you can view or delete that one alert: `POST /pricing/alerts/self/view` or `/pricing/alerts/self/delete` with `{"alert_token": "lpa_..."}` in the JSON body (never in the URL), or the `manage_price_alert` MCP tool. Any token that matches nothing gets the same `invalid_alert_token` refusal. Alerts registered before v1.81.0 have no token and are removed via the operator
 - Interactive docs: `/docs` (Swagger) and `/redoc`
 
@@ -55,10 +55,10 @@ Most LLM pricing tools are a static lookup table. This one checks its own number
 - Ends at an open PR against `develop`; merging is still a human decision
 
 ### Agent + RAG Pipeline
-- **Configurable LLM backend**: OpenAI GPT-4o-mini (default) or Anthropic Claude via env vars
+- **Configurable LLM backend**: Anthropic Claude (code default) or OpenAI GPT-4o-mini via env vars (the Fly.io example below sets OpenAI)
 - **ReAct loop agent** with access to 27 of the 31 MCP tools (excludes `ask_agent`, `get_telemetry`, `get_cache_stats`, and `dispatch`)
 - **TF-IDF RAG** over pricing docs with top-k retrieval
-- **Conversation memory**: per-session SQLite persistence, configurable turn limit
+- **Conversation memory**: per-session, in-memory by default or SQLite when `CONVERSATION_DB_PATH` is set, configurable turn limit
 - **Chat UI** at `/chat` — streams ReAct progress in real time
 - `POST /agent/chat` — blocking JSON response
 - `POST /agent/chat/stream` — SSE stream (`thinking` / `tool_call` / `tool_result` / `answer` / `done`)
@@ -70,12 +70,13 @@ Most LLM pricing tools are a static lookup table. This one checks its own number
 | `/chat` | Conversational AI agent |
 | `/calculator` | Interactive cost calculator |
 | `/compare` | Side-by-side model comparison |
+| `/ide-compare` | AI coding IDE subscription comparison (public since v1.81.4; it previously needed a key when `MCP_API_KEY` was set) |
 | `/history` | Pricing history charts (Chart.js) |
 | `/trends` | Price-change leaderboard |
 | `/widget` | Embeddable pricing table |
 | `/billing` | Self-serve signup + upgrade dashboard |
 | `/conversations` | Operator-only conversation management (needs the operator key, `MCP_API_KEY`; shows an operator-key-required state otherwise) |
-| `/admin` | Server stats, rate limits, customers |
+| `/admin` | Server stats, rate limits, customers (the customer list needs the operator key) |
 | `/mcp-setup` | MCP integration hub |
 | `/api-docs` | API reference (Swagger/ReDoc) |
 | `/whats-new` | Release notes timeline |
@@ -96,17 +97,17 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 
 ### Security & Quality
 - Most endpoints are public (read-only pricing data, UIs, MCP tools)
-- Protected endpoints (`/billing/me`, `/router/recommend`, `/router/feedback`, `/billing/portal`) require a billing API key or the global `MCP_API_KEY`
+- Protected endpoints (e.g. `/billing/me`, `/router/recommend`, `/router/feedback`, `/billing/portal`, `/usage/*`, `/telemetry/savings`, `/api/versions`) require a billing API key or the global `MCP_API_KEY` (they are open only when `MCP_API_KEY` is unset)
 - Dispatch mode of `/v1/chat/completions` requires a free-tier *customer* key (the global `MCP_API_KEY` is refused — dispatch writes per-org ledgers); provider keys are bring-your-own — per request (`X-Provider-Key-*` headers, used transiently) or, since v1.79.0, stored once per org with `POST /dispatch/keys` (AES-256-GCM-encrypted at rest under the operator's `PROVIDER_KEY_ENCRYPTION_KEY`, scoped to your org, never returned after registration — only a last-4 fingerprint is shown); provider keys are never logged or echoed — and neither are prompts or completions
-- Rate limiting per client IP + tier bucket — includes the anonymous `/agent/chat` and `/agent/chat/stream` endpoints (no API key needed, but throttled, since each call runs an LLM on the operator's key) and, since v1.79.2, anonymous `POST /pricing/alerts` registration (and, since v1.81.0, the anonymous `POST /pricing/alerts/self/view` and `/self/delete` alert_token routes, sharing the same per-IP bucket and body cap)
+- Rate limiting per client IP + tier bucket — includes the anonymous `/agent/chat` and `/agent/chat/stream` endpoints (no API key needed, but throttled, since each call runs an LLM on the operator's key), `POST /billing/signup` (since v1.78.1) and, since v1.79.2, anonymous `POST /pricing/alerts` registration (and, since v1.81.0, the anonymous `POST /pricing/alerts/self/view` and `/self/delete` alert_token routes, sharing the same per-IP bucket and body cap)
 - Operator-only data (v1.79.2): listing or deleting price-alert webhooks and chat conversations needs the operator key (`MCP_API_KEY`) on every surface — `x-api-key` over HTTP (`GET`/`DELETE /pricing/alerts`, `GET`/`DELETE /agent/conversations`), `x-api-key` or `Bearer` over MCP; anyone else gets 401 over HTTP or `operator_key_required` over MCP, with nothing revealed about stored records. Since v1.81.0 a registrant views or deletes their own alert with its `alert_token` instead (see Self-service price alerts)
 - Request size limit (1MB default), enforced before parsing on `POST /mcp` too (413 above it)
 - Webhook SSRF guard (v1.80.1): alert webhooks only reach public https destinations — checked at registration and again at every delivery, connecting only to the checked IP (DNS-rebinding safe), never following redirects, and ignoring `HTTPS_PROXY`. Alerts stored earlier that break these rules are kept but skipped at delivery (logged, not retried); the operator removes them via the operator-only list/delete
-- 3038 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 3047 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
-- **CI/CD**: GitHub Actions — test → deploy on `master` push
+- **CI/CD**: GitHub Actions — five gates (test, lint, OSV, bandit, gitleaks) on every PR; deploy on `master` push only when all pass
 - Blue-green deployment support, graceful shutdown (SIGTERM/SIGINT)
 - Health probes: `/health`, `/health/live`, `/health/ready`, `/health/detailed`
 
@@ -136,7 +137,7 @@ One-click links above open Cursor/VS Code directly (best-effort — deep-link su
 
 ### Option A — Remote (no install needed)
 
-Add to your `claude_desktop_config.json`:
+In Claude Desktop open **Settings → Connectors → Add custom connector** and paste `https://llm-pricing-api.fly.dev/mcp`. Claude Desktop does not read a `url` entry from `claude_desktop_config.json` (that file only launches local commands). Clients that do accept a URL in their config, such as Cursor, use:
 
 ```json
 {
@@ -148,7 +149,9 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
-Restart Claude Desktop. All 31 tools are immediately available; the 19 public ones need no key (the 7 usage/budget tools and `dispatch` need your service key on the connection, and the four alert/conversation management tools are operator-only — see [HTTP MCP Transport](#http-mcp-transport)).
+A Claude Desktop connector sends no custom headers, so for the tools that need your service key use Option B with `LLM_PRICING_API_KEY` set.
+
+All 31 tools are then listed; the 19 public ones need no key (the 7 usage/budget tools and `dispatch` need your service key on the connection, and the four alert/conversation management tools are operator-only — see [HTTP MCP Transport](#http-mcp-transport)).
 
 ### Option B — STDIO via npx (no clone, no Python)
 
@@ -173,7 +176,7 @@ Restart Claude Desktop. See [npm/llm-pricing-mcp/README.md](npm/llm-pricing-mcp/
 ```bash
 git clone https://github.com/skakumanu/llm-pricing-mcp-server.git
 cd llm-pricing-mcp-server
-python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
+python -m venv .venv && source .venv/bin/activate  # Python 3.11; Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
@@ -183,7 +186,7 @@ pip install -r requirements.txt
   "mcpServers": {
     "llm-pricing": {
       "command": "python",
-      "args": ["/absolute/path/to/mcp/server.py"],
+      "args": ["/absolute/path/to/llm-pricing-mcp-server/mcp/server.py"],
       "cwd": "/absolute/path/to/llm-pricing-mcp-server",
       "env": { "PYTHONUNBUFFERED": "1" }
     }
@@ -349,18 +352,18 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 | GET | `/performance` | Throughput, latency, context window, quality scores |
 | GET | `/use-cases` | Model use-case recommendations |
 | GET | `/telemetry` | Server usage metrics and analytics |
-| GET | `/admin/stats` | Aggregated server statistics |
-| GET | `/admin/rate-limits` | Current rate-limit state |
 | GET | `/rate-limits/tiers` | API tier definitions |
 | GET | `/pricing/history` | Historical pricing snapshots |
 | GET | `/pricing/trends` | Price-change leaderboard |
 | GET | `/pricing/public` | Public pricing (unauthenticated, embed-safe) |
 | GET | `/pricing/history/export` | CSV/JSON export |
+| GET | `/pricing/subscription-trends` | IDE/subscription tools whose monthly price changed most |
+| GET | `/data-quality` | Catalogue trust summary (`confirmed_pct`, drift-withheld, never-priced, stale) |
+| GET | `/cache-stats` | Router recommendation-cache hit/miss stats |
 | POST | `/cost-estimate` | Single model cost estimate |
 | POST | `/cost-estimate/batch` | Multi-model cost comparison |
 | POST | `/agent/chat` | Blocking agent chat |
 | POST | `/agent/chat/stream` | Streaming agent chat (SSE) |
-| GET | `/api/versions` | API version info |
 | GET | `/pricing/alerts/signing-info` | Webhook signing key info |
 | POST | `/pricing/alerts` | Register price-change webhook (no key; per-IP rate-limited and body-capped since v1.79.2); v1.81.0 returns a one-time `alert_token` |
 | POST | `/pricing/alerts/self/view` | View your own alert: `{"alert_token": ...}` in the body (v1.81.0; no key, rate-limited; 404 `invalid_alert_token` otherwise) |
@@ -369,8 +372,9 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 | GET | `/dispatch/providers` | Executable providers, their key headers and stored-key paths, and which models are dispatchable (and why not) |
 | GET | `/mcp` | HTTP MCP server info |
 | POST | `/mcp` | HTTP MCP JSON-RPC 2.0 |
-| POST | `/billing/signup` | Free tier signup → API key |
+| POST | `/billing/signup` | Free tier signup → API key (per-IP rate-limited) |
 | GET | `/billing` | Billing dashboard (HTML) |
+| GET | `/admin` | Admin dashboard (HTML) |
 | POST | `/billing/webhook` | Stripe webhook |
 | GET | `/health` | Health check |
 | GET | `/health/live` | Kubernetes liveness probe |
@@ -385,9 +389,14 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 | POST | `/router/recommend/stream` | Streaming router (SSE) |
 | POST | `/router/feedback` | Submit routing feedback |
 | GET | `/telemetry/savings` | Router savings report |
+| GET | `/telemetry/ide-savings` | Routing decisions and savings broken down by IDE context |
 | POST | `/usage` | Record one actual usage event (cost computed server-side) |
 | POST | `/usage/batch` | Record multiple usage events at once |
 | GET | `/usage/summary` | Actual spend summary by model/provider, per org |
+| GET | `/usage/session/{session_id}` | Analyze one tagged session: grounded recommendation with estimated savings |
+| POST | `/usage/alerts` | Register a budget-spend webhook (public https URL only; `hard_stop` needs a customer key) |
+| GET | `/usage/alerts` | List budget alerts (a customer key sees only its own org's) |
+| DELETE | `/usage/alerts/{id}` | Delete a budget alert (own org only for a customer key) |
 | POST | `/v1/chat/completions` + `dispatch` | Dispatch mode (customer key only): execute the best eligible model with your `X-Provider-Key-*`, failover, receipt |
 | GET | `/dispatch/receipts` | Metadata-only JSON/CSV export of your org's dispatch receipts (customer key only) |
 | POST | `/dispatch/keys` | Store a provider key for your org (`{provider, api_key}`; customer key only; returns metadata, never the key) |
@@ -397,6 +406,9 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 | POST | `/billing/checkout` | Stripe Checkout session |
 | GET | `/billing/portal` | Stripe billing portal |
 | GET | `/billing/me` | Usage dashboard |
+| GET | `/api/versions` | API version info |
+| GET | `/deployment/metadata` | Deployment version + API versioning metadata |
+| GET | `/deployment/info` | Deployment environment info |
 
 ### Operator-only (MCP_API_KEY)
 
@@ -409,6 +421,10 @@ Send the global `MCP_API_KEY` as `x-api-key` (Bearer is not accepted on these ro
 | GET | `/agent/conversations` | List every stored chat conversation (v1.79.2) |
 | DELETE | `/agent/conversations/{id}` | Delete a conversation (customer keys no longer suffice; 404 for an unknown id) |
 | GET | `/admin/customers` | List billing customers |
+| GET | `/admin/stats` | Aggregated server statistics, per-endpoint traffic and provider health (v1.81.4: operator only) |
+| GET | `/admin/rate-limits` | Top rate-limit consumers by IP or customer id (v1.81.4: operator only) |
+| POST | `/deployment/shutdown` | Start a graceful shutdown (request draining) |
+| GET | `/deployment/shutdown/status` | Graceful-shutdown status |
 
 ### Key Request/Response Examples
 
@@ -644,8 +660,8 @@ resp = client.chat.completions.create(model="gpt-4o", messages=[...],
 
 ```env
 # LLM Backend (Agent)
-AGENT_LLM_PROVIDER=openai           # "openai" (default) or "anthropic"
-AGENT_MODEL=gpt-4o-mini             # Model name
+AGENT_LLM_PROVIDER=anthropic        # "anthropic" (default) or "openai"
+AGENT_MODEL=claude-sonnet-4-6       # Model name (default; e.g. gpt-4o-mini with openai)
 OPENAI_API_KEY=sk-...               # Required when AGENT_LLM_PROVIDER=openai
 ANTHROPIC_API_KEY=sk-ant-...        # Required when AGENT_LLM_PROVIDER=anthropic
 
@@ -657,13 +673,21 @@ DEBUG=false
 # Security
 MCP_API_KEY=your-strong-random-key  # Global admin key (optional — billing keys work too)
 RATE_LIMIT_PER_MINUTE=60            # Default rate limit (overridden by tier)
+RATE_LIMIT_FREE=30                  # Per-tier limits (req/min)
+RATE_LIMIT_PRO=120
+RATE_LIMIT_ENTERPRISE=600
+MAX_BODY_BYTES=1000000              # Request body cap (413 above it)
+
+# Storage
+PRICING_HISTORY_DB_PATH=pricing_history.db   # Fly sets /app/data/pricing_history.db
+CONVERSATION_DB_PATH=               # unset = in-memory conversations; set a path for SQLite
 
 # Local currency (v1.76.0)
 CURRENCY_DETECTION_ENABLED=true     # false = never infer a country from the client IP
 GEO_LOOKUP_TIMEOUT_SECONDS=1.0      # request-path cap on the IP -> country lookup
 EXCHANGE_RATES_PATH=                # override for data/exchange_rates.json (Fly sets /app/vendored/exchange_rates.json)
 
-# Dispatch gateway (v1.77.0) — provider keys are never configured here; callers bring their own per request
+# Dispatch gateway (v1.77.0) — provider keys are never configured here; callers bring their own per request or store them per org
 DISPATCH_ENABLED=true               # false = dispatch mode of /v1/chat/completions returns 503
 DISPATCH_DEFAULT_MAX_TOKENS=1024    # used when the caller omits max_tokens (Anthropic requires one)
 DISPATCH_ATTEMPT_TIMEOUT_MS=30000   # per-attempt provider timeout
@@ -676,10 +700,11 @@ STRIPE_SECRET_KEY=sk_live_...       # Optional — free signup works without thi
 STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICE_ID_PRO=price_...
 STRIPE_PRICE_ID_ENTERPRISE=price_...
-BILLING_DB_PATH=/app/data/billing.db
-BILLING_BASE_URL=https://llm-pricing-api.fly.dev
+BILLING_DB_PATH=/app/data/billing.db # default billing.db; Fly sets /app/data/billing.db
+BILLING_BASE_URL=https://llm-pricing-api.fly.dev   # default http://localhost:8000
 
-# Webhook alerts (v1.80.1)
+# Webhook alerts
+WEBHOOK_SECRET=                     # HMAC-SHA256 signing secret for alert webhooks (unset = unsigned)
 WEBHOOK_ALLOW_PRIVATE_TARGETS=false # LOCAL DEV ONLY: allows http:// and private/loopback webhook targets; never set on Fly (startup WARNING when on)
 ```
 
@@ -687,9 +712,9 @@ WEBHOOK_ALLOW_PRIVATE_TARGETS=false # LOCAL DEV ONLY: allows http:// and private
 
 | Provider | `AGENT_LLM_PROVIDER` | `AGENT_MODEL` | Estimated cost |
 |---|---|---|---|
-| OpenAI (default) | `openai` | `gpt-4o-mini` | ~$0.73/mo |
+| OpenAI (cheapest) | `openai` | `gpt-4o-mini` | ~$0.73/mo |
 | OpenAI (powerful) | `openai` | `gpt-4o` | ~$8/mo |
-| Anthropic | `anthropic` | `claude-sonnet-4-6` | ~$15/mo |
+| Anthropic (default) | `anthropic` | `claude-sonnet-4-6` | ~$15/mo |
 | Anthropic (fast) | `anthropic` | `claude-haiku-4-5-20251001` | ~$2/mo |
 
 ---
@@ -701,7 +726,7 @@ WEBHOOK_ALLOW_PRIVATE_TARGETS=false # LOCAL DEV ONLY: allows http:// and private
 ```
 llm-pricing-mcp-server/
 ├── src/
-│   ├── __init__.py                  # Version (1.48.0)
+│   ├── __init__.py                  # Version (__version__, single source)
 │   ├── main.py                      # FastAPI app + all endpoints
 │   ├── config/settings.py           # Pydantic settings
 │   ├── models/                      # Pydantic models (pricing, billing, router, …)
@@ -712,9 +737,13 @@ llm-pricing-mcp-server/
 │       ├── savings_tracker.py       # Router savings analytics
 │       ├── benchmark_service.py     # Quality scores + HF API
 │       ├── pricing_history.py       # Historical snapshot DB
+│       ├── dispatch_service.py      # Dispatch gateway (policy, failover, receipts)
+│       ├── provider_key_store.py    # Stored provider keys (AES-256-GCM)
+│       ├── webhook_guard.py         # Webhook SSRF guard
 │       └── …
 ├── mcp/
 │   ├── server.py                    # STDIO JSON-RPC 2.0 server
+│   ├── caller.py                    # MCP caller identity / tool access levels
 │   └── tools/                       # 31 MCP tool implementations
 │       ├── tool_manager.py
 │       ├── get_all_pricing.py
@@ -725,18 +754,23 @@ llm-pricing-mcp-server/
 │   ├── llm_backend.py               # OpenAI + Anthropic backends
 │   └── tools.py                     # Agent tool wrappers
 ├── static/                          # Browser UIs (one dir per page)
+│   ├── index.html                   # /chat (agent UI)
 │   ├── landing/                     # / (marketing page)
-│   ├── chat/                        # /chat (agent UI)
 │   ├── calculator/                  # /calculator
 │   ├── compare/                     # /compare
 │   ├── history/                     # /history
 │   ├── trends/                      # /trends
 │   ├── widget/                      # /widget
+│   ├── ide-compare/                 # /ide-compare
+│   ├── conversations/               # /conversations
+│   ├── mcp-setup/                   # /mcp-setup
+│   ├── api-docs/                    # /api-docs
+│   ├── whats-new/                   # /whats-new
 │   ├── billing/                     # /billing
 │   └── admin/                       # /admin
-├── tests/                           # 667 tests
+├── tests/                           # pytest suite
 ├── docs/                            # Extended documentation
-├── .github/workflows/ci-cd.yml      # CI/CD pipeline
+├── .github/workflows/ci-cd.yml      # CI/CD pipeline (+ price-audit, npm/MCP-registry publish, develop sync)
 ├── Dockerfile
 ├── fly.toml                         # Fly.io deployment config
 └── requirements.txt
@@ -754,7 +788,7 @@ llm-pricing-mcp-server/
 ## Testing
 
 ```bash
-# Run all 667 tests
+# Run the full suite
 pytest
 
 # With coverage
@@ -799,6 +833,7 @@ pytest tests/test_router.py -v
 | `test_dispatch_service.py` | Dispatch policy, eligibility, ranking, failover, cap, hard stop, shadow A/B, receipts (fake executor) |
 | `test_dispatch_api.py` | Dispatch mode over HTTP: auth, unsupported features, ledgers, budget alerts, export, key/prompt leak sentinels |
 | `test_provider_key_store.py` | Stored provider keys: AES-GCM at rest, org/provider binding, tamper/wrong-secret handling, metadata-only listing, composite header-then-stored resolver, last_used |
+| `test_webhook_guard.py`, `test_webhook_ssrf_registration.py` | v1.80.1 webhook SSRF guard: URL rules, DNS-rebinding-safe pinned delivery, no redirects, every registration surface and fire site |
 | `test_provider_keys_api.py` | `/dispatch/keys` over HTTP: register/list/rotate/delete, auth, org isolation, stored-key dispatch, key_source in receipts/exports, raw-DB and log leak scans, missing/changed secret |
 
 ---
@@ -821,7 +856,9 @@ flyctl secrets set \
   MCP_API_KEY=... \
   OPENAI_API_KEY=... \
   AGENT_LLM_PROVIDER=openai \
-  AGENT_MODEL=gpt-4o-mini
+  AGENT_MODEL=gpt-4o-mini \
+  WEBHOOK_SECRET=... \
+  PROVIDER_KEY_ENCRYPTION_KEY=...
 
 # Set Stripe secrets (optional — free tier works without)
 flyctl secrets set \
@@ -832,19 +869,19 @@ flyctl secrets set \
   BILLING_BASE_URL=https://llm-pricing-api.fly.dev
 ```
 
-Configuration in `fly.toml`. Persistent volume at `/app/data/` stores all SQLite databases.
+Configuration in `fly.toml`. The persistent volume at `/app/data/` holds the billing (customers, stored provider keys) and pricing-history (snapshots, alerts, usage, savings, dispatch receipts) SQLite databases; `fly.toml` points `BILLING_DB_PATH` and `PRICING_HISTORY_DB_PATH` there.
 
 ### GitHub Actions CI/CD
 
 The `.github/workflows/ci-cd.yml` pipeline:
-1. Runs all 667 tests on every PR
-2. Deploys to Fly.io on `master` push (via `FLY_API_TOKEN` secret)
-3. Performs a health check after deploy
+1. Runs five gates on every PR to `develop`/`master`: `test` (pytest), `lint` (flake8), `osv_scan`, `security` (bandit), `secret_scan` (gitleaks)
+2. Deploys to Fly.io on `master` push only when all five pass (via `FLY_API_TOKEN` secret)
+3. Polls `/health` after deploy until it reports the expected version
 
 ### Health Check Endpoints
 
 ```bash
-GET /health        → {"status":"healthy","version":"1.39.0"}
+GET /health        → {"status":"healthy","service":"LLM Pricing MCP Server","version":"<current version>"}
 GET /health/live   → {"alive":true}
 GET /health/ready  → {"ready":true,"checks":{...}}
 GET /health/detailed → detailed environment + service statuses

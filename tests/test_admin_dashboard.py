@@ -12,6 +12,21 @@ from src.main import app  # noqa: E402
 
 client = TestClient(app)
 HEADERS = {"x-api-key": "test-key"}
+# Built at runtime so no secret-shaped literal lands in a commit (gitleaks scans them all).
+_OPERATOR_KEY = "-".join(["operator", "test", "value"])
+OPERATOR_HEADERS = {"x-api-key": _OPERATOR_KEY}
+
+
+@pytest.fixture
+def operator_key_configured():
+    """v1.81.4: /admin/stats and /admin/rate-limits are operator-only."""
+    import src.main as main_module
+    original = main_module.settings.mcp_api_key
+    main_module.settings.mcp_api_key = _OPERATOR_KEY
+    try:
+        yield
+    finally:
+        main_module.settings.mcp_api_key = original
 
 
 # ── /admin static UI ──────────────────────────────────────────────────────
@@ -88,67 +103,80 @@ class TestAdminUI:
 
 # ── GET /admin/stats ──────────────────────────────────────────────────────
 
+@pytest.mark.usefixtures("operator_key_configured")
 class TestAdminStatsEndpoint:
     def test_returns_200_with_api_key(self):
-        resp = client.get("/admin/stats", headers=HEADERS)
+        resp = client.get("/admin/stats", headers=OPERATOR_HEADERS)
         assert resp.status_code == 200
 
     def test_returns_json(self):
-        resp = client.get("/admin/stats", headers=HEADERS)
+        resp = client.get("/admin/stats", headers=OPERATOR_HEADERS)
         data = resp.json()
         assert isinstance(data, dict)
 
     def test_has_version_field(self):
-        resp = client.get("/admin/stats", headers=HEADERS)
+        resp = client.get("/admin/stats", headers=OPERATOR_HEADERS)
         assert "version" in resp.json()
 
     def test_has_overall_field(self):
-        resp = client.get("/admin/stats", headers=HEADERS)
+        resp = client.get("/admin/stats", headers=OPERATOR_HEADERS)
         assert "overall" in resp.json()
 
     def test_has_endpoints_field(self):
-        resp = client.get("/admin/stats", headers=HEADERS)
+        resp = client.get("/admin/stats", headers=OPERATOR_HEADERS)
         assert "endpoints" in resp.json()
 
     def test_has_providers_field(self):
-        resp = client.get("/admin/stats", headers=HEADERS)
+        resp = client.get("/admin/stats", headers=OPERATOR_HEADERS)
         assert "providers" in resp.json()
 
     def test_has_features_field(self):
-        resp = client.get("/admin/stats", headers=HEADERS)
+        resp = client.get("/admin/stats", headers=OPERATOR_HEADERS)
         assert "features" in resp.json()
 
     def test_has_deployment_field(self):
-        resp = client.get("/admin/stats", headers=HEADERS)
+        resp = client.get("/admin/stats", headers=OPERATOR_HEADERS)
         assert "deployment" in resp.json()
 
     def test_overall_has_total_requests(self):
-        resp = client.get("/admin/stats", headers=HEADERS)
+        resp = client.get("/admin/stats", headers=OPERATOR_HEADERS)
         assert "total_requests" in resp.json()["overall"]
 
     def test_deployment_has_uptime_seconds(self):
-        resp = client.get("/admin/stats", headers=HEADERS)
+        resp = client.get("/admin/stats", headers=OPERATOR_HEADERS)
         assert "uptime_seconds" in resp.json()["deployment"]
 
     def test_version_matches_package(self):
         import src
-        resp = client.get("/admin/stats", headers=HEADERS)
+        resp = client.get("/admin/stats", headers=OPERATOR_HEADERS)
         assert resp.json()["version"] == src.__version__
 
-    def test_accessible_without_api_key(self):
-        """/admin/stats is public read-only — no auth required."""
+    def test_refused_without_api_key(self):
+        """v1.81.4: operator-only (was on the public allow-list)."""
+        resp = client.get("/admin/stats")
+        assert resp.status_code == 401
+
+    def test_customer_service_key_is_refused(self, tmp_path):
+        import asyncio
+        from unittest.mock import patch
+        from src.services.billing_service import BillingService
+
+        svc = BillingService(str(tmp_path / "billing.db"))
+        asyncio.run(svc.initialize())
+        customer = asyncio.run(svc.create_customer("someone@example.com"))
+        with patch("src.main.get_billing_service", return_value=svc):
+            resp = client.get("/admin/stats", headers={"x-api-key": customer.api_key})
+        assert resp.status_code == 401
+
+    def test_unconfigured_operator_key_fails_closed(self):
         import src.main as main_module
-        original = main_module.settings.mcp_api_key
-        try:
-            main_module.settings.mcp_api_key = "secret"
-            resp = client.get("/admin/stats")
-            assert resp.status_code == 200
-        finally:
-            main_module.settings.mcp_api_key = original
+        main_module.settings.mcp_api_key = None  # fixture restores it
+        resp = client.get("/admin/stats", headers=OPERATOR_HEADERS)
+        assert resp.status_code == 503
 
     def test_uptime_since_is_serialisable(self):
         """uptime_since must be a plain string, not a datetime object."""
-        resp = client.get("/admin/stats", headers=HEADERS)
+        resp = client.get("/admin/stats", headers=OPERATOR_HEADERS)
         uptime_since = resp.json()["overall"].get("uptime_since")
         # If present, must be a JSON string, not an object
         assert uptime_since is None or isinstance(uptime_since, str)
@@ -156,56 +184,65 @@ class TestAdminStatsEndpoint:
 
 # ── GET /admin/rate-limits ────────────────────────────────────────────────
 
+@pytest.mark.usefixtures("operator_key_configured")
 class TestAdminRateLimitsEndpoint:
     def test_returns_200_with_api_key(self):
-        resp = client.get("/admin/rate-limits", headers=HEADERS)
+        resp = client.get("/admin/rate-limits", headers=OPERATOR_HEADERS)
         assert resp.status_code == 200
 
     def test_returns_json(self):
-        resp = client.get("/admin/rate-limits", headers=HEADERS)
+        resp = client.get("/admin/rate-limits", headers=OPERATOR_HEADERS)
         assert isinstance(resp.json(), dict)
 
     def test_has_tracked_ips(self):
-        resp = client.get("/admin/rate-limits", headers=HEADERS)
+        resp = client.get("/admin/rate-limits", headers=OPERATOR_HEADERS)
         assert "tracked_ips" in resp.json()
 
     def test_has_limit_per_minute(self):
-        resp = client.get("/admin/rate-limits", headers=HEADERS)
+        resp = client.get("/admin/rate-limits", headers=OPERATOR_HEADERS)
         assert "limit_per_minute" in resp.json()
 
     def test_has_top_consumers(self):
-        resp = client.get("/admin/rate-limits", headers=HEADERS)
+        resp = client.get("/admin/rate-limits", headers=OPERATOR_HEADERS)
         assert "top_consumers" in resp.json()
 
     def test_has_snapshot_at(self):
-        resp = client.get("/admin/rate-limits", headers=HEADERS)
+        resp = client.get("/admin/rate-limits", headers=OPERATOR_HEADERS)
         assert "snapshot_at" in resp.json()
 
     def test_top_consumers_is_list(self):
-        resp = client.get("/admin/rate-limits", headers=HEADERS)
+        resp = client.get("/admin/rate-limits", headers=OPERATOR_HEADERS)
         assert isinstance(resp.json()["top_consumers"], list)
 
     def test_limit_per_minute_is_positive(self):
-        resp = client.get("/admin/rate-limits", headers=HEADERS)
+        resp = client.get("/admin/rate-limits", headers=OPERATOR_HEADERS)
         assert resp.json()["limit_per_minute"] > 0
 
-    def test_accessible_without_api_key(self):
-        """/admin/rate-limits is public read-only — no auth required."""
+    def test_refused_without_api_key(self):
+        """v1.81.4: operator-only (was on the public allow-list)."""
+        resp = client.get("/admin/rate-limits")
+        assert resp.status_code == 401
+
+    def test_customer_service_key_is_refused(self, tmp_path):
+        import asyncio
+        from unittest.mock import patch
+        from src.services.billing_service import BillingService
+
+        svc = BillingService(str(tmp_path / "billing.db"))
+        asyncio.run(svc.initialize())
+        customer = asyncio.run(svc.create_customer("someone@example.com"))
+        with patch("src.main.get_billing_service", return_value=svc):
+            resp = client.get("/admin/rate-limits", headers={"x-api-key": customer.api_key})
+        assert resp.status_code == 401
+
+    def test_unconfigured_operator_key_fails_closed(self):
         import src.main as main_module
-        original = main_module.settings.mcp_api_key
-        try:
-            main_module.settings.mcp_api_key = "secret"
-            resp = client.get("/admin/rate-limits")
-            assert resp.status_code == 200
-        finally:
-            main_module.settings.mcp_api_key = original
+        main_module.settings.mcp_api_key = None  # fixture restores it
+        resp = client.get("/admin/rate-limits", headers=OPERATOR_HEADERS)
+        assert resp.status_code == 503
 
 
 # ── GET /admin/customers (v1.78.1: operator-only) ────────────────────────
-
-# Built at runtime so no secret-shaped literal lands in a commit (gitleaks scans them all).
-_OPERATOR_KEY = "-".join(["operator", "test", "value"])
-
 
 class TestAdminCustomersIsOperatorOnly:
     """It lists every customer's email and org_id. A customer service key, which
@@ -275,3 +312,50 @@ def test_pricing_alert_registration_goes_through_the_rate_limiter():
     assert "/pricing/alerts" in main_module._anonymous_rate_limited_paths
     assert "/agent/conversations" not in main_module._unauthenticated_paths
     assert "/mcp" in main_module._public_body_capped_paths
+
+
+# ── v1.81.4: smaller access and shutdown fixes ─────────────────────────────
+
+def test_admin_data_endpoints_are_not_on_the_public_allow_list():
+    import src.main as main_module
+    for path in ("/admin/stats", "/admin/rate-limits"):
+        assert path not in main_module._unauthenticated_paths
+        assert path in main_module._sensitive_paths
+
+
+@pytest.mark.usefixtures("operator_key_configured")
+def test_ide_compare_page_is_public_when_operator_key_is_set():
+    resp = client.get("/ide-compare/", follow_redirects=True)
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+
+
+def test_requests_during_shutdown_get_503_not_500():
+    from unittest.mock import patch
+    import src.main as main_module
+    with patch.object(main_module.deployment_manager, "is_shutting_down", return_value=True):
+        resp = client.get("/models")
+        health = client.get("/health")
+    assert resp.status_code == 503
+    assert resp.json() == {"detail": "Service is shutting down"}
+    assert health.status_code == 200
+
+
+def test_tracking_refusal_gets_503_not_500():
+    from unittest.mock import AsyncMock, patch
+    import src.main as main_module
+    with patch.object(main_module.deployment_manager, "track_request_start",
+                      AsyncMock(side_effect=RuntimeError("draining"))):
+        resp = client.get("/models")
+    assert resp.status_code == 503
+    assert resp.json() == {"detail": "draining"}
+
+
+@pytest.mark.usefixtures("operator_key_configured")
+def test_migration_guide_url_points_at_an_existing_doc():
+    resp = client.get("/api/versions", headers=OPERATOR_HEADERS)
+    assert resp.status_code == 200
+    prefix = "https://github.com/skakumanu/llm-pricing-mcp-server/blob/master/"
+    url = resp.json()["migration_guide_url"]
+    assert url.startswith(prefix)
+    assert (project_root / url[len(prefix):]).exists()

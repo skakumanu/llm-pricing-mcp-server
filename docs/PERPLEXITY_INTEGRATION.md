@@ -155,28 +155,37 @@ These tools are available inside Perplexity once connected. You can invoke them 
 
 | Tool | Required args | Optional args | Description |
 |------|--------------|---------------|-------------|
-| `get_all_pricing` | — | — | Pricing for all 87+ models across 12 providers |
-| `estimate_cost` | `model_name`, `input_tokens`, `output_tokens` | — | Cost breakdown for a single model |
-| `compare_costs` | `model_names[]`, `input_tokens`, `output_tokens` | — | Side-by-side cost comparison |
+| `get_all_pricing` | — | `currency`, `country` | Pricing for every model across all providers |
+| `estimate_cost` | `model_name`, `input_tokens`, `output_tokens` | `currency`, `country` | Cost breakdown for a single model |
+| `compare_costs` | `model_names[]`, `input_tokens`, `output_tokens` | `currency`, `country` | Side-by-side cost comparison |
 | `predict_cost` | `prompt` | `task_type`, `cache_hit_ratio`, `top_n`, `require_function_calling`, `require_vision`, `min_context_tokens` | Rank every model cheapest-first from raw prompt text — no token counts needed |
 | `optimize_workload` | `workloads[]` | `monthly_budget_usd`, `min_quality_score` | Assign the cheapest qualifying model per task across a workload mix; reports saving vs. one-model-for-everything |
-| `recommend_model` | `description` | `task_type`, `max_cost_per_1m_tokens`, `min_quality_score`, `min_context_window`, `preferred_provider`, `monthly_budget_usd` | Recommend the optimal model from a free-text use-case description via the routing engine |
+| `recommend_model` | `description` | `task_type`, `max_cost_per_1m_tokens`, `min_quality_score`, `min_context_window`, `preferred_provider`, `prefer_low_latency`, `exclude_reasoning_models`, `ide_context`, `monthly_budget_usd`, `estimated_monthly_requests`, `avg_input_tokens`, `avg_output_tokens`, `currency`, `country` | Recommend the optimal model from a free-text use-case description via the routing engine |
 | `check_price_drift` | — | `threshold_pct`, `provider`, `limit` | Audit this server's own prices against an external registry; drifted prices are auto-withheld from serving, this reports which and why |
 | `get_data_quality` | — | — | Aggregate accuracy summary: % confirmed and fresh, how many withheld for drift, how many unpriced or stale |
 | `get_ide_pricing` | — | `provider`, `max_monthly`, `inline_only` | Subscription pricing for AI coding IDE tools |
 | `get_performance_metrics` | — | `provider`, `include_cost` | Throughput, latency, context window, quality scores |
-| `get_use_cases` | — | `provider` | Model recommendations by use case |
+| `get_use_cases` | — | `provider`, `currency`, `country` | Model recommendations by use case |
 | `get_telemetry` | — | `include_details`, `limit` | Server usage analytics |
 | `get_pricing_history` | — | `model_name`, `provider`, `days`, `limit` | Historical pricing snapshots |
 | `get_pricing_trends` | — | `days`, `limit` | Price-change leaderboard |
 | `register_price_alert` | `url` | `threshold_pct`, `provider`, `model_name` | Register a webhook for price changes |
-| `list_price_alerts` | — | — | List all registered webhooks |
+| `list_price_alerts` | — | — | List all registered webhooks (operator only) |
 | `delete_price_alert` | `alert_id` | — | Remove a webhook (operator only) |
 | `manage_price_alert` | `action`, `alert_token` | — | View or delete the alert you registered, using its one-time `alert_token` (no key) |
 | `get_pricing_export_url` | — | `format`, `model_name`, `provider`, `days`, `limit` | Generate CSV/JSON export URL |
-| `list_conversations` | — | `limit` | List agent conversation history |
-| `delete_conversation` | `conversation_id` | — | Delete a conversation |
-| `ask_agent` | `message` | `session_id` | Ask the AI pricing agent a question |
+| `list_conversations` | — | `limit` | List agent conversation history (operator only) |
+| `delete_conversation` | `conversation_id` | — | Delete a conversation (operator only) |
+| `ask_agent` | `message` | `conversation_id`, `autonomous` | Ask the AI pricing agent a question |
+| `record_usage` | `model_name`, `input_tokens`, `output_tokens` | `org_id`, `occurred_at`, `request_id`, `session_id` | Record actual token usage; cost computed server-side (service API key) |
+| `get_usage_summary` | — | `org_id`, `days` | Actual recorded spend by model and provider (service API key) |
+| `analyze_session_usage` | `session_id` | `org_id` | One session's recorded usage, cost and a cheaper-model suggestion (service API key) |
+| `import_session_usage` | `session_id`, `entries[]` | `org_id` | Bulk-import a completed session's usage (service API key) |
+| `register_budget_alert` | `url`, `threshold_usd` | `org_id`, `period_days` | Webhook when recorded spend crosses a USD threshold (service API key) |
+| `list_budget_alerts` | — | — | List your org's budget alerts (service API key) |
+| `delete_budget_alert` | `alert_id` | — | Delete one of your org's budget alerts (service API key) |
+| `get_cache_stats` | — | — | Hit/miss stats for the recommendation cache |
+| `dispatch` | — | `prompt`, `system`, `messages`, `model`, `max_tokens`, `temperature`, `top_p`, `stop`, `dispatch` | Run a real chat request through the dispatch gateway on your stored provider keys (service API key) |
 
 ### Example Tool Calls (HTTP MCP)
 
@@ -267,18 +276,12 @@ All endpoints are also accessible directly via HTTP — no MCP required. The bas
 | GET | `/pricing/history/export` | CSV or JSON export |
 | GET | `/pricing/alerts/signing-info` | Webhook signing key info |
 | GET | `/rate-limits/tiers` | API tier definitions (free/pro/enterprise) |
-| GET | `/admin/stats` | Aggregated server statistics |
-| GET | `/admin/rate-limits` | Current rate-limit state |
-| GET | `/api/versions` | API version info |
 | GET | `/mcp` | HTTP MCP server info |
 | POST | `/mcp` | HTTP MCP JSON-RPC 2.0 endpoint |
-| POST | `/cost-estimate` | Single model cost estimate |
-| POST | `/cost-estimate/batch` | Multi-model cost comparison |
-| POST | `/agent/chat` | Blocking agent chat |
-| POST | `/agent/chat/stream` | Streaming agent chat (SSE) |
-| GET | `/agent/conversations` | List agent conversations |
-| DELETE | `/agent/conversations/{id}` | Delete a conversation |
-| POST | `/billing/signup` | Free tier signup — returns API key |
+| POST | `/agent/chat` | Blocking agent chat (rate-limited) |
+| POST | `/agent/chat/stream` | Streaming agent chat (SSE, rate-limited) |
+| POST | `/pricing/alerts` | Register price-change webhook (rate-limited; returns a one-time `alert_token`) |
+| POST | `/billing/signup` | Free tier signup — returns API key (rate-limited) |
 | POST | `/billing/webhook` | Stripe webhook receiver |
 | POST | `/v1/chat/completions` | OpenAI-compatible routing proxy |
 | GET | `/health` | Health check |
@@ -292,6 +295,9 @@ Pass your API key as `x-api-key: <key>` header.
 
 | Method | Path | Description |
 |--------|------|-------------|
+| POST | `/cost-estimate` | Single model cost estimate |
+| POST | `/cost-estimate/batch` | Multi-model cost comparison |
+| GET | `/api/versions` | API version info |
 | POST | `/router/recommend` | Smart model routing recommendation |
 | POST | `/router/recommend/stream` | Streaming router (SSE) |
 | POST | `/router/feedback` | Submit routing feedback |
@@ -299,9 +305,19 @@ Pass your API key as `x-api-key: <key>` header.
 | POST | `/billing/checkout` | Create Stripe Checkout session |
 | GET | `/billing/portal` | Stripe billing portal |
 | GET | `/billing/me` | Usage dashboard (calls, savings, tier) |
-| POST | `/pricing/alerts` | Register price-change webhook |
-| GET | `/pricing/alerts` | List your registered alerts |
-| DELETE | `/pricing/alerts/{id}` | Delete an alert |
+
+### Operator-only Endpoints (require the server's `MCP_API_KEY`)
+
+A free signup key is not enough for these; they list or delete every caller's records.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/pricing/alerts` | List all registered price alerts |
+| DELETE | `/pricing/alerts/{id}` | Delete a price alert |
+| GET | `/agent/conversations` | List agent conversations |
+| DELETE | `/agent/conversations/{id}` | Delete a conversation |
+| GET | `/admin/stats` | Aggregated server statistics (v1.81.4: operator only) |
+| GET | `/admin/rate-limits` | Top rate-limit consumers (v1.81.4: operator only) |
 
 ### Get a Free API Key
 
@@ -314,7 +330,7 @@ curl -X POST https://llm-pricing-api.fly.dev/billing/signup \
 Response:
 ```json
 {
-  "api_key": "abc123...",
+  "api_key": "<your-api-key>",
   "org_id": "org-xyz...",
   "tier": "free",
   "message": "Welcome! Your free API key is ready."
@@ -324,7 +340,7 @@ Response:
 Use the returned `api_key` for all protected endpoints:
 
 ```bash
-curl -H "x-api-key: abc123..." \
+curl -H "x-api-key: <your-api-key>" \
   https://llm-pricing-api.fly.dev/billing/me
 ```
 
@@ -340,16 +356,18 @@ curl https://llm-pricing-api.fly.dev/pricing
 curl "https://llm-pricing-api.fly.dev/pricing?provider=OpenAI"
 ```
 
-**Estimate cost:**
+**Estimate cost (requires API key):**
 ```bash
 curl -X POST https://llm-pricing-api.fly.dev/cost-estimate \
+  -H "x-api-key: <your-api-key>" \
   -H "Content-Type: application/json" \
   -d '{"model_name": "gpt-4o", "input_tokens": 1000, "output_tokens": 500}'
 ```
 
-**Batch compare costs:**
+**Batch compare costs (requires API key):**
 ```bash
 curl -X POST https://llm-pricing-api.fly.dev/cost-estimate/batch \
+  -H "x-api-key: <your-api-key>" \
   -H "Content-Type: application/json" \
   -d '{
     "model_names": ["gpt-4o", "gpt-4o-mini", "claude-haiku-4-5-20251001"],
