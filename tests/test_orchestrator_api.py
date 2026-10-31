@@ -1186,9 +1186,14 @@ class TestReviewFixes:
         assert len(detail["events"][0]["payload_summary_json"]["inputs"]["sha"]) == _INPUT_STR_MAX
 
     def test_allowed_decisions_follow_the_single_policy(self, orch):
-        from src.services.orchestrator_service import _DONE_MANUALLY_KINDS, _SKIPPABLE_KINDS, _allowed_decisions
+        from src.services.orchestrator_service import (
+            _DONE_MANUALLY_KINDS, _NO_APPROVE_KINDS, _SKIPPABLE_KINDS, _allowed_decisions,
+        )
         for kind in wfdef.CHECKPOINT_KINDS:
             allowed = _allowed_decisions(kind, "checkpoint")
             assert ("done_manually" in allowed) == (kind in _DONE_MANUALLY_KINDS), kind
             assert ("skip" in allowed) == (kind in _SKIPPABLE_KINDS), kind
+            # v1.84.0: an owner_handoff is answered or rejected, never "approved".
+            assert ("approve" in allowed) == (kind not in _NO_APPROVE_KINDS), kind
         assert _SKIPPABLE_KINDS <= _DONE_MANUALLY_KINDS
+        assert _allowed_decisions("owner_handoff", "checkpoint") == ["done_manually", "reject"]

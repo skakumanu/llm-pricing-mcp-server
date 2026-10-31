@@ -28,15 +28,25 @@ from src.services.pricing_alerts import redact_alert_tokens
 # Vocabulary
 # ---------------------------------------------------------------------------
 
-TRIGGER_CLASSES = ("customer_message", "github_event", "schedule", "owner_request")
+# v1.84.0: ``payment_event`` = a Stripe webhook event the server itself classified (refund,
+# dispute, failed renewal). Event types are set by server code, never by customer text.
+TRIGGER_CLASSES = ("customer_message", "github_event", "schedule", "owner_request", "payment_event")
 
 STEP_KINDS = ("deterministic", "external_action", "checkpoint", "llm")
 
 # Checkpoint kinds that gate in every mode (FR6). ``sdlc_run`` and ``step_review`` are
 # checkpoints too, but of a different nature: sdlc_run is "owner, run the pipeline";
 # step_review is the supervised-mode gate on a non-mandatory external action.
-MANDATORY_CHECKPOINT_KINDS = frozenset({"merge", "money", "outbound", "publish", "audit_flag", "missing_specialist"})
+# ``owner_handoff`` (v1.84.0) is a customer escalation waiting for the owner's reply.
+MANDATORY_CHECKPOINT_KINDS = frozenset({"merge", "money", "outbound", "publish", "audit_flag", "missing_specialist",
+                                        "owner_handoff"})
 CHECKPOINT_KINDS = MANDATORY_CHECKPOINT_KINDS | {"sdlc_run", "step_review"}
+
+# Event types (set by server code) that open a support_escalation run (v1.84.0).
+SUPPORT_ESCALATION_EVENT = "support.escalation"
+PAYMENT_ESCALATION_EVENTS = ("charge.refunded", "charge.dispute.created", "invoice.payment_failed")
+ESCALATION_CATEGORIES = ("billing_dispute", "refund", "double_charge", "payment_failure", "key_recovery",
+                         "bug", "feature", "other")
 
 # Owner GitHub actions that count as the decision on an approval (recorded, never implied).
 OWNER_SIGNALS = ("github_label", "github_pr_marker")
@@ -107,6 +117,9 @@ class Workflow:
     # Trigger class recorded when the run is started through POST /orchestrator/runs.
     owner_request_trigger_class: str = "owner_request"
     description: str = ""
+    # Default monthly USD cap for the workflow (budget.workflow_monthly_usd.<id>) when the owner has
+    # not set one; None = no workflow-level cap (the global ceiling still applies).
+    monthly_budget_usd: Optional[float] = None
 
     def step(self, name: str) -> Step:
         for s in self.steps:
@@ -156,17 +169,35 @@ WORKFLOWS: Dict[str, Workflow] = {
     "support_triage": Workflow(
         workflow_id="support_triage",
         trigger_classes=("customer_message", "owner_request"),
-        specialist_available=False,  # support agent not built
+        specialist_available=False,  # the live SupportAgent is not wired into this workflow yet (phase 2)
         per_run_budget_usd=2.0,
+        monthly_budget_usd=40.0,  # v1.84.0: live support chat spend lands here (budget_gate refuses past it)
         owner_request_trigger_class="customer_message",
-        description="Customer message -> intake -> advisory tags -> support agent "
-                    "(owner checkpoint: specialist missing).",
+        description="Owner-pasted customer message -> intake -> advisory tags -> owner checkpoint "
+                    "(specialist missing). Also the ledger workflow_id for live support chat spend "
+                    "(agent/support_agent.py records every LLM call here).",
         steps=(
             Step("intake", "deterministic", "orchestrator"),
             Step("annotate", "deterministic", "orchestrator", requires=("intake",),
                  description="Advisory 'billing' keyword tag, shown only in the queue; never unlocks a step."),
             Step("support_agent", "checkpoint", "support_agent", checkpoint_kind="missing_specialist",
                  requires=("annotate",)),
+        ),
+    ),
+    "support_escalation": Workflow(
+        workflow_id="support_escalation",
+        trigger_classes=("customer_message", "payment_event", "owner_request"),
+        specialist_available=True,  # the support agent (v1.84.0) hands off deterministically
+        per_run_budget_usd=1.0,
+        owner_request_trigger_class="customer_message",
+        description="Customer escalation (support chat) or Stripe payment event -> intake -> owner_handoff "
+                    "checkpoint; the owner replies from the queue, nothing is refunded or changed here.",
+        steps=(
+            Step("intake", "deterministic", "support_agent",
+                 description="Record category, priority, tier, identified flag, org prefix and conversation ref."),
+            Step("owner_handoff", "checkpoint", "orchestrator", checkpoint_kind="owner_handoff",
+                 requires=("intake",),
+                 description="Waits for the owner; done_manually with a reply note the customer can read."),
         ),
     ),
     "weekly_price_audit": Workflow(
@@ -314,7 +345,16 @@ def route(trigger_class: str, event_type: str, owner_signals: Dict[str, Any],
             return None, "refused:no_route"
         return wf.workflow_id, "routed"
 
-    # customer_message is reachable only through the owner-request path in v1 (owner decision 1).
+    if trigger_class == "payment_event":
+        # Stripe-originated escalations (v1.84.0): the server classifies the event type itself.
+        if event_type in PAYMENT_ESCALATION_EVENTS:
+            return _if_present("support_escalation", registry)
+        return None, "refused:no_route"
+
+    # customer_message (v1.84.0): the support agent's escalation hand-off is the one event type
+    # that starts a run; everything else on this class stays owner-request-only (owner decision 1).
+    if event_type == SUPPORT_ESCALATION_EVENT:
+        return _if_present("support_escalation", registry)
     return None, "refused:no_route"
 
 
@@ -335,8 +375,8 @@ _SECRET_RES = (
     re.compile(r"\bAKIA[A-Z0-9]{16}\b"),
     re.compile(r"\b(?:cus|sub|evt|pi|ch|in|price|prod)_[A-Za-z0-9]{8,}\b"),  # Stripe ids
     re.compile(r"\blpa_[A-Za-z0-9_-]{8,}"),  # alert tokens (also handled by redact_alert_tokens)
-    re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),  # email-shaped
 )
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")  # email-shaped
 
 # Conservative: catches the obvious "steer the agent" phrases and the exact strings that
 # would mean something to this system if they were obeyed. Advisory only.
@@ -348,13 +388,20 @@ INSTRUCTION_LIKE_RE = re.compile(
 )
 
 
-def redact_untrusted_text(text: Any) -> Any:
-    """Replace secret-, Stripe-id- and email-shaped tokens with '[redacted]'. Non-str unchanged."""
+def redact_untrusted_text(text: Any, keep_emails: bool = False) -> Any:
+    """Replace secret-, Stripe-id- and email-shaped tokens with '[redacted]'. Non-str unchanged.
+
+    ``keep_emails=True`` (v1.84.0) is for the operator-only support conversation store, where
+    the customer's own address is kept so a key-recovery request can be verified; every run
+    artifact, action record and customer-visible text still goes through the default.
+    """
     if not isinstance(text, str):
         return text
     out = redact_alert_tokens(text)
     for rx in _SECRET_RES:
         out = rx.sub(REDACTED, out)
+    if not keep_emails:
+        out = _EMAIL_RE.sub(REDACTED, out)
     return out
 
 

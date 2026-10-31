@@ -329,6 +329,14 @@ class OrchestratorStore:
                 row = await cur.fetchone()
         return _decode_row(row) if row else None
 
+    async def get_run_by_dedup_key(self, dedup_key: str) -> Optional[Dict[str, Any]]:
+        """v1.84.0: the run an intake with this key would attach to (dedup_key is UNIQUE)."""
+        async with _open_db(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT * FROM orch_runs WHERE dedup_key = ?", (dedup_key,)) as cur:
+                row = await cur.fetchone()
+        return _decode_row(row) if row else None
+
     async def update_run(self, run_id: str, **fields: Any) -> None:
         if not fields:
             return

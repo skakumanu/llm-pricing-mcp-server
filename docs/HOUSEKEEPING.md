@@ -117,9 +117,12 @@ Fixing a drift issue:
 | Provider counts match the aggregator | `tests/test_new_providers.py` |
 | `DEPLOYMENT.md` keeps the webhook-safety wording | `tests/test_webhook_ssrf_registration.py` |
 
+| FAQ prices / limits match `src/services/tiers.py` and the settings; `/faq` is generated from `docs/FAQ.md` | `tests/test_support_faq.py` |
+
 - Never hardcode the test count outside README's "passing tests" line.
 - `static/whats-new/` and `docs/archive/` are historical; never rewrite old entries.
 - After editing the nav, run `scripts/sync_nav.py` to restamp every `static/` page.
+- After editing `docs/FAQ.md`, run `scripts/sync_faq.py` to regenerate `static/faq/index.html` (`--check` in CI).
 
 ## Repo layout
 
@@ -130,7 +133,7 @@ Fixing a drift issue:
 | `agent/`, `rag/` | ReAct agent and its retrieval pipeline |
 | `static/` | Browser UI pages (incl. `whats-new/`, `api-docs/`, `mcp-setup/`) |
 | `data/` | Vendored price snapshot, `registry_models/`, `exchange_rates.json` |
-| `scripts/` | Promotion, price-audit scripts, `sync_nav.py`, `quick_validate.py` (MCP STDIO smoke test) |
+| `scripts/` | Promotion, price-audit scripts, `sync_nav.py`, `sync_faq.py`, `quick_validate.py` (MCP STDIO smoke test) |
 | `npm/llm-pricing-mcp/` | npm wrapper, versioned separately |
 | `.claude/` | Phase agents, `/release-feature` skill, `release-feature.js` workflow |
 | `docs/` | [INDEX.md](INDEX.md), [ARCHITECTURE.md](ARCHITECTURE.md); superseded docs in `archive/` |

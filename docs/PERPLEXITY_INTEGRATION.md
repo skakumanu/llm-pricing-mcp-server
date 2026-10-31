@@ -3,7 +3,7 @@
 - **Version**: see `src/__init__.py`
 - **Protocol**: MCP 2024-11-05, JSON-RPC 2.0
 - **Live server**: https://llm-pricing-api.fly.dev
-- **Tools**: all 31 tools; see the [tool reference](MCP_QUICK_START.md#tool-reference-31)
+- **Tools**: all 32 tools; see the [tool reference](MCP_QUICK_START.md#tool-reference-32)
 
 ## Config file
 
@@ -42,7 +42,7 @@ If your version differs, check Perplexity's **Settings → MCP Servers**.
 
 ## Verify
 
-- Ask Perplexity: *"What LLM pricing tools do you have available?"* It should list 31.
+- Ask Perplexity: *"What LLM pricing tools do you have available?"* It should list 32.
 - Or from a shell:
 
 ```bash

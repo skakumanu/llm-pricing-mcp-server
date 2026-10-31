@@ -97,6 +97,25 @@ class Settings(BaseSettings):
     stripe_price_id_enterprise: Optional[str] = None
     billing_db_path: str = "billing.db"
     billing_base_url: str = "http://localhost:8000"
+    # v1.84.0: a paid customer whose renewal failed keeps the stored tier for this many
+    # days (billing_status = past_due); after that the *effective* tier is free until
+    # Stripe reports the invoice paid. Stored tiers change only through Stripe events.
+    billing_past_due_grace_days: int = 14
+
+    # Support agent (v1.84.0). A second ReAct agent (agent/support_agent.py) that answers
+    # account, billing, key and FAQ questions on the operator's LLM key. Per-caller daily
+    # USD caps by tier (anonymous strictest); the authoritative ceiling is the
+    # orchestrator spend ledger (workflow support_triage, global monthly cap). A cap hit
+    # returns a deterministic non-LLM fallback (FAQ links + escalation), never a 5xx.
+    support_enabled: bool = True
+    support_daily_cap_anonymous_usd: float = 0.10
+    support_daily_cap_free_usd: float = 0.50
+    support_daily_cap_pro_usd: float = 3.00
+    support_daily_cap_enterprise_usd: float = 10.00
+    support_max_escalations_per_day: int = 3        # identified customers; anonymous callers get 1
+    # Used to price a support turn only when AGENT_MODEL is not in the pricing catalogue.
+    support_fallback_price_per_1m_in_usd: float = 3.0
+    support_fallback_price_per_1m_out_usd: float = 15.0
 
     # Pricing history
     pricing_history_db_path: str = "pricing_history.db"
@@ -119,6 +138,11 @@ class Settings(BaseSettings):
     currency_detection_enabled: bool = True     # False = never infer a country from the IP
     geo_lookup_timeout_seconds: float = 1.0     # request-path cap on the IP -> country lookup
     exchange_rates_path: Optional[str] = None   # override for data/exchange_rates.json
+    # v1.84.1: on Fly the volume mount at /app/data shadows the image's data/ directory, so
+    # the vendored registry snapshot and the registry-sourced model files are read from the
+    # copy the Dockerfile places under /app/vendored (paths set in fly.toml). Unset = repo paths.
+    price_snapshot_path: Optional[str] = None   # override for data/model_prices_snapshot.json
+    registry_models_dir: Optional[str] = None   # override for data/registry_models/
 
     # Dispatch gateway (v1.77.0). Provider keys are never read from here — callers
     # bring their own per request (X-Provider-Key-<Provider> headers) or store them
