@@ -1,196 +1,95 @@
-# Deployment Guide
+# Deployment
 
-**Version**: see `src/__init__.py` (single source of truth)
+Production runs on **Fly.io** (app `llm-pricing-api`). Version: see `src/__init__.py`.
+The old Azure blue-green docs are historical only:
+[archive/BLUE_GREEN_DEPLOYMENT.md](archive/BLUE_GREEN_DEPLOYMENT.md),
+[archive/DEPLOYMENT_IMPLEMENTATION.md](archive/DEPLOYMENT_IMPLEMENTATION.md).
 
-This guide covers deploying the LLM Pricing MCP Server to production on Fly.io.
+## How a release deploys
 
-> This replaces an earlier version of this guide that covered Azure App Service.
-> Azure was the original deployment target; the project moved to Fly.io in v1.49.0
-> for lower cost and simpler operations, and the Azure CI job was removed at the
-> same time. If you're looking for the old Azure instructions, they're in git
-> history (`git log -- docs/DEPLOYMENT.md`), but they no longer match anything
-> this repo does.
+- Git flow: `feature/*` → PR to `develop` → promotion PR to `master` (see [HOUSEKEEPING.md](HOUSEKEEPING.md)).
+- Push to `master` runs `.github/workflows/ci-cd.yml`.
+- `deploy_fly` waits for `test`, `lint`, `osv_scan`, `security`, `secret_scan`, then runs
+  `flyctl deploy --remote-only` (token: `FLY_API_TOKEN` Actions secret).
+- It polls `https://llm-pricing-api.fly.dev/health` for 3 min, expecting `200` and the
+  `src/__init__.py` version. A timeout warns; it does not fail the build.
+- No staging slot, no manual step: a green `master` deploys itself.
 
-## How deployment actually works
+## Fly configuration (`fly.toml`)
 
-Deployment is entirely CI/CD-driven — there is no manual deploy step for normal
-releases:
+| Setting | Value |
+|---|---|
+| Region / VM | `iad`, shared-cpu-1x, 512 MB |
+| HTTP | port 8000, `force_https`, `GET /health` every 30s, `min_machines_running = 1` |
+| Volume | `llm_pricing_data` → `/app/data` (both SQLite DBs live here) |
+| `PRICING_HISTORY_DB_PATH` | `/app/data/pricing_history.db` |
+| `BILLING_DB_PATH` | `/app/data/billing.db` (unset = ephemeral image disk) |
+| `EXCHANGE_RATES_PATH` | `/app/vendored/exchange_rates.json` (the volume shadows the image's `/app/data`) |
+| Build | repo `Dockerfile`: non-root uvicorn, `--workers 2`, port 8000; `Procfile` unused |
 
-1. Changes ship through the standard git flow: `feature/*` branch → PR to `develop`
-   → clean promotion (`scripts/promote_branch_content.sh`) → PR to `master`. See
-   `CLAUDE.md`'s Git Flow section for the full process.
-2. Merging to `master` triggers `.github/workflows/ci-cd.yml`'s `CI/CD Pipeline`.
-3. The `deploy_fly` job runs only after `test`, `lint`, `osv_scan`, `security`, and
-   `secret_scan` all pass. It runs `flyctl deploy --remote-only`, then polls
-   `https://llm-pricing-api.fly.dev/health` for up to 3 minutes, confirming both a
-   `200` response and that the reported version matches `src/__init__.py`.
+## Settings and secrets
 
-That's the whole loop. There's no staging slot, no manual promotion step, no `az`
-CLI — a green `master` build deploys itself.
-
-## Prerequisites (for infrastructure changes only)
-
-You only need these if you're changing the Fly.io app configuration itself, not
-for a normal code deploy:
-
-1. A Fly.io account with the app already provisioned (`llm-pricing-api`)
-2. [`flyctl`](https://fly.io/docs/flyctl/install/) installed locally
-3. Fly.io API token — the deploy job reads it from the `FLY_API_TOKEN` GitHub
-   Actions secret; for local `flyctl` commands, run `flyctl auth login` instead
-
-## App Configuration
-
-The app's Fly.io configuration lives in `fly.toml` at the repo root:
-
-- **App**: `llm-pricing-api`, region `iad`
-- **VM**: shared-cpu-1x, 512MB
-- **HTTP service**: port 8000, `force_https`, health check on `GET /health` every 30s,
-  `min_machines_running = 1` (idle machines beyond that auto-stop and auto-start)
-- **Persistent volume**: `llm_pricing_data` mounted at `/app/data` — this is where
-  `pricing_history.db` and `billing.db` live, so data survives redeploys
-- **`[env]`**: `PRICING_HISTORY_DB_PATH=/app/data/pricing_history.db`,
-  `BILLING_DB_PATH=/app/data/billing.db` (unset, billing.db would land on the ephemeral
-  image disk), and `EXCHANGE_RATES_PATH=/app/vendored/exchange_rates.json` (the volume
-  mount shadows the image's `/app/data`, so the Dockerfile copies the rate table outside it)
-- **Build**: uses the repo's `Dockerfile` unchanged — `python -m uvicorn src.main:app
-  --host 0.0.0.0 --port 8000 --workers 2` as a non-root user. `Procfile` is not used
-  on Fly.io (the Azure-era `run.sh` startup script was removed in v1.81.5)
-
-## Environment Variables & Secrets
-
-Configuration is pydantic-settings (`src/config/settings.py`) — every setting reads
-from an environment variable of the same name, uppercased (e.g. `mcp_api_key` ←
-`MCP_API_KEY`). All provider API keys are optional; the server works with whichever
-subset is configured.
-
-Set secrets on the running app with `flyctl secrets set` (this triggers a redeploy):
+- Settings are pydantic-settings (`src/config/settings.py`): field `mcp_api_key` ← env `MCP_API_KEY`.
+- Provider API keys are optional; the server uses whichever are set.
+- Secrets: `flyctl secrets set` (triggers a redeploy). Non-secrets may go in `fly.toml` `[env]`.
+- `flyctl secrets list` shows names only.
 
 ```bash
-# Export the values in your own shell first; never paste them into docs or chat
-flyctl secrets set MCP_API_KEY="$MCP_API_KEY"
-flyctl secrets set OPENAI_API_KEY="$OPENAI_API_KEY" ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
-# ...and so on for any other provider key you want live-synced pricing for
+# export values in your own shell first; never paste them into docs or chat
+flyctl secrets set MCP_API_KEY="$MCP_API_KEY" OPENAI_API_KEY="$OPENAI_API_KEY"
 ```
 
-List what's currently set (values are never shown) with `flyctl secrets list`.
+- **`MCP_API_KEY` is required in production.** Unset: operator routes (`/deployment/shutdown`,
+  `/admin/customers`, `GET /pricing/alerts`, ...) return 503; other keyed routes run open.
+- `SERVER_HOST`/`SERVER_PORT` only apply to `python -m src.main`; on Fly the Dockerfile fixes port 8000.
 
-Non-secret settings (`RATE_LIMIT_PER_MINUTE`, `AGENT_LLM_PROVIDER`, `DISPATCH_ENABLED`,
-etc.) can be set the same way, or via the `[env]` block in `fly.toml` for values
-that aren't sensitive. (`SERVER_HOST`/`SERVER_PORT` only apply when the app is started
-with `python -m src.main`; on Fly the Dockerfile's uvicorn command fixes port 8000.)
+## Stored provider keys (`PROVIDER_KEY_ENCRYPTION_KEY`)
 
-`MCP_API_KEY` is the operator key: when it is unset, operator-only routes
-(`/deployment/shutdown`, `/admin/customers`, `GET /pricing/alerts`, ...) answer 503 and
-other keyed routes run unauthenticated (logged once as a warning), so production must
-set it.
-
-### Stored provider keys (`PROVIDER_KEY_ENCRYPTION_KEY`, v1.79.0)
-
-Customers' stored dispatch provider keys (`/dispatch/keys`) are kept in `billing.db`
-(on the volume via `BILLING_DB_PATH`), AES-256-GCM-encrypted under a key derived from
-this secret. Without it, `/dispatch/keys` answers 503 and dispatch works with
-`X-Provider-Key-*` headers only. Generate 32 random bytes, base64url-encoded, and set
-it as a Fly secret — never in `fly.toml`, never committed:
+- Encrypts customers' `/dispatch/keys` rows in `billing.db` (AES-256-GCM).
+- Unset: `/dispatch/keys` returns 503; dispatch works with `X-Provider-Key-*` headers only.
+- Value: 32 random bytes, base64url. Fly secret only, never `fly.toml` or git.
 
 ```bash
-python -c "import secrets,base64;print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
-flyctl secrets set PROVIDER_KEY_ENCRYPTION_KEY="<the value printed above>"
+export PROVIDER_KEY_ENCRYPTION_KEY="$(python -c 'import secrets,base64;print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())')"
+flyctl secrets set PROVIDER_KEY_ENCRYPTION_KEY="$PROVIDER_KEY_ENCRYPTION_KEY"
 ```
 
-- **Back it up** somewhere outside Fly (a password manager / vault). The database
-  alone cannot be decrypted without it.
-- **Changing or losing it forces every customer to re-register their stored keys**:
-  existing rows stop decrypting, are listed as `needs_reregistration`, and are never
-  sent to a provider until the customer rotates them. There is no in-place secret
-  rotation.
-- The startup log says `Stored provider keys enabled` / `disabled`; a missing or
-  too-short value logs one error naming the variable (never its value).
+- **Back it up outside Fly.** The DB cannot be decrypted without it.
+- Changing or losing it: rows show `needs_reregistration`, are never sent to a provider, and
+  every customer must re-register. No in-place rotation.
+- Startup logs `Stored provider keys enabled` / `disabled`; a bad value logs the variable name only.
 
-### Webhook alert destinations (`WEBHOOK_ALLOW_PRIVATE_TARGETS`, v1.80.1)
+## Webhook destinations (`WEBHOOK_ALLOW_PRIVATE_TARGETS`)
 
-Price-change and budget-spend alert webhooks only deliver to **public https URLs**
-(`src/services/webhook_guard.py`). Registration refuses http, private/loopback/
-link-local/metadata/CGNAT/ULA (incl. Fly 6PN `fdaa::/16`) addresses in any spelling,
-`localhost`/`*.localhost`/`*.internal`/`*.flycast`, hosts where any resolved address
-is private, and hosts that do not resolve (422 `invalid_webhook_url`). Every delivery
-re-checks the stored URL, connects only to the checked IP, and never follows redirects.
-Alerts stored before v1.80.1 that break the rules are kept but skipped at delivery
-(logged as `delivery blocked (<reason>)`); remove them with the operator-only list/delete
-(`GET`/`DELETE /pricing/alerts`, `/usage/alerts`).
+- Price and budget alert webhooks deliver only to **public https URLs** (`src/services/webhook_guard.py`).
+- Registration rejects with 422 `invalid_webhook_url`: http; private, loopback, link-local,
+  metadata, CGNAT and ULA addresses (incl. Fly 6PN `fdaa::/16`); `localhost`, `*.internal`,
+  `*.flycast`; hosts resolving to any private address; hosts that don't resolve.
+- Each delivery re-checks the URL, connects only to the checked IP and never follows redirects.
+- Older alerts that break the rules are kept but skipped at delivery (log: `delivery blocked (<reason>)`).
+  Remove them via operator `GET`/`DELETE /pricing/alerts` and `/usage/alerts`.
+- **`WEBHOOK_ALLOW_PRIVATE_TARGETS` must stay unset on Fly.** It is for local receivers only.
+  When on, startup logs `WEBHOOK_ALLOW_PRIVATE_TARGETS is ON ...` at WARNING; if that shows in
+  `flyctl logs`, run `flyctl secrets unset WEBHOOK_ALLOW_PRIVATE_TARGETS`.
+- Webhook delivery ignores `HTTPS_PROXY` / `HTTP_PROXY` (`trust_env=False`, pinned transport).
+  Other outbound calls still honour them.
 
-- **`WEBHOOK_ALLOW_PRIVATE_TARGETS` must stay unset on Fly.** It exists only for local
-  development (e.g. a webhook receiver on `http://127.0.0.1:PORT`). When it is on, the
-  server logs a `WARNING` at startup: `WEBHOOK_ALLOW_PRIVATE_TARGETS is ON ...`. If you
-  ever see that line in `flyctl logs`, unset it (`flyctl secrets unset
-  WEBHOOK_ALLOW_PRIVATE_TARGETS` / remove it from `fly.toml`). No request can turn it on.
-- **Webhook delivery ignores `HTTPS_PROXY` / `HTTP_PROXY`.** The webhook client uses
-  `trust_env=False` and a pinned transport so the destination check cannot be bypassed
-  by a proxy; webhooks always connect directly. Other outbound calls (pricing fetchers,
-  provider executors) are unchanged.
+## Operations
 
-## Manual Deploy (rare — normally CI/CD does this)
-
-Only needed for local testing of a Fly.io-specific change, or as a break-glass path
-if CI/CD is down:
-
-```bash
-flyctl deploy --remote-only
-```
-
-## Post-Deployment Verification
-
-```bash
-# Health check
-curl https://llm-pricing-api.fly.dev/health
-
-# Confirm the deployed version matches what you expect
-curl https://llm-pricing-api.fly.dev/health | jq .version
-
-# Spot-check a couple of real endpoints
-curl https://llm-pricing-api.fly.dev/models
-curl https://llm-pricing-api.fly.dev/data-quality
-```
-
-## Logs & Monitoring
-
-```bash
-# Stream logs in real-time
-flyctl logs
-
-# Check machine status
-flyctl status
-
-# Check resource usage
-flyctl vm status
-```
+| Task | Command |
+|---|---|
+| Break-glass deploy (CI down) | `flyctl deploy --remote-only` |
+| Health / version | `curl -s https://llm-pricing-api.fly.dev/health \| jq .version` |
+| Spot-check | `curl https://llm-pricing-api.fly.dev/models`, `/data-quality` |
+| Logs / status | `flyctl logs`, `flyctl status` |
+| Volume attached? | `flyctl volumes list` |
+| Scale | `flyctl scale vm shared-cpu-2x --memory 1024`, `flyctl scale count 2` |
+| Restart | `flyctl apps restart llm-pricing-api` |
 
 ## Troubleshooting
 
-1. **`deploy_fly` job didn't run** — it only fires on push to `master` (or manual
-   `workflow_dispatch`), and only after `test`/`lint`/`osv_scan`/`security`/
-   `secret_scan` all pass. Check the other jobs first.
-2. **Health check times out in CI** — the job polls for 3 minutes and warns
-   (doesn't fail the build) rather than blocking on a slow cold start. Check
-   `flyctl logs` and `flyctl status` directly if this happens repeatedly.
-3. **App won't start** — `flyctl logs` first; the most common cause is a missing
-   required environment variable or a Dockerfile build failure (`flyctl deploy` output
-   shows the build log).
-4. **Data missing after a deploy** — confirm the `llm_pricing_data` volume is still
-   attached (`flyctl volumes list`); the databases live there, not in the container
-   image, so they should survive normal deploys.
-
-## Scaling
-
-```bash
-# Scale VM size
-flyctl scale vm shared-cpu-2x --memory 1024
-
-# Scale out (more machines)
-flyctl scale count 2
-```
-
-## Restart
-
-```bash
-flyctl apps restart llm-pricing-api
-```
+- **`deploy_fly` skipped:** runs only on `master` push or `workflow_dispatch`, after all five gates pass.
+- **Health check timed out:** usually a slow cold start; check `flyctl logs` / `flyctl status`.
+- **App won't start:** `flyctl logs`; usually a missing env var or a Docker build error.
+- **Data missing after deploy:** confirm `llm_pricing_data` is still attached.
+- **Rollback:** revert on `master` via git flow and let CI redeploy, or break-glass deploy a known-good commit.

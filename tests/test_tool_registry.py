@@ -108,7 +108,7 @@ class TestAgentBindings:
 class TestDocsStayInSync:
     """Docs quote the tool count in prose; keep those numbers honest.
 
-    static/whats-new/, docs/MCP_INTEGRATION.md, and docs/MCP_VALIDATION_REPORT.md are
+    static/whats-new/ and docs/archive/ (MCP_INTEGRATION.md, MCP_VALIDATION_REPORT.md) are
     deliberately excluded — they are historical records (a changelog, an original PR
     plan dated 2024, and a point-in-time implementation report) whose old counts are
     correct for what they documented and must not be silently rewritten to match today.

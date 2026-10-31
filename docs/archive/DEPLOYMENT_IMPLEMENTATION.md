@@ -11,7 +11,7 @@
 >
 > Changes since this record was written: the two guides now live under `docs/`
 > ([BLUE_GREEN_DEPLOYMENT.md](BLUE_GREEN_DEPLOYMENT.md),
-> [BACKWARDS_COMPATIBILITY.md](BACKWARDS_COMPATIBILITY.md)); `/deployment/shutdown`
+> [BACKWARDS_COMPATIBILITY.md](../BACKWARDS_COMPATIBILITY.md)); `/deployment/shutdown`
 > and `/deployment/shutdown/status` are operator-only (`X-API-Key` = `MCP_API_KEY`),
 > so the unauthenticated `curl` calls below would get 401; and the `SIGTERM`/`SIGINT`
 > handlers are registered only when the app is started with `python -m src.main`, not
