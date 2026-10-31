@@ -58,7 +58,6 @@ Press `Ctrl+Shift+P` → **"Tasks: Run Task"** → Choose:
 - **Run MCP Server (STDIO)** - Start MCP server in STDIO mode for Claude Desktop integration
 - **Run REST API Server** - Start FastAPI server on port 8000 with hot reload
 - **Quick Validate MCP Server** - Run `scripts/quick_validate.py`: initialize, tool discovery, the 5 core pricing tools and an unknown-tool error check over STDIO
-- **Test MCP Server Integration** - Currently broken: points at `scripts/test_mcp_server.py`, which is no longer in the repo
 
 #### Method 2: Using Terminal
 
@@ -96,7 +95,6 @@ Press `Ctrl+Shift+P` → **"Tasks: Run Task"**:
 - **Run All Tests** - Execute the full test suite
 - **Run Tests with Coverage** - Generate coverage report
 - **Quick Validate MCP Server** - Fast pre-deployment validation
-- **Validate MCP Client** - Currently broken: points at `scripts/validate_mcp_client.py`, which is no longer in the repo
 
 #### Run Tests via Testing Panel
 

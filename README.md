@@ -103,7 +103,7 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 - Operator-only data (v1.79.2): listing or deleting price-alert webhooks and chat conversations needs the operator key (`MCP_API_KEY`) on every surface — `x-api-key` over HTTP (`GET`/`DELETE /pricing/alerts`, `GET`/`DELETE /agent/conversations`), `x-api-key` or `Bearer` over MCP; anyone else gets 401 over HTTP or `operator_key_required` over MCP, with nothing revealed about stored records. Since v1.81.0 a registrant views or deletes their own alert with its `alert_token` instead (see Self-service price alerts)
 - Request size limit (1MB default), enforced before parsing on `POST /mcp` too (413 above it)
 - Webhook SSRF guard (v1.80.1): alert webhooks only reach public https destinations — checked at registration and again at every delivery, connecting only to the checked IP (DNS-rebinding safe), never following redirects, and ignoring `HTTPS_PROXY`. Alerts stored earlier that break these rules are kept but skipped at delivery (logged, not retried); the operator removes them via the operator-only list/delete
-- 3047 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 3048 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
