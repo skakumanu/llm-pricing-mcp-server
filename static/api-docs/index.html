@@ -302,8 +302,8 @@
       <div class="endpoint-group">
         <h3>Admin &amp; Telemetry</h3>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/telemetry</span><span class="ep-desc">Server usage metrics and analytics</span></div>
-        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/admin/stats</span><span class="ep-desc">Aggregated server statistics</span></div>
-        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/admin/rate-limits</span><span class="ep-desc">Current rate-limit state</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/admin/stats</span><span class="ep-desc">Aggregated server statistics</span><span class="ep-auth">Operator key</span></div>
+        <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/admin/rate-limits</span><span class="ep-desc">Top rate-limit consumers</span><span class="ep-auth">Operator key</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/rate-limits/tiers</span><span class="ep-desc">API tier definitions (free/pro/enterprise)</span></div>
         <div class="endpoint-row"><span class="method GET">GET</span><span class="ep-path">/api/versions</span><span class="ep-desc">API version info</span></div>
       </div>

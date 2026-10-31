@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.81.3 | **Last updated**: 2026-10-31
+**Version**: v1.81.4 | **Last updated**: 2026-10-31
 
 ---
 
@@ -657,13 +657,13 @@ Both `.db` files are gitignored and live on the Fly.io persistent volume (`/app/
 | GET | `/openapi.json` | None | OpenAPI spec (JSON) |
 | GET | `/billing` | None | Billing SPA |
 | GET | `/admin` | None | Admin SPA |
-| GET | `/admin/stats`, `/admin/rate-limits` | None (allow-listed) | Admin dashboard data: aggregate telemetry/provider health; top rate-limit consumers |
+| GET | `/admin/stats`, `/admin/rate-limits` | Operator key (`MCP_API_KEY`, x-api-key) | Admin dashboard data: aggregate telemetry/provider health; top rate-limit consumers by IP or customer id (v1.81.4: operator only — previously allow-listed) |
 | GET | `/admin/customers` | Operator key (`MCP_API_KEY`, x-api-key) | Every customer's email, org_id and Stripe id (v1.78.1: operator only) |
 | GET | `/deployment/metadata`, `/deployment/info` | Required | Version/API-versioning metadata; blue-green environment info |
 | POST | `/deployment/shutdown` | Operator key (`MCP_API_KEY`, x-api-key) | Start graceful shutdown |
 | GET | `/deployment/shutdown/status` | Operator key (`MCP_API_KEY`, x-api-key) | Graceful-shutdown status |
 | GET | `/chat`, `/calculator`, `/compare`, `/history`, `/trends`, `/widget`, `/mcp-setup`, `/api-docs`, `/whats-new`, `/conversations` | None | Browser UIs (static mounts; `/conversations` asks for the operator key in-page) |
-| GET | `/ide-compare` | Required (not in the bypass list) | IDE comparison UI (static mount) |
+| GET | `/ide-compare` | None | IDE comparison UI (static mount; v1.81.4: added to the static-UI bypass, it previously returned 401 when `MCP_API_KEY` was set) |
 
 ---
 

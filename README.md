@@ -70,6 +70,7 @@ Most LLM pricing tools are a static lookup table. This one checks its own number
 | `/chat` | Conversational AI agent |
 | `/calculator` | Interactive cost calculator |
 | `/compare` | Side-by-side model comparison |
+| `/ide-compare` | AI coding IDE subscription comparison (public since v1.81.4; it previously needed a key when `MCP_API_KEY` was set) |
 | `/history` | Pricing history charts (Chart.js) |
 | `/trends` | Price-change leaderboard |
 | `/widget` | Embeddable pricing table |
@@ -102,7 +103,7 @@ All UIs share a consistent dark design system (CSS variables, `'Segoe UI'` font,
 - Operator-only data (v1.79.2): listing or deleting price-alert webhooks and chat conversations needs the operator key (`MCP_API_KEY`) on every surface — `x-api-key` over HTTP (`GET`/`DELETE /pricing/alerts`, `GET`/`DELETE /agent/conversations`), `x-api-key` or `Bearer` over MCP; anyone else gets 401 over HTTP or `operator_key_required` over MCP, with nothing revealed about stored records. Since v1.81.0 a registrant views or deletes their own alert with its `alert_token` instead (see Self-service price alerts)
 - Request size limit (1MB default), enforced before parsing on `POST /mcp` too (413 above it)
 - Webhook SSRF guard (v1.80.1): alert webhooks only reach public https destinations — checked at registration and again at every delivery, connecting only to the checked IP (DNS-rebinding safe), never following redirects, and ignoring `HTTPS_PROXY`. Alerts stored earlier that break these rules are kept but skipped at delivery (logged, not retried); the operator removes them via the operator-only list/delete
-- 3038 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
+- 3047 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy)
 
 ### Deployment
 - **Primary**: [Fly.io](https://llm-pricing-api.fly.dev) — shared-cpu-1x, 512MB, ~$3.40/mo
@@ -351,8 +352,6 @@ curl -X POST https://llm-pricing-api.fly.dev/mcp \
 | GET | `/performance` | Throughput, latency, context window, quality scores |
 | GET | `/use-cases` | Model use-case recommendations |
 | GET | `/telemetry` | Server usage metrics and analytics |
-| GET | `/admin/stats` | Aggregated server statistics |
-| GET | `/admin/rate-limits` | Current rate-limit state |
 | GET | `/rate-limits/tiers` | API tier definitions |
 | GET | `/pricing/history` | Historical pricing snapshots |
 | GET | `/pricing/trends` | Price-change leaderboard |
@@ -422,6 +421,8 @@ Send the global `MCP_API_KEY` as `x-api-key` (Bearer is not accepted on these ro
 | GET | `/agent/conversations` | List every stored chat conversation (v1.79.2) |
 | DELETE | `/agent/conversations/{id}` | Delete a conversation (customer keys no longer suffice; 404 for an unknown id) |
 | GET | `/admin/customers` | List billing customers |
+| GET | `/admin/stats` | Aggregated server statistics, per-endpoint traffic and provider health (v1.81.4: operator only) |
+| GET | `/admin/rate-limits` | Top rate-limit consumers by IP or customer id (v1.81.4: operator only) |
 | POST | `/deployment/shutdown` | Start a graceful shutdown (request draining) |
 | GET | `/deployment/shutdown/status` | Graceful-shutdown status |
 

@@ -442,8 +442,6 @@ _unauthenticated_paths = {
     "/currency/rates",
     # Public read-only dashboard endpoints (non-sensitive aggregate stats)
     "/telemetry",
-    "/admin/stats",
-    "/admin/rate-limits",
     "/performance",
     "/use-cases",
     "/cache-stats",
@@ -457,6 +455,12 @@ _sensitive_paths = {
     # out, so any free account could read it and use the org_ids against endpoints
     # that take an org_id parameter.
     "/admin/customers",
+    # v1.81.4: operator-only. /admin/rate-limits lists the top limiter buckets, which are
+    # visitor IPs and customer ids; /admin/stats exposes per-endpoint traffic and provider
+    # errors. Both were on the public allow-list despite docstrings saying they need a key.
+    # The /admin page already sends the operator key on every data call.
+    "/admin/stats",
+    "/admin/rate-limits",
 }
 
 # v1.79.2: operator-only HTTP routes that live under otherwise-public prefixes
@@ -494,15 +498,14 @@ async def deployment_middleware(request: Request, call_next):
     """
     if deployment_manager.is_shutting_down():
         if request.url.path not in ["/health", "/health/live", "/health/ready", "/health/detailed"]:
-            return HTTPException(
-                status_code=503,
-                detail="Service is shutting down",
-            )
+            # A middleware must return a Response; returning an HTTPException object
+            # made Starlette raise and the client saw a 500 instead of this 503.
+            return JSONResponse(status_code=503, content={"detail": "Service is shutting down"})
 
     try:
         await deployment_manager.track_request_start()
     except RuntimeError as e:
-        return HTTPException(status_code=503, detail=str(e))
+        return JSONResponse(status_code=503, content={"detail": str(e)})
 
     try:
         response = await call_next(request)
@@ -538,7 +541,8 @@ async def security_middleware(request: Request, call_next):
             path.startswith("/chat")
             or path.startswith("/history") or path.startswith("/trends")
             or path.startswith("/conversations") or path.startswith("/calculator")
-            or path.startswith("/compare") or path.startswith("/widget")
+            or path.startswith("/compare") or path.startswith("/ide-compare")
+            or path.startswith("/widget")
             or path.startswith("/pricing") or path.startswith("/models")
             or path.startswith("/providers") or path.startswith("/landing")
             or path.startswith("/mcp")
@@ -1634,7 +1638,7 @@ async def get_api_versions():
         current_version="v1",
         all_versions=metadata.api_versions,
         deprecated_versions=[],
-        migration_guide_url="https://github.com/skakumanu/llm-pricing-mcp-server/docs/MIGRATION.md",
+        migration_guide_url="https://github.com/skakumanu/llm-pricing-mcp-server/blob/master/docs/BACKWARDS_COMPATIBILITY.md",
     )
 
 
@@ -3621,7 +3625,7 @@ async def admin_stats():
 
     Returns overall telemetry, per-endpoint metrics, provider health,
     feature usage counts, deployment uptime, and the server version.
-    Requires a valid ``x-api-key`` header when ``MCP_API_KEY`` is configured.
+    Operator-only: requires the ``MCP_API_KEY`` value in ``x-api-key`` (503 if unset).
     """
     telemetry = get_telemetry_service()
     overall = telemetry.get_overall_stats()
@@ -3672,7 +3676,8 @@ async def admin_rate_limits():
     Current rate-limit consumer snapshot.
 
     Returns the number of tracked IPs and the top consumers ranked by
-    requests in the last 60 seconds.  Requires a valid ``x-api-key`` header.
+    requests in the last 60 seconds.  Operator-only: requires the ``MCP_API_KEY``
+    value in ``x-api-key`` (503 if unset).
     """
     now = time.time()
     window = 60.0
