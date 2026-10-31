@@ -13,6 +13,11 @@ changes.
 """
 from dataclasses import dataclass
 
+# v1.82.0: cap on models per comparison (POST /cost-estimate/batch and the
+# compare_costs MCP tool). Both are public; without a cap one request could ask
+# for an unbounded list and do a catalogue lookup per entry.
+MAX_COMPARE_MODELS = 50
+
 
 @dataclass(frozen=True)
 class TokenCost:

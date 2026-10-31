@@ -1,6 +1,7 @@
 {
   "name": "llm-pricing-mcp-server",
-  "version": "1.66.0",
+  "private": true,
+  "version": "1.82.0",
   "description": "LLM Pricing MCP Server for Fly.io - Real-time pricing, cost estimation, and portfolio optimization across 30 major LLM providers",
   "main": "src/main.py",
   "scripts": {

@@ -110,3 +110,12 @@ class TestDocsDoNotFreezeVersions:
             "Stale version headers — point them at src/__init__.py instead:\n"
             + "\n".join(offenders)
         )
+
+
+def test_root_package_json_version_matches():
+    """The root package.json is private (the published package is npm/llm-pricing-mcp,
+    versioned on its own), but it sat at 1.66.0 for months while the app moved on."""
+    import json
+    data = json.loads((project_root / "package.json").read_text(encoding="utf-8"))
+    assert data.get("private") is True
+    assert data["version"] == APP_VERSION
