@@ -1,140 +1,95 @@
 # Contributing Guide
 
+## Development Setup
+
+The service runs on **Python 3.11** (`runtime.txt`, `Dockerfile`'s `python:3.11-slim`, and the CI jobs all pin 3.11).
+
+```bash
+git clone https://github.com/skakumanu/llm-pricing-mcp-server.git
+cd llm-pricing-mcp-server
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt                     # includes pytest, pytest-asyncio, pytest-cov
+cp .env.example .env                                # optional; every provider key is optional
+uvicorn src.main:app --reload --port 8000
+```
+
+Optional local hooks (gitleaks, no commits to `develop`/`master`, large-file check — see `.pre-commit-config.yaml`):
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+## Testing
+
+```bash
+pytest tests/ -q                                     # full suite; README.md has the current passing-test count
+pytest tests/test_version_consistency.py -q          # required before every commit (see CLAUDE.md)
+```
+
+CI (`.github/workflows/ci-cd.yml`) runs on every PR to `develop` or `master` and on pushes to `master`. All five gates must pass before the Fly.io deploy job runs:
+
+1. `test` — `pytest tests/ -v --cov=src --cov-report=term-missing`
+2. `lint` — `flake8 src tests --select=E9,F63,F7,F82` (syntax errors and undefined names fail the build; a second, full flake8 pass with `--max-line-length=127` is report-only)
+3. `osv_scan` — Google OSV Scanner over `requirements.txt`
+4. `security` — `bandit -r src -q`
+5. `secret_scan` — gitleaks over the full git history
+
+---
+
 ## Branching Strategy
-We **STRICTLY** follow Git Flow for all development processes. This ensures a clean, predictable workflow and prevents direct commits to protected branches.
+We **STRICTLY** follow Git Flow for all development processes. `CLAUDE.md`'s "Git Flow — MANDATORY" section is the authoritative source; this is a summary.
+
+```
+feature/<short-name>  →  develop (PR)  →  master (PR)  →  deploy
+```
 
 ### Branch Overview
 
-1. **Master Branch**: The `master` branch always reflects production-ready code. Only merge into master from `develop` or `hotfix` branches.
-2. **Develop Branch**: The `develop` branch is the integration branch for ongoing development. All features merge here first.
-3. **Feature Branches**: Feature branches should be created off `develop` and follow the naming convention `feature/<feature-name>`.
-4. **Release Branches**: When preparing for a new production release, create a branch off `develop` and name it `release/<version>`.
-5. **Hotfix Branches**: For critical fixes in production, create a branch off `master` and name it `hotfix/<fix-name>`.
+1. **Master Branch**: `master` always reflects production. Every push to `master` deploys to Fly.io once CI passes. It only receives promotion PRs from `develop` (see below).
+2. **Develop Branch**: `develop` is the integration branch. All changes merge here first, by pull request.
+3. **Feature Branches**: Every change — feature, bug fix, docs, tests, urgent fix — uses a `feature/*` branch created off `develop`, named `feature/<topic>-v<version>` (e.g. `feature/api-tiers-v1.36.0`).
+
+There are no `release/*` or `hotfix/*` branches: urgent fixes take the same `feature/*` → `develop` → `master` path.
 
 ### Git Flow Workflow
-
-#### Creating and Merging Feature Branches
 
 1. **Start a new feature** (ALWAYS branch from `develop`):
    ```bash
    git checkout develop
    git pull origin develop
-   git checkout -b feature/<feature-name>
+   git checkout -b feature/<topic>-v<version>
    ```
 
-2. **Work on your feature**:
+2. **Work on your feature** — bump `src/__init__.py` per CLAUDE.md's Release Checklist, use conventional commit messages, and stage files explicitly:
    ```bash
-   # Make your changes
-   git add .
-   git commit -m "Descriptive commit message"
-   git push origin feature/<feature-name>
+   git add <files>
+   git commit -m "feat(scope): short description"
+   git push -u origin feature/<topic>-v<version>
    ```
 
-3. **Merge feature into develop** (NOT master):
+3. **Open a pull request targeting `develop`** (NOT master). Do not merge it yourself; the maintainer merges after review and green CI.
+
+4. **Promote `develop` to `master`** (maintainer). `develop` and `master` are both squash-merge targets, so their histories diverge; `scripts/promote_branch_content.sh` builds a clean promotion branch whose tree matches `develop` exactly:
    ```bash
-   git checkout develop
-   git pull origin develop
-   git merge --no-ff feature/<feature-name>
-   git push origin develop
+   git fetch origin master develop
+   scripts/promote_branch_content.sh promote-vX.Y.Z origin/master origin/develop
+   git commit -m "chore: promote develop to master (vX.Y.Z)"
+   git push -u origin promote-vX.Y.Z
+   # Open a PR: promote-vX.Y.Z → master
    ```
-
-4. **Delete feature branch** after merging:
-   ```bash
-   git branch -d feature/<feature-name>
-   git push origin --delete feature/<feature-name>
-   ```
-
-#### Creating a Release
-
-1. **Start a release branch** (from `develop`):
-   ```bash
-   git checkout develop
-   git pull origin develop
-   git checkout -b release/<version>
-   ```
-
-2. **Prepare the release** (update version numbers, documentation):
-   ```bash
-   # Make final adjustments
-   git add .
-   git commit -m "Prepare release <version>"
-   git push origin release/<version>
-   ```
-
-3. **Merge release to master**:
-   ```bash
-   git checkout master
-   git pull origin master
-   git merge --no-ff release/<version>
-   git tag -a v<version> -m "Release version <version>"
-   git push origin master --tags
-   ```
-
-4. **Merge release back to develop**:
-   ```bash
-   git checkout develop
-   git pull origin develop
-   git merge --no-ff release/<version>
-   git push origin develop
-   ```
-
-5. **Delete release branch**:
-   ```bash
-   git branch -d release/<version>
-   git push origin --delete release/<version>
-   ```
-
-#### Hotfix Workflow
-
-1. **Create hotfix branch** (from `master`):
-   ```bash
-   git checkout master
-   git pull origin master
-   git checkout -b hotfix/<fix-name>
-   ```
-
-2. **Apply the fix**:
-   ```bash
-   # Make your changes
-   git add .
-   git commit -m "Fix: description of hotfix"
-   git push origin hotfix/<fix-name>
-   ```
-
-3. **Merge hotfix to master**:
-   ```bash
-   git checkout master
-   git pull origin master
-   git merge --no-ff hotfix/<fix-name>
-   git tag -a v<version> -m "Hotfix version <version>"
-   git push origin master --tags
-   ```
-
-4. **Merge hotfix to develop**:
-   ```bash
-   git checkout develop
-   git pull origin develop
-   git merge --no-ff hotfix/<fix-name>
-   git push origin develop
-   ```
-
-5. **Delete hotfix branch**:
-   ```bash
-   git branch -d hotfix/<fix-name>
-   git push origin --delete hotfix/<fix-name>
-   ```
+   On every push to `master`, `.github/workflows/sync-develop.yml` opens a `ci/sync-develop-*` PR into `develop` if `develop` is missing any `master` commits.
 
 ### Important Rules
 
 - ⚠️ **NEVER merge feature branches directly into `master`**
 - ⚠️ **NEVER commit directly to `master` or `develop`**
 - ⚠️ **NEVER commit secrets, API keys, or sensitive information**
-- ✅ **ALWAYS merge features into `develop` first**
-- ✅ **ALWAYS use `--no-ff` flag for merges** to preserve branch history
-- ✅ **ALWAYS sync `develop` after merging to `master`**
+- ✅ **ALWAYS branch from `develop` and open the PR against `develop`**
+- ✅ **ALWAYS run the Release Checklist in `CLAUDE.md` before committing** (version bump, tests, secret scan)
 - ✅ **ALWAYS check for secrets before committing** (see Security Checklist below)
 - ✅ **Use pull requests** for code review before merging
-- ✅ **Include detailed commit messages** describing what and why
+- ✅ **Include detailed commit messages** describing what and why (conventional commits: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`, `style`)
 
 ### Pre-Commit Security Checklist
 
@@ -145,14 +100,12 @@ Before committing ANY code, verify:
 git status
 git diff --cached
 
-# 2. Search for common secret patterns (run these checks!)
-grep -r "password" --include="*.py" --include="*.json" --include="*.txt" .
-grep -r "api_key" --include="*.py" --include="*.json" --include="*.txt" .
-grep -r "secret" --include="*.py" --include="*.json" --include="*.txt" .
-grep -r "token" --include="*.py" --include="*.json" --include="*.txt" .
+# 2. Scan the staged diff for secret-shaped strings (same pattern as CLAUDE.md's checklist)
+git diff --staged | grep -iE \
+  "(sk-[a-zA-Z0-9]{20,}|pk-[a-zA-Z0-9]{20,}|whsec_[a-zA-Z0-9]{20,}|api[_-]key\s*=\s*['\"][^'\"]{8,}|password\s*=\s*['\"][^'\"]{4,}|secret\s*=\s*['\"][^'\"]{4,}|AKIA[A-Z0-9]{16})"
 
-# 3. Ensure .env files are NOT staged
-git ls-files | grep -E "\.(env|secret|key|pem|pfx)$"
+# 3. Ensure no .env / .db / key files are staged (must print nothing)
+git diff --staged --name-only | grep -E "\.(db|env|pem|key|p12|pfx|secret)$"
 ```
 
 **If you find any secrets:**
@@ -160,8 +113,6 @@ git ls-files | grep -E "\.(env|secret|key|pem|pfx)$"
 2. Use environment variables instead
 3. Add the pattern to `.gitignore`
 4. Never commit the secrets
-
-Ensure to follow proper branching practices, including pull requests for merging, and always include detailed commit messages.
 
 ---
 
@@ -203,13 +154,14 @@ Ensure to follow proper branching practices, including pull requests for merging
    api_key = os.getenv("OPENAI_API_KEY")
    ```
 
-2. **Store Secrets in Azure Key Vault:**
-   - All production secrets are stored in Azure Key Vault
-   - Access secrets at runtime, never hard-code them
+2. **Store Production Secrets as Fly.io Secrets:**
+   - Production runs on Fly.io; secrets are set with `flyctl secrets set NAME=...` (never in `fly.toml`, never committed) — see [DEPLOYMENT.md](DEPLOYMENT.md)
+   - CI credentials (e.g. `FLY_API_TOKEN`) are GitHub Actions secrets
+   - Access secrets at runtime via environment variables, never hard-code them
 
 3. **Use `.env` for Local Development:**
-   - Create a `.env` file (already in `.gitignore`)
-   - Provide a `.env.example` template with dummy values
+   - Copy `.env.example` to `.env` (`.env` is already in `.gitignore`)
+   - Keep `.env.example` limited to dummy values
    - Document required environment variables in README
 
 4. **Before Every Commit:**
@@ -219,17 +171,9 @@ Ensure to follow proper branching practices, including pull requests for merging
 
 ### Secret Detection Tools
 
-Consider using these tools to scan for secrets:
+gitleaks is the scanner this repo uses: CI's `secret_scan` job runs it over the full history, and the optional pre-commit hook runs it locally. To scan by hand:
 
 ```bash
-# Install git-secrets (prevents committing secrets)
-git secrets --install
-git secrets --register-aws
-
-# Scan repository for secrets
-git secrets --scan
-
-# Or use gitleaks
 gitleaks detect --source . --verbose
 ```
 
@@ -249,7 +193,7 @@ gitleaks detect --source . --verbose
 
 ### Additional Security Practices
 
-1. All contributions must undergo static code analysis using the provided CI/CD pipeline
+1. All contributions must pass the CI/CD gates (bandit static analysis, OSV dependency scan, gitleaks)
 2. Use secure coding practices, avoiding hard-coded credentials
 3. Always use environment variables for configuration
 4. Follow the principle of least privilege for accessing sensitive resources
@@ -261,6 +205,6 @@ gitleaks detect --source . --verbose
 ## Privacy Compliance
 1. Do not include any Personal Identifiable Information (PII) in logs or outputs.
 2. Ensure third-party dependencies comply with GDPR and similar privacy regulations.
-3. Periodically review the `privacy_policy.md` file to ensure compliance.
+3. Never log or persist request IPs, provider keys, or prompt/completion text (see the privacy rules in `docs/ARCHITECTURE.md`).
 
 Thank you for contributing to the llm-pricing-mcp-server project!

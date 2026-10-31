@@ -1,5 +1,7 @@
 # MCP Server Implementation - Complete Validation Report
 
+> **Historical record** (February 19, 2026). Describes the original implementation; counts and file lists are out of date. For the current system see [ARCHITECTURE.md](ARCHITECTURE.md) and [MCP_QUICK_START.md](MCP_QUICK_START.md).
+
 ## Executive Summary
 
 ✅ **Implementation Status**: COMPLETE AND READY FOR PRODUCTION

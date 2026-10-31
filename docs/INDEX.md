@@ -9,7 +9,7 @@ Welcome to the LLM Pricing MCP Server documentation! This directory contains com
 
 ### Architecture & Design
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System design, architecture diagrams, and component interactions
-- **[DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md)** - Core design principles and architectural decisions
+- **[DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md)** - Core design principles (clarity, sustainability, impact)
 
 ### Features & Capabilities
 - **[LIVE_DATA_FETCHING.md](LIVE_DATA_FETCHING.md)** - Live data fetching architecture, caching strategy, and data sources
@@ -17,19 +17,19 @@ Welcome to the LLM Pricing MCP Server documentation! This directory contains com
 
 ### Deployment & Operations
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** - How production deployment actually works today: CI/CD-driven onto Fly.io
-- **[BLUE_GREEN_DEPLOYMENT.md](BLUE_GREEN_DEPLOYMENT.md)** - Zero-downtime blue-green deployment strategy and implementation
+- **[BLUE_GREEN_DEPLOYMENT.md](BLUE_GREEN_DEPLOYMENT.md)** - Health-check, graceful-shutdown and API-versioning endpoints; its blue-green orchestration examples are illustrative only (⚠️ not the active deploy path — production is a single Fly.io app)
 - **[DEPLOYMENT_IMPLEMENTATION.md](DEPLOYMENT_IMPLEMENTATION.md)** - Historical implementation summary for the health-check/graceful-shutdown feature (⚠️ not a deployment runbook — see the note at the top of the file)
 
 Actual production deployment is CI/CD-driven via `.github/workflows/ci-cd.yml` (Fly.io + health check on merge to `master`) — see `CLAUDE.md`'s Git Flow section or `DEPLOYMENT.md` for the current process.
 
 ### MCP (Model Context Protocol) Integration
 - **[MCP_QUICK_START.md](MCP_QUICK_START.md)** - Quick start guide for running the MCP server
-- **[MCP_TESTING.md](MCP_TESTING.md)** - Comprehensive testing guide with all test scripts
-- **[MCP_INTEGRATION.md](MCP_INTEGRATION.md)** - Architecture and integration patterns
+- **[MCP_TESTING.md](MCP_TESTING.md)** - How the MCP server is tested: the pytest suite that gates CI, plus local smoke checks
+- **[MCP_INTEGRATION.md](MCP_INTEGRATION.md)** - Historical record (2024): the original MCP integration plan; counts and file lists are out of date (see ARCHITECTURE.md for the current system)
 - **[CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md)** - Claude Desktop integration guide (local development)
 - **[PERPLEXITY_INTEGRATION.md](PERPLEXITY_INTEGRATION.md)** - Perplexity desktop MCP setup + full API endpoint reference
 - **[VS_CODE_INTEGRATION.md](VS_CODE_INTEGRATION.md)** - VS Code workspace setup and development guide
-- **[MCP_VALIDATION_REPORT.md](MCP_VALIDATION_REPORT.md)** - Validation results and test reports
+- **[MCP_VALIDATION_REPORT.md](MCP_VALIDATION_REPORT.md)** - Historical record (Feb 2026): point-in-time validation report of the first MCP implementation; not current behavior
 
 ### Development & Contribution
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines, Git Flow workflow, and development setup
@@ -57,12 +57,12 @@ Actual production deployment is CI/CD-driven via `.github/workflows/ci-cd.yml` (
 1. **Perplexity**: Follow [PERPLEXITY_INTEGRATION.md](PERPLEXITY_INTEGRATION.md) for Perplexity desktop MCP setup
 2. **Claude Desktop**: Follow [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md) for Claude Desktop with local server
 3. **VS Code**: Follow [VS_CODE_INTEGRATION.md](VS_CODE_INTEGRATION.md) for Copilot + MCP
-4. Review [MCP_INTEGRATION.md](MCP_INTEGRATION.md) for architecture and custom clients
+4. Review [ARCHITECTURE.md](ARCHITECTURE.md) ("MCP Dual Transport") for the current transports and custom clients
 5. Use [MCP_TESTING.md](MCP_TESTING.md) to validate your integration
-6. Check [MCP_VALIDATION_REPORT.md](MCP_VALIDATION_REPORT.md) for expected behavior
+6. [MCP_INTEGRATION.md](MCP_INTEGRATION.md) and [MCP_VALIDATION_REPORT.md](MCP_VALIDATION_REPORT.md) are historical records of the original implementation, not current behavior
 
 **For API Users:**
-1. Start with [README.md](../README.md) API Documentation section
+1. Start with [README.md](../README.md) API Reference section
 2. Review [BACKWARDS_COMPATIBILITY.md](BACKWARDS_COMPATIBILITY.md) for version info
 3. Check [LIVE_DATA_FETCHING.md](LIVE_DATA_FETCHING.md) for data source details
 4. See [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md) for design philosophy
@@ -73,16 +73,16 @@ Actual production deployment is CI/CD-driven via `.github/workflows/ci-cd.yml` (
 - [DEPLOYMENT.md](DEPLOYMENT.md)
 - [BLUE_GREEN_DEPLOYMENT.md](BLUE_GREEN_DEPLOYMENT.md)
 - [DEPLOYMENT_IMPLEMENTATION.md](DEPLOYMENT_IMPLEMENTATION.md) (⚠️ historical record, not a runbook — see note above)
-- [HOUSEKEEPING.md](HOUSEKEEPING.md) - Blue-Green Deployment section
+- [HOUSEKEEPING.md](HOUSEKEEPING.md) - Deployment Housekeeping section
 
 **MCP Protocol & Tools:**
 - [MCP_QUICK_START.md](MCP_QUICK_START.md)
-- [MCP_INTEGRATION.md](MCP_INTEGRATION.md)
+- [MCP_INTEGRATION.md](MCP_INTEGRATION.md) (historical)
 - [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md) - Claude Desktop setup
 - [PERPLEXITY_INTEGRATION.md](PERPLEXITY_INTEGRATION.md) - Perplexity desktop setup
 - [VS_CODE_INTEGRATION.md](VS_CODE_INTEGRATION.md)
 - [MCP_TESTING.md](MCP_TESTING.md)
-- [MCP_VALIDATION_REPORT.md](MCP_VALIDATION_REPORT.md)
+- [MCP_VALIDATION_REPORT.md](MCP_VALIDATION_REPORT.md) (historical)
 
 **Architecture & Design:**
 - [ARCHITECTURE.md](ARCHITECTURE.md)
@@ -110,32 +110,33 @@ All documentation in this directory follows these standards:
 
 | Document | Purpose | Audience | Size |
 |----------|---------|----------|------|
-| ARCHITECTURE.md | System design and components | Developers, Architects | ~400 lines |
+| ARCHITECTURE.md | System design and components | Developers, Architects | ~770 lines |
 | BACKWARDS_COMPATIBILITY.md | API versioning and compatibility | API Users, Developers | ~500 lines |
-| BLUE_GREEN_DEPLOYMENT.md | Zero-downtime deployment strategy | DevOps, SRE | ~605 lines |
-| CLAUDE_INTEGRATION.md | Claude Desktop integration | MCP Users, Integrators | ~900 lines |
-| CONTRIBUTING.md | Development workflow and guidelines | Developers, Contributors | ~200 lines |
-| DEPLOYMENT.md | Deployment procedures and best practices | DevOps, SRE | ~200 lines |
-| DEPLOYMENT_IMPLEMENTATION.md | Detailed deployment implementation | DevOps, Engineers | ~300 lines |
-| DESIGN_PRINCIPLES.md | Core architectural principles | Architects, Developers | ~100 lines |
-| HOUSEKEEPING.md | Quality and operational standards | All Developers | ~980 lines |
-| LIVE_DATA_FETCHING.md | Data fetching architecture | Developers, Architects | ~260 lines |
-| MCP_INTEGRATION.md | MCP protocol integration | Developers, Integrators | ~300 lines |
-| MCP_QUICK_START.md | Quick start guide | All Users | ~353 lines |
-| MCP_TESTING.md | Testing procedures | Developers, QA | ~458 lines |
-| MCP_VALIDATION_REPORT.md | Test results and validation | QA, Management | ~150 lines |
-| VS_CODE_INTEGRATION.md | VS Code workspace & development | Developers | ~600 lines |
+| BLUE_GREEN_DEPLOYMENT.md | Health/shutdown/versioning endpoints; illustrative blue-green examples (not the active deploy path) | DevOps, SRE | ~630 lines |
+| CLAUDE_INTEGRATION.md | Claude Desktop integration | MCP Users, Integrators | ~230 lines |
+| CONTRIBUTING.md | Development workflow and guidelines | Developers, Contributors | ~270 lines |
+| DEPLOYMENT.md | Current Fly.io deployment via CI/CD | DevOps, SRE | ~180 lines |
+| DEPLOYMENT_IMPLEMENTATION.md | Historical implementation record (not a runbook) | DevOps, Engineers | ~350 lines |
+| DESIGN_PRINCIPLES.md | Core design principles | Architects, Developers | ~20 lines |
+| HOUSEKEEPING.md | Quality and operational standards | All Developers | ~1100 lines |
+| LIVE_DATA_FETCHING.md | Data fetching architecture | Developers, Architects | ~300 lines |
+| MCP_INTEGRATION.md | Historical record: original MCP integration plan (2024) | Developers, Integrators | ~430 lines |
+| MCP_QUICK_START.md | Quick start guide | All Users | ~260 lines |
+| MCP_TESTING.md | Testing procedures | Developers, QA | ~120 lines |
+| MCP_VALIDATION_REPORT.md | Historical record: Feb 2026 validation report | QA, Management | ~580 lines |
+| PERPLEXITY_INTEGRATION.md | Perplexity desktop MCP setup + API endpoint reference | MCP Users, Integrators | ~450 lines |
+| VS_CODE_INTEGRATION.md | VS Code workspace & development | Developers | ~540 lines |
 
 ## Finding Information
 
 **Common Questions:**
 
-- **How do I set up the project?** → [README.md](../README.md#installation)
+- **How do I set up the project?** → [README.md](../README.md#development) and [CONTRIBUTING.md](CONTRIBUTING.md)
 - **How do I configure VS Code for development?** → [VS_CODE_INTEGRATION.md](VS_CODE_INTEGRATION.md)
 - **How do I run the MCP server?** → [MCP_QUICK_START.md](MCP_QUICK_START.md)
 - **How do I test the MCP server?** → [MCP_TESTING.md](MCP_TESTING.md)
 - **How do I integrate with Claude Desktop?** → [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md)
-- **How do I deploy?** → CI/CD-driven via `.github/workflows/ci-cd.yml` on merge to `master` (Fly.io + health check); `DEPLOYMENT.md` predates this and describes the retired Azure target
+- **How do I deploy?** → CI/CD-driven via `.github/workflows/ci-cd.yml` on merge to `master` (Fly.io + health check); see [DEPLOYMENT.md](DEPLOYMENT.md)
 - **How do I contribute?** → [CONTRIBUTING.md](CONTRIBUTING.md)
 - **What are the system design principles?** → [DESIGN_PRINCIPLES.md](DESIGN_PRINCIPLES.md)
 - **How does the architecture work?** → [ARCHITECTURE.md](ARCHITECTURE.md)
@@ -143,6 +144,8 @@ All documentation in this directory follows these standards:
 - **How does live data fetching work?** → [LIVE_DATA_FETCHING.md](LIVE_DATA_FETCHING.md)
 
 ## Latest Updates
+
+Current release notes live on the `/whats-new` page (`static/whats-new/index.html`); the list below is the early history only and is not kept current.
 
 - **March 2026** - v1.33.0: Switched default LLM backend to GPT-4o-mini (20× cheaper, 2× faster); both OpenAI and Anthropic fully supported via env vars
 - **March 2026** - v1.32.0: Friendly error message for exhausted AI provider credits
@@ -163,6 +166,6 @@ All documentation in this directory follows these standards:
 
 ---
 
-**Last Updated**: March 2026
-**Documentation Version**: 1.3
-**Project Version**: 1.33.0
+**Last Updated**: October 2026
+**Documentation Version**: 1.4
+**Project Version**: see `src/__init__.py` (single source of truth)
