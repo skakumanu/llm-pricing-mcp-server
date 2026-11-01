@@ -386,6 +386,28 @@ class TestAdminOrchestratorBlock:
         html = self._html()
         assert '<a href="/whats-new">What\'s New</a>' in html
 
+    # v1.88.0 — Compliance audit panel (AC15)
+    def test_compliance_audit_panel_markup(self):
+        html = self._html()
+        for el in ("audit-panel", "audit-badge", "audit-run-btn", "audit-report-select", "audit-checks-body",
+                   "audit-summary", "audit-coverage"):
+            assert f'id="{el}"' in html, el
+        assert "Compliance audit" in html and "Run audit now" in html
+        for path in ("/audit/reports?limit=", "/audit/reports/", "/audit/run"):
+            assert path in html, path
+        assert html.index('id="audit-panel"') > html.index('id="orch-section"')  # inside the Orchestrator block
+
+    def test_audit_flag_card_shows_failed_outcome_and_report_link(self):
+        html = self._html()
+        assert 'art.kind === "audit_flag"' in html
+        assert "art.failed_outcome" in html and "art.report_id" in html and "#audit-report-" in html
+
+    def test_audit_paths_are_operator_only_not_public(self):
+        import src.main as main_module
+        assert "/audit/" in main_module._OPERATOR_ONLY_PREFIXES
+        for path in main_module._unauthenticated_paths | main_module._anonymous_rate_limited_paths:
+            assert not path.startswith("/audit"), path
+
 
 @pytest.mark.usefixtures("operator_key_configured")
 def test_migration_guide_url_points_at_an_existing_doc():

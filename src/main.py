@@ -79,6 +79,9 @@ from src.services.orchestrator_service import (  # noqa: E402
     OrchestratorError, OrchestratorService, get_orchestrator_service, init_orchestrator_service,
 )
 from src.services.orchestrator_workflows import workflow_catalogue as _orchestrator_workflow_catalogue  # noqa: E402
+from src.models.audit import AuditRunIn  # noqa: E402
+from src.services.audit_service import AuditService, get_audit_service, init_audit_service  # noqa: E402
+from src.services.audit_store import init_audit_store  # noqa: E402
 from src.models.orchestrator import (  # noqa: E402
     ActionResultIn, ApprovalDecisionIn, OrchestratorEventIn, OwnerRunIn, RunCloseIn, SettingsIn,
 )
@@ -542,7 +545,8 @@ _OPERATOR_ONLY_DELETE_PREFIXES = ("/pricing/alerts/", "/agent/conversations/")
 # parked runs, settings, budget). Constant refusals, limiter and body cap are inherited.
 # v1.84.0: /admin/customers/{id}/key/rotate (owner-side key rotation) joins them; the exact
 # path /admin/customers stays in _sensitive_paths.
-_OPERATOR_ONLY_PREFIXES = ("/orchestrator/", "/admin/customers/")
+# v1.88.0: /audit/ (compliance audit reports) joins them; the intake key is NOT accepted there.
+_OPERATOR_ONLY_PREFIXES = ("/orchestrator/", "/admin/customers/", "/audit/")
 
 # The three executor routes that also accept the separate ORCHESTRATOR_INTAKE_KEY
 # (GitHub Actions). The intake key unlocks nothing else, but through these three routes it can
@@ -1245,9 +1249,20 @@ async def startup_pricing_history() -> None:
             run_retention_days=settings.orchestrator_run_retention_days,
             io_retention_days=settings.orchestrator_io_retention_days,
         )
-        init_orchestrator_service(OrchestratorService(orch_store))
+        orch_service = init_orchestrator_service(OrchestratorService(orch_store))
         logger.info("Orchestrator initialized at %s (intake key %s)", settings.orchestrator_db_path,
                     "set" if settings.orchestrator_intake_key else "unset")
+        # v1.88.0 — compliance audit: report tables in the same file, handlers registered with the
+        # orchestrator. Report-only; /audit routes answer 503 if this fails.
+        try:
+            audit_store = await init_audit_store(settings.orchestrator_db_path,
+                                                 retention_days=settings.audit_report_retention_days)
+            audit_service = init_audit_service(AuditService(audit_store, orch_service, settings))
+            audit_service.install()
+            logger.info("Compliance audit initialized (stripe reconciliation %s, llm summary %s)",
+                        "on" if settings.stripe_audit_key else "off", "on" if settings.audit_llm_summary else "off")
+        except Exception as exc:  # nosec B110
+            logger.error("Compliance audit init failed (/audit routes answer 503): %s", type(exc).__name__)
     except Exception as exc:  # nosec B110
         logger.error("Orchestrator init failed (/orchestrator routes answer 503): %s", type(exc).__name__)
     asyncio.create_task(_pricing_snapshot_loop())
@@ -4464,6 +4479,58 @@ async def orchestrator_actions(
         return Response(content=svc.store.to_csv(rows, _ORCH_ACTION_COLUMNS), media_type="text/csv",
                         headers={"Content-Disposition": 'attachment; filename="orchestrator_actions.csv"'})
     return {"count": len(rows), "actions": rows}
+
+
+# ---------------------------------------------------------------------------
+# Compliance audit (v1.88.0) — operator-only via _OPERATOR_ONLY_PREFIXES ("/audit/"); report-only.
+# ---------------------------------------------------------------------------
+
+def _audit() -> AuditService:
+    try:
+        return get_audit_service()
+    except RuntimeError:
+        raise HTTPException(status_code=503, detail="Compliance audit is not initialized")
+
+
+def _audit_report_summary(r: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: r.get(k) for k in ("report_id", "run_id", "created_at", "trigger_class", "status", "counts",
+                                  "numbers", "summary_source")}
+
+
+@app.post("/audit/run", tags=["Orchestrator"])
+async def audit_run(body: Optional[AuditRunIn] = None):
+    """
+    Start an on-demand compliance audit (owner request, operator key only). Runs the mechanical check
+    catalogue, persists one report and, when a check fails, opens one `audit_flag` approval in the
+    orchestrator queue. Omit `request_id` to run a fresh audit every time. Report-only: nothing audited
+    is changed. 503 when the audit is not initialised.
+    """
+    svc = _audit()
+    request_id = (body.request_id if body else None) or time.strftime("audit-%Y%m%dT%H%M%S", time.gmtime()) \
+        + "-" + secrets.token_hex(3)
+    try:
+        return await svc.run_now(request_id)
+    except OrchestratorError as exc:
+        return _orchestrator_error(exc)
+
+
+@app.get("/audit/reports", tags=["Orchestrator"])
+async def audit_reports(limit: int = Query(50, ge=1, le=500)):
+    """Audit reports, newest first: status, counts, the data-quality numbers and where the summary came from."""
+    svc = _audit()
+    rows = await svc.store.list_reports(limit=limit)
+    return {"count": len(rows), "reports": [_audit_report_summary(r) for r in rows]}
+
+
+@app.get("/audit/reports/{report_id}", tags=["Orchestrator"])
+async def audit_report(report_id: str):
+    """One report with every check row (status, severity, evidence, launch-checklist ids) and its summary.
+    `latest` is an alias for the newest report."""
+    svc = _audit()
+    report = await (svc.store.latest_report() if report_id == "latest" else svc.store.get_report(report_id))
+    if report is None:
+        return JSONResponse(status_code=404, content={"error": "report_not_found", "message": "no such report"})
+    return report
 
 
 # ---------------------------------------------------------------------------

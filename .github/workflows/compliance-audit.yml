@@ -1,0 +1,86 @@
+name: Compliance audit
+
+# v1.88.0 — weekly, mechanical, report-only compliance audit. The audit itself runs inside the
+# service (src/services/audit_*.py, workflow compliance_audit); this workflow supplies the part the
+# production image cannot see (.github/, scripts/, tests/ are not in it) and then asks the service to
+# run: one `schedule` event to POST /orchestrator/events, exactly like the report-run job of
+# price-audit.yml. The service persists a report (GET /audit/reports/latest) and opens an owner
+# checkpoint on /admin only when a check fails.
+#
+#   repo-checks  runs scripts/compliance_repo_checks.py (Dependabot, CodeQL, forbidden tracked files,
+#                replication check, checklist parser, version tests) and publishes a bounded
+#                {check_id: pass|fail} dict as a job output.
+#   report-run   posts that dict, the repository version and the commit sha. One run per UTC day
+#                (dedup key), so a manual re-run attaches to the same run instead of adding one.
+#
+# Credentials: ORCHESTRATOR_INTAKE_KEY (repo secret) and ORCHESTRATOR_BASE_URL (repo variable). No
+# PAT, contents stay read-only, no event text is interpolated into a script, and without the intake
+# key the report job prints one step-summary line and exits 0.
+
+on:
+  schedule:
+    - cron: "0 7 * * 1"   # Mondays 07:00 UTC, after price-audit.yml (06:00)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repo-checks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      repo_checks: ${{ steps.checks.outputs.repo_checks }}
+      repo_version: ${{ steps.checks.outputs.repo_version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+      - name: Run the repo-side checks
+        id: checks
+        run: |
+          python scripts/compliance_repo_checks.py --json > checks.json
+          echo "repo_checks=$(jq -c '.repo_checks' checks.json)" >> "$GITHUB_OUTPUT"
+          echo "repo_version=$(jq -r '.repo_version' checks.json)" >> "$GITHUB_OUTPUT"
+          jq . checks.json >> "$GITHUB_STEP_SUMMARY"
+
+  report-run:
+    runs-on: ubuntu-latest
+    needs: [repo-checks]
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: Ask the service to run the audit
+        env:
+          ORCHESTRATOR_INTAKE_KEY: ${{ secrets.ORCHESTRATOR_INTAKE_KEY }}
+          ORCHESTRATOR_BASE_URL: ${{ vars.ORCHESTRATOR_BASE_URL || 'https://llm-pricing-api.fly.dev' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPO_CHECKS: ${{ needs.repo-checks.outputs.repo_checks }}
+          REPO_VERSION: ${{ needs.repo-checks.outputs.repo_version }}
+          SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$ORCHESTRATOR_INTAKE_KEY" ]; then
+            echo "ORCHESTRATOR_INTAKE_KEY is not set; compliance audit not requested from the service." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          DAY=$(date -u +%F)
+          # An empty or unparsable dict (the repo-checks job failed) is posted as absent: the
+          # service then reports those checks as n/a, never as a pass.
+          CHECKS=$(printf '%s' "$REPO_CHECKS" | jq -c 'if type == "object" then . else {} end' 2>/dev/null || echo '{}')
+          jq -n --arg day "$DAY" --arg run_url "$RUN_URL" --arg version "$REPO_VERSION" --arg sha "$SHA" \
+            --argjson checks "$CHECKS" \
+            '{trigger_class: "schedule", event_type: "compliance-audit.requested",
+              dedup_key: ("schedule:compliance-audit:" + $day), actor: "schedule", actor_is_owner: false,
+              delivery_ref: $run_url, source: {kind: "actions", ref: $run_url},
+              data: {repo_checks: $checks, repo_version: $version, sha: $sha}}' > event.json
+          curl -sS --max-time 60 -X POST "$ORCHESTRATOR_BASE_URL/orchestrator/events" \
+            -H "x-api-key: $ORCHESTRATOR_INTAKE_KEY" -H "Content-Type: application/json" \
+            --data-binary @event.json | jq '{run_id, duplicate, outcome, status}' \
+            | tee -a "$GITHUB_STEP_SUMMARY" || echo "Service unreachable; the audit will run at the next schedule or from /admin."

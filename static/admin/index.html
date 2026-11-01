@@ -498,6 +498,26 @@
     </div>
   </div>
 
+  <!-- ── Compliance audit (v1.88.0) — weekly, mechanical, report-only ── -->
+  <div class="panel" id="audit-panel">
+    <div class="panel-header">
+      Compliance audit
+      <span class="orch-filters">
+        <select id="audit-report-select" onchange="auditSelect(this.value)" title="Earlier reports"></select>
+        <button id="audit-run-btn" onclick="auditRun()" title="Run the mechanical checks now (report-only; changes nothing)">Run audit now</button>
+      </span>
+      <span class="panel-badge" id="audit-badge">—</span>
+    </div>
+    <div id="audit-summary" style="padding:10px 16px;font-size:12px;color:var(--text)">Loading…</div>
+    <div id="audit-coverage" style="padding:0 16px 10px;font-size:11px;color:var(--muted)"></div>
+    <div class="table-scroll">
+    <table class="data-table" id="audit-checks-table">
+      <thead><tr><th>Check</th><th>Status</th><th>Severity</th><th>Evidence</th><th>Launch items</th></tr></thead>
+      <tbody id="audit-checks-body"><tr class="empty-row"><td colspan="5">Loading…</td></tr></tbody>
+    </table>
+    </div>
+  </div>
+
   <div class="panel">
     <div class="panel-header">
       Run Log
@@ -861,8 +881,89 @@ async function loadOrchestrator() {
     renderOrchApprovals(approvals);
     renderOrchParked(parked);
     renderOrchRuns(runs);
+    await loadAudit();
   } catch (e) {
     showError("Orchestrator: " + e.message);
+  }
+}
+
+// ── Compliance audit (v1.88.0) ─────────────────────────────────────────────
+// Report-only: "Run audit now" starts the mechanical checks; nothing audited is changed. A failing
+// check opens one audit_flag card in the approval queue above, which links back to its report here.
+let _auditSelected = null;
+
+async function loadAudit(selectId) {
+  const badge = document.getElementById("audit-badge");
+  try {
+    const list = await orchJson("/audit/reports?limit=30");
+    if (list._unavailable) { badge.textContent = "unavailable"; return; }
+    const reports = list.reports || [];
+    const sel = document.getElementById("audit-report-select");
+    const id = selectId || _auditSelected || (reports[0] && reports[0].report_id) || null;
+    _auditSelected = id;
+    sel.innerHTML = reports.map(r =>
+      `<option value="${esc(r.report_id)}" ${r.report_id === id ? "selected" : ""}>${esc(new Date(r.created_at * 1000).toLocaleDateString())} · ${esc(r.status)} · ${esc(r.report_id)}</option>`).join("");
+    if (!id) {
+      badge.textContent = "no report yet";
+      document.getElementById("audit-summary").textContent = "No audit has run yet. Use “Run audit now” or wait for the weekly schedule.";
+      document.getElementById("audit-coverage").textContent = "";
+      document.getElementById("audit-checks-body").innerHTML = '<tr class="empty-row"><td colspan="5">No report</td></tr>';
+      return;
+    }
+    renderAudit(await orchJson("/audit/reports/" + encodeURIComponent(id)));
+  } catch (e) {
+    badge.textContent = "error";
+    document.getElementById("audit-summary").textContent = "Audit unavailable: " + e.message;
+  }
+}
+
+function renderAudit(rep) {
+  const cls = { pass: "pill-green", warn: "pill-amber", fail: "pill-red", "n/a": "pill-blue" };
+  const badge = document.getElementById("audit-badge");
+  badge.textContent = (rep.status || "?").toUpperCase() + " · " + (rep.created_at ? new Date(rep.created_at * 1000).toLocaleDateString() : "");
+  document.getElementById("audit-summary").innerHTML =
+    `<span class="pill ${cls[rep.status] || "pill-blue"}">${esc(rep.status)}</span> ${esc(rep.summary_text || "")}
+     <span style="color:var(--muted);font-size:10px"> (${esc(rep.summary_source || "")})</span>`;
+  const checks = rep.checks || [];
+  const cov = ((checks.find(c => c.id === "audit.coverage") || {}).evidence) || {};
+  const counts = rep.counts || cov.counts || {};
+  const na = Object.entries(cov.na_reasons || {}).map(([k, v]) => `${k} (${v || "n/a"})`);
+  document.getElementById("audit-coverage").textContent =
+    `Coverage: ${counts.pass || 0} pass · ${counts.warn || 0} warn · ${counts.fail || 0} fail · ${counts.n_a != null ? counts.n_a : (counts["n/a"] || 0)} n/a`
+    + ` · disabled: ${(cov.disabled || []).join(", ") || "none"}`
+    + ` · Stripe: ${cov.stripe_configured ? "checked" : "not configured"}`
+    + ` · repo-side checks: ${cov.repo_checks_supplied ? "supplied" : "not supplied"}`
+    + (na.length ? ` · not run: ${na.join("; ")}` : "");
+  const body = document.getElementById("audit-checks-body");
+  if (checks.length === 0) { body.innerHTML = '<tr class="empty-row"><td colspan="5">No checks</td></tr>'; return; }
+  body.innerHTML = checks.map(c => `<tr id="audit-check-${esc(c.id)}">
+      <td class="mono" style="font-size:11px">${esc(c.id)}<div style="color:var(--muted);font-family:inherit">${esc(c.title || "")}</div></td>
+      <td><span class="pill ${cls[c.status] || "pill-blue"}">${esc(c.status)}</span></td>
+      <td style="font-size:11px;color:var(--muted)">${esc(c.severity || "")}</td>
+      <td class="mono" style="font-size:10px;max-width:420px;overflow-wrap:anywhere">${esc(truncate(JSON.stringify(c.evidence || {}), 220))}</td>
+      <td style="font-size:11px">${esc((c.lc || []).join(", "))}</td>
+    </tr>`).join("");
+}
+
+function auditSelect(id) {
+  if (!id) return;
+  loadAudit(id);
+  const panel = document.getElementById("audit-panel");
+  if (panel && panel.scrollIntoView) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function auditRun() {
+  const btn = document.getElementById("audit-run-btn");
+  btn.disabled = true;
+  try {
+    const res = await orchJson("/audit/run", { method: "POST", body: JSON.stringify({}) });
+    if (res._unavailable) { showError("Compliance audit is not initialised"); return; }
+    _auditSelected = res.report_id || null;
+    await loadOrchestrator();
+  } catch (e) {
+    showError("Audit run failed: " + e.message);
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -922,6 +1023,11 @@ function renderOrchApprovals(data) {
     if (a.recipient) artifact += `<div style="font-size:10px;color:var(--muted)">to ${esc(a.recipient)}</div>`;
     if ((a.advisory_tags || []).length) artifact += `<div style="font-size:10px;color:var(--warn)">advisory: ${esc(a.advisory_tags.join(", "))}</div>`;
     if (a.instruction_like) artifact += `<div style="font-size:10px;color:var(--warn)">instruction-like content logged (routing unaffected)</div>`;
+    // v1.88.0 — audit_flag card: which step failed and why (the failing check ids), with a link to the report.
+    if (art.kind === "audit_flag") {
+      if (art.failed_outcome) artifact += `<div style="font-size:11px;color:var(--danger);margin-top:4px">${esc(truncate(art.failed_outcome, 220))}</div>`;
+      if (art.report_id) artifact += `<div style="font-size:11px;margin-top:4px"><a href="#audit-report-${esc(art.report_id)}" onclick="auditSelect('${esc(art.report_id)}')" style="color:var(--accent)">view report ${esc(art.report_id)}</a></div>`;
+    }
     // v1.84.0 — customer escalation card (owner_handoff): priority, category, opaque customer, conversation link.
     let priorityPill = "";
     if (art.kind === "owner_handoff") {
