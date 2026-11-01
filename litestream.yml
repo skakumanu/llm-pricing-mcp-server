@@ -18,3 +18,7 @@ dbs:
   - path: /app/data/orchestrator.db
     replicas:
       - url: ${LITESTREAM_REPLICA_URL}/orchestrator.db
+  # v1.87.0: support conversations (org-attributed, purged after CONVERSATION_RETENTION_DAYS).
+  - path: /app/data/conversations.db
+    replicas:
+      - url: ${LITESTREAM_REPLICA_URL}/conversations.db

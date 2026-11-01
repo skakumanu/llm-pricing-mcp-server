@@ -20,6 +20,7 @@ def _make_customer(**kwargs):
         stripe_customer_id=None,
         stripe_subscription_id=None,
         api_key="test-api-key-abc",
+        api_key_prefix="test-api",
         tier="free",
         org_id="org-abc-123",
         created_at=time.time(),

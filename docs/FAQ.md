@@ -55,7 +55,10 @@ Published answers about the LLM Pricing API service: plans, billing, service key
 ## Legal, privacy and your data
 
 - Published policies: [Terms](/terms), [Privacy](/privacy), [Refunds](/refunds), [Data Processing Addendum](/dpa), [Subprocessors](/subprocessors) and the [Security statement](/security). They are templates awaiting legal review and show a draft notice until the owner marks them in force; paid checkout stays disabled until then.
-- To see, correct or delete the data held about you, ask the support assistant to escalate a data request, or write to the contact address in the Privacy policy. The owner verifies you first.
+- **How to export or delete your data.** You do it yourself with your service key, no email needed. Export: `GET /billing/account/export` with your key in the `x-api-key` header downloads one JSON file with everything held about your organisation (account record, stored provider-key metadata but never the keys, usage, dispatch receipts, budget alerts, routing history and your support conversations). Delete: `POST /billing/account/delete` with the body `{"confirm": "DELETE", "org_id": "<your org id>"}` permanently erases all of it and your key stops working at once. Deletion is irreversible; without the exact confirmation nothing is changed. Details are in the [Privacy policy](/privacy) and the [API docs](/api-docs).
+- A paid subscription is ended immediately when you delete, so no further charge occurs. Deleting within 14 days of your first payment also asks the owner to review a refund; you get a reference, and nothing is refunded automatically.
+- Support conversations you hold with your key are kept against your organisation for 90 days and then purged.
+- To correct data, or if you lost your key, ask the support assistant to escalate a data request, or write to the contact address in the Privacy policy. The owner verifies you first.
 - Security reports are escalated privately through the support assistant and never posted publicly. The Security statement lists what the service does and does not have.
 
 ## Rate limits

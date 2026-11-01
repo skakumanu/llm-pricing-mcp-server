@@ -168,6 +168,26 @@ class UsageTrackerService:
                 pass  # nosec B110 — column already exists, this is intentional
             await db.commit()
 
+    async def list_events(self, org_id: str, limit: int = 100000) -> List[Dict[str, Any]]:
+        """v1.87.0 account export: every usage event of exactly one org, oldest first."""
+        async with _open_db(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT id, org_id, recorded_at, occurred_at, provider, model_name, input_tokens, "
+                "output_tokens, cost_usd, request_id, session_id, is_estimated "
+                "FROM usage_events WHERE org_id = ? ORDER BY occurred_at, id LIMIT ?",
+                (org_id, limit),
+            ) as cur:
+                rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+    async def delete_org(self, org_id: str) -> int:
+        """v1.87.0 account deletion: erase every usage event of one org."""
+        async with _open_db(self._db_path) as db:
+            cur = await db.execute("DELETE FROM usage_events WHERE org_id = ?", (org_id,))
+            await db.commit()
+            return cur.rowcount or 0
+
     async def record_event(
         self,
         provider: str,

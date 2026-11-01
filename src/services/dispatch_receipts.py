@@ -160,6 +160,13 @@ class DispatchReceiptStore:
             await db.commit()
             return cursor.rowcount or 0
 
+    async def delete_org(self, org_id: str) -> int:
+        """v1.87.0 account deletion: erase every receipt of one org."""
+        async with _open_db(self._db_path) as db:
+            cursor = await db.execute("DELETE FROM dispatch_receipts WHERE org_id = ?", (org_id,))
+            await db.commit()
+            return cursor.rowcount or 0
+
     async def list_receipts(
         self,
         org_id: str,

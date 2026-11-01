@@ -44,6 +44,9 @@ CHECKPOINT_KINDS = MANDATORY_CHECKPOINT_KINDS | {"sdlc_run", "step_review"}
 
 # Event types (set by server code) that open a support_escalation run (v1.84.0).
 SUPPORT_ESCALATION_EVENT = "support.escalation"
+# v1.87.0: opened by the account-deletion handler (actor_kind 'account_service') when a paying
+# account is deleted inside the refund window; routed like a support escalation, category refund.
+ACCOUNT_DELETION_EVENT = "account.deletion_refund_review"
 PAYMENT_ESCALATION_EVENTS = ("charge.refunded", "charge.dispute.created", "invoice.payment_failed")
 ESCALATION_CATEGORIES = ("billing_dispute", "refund", "double_charge", "payment_failure", "key_recovery",
                          "bug", "feature", "other")
@@ -353,7 +356,7 @@ def route(trigger_class: str, event_type: str, owner_signals: Dict[str, Any],
 
     # customer_message (v1.84.0): the support agent's escalation hand-off is the one event type
     # that starts a run; everything else on this class stays owner-request-only (owner decision 1).
-    if event_type == SUPPORT_ESCALATION_EVENT:
+    if event_type in (SUPPORT_ESCALATION_EVENT, ACCOUNT_DELETION_EVENT):
         return _if_present("support_escalation", registry)
     return None, "refused:no_route"
 

@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.86.0 | **Last updated**: 2026-10-31
+**Version**: v1.87.0 | **Last updated**: 2026-11-01
 
 Canonical internals reference. Release history lives in `static/whats-new/`, not here.
 
@@ -44,7 +44,7 @@ FastAPI service that aggregates LLM pricing from 30 providers (600+ models) and 
 │ Currency · Dispatch  │ │ SupportBudget  │ │ (runs, approvals, budget)│
 └───────┬──────────────┘ └──────┬─────────┘ └──────────┬──────────────┘
 ┌───────▼───────────────────────▼──────────────────────▼───────────────┐
-│ Data: pricing_history.db · billing.db · orchestrator.db · caches     │
+│ Data: pricing_history · billing · orchestrator · conversations (.db) │
 └───────┬──────────────────────────────────────────────────────────────┘
 ┌───────▼──────────────────────────────────────────────────────────────┐
 │ External: provider pricing/model APIs · reference price registry ·   │
@@ -90,8 +90,11 @@ src/
     dispatch_receipts.py    metadata-only receipts table + org-scoped export
     provider_key_store.py   encrypted per-org provider keys; CompositeKeyResolver
     rate_limiter.py         the one sliding-window store, shared by HTTP and MCP dispatch
-    billing_service.py      customers table (+ billing_status / past_due_since), stripe_events dedup, key rotation,
-                            effective_tier(); Stripe sync
+    billing_service.py      customers table (+ billing_status / past_due_since / first_paid_at; service keys stored as
+                            SHA-256 hash + 8-char prefix, in-place migration), stripe_events dedup, key rotation,
+                            deleted_accounts + billing_meta (suppression marker), cancel_stripe_subscription(),
+                            effective_tier(), within_refund_window(); Stripe sync
+    account_data.py         self-service export + deletion of one org's data across every store (v1.87.0)
     tiers.py                single source of tier copy: prices, rate limits, support allowance, escalation
                             priority, entitlement strings, checkout/portal flags (v1.84.0)
     support_budget.py       per-caller daily LLM caps for the support agent + support_action() audit helper (v1.84.0)
@@ -152,7 +155,7 @@ Checked in this order:
 | 2. Full bypass | OPTIONS, static UIs (incl. `/faq`), the legal pages (`_LEGAL_PAGE_PATHS`: `/terms`, `/privacy`, `/refunds`, `/dpa`, `/subprocessors`, `/security`), `/pricing*`, `/mcp`, `_unauthenticated_paths` (incl. `/billing/config`) | No auth, no limiter; `_public_body_capped_paths` (`/v1/chat/completions`, `/mcp`) still body-capped |
 | 3. Operator key | step 1 + `_sensitive_paths` (`/deployment/shutdown*`, `/admin/customers`, `/admin/stats`, `/admin/rate-limits`) | Global `MCP_API_KEY` in `x-api-key` only (byte compare); 503 if unset. The three orchestrator executor routes (POST `/orchestrator/events`, GET `…/runs/{id}/actions`, POST `…/actions/{aid}/result`) also accept `ORCHESTRATOR_INTAKE_KEY`; it unlocks nothing else, but on those routes it carries the executor's owner assertion for GitHub events, so a `pull_request.opened` continuation is additionally bound to the repository the run was created from (`refused:repo_mismatch` otherwise) |
 | 4. Anonymous, rate-limited | `/agent/chat*`, `/support/chat`, `/support/escalations/status`, `/billing/signup`, POST `/pricing/alerts`, `/pricing/alerts/self/*`, `/cost-estimate*` | Per-IP limit + body cap; a customer key on `/cost-estimate*` and `/support/*` gets its tier limit (the support handlers resolve identity themselves via `_resolve_mcp_caller`) |
-| 5. Service key | everything else (incl. `/billing/me`, `/billing/key/rotate`) | Billing customer key (tier from DB) or global key; 401 otherwise |
+| 5. Service key | everything else (incl. `/billing/me`, `/billing/key/rotate`, `/billing/account/export`, `/billing/account/delete`) | Billing customer key (tier from DB) or global key; 401 otherwise |
 
 - Rate limit: 60 s sliding window per bucket (customer id, else `ip:tier`); free / pro / enterprise = 30 / 120 / 600 req/min. The tier is the **effective** tier (`billing_service.effective_tier`): a `past_due` customer past `BILLING_PAST_DUE_GRACE_DAYS` is served as free.
 - `X-Api-Key-Tier` is honoured only alongside a valid global key.
@@ -201,6 +204,8 @@ message → react_loop (think → tool → observe; system_prompt per agent) →
 - `POST /billing/signup` → new customer row → service key shown once (409 for an existing email).
 - `POST /billing/checkout` → Stripe session; `GET /billing/portal` → Stripe customer portal (cancel, card, invoices). Checkout returns 503 without `STRIPE_SECRET_KEY` or while the legal pages are not live, and the portal without Stripe; both with a "not enabled on this server" detail; signup, the dashboard and support still work.
 - `POST /billing/key/rotate` (current key) and `POST /admin/customers/{id}/key/rotate` (operator) → `rotate_api_key()`; the new key is shown once, the old one stops at once; action `billing.key_rotate` (actor `customer` | `owner`).
+- **Account data rights (v1.87.0, `services/account_data.py`):** `GET /billing/account/export` returns one JSON document (account, provider-key metadata only, usage events, dispatch receipts, budget alerts, routing savings + feedback, support conversations; per-table cap with a `truncated` flag). `POST /billing/account/delete` with `{confirm: "DELETE", org_id}` (both must match the caller, else 400 and nothing changes) runs in a fixed order: Stripe subscription cancelled **first** (any failure other than "already cancelled" is 502, subscription with Stripe unconfigured is 503, nothing deleted), then pricing_history.db rows, conversations and provider keys, then the `customers` row and a `deleted_accounts` suppression marker (timestamp + HMAC-SHA256 of the lower-cased email with the per-database salt in `billing_meta`) in one billing.db transaction, so the service key dies last and a mid-way failure is retryable. Both need a customer key (anonymous and operator-only are 401). Inside `BILLING_REFUND_WINDOW_DAYS` of `first_paid_at` (unknown counts as inside) it opens a `support_escalation` run via the event `account.deletion_refund_review` (trigger class `customer_message`, trusted only from `actor_kind` `account_service`) and returns its reference; no money moves. Audit actions `billing.account_export` / `billing.account_delete` target `org:<8>`, never the email. Re-signup after deletion is allowed.
+- **Service keys are hashed (v1.87.0):** `customers` stores `api_key_hash` (SHA-256 hex, unique) and `api_key_prefix` (8 chars); the legacy `api_key` column holds only a `hashed:<id>` placeholder (its NOT NULL constraint cannot be dropped in place). `get_customer_by_api_key` hashes the presented key. `initialize()` runs `migrate_plaintext_keys()` (idempotent, logs counts). Creation and rotation return the plaintext once; `/admin/customers` and `/billing/me` show the prefix.
 - `/billing/me` adds `effective_tier`, `billing_status`, `past_due_since`, `rate_limit_per_minute`.
 - `POST /billing/webhook` → verify signature → `record_stripe_event(event.id)` (duplicate → `{ok, duplicate: true}`, nothing else) → state machine → one `billing.<event type>` action record (outcome `applied… | ignored | duplicate | escalated…`). If applying the event raises, the id is forgotten again (`forget_stripe_event`) and the handler returns 500 so Stripe's retry is processed rather than treated as a duplicate. A `charge.dispute.created` object has no `customer`; the handler reads it from the disputed Charge (`stripe.Charge.retrieve`):
 
@@ -282,7 +287,7 @@ trigger (GitHub event · schedule · owner request · support escalation · Stri
   failure / block / deadline / max steps → status parked (reason + prior outputs); owner resumes or closes
   result ∈ {done, awaiting_owner, failed, deliberately_not_done}; public_summary is a template
 ```
-- **Workflows (code, `orchestrator_workflows.py`)**: `github_accepted_bug` (intake → annotate → `sdlc_run` checkpoint → one status comment), `release_notes_draft` and `support_triage` (specialist missing → forced `dry_run`, owner checkpoint "do manually or skip"; `support_triage` is also the ledger workflow id for live support-chat spend), `support_escalation` (v1.84.0: intake → mandatory `owner_handoff` checkpoint; trigger classes `customer_message` with event `support.escalation`, `payment_event` with `charge.refunded` / `charge.dispute.created` / `invoice.payment_failed`, `owner_request`), `weekly_price_audit` (parks on any failed job). `validate_registry()` runs at import and rejects `FORBIDDEN_ACTIONS` (`merge_pr`, `refund`, `charge`, `send_email`, `publish`, `push_branch`, `grant_permission`); the only executor action kind is `github_issue_comment_upsert`.
+- **Workflows (code, `orchestrator_workflows.py`)**: `github_accepted_bug` (intake → annotate → `sdlc_run` checkpoint → one status comment), `release_notes_draft` and `support_triage` (specialist missing → forced `dry_run`, owner checkpoint "do manually or skip"; `support_triage` is also the ledger workflow id for live support-chat spend), `support_escalation` (v1.84.0: intake → mandatory `owner_handoff` checkpoint; trigger classes `customer_message` with event `support.escalation` (from the support agent) or `account.deletion_refund_review` (v1.87.0, from the account service only), `payment_event` with `charge.refunded` / `charge.dispute.created` / `invoice.payment_failed`, `owner_request`), `weekly_price_audit` (parks on any failed job). `validate_registry()` runs at import and rejects `FORBIDDEN_ACTIONS` (`merge_pr`, `refund`, `charge`, `send_email`, `publish`, `push_branch`, `grant_permission`); the only executor action kind is `github_issue_comment_upsert`.
 - **Support escalations (v1.84.0)**: dedup `msg:<conversation_id>` (one run per support conversation; a second attempt attaches and returns the same reference) or `stripe:<event id>`; actor kinds `support_agent` / `stripe`; structured inputs `category`, `priority`, `tier`, `identified`, `customer_ref` (org prefix), `conversation_ref`, `suggested_reply` (redacted, ≤ 500). The `owner_handoff` artifact is `{kind, label, priority, body (redacted ≤ 500), customer {identified, org_ref}, conversation_ref, instruction_like, suggested_reply}`; decisions are `done_manually` (with a reply note the customer can read) or `reject`, never `approve`; `approval_queue()` adds `priority` and sorts enterprise > pro > standard, then newest. `public_escalation_view(run_id)` → `{reference, status, owner_reply}` is all a customer ever sees (`POST /support/escalations/status`, `check_escalation`). No email, key or Stripe id reaches an artifact, event or action record.
 - **Support spend**: `record_agent_spend()` writes every support LLM call to `orch_spend` (`run_id conv:<id>`, workflow `support_triage`, default `budget.workflow_monthly_usd.support_triage` = 40); `budget_gate(workflow_id)` (factored out of `check_budget`) is asked before every call, so the global 150 USD/month ceiling and the /admin budget bars cover support. Action records written outside a run: `support.answer` (outcome `answered | fallback_cap | fallback_disabled | error`), `support.cap_hit`, `support.account_read`, `support.escalation`, `support.escalation_status`, `billing.key_rotate`, `billing.<stripe event>`.
 - **SDLC wrap**: the checkpoint shows `/release-feature Fix issue #N (orchestrator run orc_…)`; the skill stamps `Orchestrator-Run:` into the PR footer; `pull_request: opened` (same repo, owner) completes the checkpoint and approves the templated status comment (`decided_by: github_pr_marker`); the PR URL must be in the repository recorded on the run and match the event's PR number, so a leaked intake key cannot attach a foreign link. Merging stays the owner's.
@@ -320,11 +325,11 @@ Pages: `/` (landing), `/chat` (Pricing | Support toggle; the optional service ke
 | DB | Tables | Notes |
 |---|---|---|
 | `pricing_history.db` | `pricing_snapshots`, `routing_savings`, `routing_feedback`, `usage_events`, `pricing_alerts`, `budget_alerts`, `dispatch_receipts` | Receipts are metadata only, purged after 90 days |
-| `billing.db` | `customers` (+ `billing_status`, `past_due_since` since v1.84.0), `stripe_events` (event-id dedup), `provider_keys` | Provider keys stored as ciphertext + last-4 fingerprint; new columns added by a `PRAGMA table_info`-guarded `ALTER TABLE` |
-| `CONVERSATION_DB_PATH` (optional) | `conversations` | Unset on Fly → in-memory. Support turns (`sup-…` ids) are stored with secrets redacted; the customer's own email is kept (operator-only view) |
+| `billing.db` | `customers` (+ `billing_status`, `past_due_since` since v1.84.0; `api_key_hash`, `api_key_prefix`, `first_paid_at` since v1.87.0), `stripe_events` (event-id dedup), `provider_keys`, `deleted_accounts` (suppression markers), `billing_meta` (per-database salt) | Provider keys stored as ciphertext + last-4 fingerprint; new columns added by a `PRAGMA table_info`-guarded `ALTER TABLE` |
+| `conversations.db` (`CONVERSATION_DB_PATH`) | `conversations` (+ nullable `org_id`, index on `(org_id, updated_at)` since v1.87.0) | Set to `/app/data/conversations.db` on Fly and replicated (unset locally → in-memory). Support turns (`sup-…` ids) are stored with secrets redacted; conversations of identified customers are attributed to their org (never detached by a later anonymous turn). Purged after `CONVERSATION_RETENTION_DAYS` (90; `<= 0` disables) at startup and after saves; erased with the account |
 | `orchestrator.db` (`ORCHESTRATOR_DB_PATH`) | `orch_runs`, `orch_steps`, `orch_events`, `orch_approvals`, `orch_actions`, `orch_spend`, `orch_settings` | Rows purged after `ORCHESTRATOR_RUN_RETENTION_DAYS` (365); redacted I/O summaries nulled after `ORCHESTRATOR_IO_RETENTION_DAYS` (90); `orch_actions` is append-only |
 
-- All `.db` files are gitignored and live on the Fly volume (`/app/data`). `billing.db`, `pricing_history.db` and `orchestrator.db` are replicated continuously to S3-compatible storage by Litestream (v1.86.0; `litestream.yml`, restore in `docs/DEPLOYMENT.md`); `scripts/check_replication.py` fails the build if a new `*_db_path` database is not on the volume and in `litestream.yml`. The mount hides the image's
+- All `.db` files are gitignored and live on the Fly volume (`/app/data`). `billing.db`, `pricing_history.db`, `orchestrator.db` and `conversations.db` are replicated continuously to S3-compatible storage by Litestream (v1.86.0; `litestream.yml`, restore in `docs/DEPLOYMENT.md`); `scripts/check_replication.py` fails the build if a new `*_db_path` database is not on the volume and in `litestream.yml`. The mount hides the image's
   `data/` tree, so the registry snapshot, registry-sourced model files and exchange-rate table are read
   from the Dockerfile's copy under `/app/vendored` (`PRICE_SNAPSHOT_PATH`, `REGISTRY_MODELS_DIR`,
   `EXCHANGE_RATES_PATH`; startup logs the registry-sourced model count, v1.84.1).
@@ -368,6 +373,8 @@ Auth: **None** = public · **Rate-limited** = anonymous, per-IP limit + body cap
 | POST | `/billing/signup` | Rate-limited | Free-tier signup |
 | GET/POST | `/billing/me`, `/billing/checkout`, `/billing/portal` | Service key | Dashboard (+ `effective_tier`, `billing_status`), Stripe checkout/portal (503 without Stripe) |
 | POST | `/billing/key/rotate` | Customer key | Rotate own service key (shown once) |
+| GET | `/billing/account/export` | Customer key | Download everything held about the caller's org (JSON; never keys) |
+| POST | `/billing/account/delete` | Customer key | Irreversibly delete the caller's account and data; body `{confirm: "DELETE", org_id}`; ends any Stripe subscription first |
 | POST | `/billing/webhook` | Stripe signature | Subscription + payment-event sync (see Billing table); duplicates ignored |
 | GET | `/admin/stats`, `/admin/rate-limits`, `/admin/customers` | Operator key | Admin data |
 | POST | `/admin/customers/{id}/key/rotate` | Operator key | Owner-side key rotation (shown once, audited) |
@@ -391,7 +398,7 @@ Auth: **None** = public · **Rate-limited** = anonymous, per-IP limit + body cap
 PR to develop/master, push to master  (ci-cd.yml)
   test · lint (flake8) · osv_scan · security (bandit) · secret_scan (gitleaks)   (the five deploy gates)
 PR to master/develop + weekly → codeql.yml (python code scanning; additional, not a deploy gate)
-weekly → .github/dependabot.yml opens grouped minor+patch PRs for pip and github-actions (never auto-merged)
+weekly → .github/dependabot.yml opens grouped minor+patch PRs for pip and github-actions against develop (never auto-merged)
     └─ all pass on a master push → deploy_fly → /health version must match src/__init__.py
          └─ confirmed → tag vX.Y.Z + GitHub Release (notes = that version's What's New entry,
             via scripts/release_notes_from_whats_new.py; idempotent, skipped on an unconfirmed deploy)
