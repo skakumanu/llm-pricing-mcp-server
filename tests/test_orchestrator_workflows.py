@@ -40,7 +40,8 @@ class TestRegistryValidation:
         wf.validate_registry(wf.WORKFLOWS)
         assert set(wf.WORKFLOWS) == {"github_accepted_bug", "release_notes_draft", "support_triage",
                                      "weekly_price_audit", "support_escalation",
-                                     "compliance_audit"}  # v1.84.0: + support_escalation; v1.88.0: + compliance_audit
+                                     "compliance_audit",
+                                     "document_generate"}  # v1.84.0: + support_escalation; v1.88.0: + compliance_audit; v1.89.0: + document_generate
         for w in wf.WORKFLOWS.values():
             assert 1 <= len(w.steps) <= wf.MAX_STEPS
 
@@ -233,6 +234,24 @@ class TestModes:
         assert w.step("review_report").requires == ("run_checks",) and w.step("executive_summary").requires == ()
         assert w.per_run_budget_usd == 0.25 and w.monthly_budget_usd == 5.0
         assert w.step("run_checks").timeout_s == 180
+
+    def test_document_generate_definition(self):
+        """v1.89.0: the LLM draft is made inside a deterministic step; the last gate is the publish checkpoint."""
+        w = wf.WORKFLOWS["document_generate"]
+        assert w.specialist_available and w.trigger_classes == ("owner_request",)
+        assert [s.name for s in w.steps] == ["gather", "draft", "verify_render", "owner_review", "publish"]
+        assert [s.kind for s in w.steps] == ["deterministic"] * 3 + ["checkpoint", "deterministic"]
+        assert w.step("owner_review").checkpoint_kind == "publish"
+        assert all(s.action is None for s in w.steps)  # nothing can be sent anywhere
+        assert w.step("draft").requires == ("gather",) and w.step("publish").requires == ("owner_review",)
+        assert w.per_run_budget_usd == 2.0 and w.monthly_budget_usd == 20.0
+
+    def test_document_generate_routes_for_owner_only(self):
+        sig = {"actor_is_owner": True, "workflow_id": "document_generate"}
+        assert wf.route("owner_request", "document_generate", sig) == ("document_generate", "routed")
+        assert wf.route("owner_request", "document_generate", {**sig, "actor_is_owner": False}) == (None, "refused:not_owner")
+        assert wf.route("schedule", "document_generate", {}) == (None, "refused:no_route")
+        assert wf.route("github_event", "push.master", {"actor_is_owner": True})[0] == "release_notes_draft"
 
     def test_mandatory_kinds(self):
         assert wf.MANDATORY_CHECKPOINT_KINDS == {"merge", "money", "outbound", "publish", "audit_flag",

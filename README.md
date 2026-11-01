@@ -133,6 +133,10 @@ The chat agent binds 27 of the 32 MCP tools (all except `ask_agent`, `support_ch
 - A weekly (Mondays 07:00 UTC, `compliance-audit.yml`) and on-demand mechanical audit of the whole system: legal placeholders and the legal-live gate, Litestream coverage of every database, production secret presence (names only), version consistency, data-quality regression against the previous report, the weekly price audit, orchestrator budget, service-key hashing, Stripe reconciliation when `STRIPE_AUDIT_KEY` is set, and the launch checklist's "done" items. It is report-only (changes nothing audited), makes no legal-compliance claim, and opens an owner approval only when a check fails.
 - `POST /audit/run`, `GET /audit/reports`, `GET /audit/reports/{id}` (`latest` alias) and a Compliance audit panel on `/admin`. Reports hold counts, file and setting names and opaque prefixes, never emails, keys or Stripe ids.
 
+### Document agent (operator-only, v1.89.0)
+- Owner-requested decks, one-pagers, release briefs and status reports from a closed four-type catalogue (`release_notes_brief`, `pricing_comparison_deck`, `pricing_one_pager`, `internal_status_report`). Every figure comes from a product data call made during the generation and is recorded in a provenance manifest; every number in the text is cross-checked against it (untraceable numbers are removed and counted); each price carries its `price_as_of` and a status label, and models without a usable price show "price not available" and stay out of rankings and charts.
+- `GET /documents/types`, `POST /documents/generate`, `GET /documents/artifacts`, `GET /documents/artifacts/{id}` and `.../download?format=html|md` (self-contained printable HTML, or Markdown), plus a Documents panel on `/admin`. One bounded drafting call per document (`claude-haiku-5-5` by default, `claude-sonnet-5-5` on request) with a labelled data-only fallback; each document waits for the owner's publish approval. Nothing is sent anywhere, no MCP tool exposes it, and customer-visible behaviour is unchanged.
+
 ---
 
 ## Access and keys
@@ -141,7 +145,7 @@ The chat agent binds 27 of the 32 MCP tools (all except `ask_agent`, `support_ch
 |---|---|---|
 | Public | Anyone | Pricing, estimates, data quality, history, registering a price alert, the chat agent, the support assistant in general mode: 19 public MCP tools + the identity-aware `support_chat` |
 | Service key | You (free: `POST /billing/signup`) | Usage/budget tools and endpoints, router, `dispatch`, `/dispatch/keys`, `/billing/me`, `/billing/key/rotate`, `/billing/account/export`, `/billing/account/delete`; acts only on your own org, and `support_chat` / `POST /support/chat` can describe your own account |
-| Operator key | Server operator (`MCP_API_KEY`) | Listing/deleting all price alerts and conversations, admin customer list and owner-side key rotation (`/admin/customers/{id}/key/rotate`), every `/orchestrator/*` and `/audit/*` route |
+| Operator key | Server operator (`MCP_API_KEY`) | Listing/deleting all price alerts and conversations, admin customer list and owner-side key rotation (`/admin/customers/{id}/key/rotate`), every `/orchestrator/*`, `/audit/*` and `/documents/*` route |
 | Intake key | GitHub Actions executor (`ORCHESTRATOR_INTAKE_KEY`) | Only `POST /orchestrator/events`, `GET /orchestrator/runs/{id}/actions`, `POST …/actions/{aid}/result`; it carries the workflow's owner assertion for GitHub events, so treat it as a secret |
 
 - Send keys as `x-api-key: <your-key>` (MCP also accepts `Authorization: Bearer <your-key>`).
@@ -168,6 +172,8 @@ Set via environment variables or `.env`. An unknown key in `.env` stops startup 
 | `STRIPE_AUDIT_KEY` | Restricted read-only Stripe key (Customers, Subscriptions, Webhook Endpoints: read) for the compliance audit's Stripe reconciliation; unset = those checks report n/a (v1.88.0) |
 | `AUDIT_LLM_SUMMARY` / `AUDIT_SUMMARY_MODEL` | Optional one-call executive summary of each audit report (default off; model `claude-haiku-5-5`); spend lands in the orchestrator ledger under `compliance_audit` |
 | `AUDIT_REPORT_RETENTION_DAYS` / `AUDIT_ESCALATION_MAX_AGE_DAYS` / `AUDIT_STALE_PRICE_PCT_WARN` / `AUDIT_DISABLED_CHECKS` | Audit report retention (365), escalation age warning (7 days), stale-price warning (10 %), and a comma list of check ids reported as n/a "disabled" |
+| `DOCS_DEFAULT_MODEL` / `DOCS_PREMIUM_MODEL` | Models for the document writer's one drafting call (`claude-haiku-5-5`, and `claude-sonnet-5-5` when a request sets `premium`); spend lands in the orchestrator ledger under `document_generate` (v1.89.0) |
+| `DOCS_ARTIFACT_RETENTION_DAYS` / `DOCS_DATA_ONLY_DEFAULT` | Stored document artefacts are purged after this many days (30); `true` = templated prose and no model call unless a request says otherwise |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_ID_PRO` / `STRIPE_PRICE_ID_ENTERPRISE` | Paid tiers; checkout, portal and webhook stay 503 until set, and checkout also waits for the legal pages to be in force (`GET /billing/config` reports `checkout_disabled_reason`) |
 | `LEGAL_PAGES_LIVE` | Marks the legal pages in force (default false). Even when true, a remaining `[PLACEHOLDER]` in `docs/legal/` keeps the pages draft and checkout disabled |
 | `CONVERSATION_DB_PATH` / `CONVERSATION_RETENTION_DAYS` | Support conversations are stored per organisation in this SQLite file (`/app/data/conversations.db` on Fly, replicated) and purged after the retention days (90; `<= 0` disables). Unset path = in memory (v1.87.0) |
@@ -189,7 +195,7 @@ Full list: `src/config/settings.py`. Production settings: [docs/DEPLOYMENT.md](d
 pytest tests/ -q
 ```
 
-- 3930 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy); CodeQL and Dependabot run as additional scanners
+- 4063 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy); CodeQL and Dependabot run as additional scanners
 - Git Flow: `feature/*` → `develop` → `master`. See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 - Internals, services, data stores and CI: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Deploys to Fly.io from `master` when all CI gates pass: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
