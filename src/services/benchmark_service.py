@@ -35,9 +35,21 @@ STATIC_SCORES: Dict[str, float] = {
     "o3-mini": 85,
     "o1-preview": 91,
     # Anthropic
+    # Claude 5.x (v1.89.1): tier-relative scores placed from the public launch figures
+    # (SWE-bench Pro: Opus 5.5 89.9 vs Sonnet 5.5 81.3; Humanity's Last Exam: Fable 5.1
+    # 60.9 vs Opus 5 56.6; Haiku 5.5 beats the previous Opus/Sonnet on APEX-SWE), so each
+    # 5.x model ranks above its 4.x predecessor and the family order is preserved. Until
+    # these were listed, every 5.x model had quality_score=None and the router ranked the
+    # ten-times-dearer claude-haiku-4-5 above claude-haiku-5-5.
+    "claude-mythos-5-1": 96,
+    "claude-fable-5-1": 95,
+    "claude-opus-5-5": 92,
+    "claude-sonnet-5-5": 86,
+    "claude-haiku-5-5": 76,
     "claude-opus-4-6": 90,
     "claude-sonnet-4-6": 82,
     "claude-haiku-4-5-20251001": 72,
+    "claude-haiku-4-5": 72,  # registry key without the date suffix never partial-matched the line above
     "claude-3-opus-20240229": 88,
     "claude-3-sonnet-20240229": 79,
     "claude-3-haiku-20240307": 68,

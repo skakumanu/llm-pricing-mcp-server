@@ -49,6 +49,23 @@ def test_lookup_static_unknown():
     assert _lookup_static("totally-unknown-xyz-model-9999") is None
 
 
+def test_claude_5x_family_is_scored_and_ordered():
+    """v1.89.1: the Claude 5.x models this repo's sessions run must have a score, each above
+    its 4.x predecessor and in family order, so the router stops preferring the ten-times
+    dearer claude-haiku-4-5 over claude-haiku-5-5 (which had quality_score=None)."""
+    haiku, sonnet, opus, fable = (
+        _lookup_static("claude-haiku-5-5"), _lookup_static("claude-sonnet-5-5"),
+        _lookup_static("claude-opus-5-5"), _lookup_static("claude-fable-5-1"),
+    )
+    assert None not in (haiku, sonnet, opus, fable)
+    assert haiku < sonnet < opus < fable <= 100
+    assert haiku > _lookup_static("claude-haiku-4-5-20251001")
+    assert sonnet > _lookup_static("claude-sonnet-4-6")
+    assert opus > _lookup_static("claude-opus-4-6")
+    # The undated registry key for Haiku 4.5 is scored too (it never partial-matched the dated key).
+    assert _lookup_static("claude-haiku-4-5") == _lookup_static("claude-haiku-4-5-20251001")
+
+
 # ---------------------------------------------------------------------------
 # quality_score / quality_value_score on PricingMetrics
 # ---------------------------------------------------------------------------
