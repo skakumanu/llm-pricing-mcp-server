@@ -182,6 +182,18 @@ class Settings(BaseSettings):
     orchestrator_run_retention_days: int = 365   # run / step / event / approval / action rows
     orchestrator_io_retention_days: int = 90     # redacted I/O summaries nulled past this age
 
+    # Compliance audit agent (v1.88.0). Weekly, mechanical, report-only (src/services/audit_*.py);
+    # reports live in orchestrator.db. STRIPE_AUDIT_KEY is a DISTINCT restricted READ-ONLY Stripe key
+    # (Customers:read, Subscriptions:read, Webhook Endpoints:read) used only for reconciliation;
+    # unset = every stripe.* check reports n/a "not configured". SecretStr so a repr never shows it.
+    stripe_audit_key: Optional[SecretStr] = None
+    audit_llm_summary: bool = False                 # one optional bounded executive-summary call
+    audit_summary_model: str = "claude-haiku-5-5"   # model for that call (spend: orch_spend, compliance_audit)
+    audit_report_retention_days: int = 365          # reports (and their check rows) purged past this age
+    audit_escalation_max_age_days: int = 7          # open owner escalations older than this -> warn
+    audit_stale_price_pct_warn: float = 10.0        # stale confirmed prices above this % -> warn
+    audit_disabled_checks: str = ""                 # comma list of check ids reported n/a "disabled"
+
     # v1.82.1: back to "forbid" so an unknown .env key fails at startup instead of being
     # silently ignored; retired keys are filtered out first (RETIRED_ENV_KEYS). Process
     # environment variables were never affected: only names matching a field are read.

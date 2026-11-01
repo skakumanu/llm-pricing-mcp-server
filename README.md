@@ -129,6 +129,10 @@ The chat agent binds 27 of the 32 MCP tools (all except `ask_agent`, `support_ch
 - `/orchestrator/*` plus an Orchestrator block on `/admin`: approval queue, parked runs, run log (CSV), global pause, per-workflow mode, budgets. Nothing merges, moves money or sends anything without a recorded approval.
 - The SDLC pipeline is wrapped as an owner checkpoint: the queue shows the exact `/release-feature` command; the PR it opens completes the run and posts one status comment on the issue.
 
+### Compliance audit (operator-only, v1.88.0)
+- A weekly (Mondays 07:00 UTC, `compliance-audit.yml`) and on-demand mechanical audit of the whole system: legal placeholders and the legal-live gate, Litestream coverage of every database, production secret presence (names only), version consistency, data-quality regression against the previous report, the weekly price audit, orchestrator budget, service-key hashing, Stripe reconciliation when `STRIPE_AUDIT_KEY` is set, and the launch checklist's "done" items. It is report-only (changes nothing audited), makes no legal-compliance claim, and opens an owner approval only when a check fails.
+- `POST /audit/run`, `GET /audit/reports`, `GET /audit/reports/{id}` (`latest` alias) and a Compliance audit panel on `/admin`. Reports hold counts, file and setting names and opaque prefixes, never emails, keys or Stripe ids.
+
 ---
 
 ## Access and keys
@@ -137,7 +141,7 @@ The chat agent binds 27 of the 32 MCP tools (all except `ask_agent`, `support_ch
 |---|---|---|
 | Public | Anyone | Pricing, estimates, data quality, history, registering a price alert, the chat agent, the support assistant in general mode: 19 public MCP tools + the identity-aware `support_chat` |
 | Service key | You (free: `POST /billing/signup`) | Usage/budget tools and endpoints, router, `dispatch`, `/dispatch/keys`, `/billing/me`, `/billing/key/rotate`, `/billing/account/export`, `/billing/account/delete`; acts only on your own org, and `support_chat` / `POST /support/chat` can describe your own account |
-| Operator key | Server operator (`MCP_API_KEY`) | Listing/deleting all price alerts and conversations, admin customer list and owner-side key rotation (`/admin/customers/{id}/key/rotate`), every `/orchestrator/*` route |
+| Operator key | Server operator (`MCP_API_KEY`) | Listing/deleting all price alerts and conversations, admin customer list and owner-side key rotation (`/admin/customers/{id}/key/rotate`), every `/orchestrator/*` and `/audit/*` route |
 | Intake key | GitHub Actions executor (`ORCHESTRATOR_INTAKE_KEY`) | Only `POST /orchestrator/events`, `GET /orchestrator/runs/{id}/actions`, `POST …/actions/{aid}/result`; it carries the workflow's owner assertion for GitHub events, so treat it as a secret |
 
 - Send keys as `x-api-key: <your-key>` (MCP also accepts `Authorization: Bearer <your-key>`).
@@ -161,6 +165,9 @@ Set via environment variables or `.env`. An unknown key in `.env` stops startup 
 | `ORCHESTRATOR_DB_PATH` | Orchestrator SQLite file (runs, approvals, action records, spend, settings) |
 | `ORCHESTRATOR_INTAKE_KEY` | Separate credential for the GitHub Actions executor; accepted on three routes only |
 | `ORCHESTRATOR_RUN_RETENTION_DAYS` / `ORCHESTRATOR_IO_RETENTION_DAYS` | Orchestrator retention: rows (365) and redacted I/O summaries (90) |
+| `STRIPE_AUDIT_KEY` | Restricted read-only Stripe key (Customers, Subscriptions, Webhook Endpoints: read) for the compliance audit's Stripe reconciliation; unset = those checks report n/a (v1.88.0) |
+| `AUDIT_LLM_SUMMARY` / `AUDIT_SUMMARY_MODEL` | Optional one-call executive summary of each audit report (default off; model `claude-haiku-5-5`); spend lands in the orchestrator ledger under `compliance_audit` |
+| `AUDIT_REPORT_RETENTION_DAYS` / `AUDIT_ESCALATION_MAX_AGE_DAYS` / `AUDIT_STALE_PRICE_PCT_WARN` / `AUDIT_DISABLED_CHECKS` | Audit report retention (365), escalation age warning (7 days), stale-price warning (10 %), and a comma list of check ids reported as n/a "disabled" |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_ID_PRO` / `STRIPE_PRICE_ID_ENTERPRISE` | Paid tiers; checkout, portal and webhook stay 503 until set, and checkout also waits for the legal pages to be in force (`GET /billing/config` reports `checkout_disabled_reason`) |
 | `LEGAL_PAGES_LIVE` | Marks the legal pages in force (default false). Even when true, a remaining `[PLACEHOLDER]` in `docs/legal/` keeps the pages draft and checkout disabled |
 | `CONVERSATION_DB_PATH` / `CONVERSATION_RETENTION_DAYS` | Support conversations are stored per organisation in this SQLite file (`/app/data/conversations.db` on Fly, replicated) and purged after the retention days (90; `<= 0` disables). Unset path = in memory (v1.87.0) |
@@ -182,7 +189,7 @@ Full list: `src/config/settings.py`. Production settings: [docs/DEPLOYMENT.md](d
 pytest tests/ -q
 ```
 
-- 3813 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy); CodeQL and Dependabot run as additional scanners
+- 3930 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy); CodeQL and Dependabot run as additional scanners
 - Git Flow: `feature/*` → `develop` → `master`. See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 - Internals, services, data stores and CI: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Deploys to Fly.io from `master` when all CI gates pass: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

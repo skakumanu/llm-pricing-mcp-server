@@ -127,6 +127,8 @@ _NO_APPROVE_KINDS = frozenset({"owner_handoff"})
 _FINISHED_STEP_STATUSES = _OK_STEP_STATUSES | {"skipped_dry_run", "skipped_by_owner", "failed"}
 _INPUT_KEYS = ("issue_number", "labels", "label", "pr_number", "pr_url", "sha", "jobs", "org_id", "repo",
                "orchestrator_run_id", "customer_ref",
+               # v1.88.0 compliance audit (bounded status dict + versions posted by compliance-audit.yml)
+               "repo_checks", "repo_version",
                # v1.84.0 support escalations (all set by server code, never by customer text)
                "category", "priority", "tier", "conversation_ref", "identified", "suggested_reply")
 _SUPPORT_STR_KEYS = ("category", "priority", "tier", "conversation_ref")
@@ -200,6 +202,13 @@ def _pick_inputs(data: Dict[str, Any]) -> Dict[str, Any]:
             out["jobs"] = {str(k)[:60]: str(v)[:30] for k, v in list(out["jobs"].items())[:30]}
         else:
             out.pop("jobs")
+    if "repo_checks" in out:
+        if isinstance(out["repo_checks"], dict):
+            out["repo_checks"] = {str(k)[:60]: str(v)[:30] for k, v in list(out["repo_checks"].items())[:30]}
+        else:
+            out.pop("repo_checks")
+    if "repo_version" in out:
+        out["repo_version"] = str(out["repo_version"])[:20]
     return out
 
 
@@ -733,7 +742,11 @@ class OrchestratorService:
                     return  # an external action is with its executor
                 if any(s["status"] == "waiting_approval" for s in steps):
                     return  # a checkpoint is with the owner
-                await self._finish(run, "failed" if any(s["status"] == "failed" for s in steps) else "done")
+                # A step that failed only by its own gate verdict was reviewed (the owner overrode it at the
+                # audit_flag checkpoint, or the run would still be waiting), so it does not fail the run.
+                hard_failed = any(s["status"] == "failed" and not str(s.get("outcome") or "").startswith("gate_failed:")
+                                  for s in steps)
+                await self._finish(run, "failed" if hard_failed else "done")
                 return
             now = self.clock()
             if run["step_count"] >= run["max_steps"]:
@@ -1053,6 +1066,14 @@ class OrchestratorService:
         """A prerequisite (e.g. the audit gate) failed: park at an audit_flag owner checkpoint (AC3)."""
         artifact = {"kind": "audit_flag", "label": f"prerequisite {failed_req} failed before {step['name']}",
                     "blocked_step": step["name"], "failed_step": failed_req}
+        # v1.88.0: data only. The failed step's own outcome (e.g. the audit's failing check ids) and, when
+        # the run produced a report, its id, so the owner's card can link to the evidence.
+        failed_row = next((s for s in await self.store.get_steps(run["run_id"]) if s["name"] == failed_req), None)
+        if failed_row is not None and failed_row.get("outcome"):
+            artifact["failed_outcome"] = wfdef.redact_untrusted_text(str(failed_row["outcome"]))[:300]
+        report_id = (run.get("summary_json") or {}).get("report_id")
+        if isinstance(report_id, str) and report_id:
+            artifact["report_id"] = report_id[:40]
         approval, is_new = await self.ensure_approval(run["run_id"], step["step_id"], "audit_flag", artifact, None)
         now = self.clock()
         await self.store.update_step(step["step_id"], status="waiting_approval", started_at=now,

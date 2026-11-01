@@ -155,8 +155,31 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.87.0 -->
+  <!-- v1.88.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.88.0</span>
+      <span class="release-date">Nov 1, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Compliance audit: weekly, mechanical, report-only</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong>An independent weekly audit of the whole service, for the operator.</strong> Every Monday (and on demand from the admin console) the service runs a fixed set of mechanical checks and stores a report: legal placeholders and the legal-live gate, that every database is in the backup configuration, that production secrets are set (names only, never values), version consistency, that the data-quality figures have not regressed since the last report, that the weekly price audit ran, orchestrator budget, old escalations, that every service key is stored hashed, and, when a restricted read-only Stripe key is configured, a reconciliation of subscriptions against local accounts and the webhook registration. Repo-side checks (Dependabot, CodeQL, tracked files) are supplied by a new GitHub workflow</li>
+        <li><strong>Operator-only: <code>POST /audit/run</code>, <code>GET /audit/reports</code>, <code>GET /audit/reports/{id}</code> (and <code>latest</code>)</strong>, plus a Compliance audit panel in the admin console with a Run audit now button. A failing check opens one approval in the owner queue with the failing check ids and a link to the report; a passing or warning-only report asks for nothing</li>
+        <li>The report is evidence, not certification: it contains counts, file and setting names and opaque prefixes, never emails, keys or Stripe ids, and it makes no statement of legal compliance. The audit only reads; it changes no setting, account, subscription or price. An optional one-paragraph summary by a small model is off by default</li>
+      </ul>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li><strong>Customer-visible behaviour is unchanged.</strong> No endpoint, tool, tier, price or page a customer uses changed, and no pricing data was touched</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.87.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.87.0</span>
