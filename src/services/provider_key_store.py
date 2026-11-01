@@ -367,6 +367,36 @@ class ProviderKeyStore:
             ))
         return out
 
+    async def export_metadata(self, org_id: str) -> List[Dict[str, Any]]:
+        """v1.87.0 account export: the org's stored-key METADATA, never key material.
+
+        Selects no ciphertext and no fingerprint into the result. Works when the store is
+        unavailable (status then reports ``unavailable``) so an export is never blocked by it.
+        """
+        async with _open_db(self._db_path) as db:
+            async with db.execute(
+                "SELECT provider, ciphertext, key_version, created_at, rotated_at "
+                "FROM provider_keys WHERE org_id = ? ORDER BY provider", (org_id,),
+            ) as cur:
+                rows = await cur.fetchall()
+        out: List[Dict[str, Any]] = []
+        for provider, blob, version, created, rotated in rows:
+            if not self.available:
+                status = "unavailable"
+            else:
+                status = (STATUS_ACTIVE if self.decrypt(org_id, provider, blob) is not None
+                          else STATUS_NEEDS_REREGISTRATION)
+            out.append({"provider": provider, "created_at": _iso(created), "rotated_at": _iso(rotated),
+                        "key_version": version, "status": status})
+        return out
+
+    async def delete_all(self, org_id: str) -> int:
+        """v1.87.0 account deletion: erase every stored key of the org. Needs no secret."""
+        async with _open_db(self._db_path) as db:
+            cur = await db.execute("DELETE FROM provider_keys WHERE org_id = ?", (org_id,))
+            await db.commit()
+            return cur.rowcount or 0
+
     # ---- dispatch ----------------------------------------------------------
 
     async def load_for_dispatch(self, org_id: str, exclude: Iterable[str] = ()) -> Dict[str, "StoredSecret"]:

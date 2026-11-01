@@ -192,7 +192,9 @@ class SupportAgent:
         try:
             self._conversation_store = get_conversation_store()
         except RuntimeError:
-            await init_conversation_store(settings.conversation_db_path, settings.agent_max_history_turns)
+            await init_conversation_store(
+                settings.conversation_db_path, settings.agent_max_history_turns, settings.conversation_retention_days
+            )
             self._conversation_store = get_conversation_store()
 
         if self._llm_backend is None:
@@ -223,6 +225,12 @@ class SupportAgent:
 
         caller = caller or ANONYMOUS
         conv_id = conversation_id or new_conversation_id()
+        if conversation_id and self._conversation_store is not None:
+            # A conversation owned by another org (or by an identified customer, when the caller is
+            # anonymous) is never continued or taken over: start a fresh conversation instead.
+            owner = await self._conversation_store.owner_of(conversation_id)
+            if owner and owner != (caller.org_id if caller.is_customer else None):
+                conv_id = new_conversation_id()
         tier = tier_label(caller)
         identified = bool(caller.is_customer)
         key = caller_key(caller, client_ip)
@@ -272,7 +280,9 @@ class SupportAgent:
                                    escalation=escalation, fallback="spend_cap")
 
         # 4. The LLM turn.
-        _, history = await self._conversation_store.get_or_create(conv_id)
+        # v1.87.0: identified customers' conversations are attributed to their org (export/deletion/retention).
+        conv_org = caller.org_id if caller.is_customer else None
+        _, history = await self._conversation_store.get_or_create(conv_id, org_id=conv_org)
         history.add("user", redacted)
         tools = build_support_tools(self._tool_manager, self._rag, caller, ctx)
         loop = ReActLoop(llm_backend=self._llm_backend, tools=tools, max_iterations=settings.agent_max_iterations,
@@ -297,7 +307,7 @@ class SupportAgent:
 
         reply = redact_support_text(result.final_answer or "")
         history.add("assistant", reply)
-        await self._conversation_store.save(conv_id, history)
+        await self._conversation_store.save(conv_id, history, org_id=conv_org)
 
         await support_action("support.answer", "answered", target=target, trigger=trigger,
                              provenance={**base_provenance, "tools": ctx.tools_used, "cost_usd": round(cost, 6),
@@ -366,7 +376,7 @@ class SupportAgent:
             "rate_limit_per_minute": rate_limit_for(eff, settings),
             "has_stripe_customer": bool(record.stripe_customer_id),
             "has_subscription": bool(record.stripe_subscription_id),
-            "api_key_preview": record.api_key[:8] + "...",
+            "api_key_preview": (record.api_key_prefix or "") + "...",
             "org_ref": record.org_id[:8],
             "support_allowance_usd_day": support_cap_for(eff, settings),
             "support_spent_today_usd": round(spent, 4),

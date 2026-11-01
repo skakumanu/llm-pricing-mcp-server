@@ -255,7 +255,7 @@ class TestEscalation:
         assert art["conversation_ref"] == resp.conversation_id
         assert "Charged twice" in art["body"] and "refund the duplicate" in art["suggested_reply"]
         after = run(env.billing.get_customer_by_id(pro.id))
-        assert after.tier == "pro" and after.billing_status == "active" and after.api_key == pro.api_key
+        assert after.tier == "pro" and after.billing_status == "active" and after.api_key_prefix == pro.api_key[:8]
         actions = {a["action"] for a in dump_actions(env.store)}
         assert "support.escalation" in actions and "support.answer" in actions
         assert not any(a["action"].startswith("billing.") for a in dump_actions(env.store))
@@ -289,6 +289,17 @@ class TestEscalation:
         assert resp.escalation is None
         after = run(env.billing.get_customer_by_id(pro.id))
         assert after.tier == "pro" and after.stripe_subscription_id == pro.stripe_subscription_id
+
+    def test_conversation_is_attributed_to_the_customers_org_only(self, env_factory):
+        env = env_factory([say("ok"), say("ok again")])
+        me = env.customers["free"]
+        store = env.agent._conversation_store
+        resp = run(env.agent.chat("hello", None, caller=caller_for(me), client_ip="4.4.4.4"))
+        assert [c["id"] for c in run(store.list_for_org(me.org_id))] == [resp.conversation_id]
+        run(env.agent.chat("hello again", resp.conversation_id, caller=ANONYMOUS, client_ip="4.4.4.4"))
+        assert [c["id"] for c in run(store.list_for_org(me.org_id))] == [resp.conversation_id]  # not detached
+        anon = run(env.agent.chat("anonymous question", None, caller=ANONYMOUS, client_ip="9.9.9.9"))
+        assert anon.conversation_id not in [c["id"] for c in run(store.list_for_org(me.org_id))]
 
     def test_lost_key_never_returns_a_key(self, env_factory):
         env = env_factory([tool("get_my_account"), say("Rotate it on /billing with your current key.")])

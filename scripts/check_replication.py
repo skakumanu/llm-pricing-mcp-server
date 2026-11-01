@@ -7,8 +7,8 @@ through a new ``*_db_path`` setting would otherwise sit unreplicated and unnotic
 the volume is lost. Shared by tests/test_litestream_config.py and CI.
 
 A setting whose default is ``None`` is opt-in (the store is in-memory unless the operator
-sets a path), so it is not opened in production by default and is exempt until fly.toml
-sets it.
+sets a path) and is exempt until fly.toml sets it, except the stores in REQUIRED_IN_PRODUCTION
+(conversation_db_path, v1.87.0), which fly.toml must set.
 
     python scripts/check_replication.py [--check]    # exit 1 and print problems if incomplete
 """
@@ -29,12 +29,18 @@ LITESTREAM_YML = PROJECT_ROOT / "litestream.yml"
 VOLUME = "/app/data"
 
 
+# Opt-in stores (default None) that production must nevertheless set: conversations are
+# persisted per organisation since v1.87.0 (privacy policy retention, export and deletion).
+REQUIRED_IN_PRODUCTION = ("conversation_db_path",)
+
+
 def db_path_fields() -> List[str]:
-    """Settings field names ending in ``_db_path`` that default to a real path."""
+    """Settings field names ending in ``_db_path`` that default to a real path, plus the opt-in
+    stores production is required to set (REQUIRED_IN_PRODUCTION)."""
     from src.config.settings import Settings
     return sorted(
         name for name, field in Settings.model_fields.items()
-        if name.endswith("_db_path") and field.default is not None
+        if name.endswith("_db_path") and (field.default is not None or name in REQUIRED_IN_PRODUCTION)
     )
 
 

@@ -155,8 +155,33 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.86.0 -->
+  <!-- v1.87.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.87.0</span>
+      <span class="release-date">Nov 1, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Your data, your call: export or delete your account; hashed service keys</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong>Export everything we hold about your organisation: <code>GET /billing/account/export</code>.</strong> With your service key it returns one JSON file: account record, metadata of the provider keys you stored (never the keys), usage events, dispatch receipts, budget alerts, routing history and feedback, and the support conversations held under your key. Never your service key and never another organisation's rows</li>
+        <li><strong>Delete your account: <code>POST /billing/account/delete</code> with <code>{"confirm": "DELETE", "org_id": "..."}</code>.</strong> It is irreversible: every record above is erased, your key stops working at once, and only a dated marker (a one-way hash of your email, no key, no Stripe ids) remains. A paid subscription is ended immediately so no further charge occurs; if Stripe cannot be reached nothing is deleted. Deleting within the 14-day refund window opens a refund review in the owner queue and returns its reference; nothing is refunded automatically. You can sign up again with the same email</li>
+        <li><strong>Support conversations are now kept per organisation and purged after 90 days</strong> (<code>CONVERSATION_RETENTION_DAYS</code>, <code>0</code> disables). They are stored in a fourth database, <code>conversations.db</code>, which is included in the off-site replication, and they are erased with the account</li>
+      </ul>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li><strong>Service keys are now stored only as a SHA-256 hash plus an 8-character prefix.</strong> Existing keys are converted in place on the first start (once, safe to repeat); every key keeps working and the admin console shows the prefix as before. Keys are still shown once, at signup or rotation. This means the off-site backup copy of the account database holds no usable keys</li>
+        <li>The privacy policy and security statement now describe the self-service export and deletion and the hashed keys</li>
+        <li>No pricing data, tiers or prices changed</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.86.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.86.0</span>

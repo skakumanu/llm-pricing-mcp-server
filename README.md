@@ -120,7 +120,7 @@ The chat agent binds 27 of the 32 MCP tools (all except `ask_agent`, `support_ch
 ### Customer support and plans
 - Support mode on [/chat](https://llm-pricing-api.fly.dev/chat?mode=support) and the `support_chat` MCP tool answer plan, billing, key, rate-limit and how-to questions only from the published [FAQ](https://llm-pricing-api.fly.dev/faq) (`docs/FAQ.md`), the plan catalogue (`GET /billing/config`) and, with your service key, your own account. No invented prices, policies or response times.
 - Everything outside its authority (refunds, credits, disputes, failed payments, a lost key without the current key, bug/feature/security reports, "talk to a human") becomes an escalation in the owner's operator-only queue with a reference; `POST /support/escalations/status` returns the owner's reply.
-- Plans describe only what is implemented: rate limit, support assistant allowance and escalation priority. Upgrade and Manage Billing work when Stripe is configured; `POST /billing/key/rotate` rotates a key with the current one; the Stripe webhook handles failed renewals (14-day grace, then the free limit), refunds and disputes, and ignores duplicate deliveries.
+- Plans describe only what is implemented: rate limit, support assistant allowance and escalation priority. Upgrade and Manage Billing work when Stripe is configured; `POST /billing/key/rotate` rotates a key with the current one; `GET /billing/account/export` downloads everything held about your organisation and `POST /billing/account/delete` (body `{"confirm": "DELETE", "org_id": ...}`) irreversibly erases it, ends any Stripe subscription and opens a refund review when you delete inside the 14-day window (v1.87.0); service keys are stored only as a SHA-256 hash; the Stripe webhook handles failed renewals (14-day grace, then the free limit), refunds and disputes, and ignores duplicate deliveries.
 - Legal pages (v1.86.0): [/terms](https://llm-pricing-api.fly.dev/terms), [/privacy](https://llm-pricing-api.fly.dev/privacy), [/refunds](https://llm-pricing-api.fly.dev/refunds), [/dpa](https://llm-pricing-api.fly.dev/dpa), [/subprocessors](https://llm-pricing-api.fly.dev/subprocessors) are generated from `docs/legal/*.md` (`scripts/sync_legal.py`), linked from the site footer, `/billing` and `/faq`, and show a draft notice until the owner turns on `LEGAL_PAGES_LIVE` and every placeholder is replaced. Paid checkout stays disabled until then; the Stripe customer portal is unaffected. Refunds: full within 14 days of the first payment, pro-rated after, every request reviewed by the owner via the support assistant. [/security](https://llm-pricing-api.fly.dev/security) states what the service does and does not have (no SOC 2, ISO 27001 or third-party penetration test). The pre-launch list is [docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md).
 - Spend: per-caller daily LLM caps by tier (anonymous strictest) under the orchestrator's global monthly ceiling; a cap hit returns a non-LLM fallback with FAQ links. Every support action leaves an operator-only, append-only record.
 
@@ -136,7 +136,7 @@ The chat agent binds 27 of the 32 MCP tools (all except `ask_agent`, `support_ch
 | Access | Who | What it unlocks |
 |---|---|---|
 | Public | Anyone | Pricing, estimates, data quality, history, registering a price alert, the chat agent, the support assistant in general mode: 19 public MCP tools + the identity-aware `support_chat` |
-| Service key | You (free: `POST /billing/signup`) | Usage/budget tools and endpoints, router, `dispatch`, `/dispatch/keys`, `/billing/me`, `/billing/key/rotate`; acts only on your own org, and `support_chat` / `POST /support/chat` can describe your own account |
+| Service key | You (free: `POST /billing/signup`) | Usage/budget tools and endpoints, router, `dispatch`, `/dispatch/keys`, `/billing/me`, `/billing/key/rotate`, `/billing/account/export`, `/billing/account/delete`; acts only on your own org, and `support_chat` / `POST /support/chat` can describe your own account |
 | Operator key | Server operator (`MCP_API_KEY`) | Listing/deleting all price alerts and conversations, admin customer list and owner-side key rotation (`/admin/customers/{id}/key/rotate`), every `/orchestrator/*` route |
 | Intake key | GitHub Actions executor (`ORCHESTRATOR_INTAKE_KEY`) | Only `POST /orchestrator/events`, `GET /orchestrator/runs/{id}/actions`, `POST …/actions/{aid}/result`; it carries the workflow's owner assertion for GitHub events, so treat it as a secret |
 
@@ -163,8 +163,9 @@ Set via environment variables or `.env`. An unknown key in `.env` stops startup 
 | `ORCHESTRATOR_RUN_RETENTION_DAYS` / `ORCHESTRATOR_IO_RETENTION_DAYS` | Orchestrator retention: rows (365) and redacted I/O summaries (90) |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_ID_PRO` / `STRIPE_PRICE_ID_ENTERPRISE` | Paid tiers; checkout, portal and webhook stay 503 until set, and checkout also waits for the legal pages to be in force (`GET /billing/config` reports `checkout_disabled_reason`) |
 | `LEGAL_PAGES_LIVE` | Marks the legal pages in force (default false). Even when true, a remaining `[PLACEHOLDER]` in `docs/legal/` keeps the pages draft and checkout disabled |
+| `CONVERSATION_DB_PATH` / `CONVERSATION_RETENTION_DAYS` | Support conversations are stored per organisation in this SQLite file (`/app/data/conversations.db` on Fly, replicated) and purged after the retention days (90; `<= 0` disables). Unset path = in memory (v1.87.0) |
 | `BILLING_REFUND_WINDOW_DAYS` | Full-refund window quoted by `/refunds` and the FAQ (14); policy copy, refunds are never automatic |
-| `LITESTREAM_REPLICA_URL` / `LITESTREAM_ACCESS_KEY_ID` / `LITESTREAM_SECRET_ACCESS_KEY` | Fly secrets (process environment, not `.env`) that turn on continuous replication of the three production databases; restore steps in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#restore-from-the-litestream-replica) |
+| `LITESTREAM_REPLICA_URL` / `LITESTREAM_ACCESS_KEY_ID` / `LITESTREAM_SECRET_ACCESS_KEY` | Fly secrets (process environment, not `.env`) that turn on continuous replication of the four production databases; restore steps in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#restore-from-the-litestream-replica) |
 | `BILLING_PAST_DUE_GRACE_DAYS` | Days a failed renewal keeps the paid tier before the account is served at the free limit (14) |
 | `SUPPORT_ENABLED` | `false` turns the support assistant into a FAQ-and-escalation fallback (default `true`) |
 | `SUPPORT_DAILY_CAP_ANONYMOUS_USD` / `_FREE_USD` / `_PRO_USD` / `_ENTERPRISE_USD` | Per-caller daily LLM allowance for support by tier (0.10 / 0.50 / 3.00 / 10.00) |
@@ -181,7 +182,7 @@ Full list: `src/config/settings.py`. Production settings: [docs/DEPLOYMENT.md](d
 pytest tests/ -q
 ```
 
-- 3753 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy); CodeQL and Dependabot run as additional scanners
+- 3812 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy); CodeQL and Dependabot run as additional scanners
 - Git Flow: `feature/*` → `develop` → `master`. See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 - Internals, services, data stores and CI: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Deploys to Fly.io from `master` when all CI gates pass: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

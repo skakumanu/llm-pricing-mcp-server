@@ -61,7 +61,8 @@ class PricingAgent:
         except RuntimeError:
             # Not yet initialized (e.g. tests that bypass startup) — create one here
             await init_conversation_store(
-                settings.conversation_db_path, settings.agent_max_history_turns
+                settings.conversation_db_path, settings.agent_max_history_turns,
+                settings.conversation_retention_days,
             )
             self._conversation_store = get_conversation_store()
             logger.info("Conversation store: initialized by agent")
