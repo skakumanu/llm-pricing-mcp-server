@@ -31,6 +31,7 @@ END = "<!-- faq:end -->"
 
 _INLINE_CODE = re.compile(r"`([^`]+)`")
 _BOLD = re.compile(r"\*\*(.+?)\*\*")
+_ORDERED = re.compile(r"^(\d+)\. (.*)$")
 _LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 
 
@@ -56,13 +57,17 @@ def render_markdown(md: str) -> str:
     lines = md.splitlines()
     out: list[str] = []
     i = 0
-    in_list = False
+    in_list = False       # inside <ul>
+    in_olist = False      # inside <ol>
 
     def close_list() -> None:
-        nonlocal in_list
+        nonlocal in_list, in_olist
         if in_list:
             out.append("</ul>")
             in_list = False
+        if in_olist:
+            out.append("</ol>")
+            in_olist = False
 
     while i < len(lines):
         line = lines[i]
@@ -78,7 +83,22 @@ def render_markdown(md: str) -> str:
             close_list()
             title = stripped[3:]
             out.append(f'<h2 id="{_slug(title)}">{_inline(title)}</h2>')
+        elif stripped.startswith("### "):
+            close_list()
+            title = stripped[4:]
+            out.append(f'<h3 id="{_slug(title)}">{_inline(title)}</h3>')
+        elif (m_ord := _ORDERED.match(stripped)):
+            if in_list:
+                out.append("</ul>")
+                in_list = False
+            if not in_olist:
+                out.append("<ol>")
+                in_olist = True
+            out.append(f"<li>{_inline(m_ord.group(2))}</li>")
         elif stripped.startswith("- "):
+            if in_olist:
+                out.append("</ol>")
+                in_olist = False
             if not in_list:
                 out.append("<ul>")
                 in_list = True
@@ -131,7 +151,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     .faq h2 {{ font-size: 18px; font-weight: 600; margin: 32px 0 10px; padding-top: 8px; border-top: 1px solid var(--border); }}
     .faq p {{ color: var(--muted); margin: 0 0 10px; }}
     .faq h1 + p {{ font-size: 15px; }}
-    .faq ul {{ margin: 0 0 12px 1.2rem; color: var(--text); }}
+    .faq ul, .faq ol {{ margin: 0 0 12px 1.2rem; color: var(--text); }}
     .faq li {{ margin: 4px 0; overflow-wrap: anywhere; }}
     .faq a {{ color: var(--accent); text-decoration: none; }}
     .faq a:hover {{ text-decoration: underline; }}

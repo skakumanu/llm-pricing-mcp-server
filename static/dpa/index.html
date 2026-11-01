@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Processing Addendum — LLM Pricing API</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3347;
+      --accent: #7c6af7;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --warn: #ed8936;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 1.6; }
+    /* ── Shared nav (identical on every page; scripts/sync_nav.py, tests/test_nav_consistency.py) ── */
+    .main-nav{display:flex;align-items:center;background:#0f1117;padding:0 1.25rem;height:52px;border-bottom:1px solid #23263a;position:sticky;top:0;z-index:200;gap:.5rem;flex-shrink:0}
+    .nav-brand{font-weight:700;color:#7c6af7;text-decoration:none;font-size:1rem;white-space:nowrap;flex-shrink:0}
+    .nav-spacer{flex:1}
+    .nav-links{display:flex;align-items:center;gap:.125rem}
+    .nav-links a{color:#8b93a5;text-decoration:none;padding:.35rem .6rem;border-radius:6px;font-size:.8rem;white-space:nowrap;transition:all .15s;border:none}
+    .nav-links a:hover{background:#1a1d2e;color:#e5e7eb}
+    .nav-links a.active{background:#1a1d2e;color:#7c6af7;font-weight:600}
+    .nav-links a.nav-cta{margin-left:.35rem;border:1px solid #7c6af7;color:#7c6af7}
+    .nav-links a.nav-cta:hover{background:#7c6af7;color:#fff}
+    .nav-toggle{display:none;background:none;border:1px solid #2a2d3a;color:#9ca3af;font-size:1.1rem;cursor:pointer;padding:.25rem .5rem;border-radius:6px;line-height:1;flex-shrink:0}
+    @media(max-width:760px){
+      .nav-toggle{display:block}
+      .nav-links{display:none;position:absolute;top:52px;left:0;right:0;flex-direction:column;align-items:stretch;background:#0f1117;border-bottom:1px solid #23263a;padding:.5rem 1rem;gap:.25rem;z-index:199}
+      .nav-links.open{display:flex}
+      .nav-links a{padding:.6rem .75rem;font-size:.875rem}
+      .nav-links a.nav-cta{margin-left:0;text-align:center}
+    }
+    /* ── Legal page ── */
+    .container { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+    .legal h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+    .legal .updated { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+    .legal h2 { font-size: 18px; font-weight: 600; margin: 32px 0 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+    .legal h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+    .legal p { color: var(--muted); margin: 0 0 10px; }
+    .legal ul, .legal ol { margin: 0 0 12px 1.2rem; color: var(--text); }
+    .legal li { margin: 4px 0; overflow-wrap: anywhere; }
+    .legal a { color: var(--accent); text-decoration: none; }
+    .legal a:hover { text-decoration: underline; }
+    .legal code { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 0 .35em; font-size: .9em; }
+    .legal table { border-collapse: collapse; width: 100%; margin: 10px 0 14px; font-size: 13px; background: var(--surface); border: 1px solid var(--border); }
+    .legal th, .legal td { border-bottom: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+    .legal th { background: var(--surface2); font-weight: 600; }
+    .legal-draft { border: 1px solid var(--warn); color: var(--warn); background: var(--surface); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 18px; }
+    .legal-links { margin-top: 36px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; font-size: 13px; color: var(--muted); }
+    .legal-links a { color: var(--accent); text-decoration: none; margin-right: 12px; }
+  </style>
+</head>
+<body>
+<nav class="main-nav">
+  <a href="/" class="nav-brand">⚡ LLM Pricing</a>
+  <span class="nav-spacer"></span>
+  <div class="nav-links" id="navLinks">
+    <a href="/calculator">Calculator</a>
+    <a href="/compare">Compare</a>
+    <a href="/trends">Trends</a>
+    <a href="/chat">Chat</a>
+    <a href="/mcp-setup">MCP</a>
+    <a href="/api-docs">API</a>
+    <a href="/whats-new">What's New</a>
+    <a href="/billing" class="nav-cta">Sign in</a>
+  </div>
+  <button class="nav-toggle" id="navToggle" aria-label="Menu" aria-expanded="false" aria-controls="navLinks">☰</button>
+</nav>
+<script>
+(function(){
+  var t=document.getElementById('navToggle'),l=document.getElementById('navLinks');
+  if(!t||!l)return;
+  t.onclick=function(){var o=l.classList.toggle('open');t.setAttribute('aria-expanded',o?'true':'false');};
+  var p=location.pathname.replace(/\/$/,'')||'/';
+  l.querySelectorAll('a').forEach(function(a){
+    var h=a.getAttribute('href');
+    if(h===p||h===p+'/')a.classList.add('active');
+    a.addEventListener('click',function(){l.classList.remove('open');t.setAttribute('aria-expanded','false');});
+  });
+})();
+</script>
+
+<div class="container">
+  <div class="legal">
+<!-- legal:notice -->
+<p class="updated">Last updated 2026-10-31</p>
+<!-- legal:start (generated from docs/legal/ by scripts/sync_legal.py; do not edit by hand) -->
+<h1>Data Processing Addendum</h1>
+<p>This Addendum forms part of the <a href="/terms">Terms of Service</a> between [ENTITY NAME] ("Provider") and the customer ("Customer") and applies where the Provider processes personal data on the Customer's behalf and the GDPR, UK GDPR or a US state privacy law applies. This document is a template awaiting legal review and is not in force until the notice at the top of the page is gone.</p>
+<h2 id="1-roles">1. Roles</h2>
+<ul>
+<li>For the data of the people who use the Service on a Customer's behalf (account email, billing contact), the Provider is a controller, as described in the <a href="/privacy">Privacy Policy</a>.</li>
+<li>For personal data that the Customer sends through the Service, such as the content of dispatch requests passed to a model provider using the Customer's own provider keys, the Customer is the controller (or "business") and the Provider is the processor (or "service provider").</li>
+</ul>
+<h2 id="2-processing-details">2. Processing details</h2>
+<ul>
+<li>Subject matter and purpose: operating the Service for the Customer.</li>
+<li>Duration: the life of the account plus the retention periods in the Privacy Policy.</li>
+<li>Data subjects and categories: the Customer's personnel and end users; the categories listed in the Privacy Policy.</li>
+<li>The Provider does not store dispatch prompts or responses; only metadata (model, provider, token counts, cost, status) is kept in dispatch receipts.</li>
+</ul>
+<h2 id="3-provider-obligations">3. Provider obligations</h2>
+<p>The Provider will: process personal data only on the Customer's documented instructions (the Terms and the Customer's use of the Service); ensure personnel are bound by confidentiality; apply the measures described on the <a href="/security">Security</a> page; help the Customer respond to data subject requests; notify the Customer without undue delay after becoming aware of a personal data breach affecting the Customer's data; and delete or return personal data at the end of the Service on request.</p>
+<h2 id="4-subprocessors">4. Subprocessors</h2>
+<p>The Customer authorises the subprocessors on the <a href="/subprocessors">Subprocessors</a> page. The Provider will update that page before adding or replacing one and the Customer may object on reasonable grounds by contacting [CONTACT EMAIL].</p>
+<h2 id="5-international-transfers">5. International transfers</h2>
+<p>The Service is hosted in the United States. Where personal data from the EU, UK or Switzerland is transferred, the parties rely on the standard contractual clauses (and the UK addendum) which are incorporated by reference, with the Customer as exporter and the Provider as importer.</p>
+<h2 id="6-audits">6. Audits</h2>
+<p>On reasonable written notice, and no more than once a year, the Provider will give the Customer the information needed to show compliance with this Addendum.</p>
+<h2 id="7-liability-and-order-of-precedence">7. Liability and order of precedence</h2>
+<p>Liability under this Addendum is subject to the limits in the Terms. If this Addendum conflicts with the Terms on the processing of personal data, this Addendum prevails.</p>
+<p>Contact: [ENTITY NAME], [POSTAL ADDRESS], [CONTACT EMAIL].</p>
+<!-- legal:end -->
+  </div>
+  <div class="legal-links">
+    <span>Policies:</span>
+    <a href="/terms">Terms of Service</a>
+    <a href="/privacy">Privacy Policy</a>
+    <a href="/refunds">Refund Policy</a>
+    <a href="/dpa">Data Processing Addendum</a>
+    <a href="/subprocessors">Subprocessors</a>
+    <a href="/security">Security</a>
+    <a href="/faq">FAQ</a>
+    <a href="/billing">Billing</a>
+  </div>
+</div>
+
+</body>
+</html>

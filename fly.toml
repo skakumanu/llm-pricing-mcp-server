@@ -25,6 +25,9 @@ primary_region = 'iad'
   # Orchestrator core (v1.83.0): runs, approvals, action records, spend and settings.
   # ORCHESTRATOR_INTAKE_KEY is a Fly secret, never set here.
   ORCHESTRATOR_DB_PATH = "/app/data/orchestrator.db"
+  # v1.86.0: LEGAL_PAGES_LIVE is deliberately NOT set here (default off). Add it only after the
+  # launch checklist's lawyer review and placeholder items are done. Replication secrets
+  # (LITESTREAM_REPLICA_URL, LITESTREAM_ACCESS_KEY_ID, LITESTREAM_SECRET_ACCESS_KEY) are Fly secrets.
 
 [http_service]
   internal_port = 8000

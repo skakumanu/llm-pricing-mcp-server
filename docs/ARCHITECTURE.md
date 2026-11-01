@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.85.0 | **Last updated**: 2026-10-31
+**Version**: v1.86.0 | **Last updated**: 2026-10-31
 
 Canonical internals reference. Release history lives in `static/whats-new/`, not here.
 
@@ -8,7 +8,7 @@ Canonical internals reference. Release history lives in `static/whats-new/`, not
 
 ## System Overview
 
-FastAPI service that aggregates LLM pricing from 30 providers (600+ models) and serves it over REST and MCP, with a ReAct pricing agent, a grounded support agent, a dispatch gateway, self-serve billing and 15 browser UIs.
+FastAPI service that aggregates LLM pricing from 30 providers (600+ models) and serves it over REST and MCP, with a ReAct pricing agent, a grounded support agent, a dispatch gateway, self-serve billing and 21 browser pages.
 
 - **Deploy**: Fly.io app `llm-pricing-api` (shared-cpu-1x, 512 MB, volume at `/app/data`)
 - **CI/CD**: test → lint → OSV → bandit → gitleaks → Fly deploy (see [CI/CD](#cicd-pipeline))
@@ -30,7 +30,7 @@ FastAPI service that aggregates LLM pricing from 30 providers (600+ models) and 
                                 │ HTTPS / STDIO
 ┌───────────────────────────────▼──────────────────────────────────────┐
 │ Presentation — src/main.py + mcp/                                    │
-│  REST API          MCP: 32 tools, STDIO + POST /mcp    15 UI pages   │
+│  REST API          MCP: 32 tools, STDIO + POST /mcp    21 UI pages   │
 │  security_middleware: operator / customer / global key, rate limit,  │
 │  body cap · per-bucket sliding window (src/services/rate_limiter.py) │
 └───────┬───────────────────────┬──────────────────────┬───────────────┘
@@ -66,6 +66,7 @@ src/
                             orchestrator.py (event / owner-run / approval / result bodies)
   services/
     pricing_aggregator.py   PROVIDER_SERVICES list, async fan-out + TTL cache, get_pricing_aggregator() singleton
+    legal_pages.py          live gate for the legal pages: placeholder scan of docs/legal + LEGAL_PAGES_LIVE (v1.86.0)
     base_provider.py        BasePricingProvider: build_metrics, registry-entry merge, live model sync
     *_pricing.py            one service per provider (30)
     price_oracle.py         reference registry: gap-fill, drift + retirement withholding (24h TTL + snapshot)
@@ -107,20 +108,29 @@ mcp/
 agent/                      pricing_agent.py, support_agent.py, support_tools.py, react_loop.py, llm_backend.py,
                             conversation.py, tools.py
 rag/                        document_loader, chunker, in-memory TF-IDF vector_store, pipeline (optional doc allow-list)
-static/                     15 UI pages (see Design System); landing/ is served at /; faq/ is generated from docs/FAQ.md
+static/                     21 UI pages (see Design System); landing/ is served at /; faq/ is generated from docs/FAQ.md;
+                            terms/ privacy/ refunds/ dpa/ subprocessors/ security/ are generated from docs/legal/*.md
 data/
   model_prices_snapshot.json  vendored registry snapshot (weekly refresh PR)
   exchange_rates.json         vendored USD rate table (weekly refresh PR)
   registry_models/<slug>.json registry-sourced models per provider (written only by pickup script)
 scripts/                    weekly audit scripts, validate_price_snapshot.py, sync_nav.py, sync_faq.py,
+                            sync_legal.py (docs/legal → legal pages, --check, --placeholders),
+                            check_replication.py (every *_db_path DB is on the volume and in litestream.yml),
+                            launch_checklist.py (parser/validator for docs/LAUNCH_CHECKLIST.md),
                             quick_validate.py, audit_repo.py, promote_branch_content.sh,
                             release_notes_from_whats_new.py (deploy job → GitHub Release notes)
 npm/llm-pricing-mcp/        zero-dependency STDIO↔HTTP bridge published to npm
 server.json                 MCP registry listing (remote + npm package)
 .github/workflows/          ci-cd, sync-develop, price-audit (+ report-run), npm-publish, mcp-registry-publish,
-                            orchestrator-intake (GitHub executor of the orchestrator core)
+                            orchestrator-intake (GitHub executor of the orchestrator core),
+                            codeql (python code scanning; PR + weekly); .github/dependabot.yml (pip + github-actions)
 tests/                      pytest suite (count: README "passing tests" line)
-fly.toml, Dockerfile        Fly config; image copies src/ static/ agent/ rag/ mcp/ docs/ data/
+fly.toml, Dockerfile        Fly config; image copies src/ static/ agent/ rag/ mcp/ docs/ data/ (multi-stage: adds the Litestream binary)
+entrypoint.sh, litestream.yml  container entrypoint (plain uvicorn, or under `litestream replicate` when LITESTREAM_REPLICA_URL is set;
+                            restores missing DBs first) and the replicated database list (billing, pricing_history, orchestrator)
+docs/legal/                 Markdown sources of /terms /privacy /refunds /dpa /subprocessors /security; docs/LAUNCH_CHECKLIST.md
+SECURITY.md                 root pointer to /security for the GitHub security tab
 CLAUDE.md                   session rules + release checklist
 ```
 
@@ -139,7 +149,7 @@ Checked in this order:
 | Step | Paths | Effect |
 |---|---|---|
 | 1. Operator-only request | GET/HEAD `/pricing/alerts`, `/agent/conversations`; DELETE `/pricing/alerts/{id}`, `/agent/conversations/{id}`; any method under `/orchestrator/` and `/admin/customers/` (`_OPERATOR_ONLY_PREFIXES`; the latter is `/admin/customers/{id}/key/rotate`) | Decided first so the `/pricing` prefix bypass can't expose them |
-| 2. Full bypass | OPTIONS, static UIs (incl. `/faq`), `/pricing*`, `/mcp`, `_unauthenticated_paths` (incl. `/billing/config`) | No auth, no limiter; `_public_body_capped_paths` (`/v1/chat/completions`, `/mcp`) still body-capped |
+| 2. Full bypass | OPTIONS, static UIs (incl. `/faq`), the legal pages (`_LEGAL_PAGE_PATHS`: `/terms`, `/privacy`, `/refunds`, `/dpa`, `/subprocessors`, `/security`), `/pricing*`, `/mcp`, `_unauthenticated_paths` (incl. `/billing/config`) | No auth, no limiter; `_public_body_capped_paths` (`/v1/chat/completions`, `/mcp`) still body-capped |
 | 3. Operator key | step 1 + `_sensitive_paths` (`/deployment/shutdown*`, `/admin/customers`, `/admin/stats`, `/admin/rate-limits`) | Global `MCP_API_KEY` in `x-api-key` only (byte compare); 503 if unset. The three orchestrator executor routes (POST `/orchestrator/events`, GET `…/runs/{id}/actions`, POST `…/actions/{aid}/result`) also accept `ORCHESTRATOR_INTAKE_KEY`; it unlocks nothing else, but on those routes it carries the executor's owner assertion for GitHub events, so a `pull_request.opened` continuation is additionally bound to the repository the run was created from (`refused:repo_mismatch` otherwise) |
 | 4. Anonymous, rate-limited | `/agent/chat*`, `/support/chat`, `/support/escalations/status`, `/billing/signup`, POST `/pricing/alerts`, `/pricing/alerts/self/*`, `/cost-estimate*` | Per-IP limit + body cap; a customer key on `/cost-estimate*` and `/support/*` gets its tier limit (the support handlers resolve identity themselves via `_resolve_mcp_caller`) |
 | 5. Service key | everything else (incl. `/billing/me`, `/billing/key/rotate`) | Billing customer key (tier from DB) or global key; 401 otherwise |
@@ -186,9 +196,10 @@ message → react_loop (think → tool → observe; system_prompt per agent) →
 - Identity: HTTP `_resolve_mcp_caller(request)`; MCP via ToolManager; the agent never reads `request.state`.
 
 ### Billing (Stripe optional)
-- `GET /billing/config` (public): `tiers.catalog_payload(settings)` — `checkout_enabled` / `portal_enabled` (= Stripe secret set), per-tier `checkout_available` (price id set), `past_due_grace_days`, `tiers`; the agent's `get_plan_catalog` returns the same payload. `/billing`, the landing page and the agent render these exact strings; `tests/test_support_faq.py` pins them to each other and to `docs/FAQ.md`.
+- **Legal gate (v1.86.0):** `services/legal_pages.is_live(settings)` = `LEGAL_PAGES_LIVE` **and** no `[PLACEHOLDER]` left in `docs/legal/*.md` (fail closed; WARNING logged when the flag is on but placeholders remain). `checkout_enabled` = Stripe configured AND legal live; `portal_enabled` = Stripe configured only. A gated page (all but `/security`) gets a server-side "Draft, not yet in force" notice in place of `<!-- legal:notice -->` while not live. `tests/test_legal_pages.py` fails the build if the flag is on by default while a placeholder remains.
+- `GET /billing/config` (public): `tiers.catalog_payload(settings)` — `checkout_enabled` (Stripe set AND legal pages live), `portal_enabled` (= Stripe secret set), `legal_pages_live`, `checkout_disabled_reason` (`stripe_not_configured` | `legal_pages_not_live` | null), per-tier `checkout_available` (price id set), `past_due_grace_days`, `tiers`; the agent's `get_plan_catalog` returns the same payload. `/billing`, the landing page and the agent render these exact strings; `tests/test_support_faq.py` pins them to each other and to `docs/FAQ.md`.
 - `POST /billing/signup` → new customer row → service key shown once (409 for an existing email).
-- `POST /billing/checkout` → Stripe session; `GET /billing/portal` → Stripe customer portal (cancel, card, invoices). Without `STRIPE_SECRET_KEY` both return 503 with a "not enabled on this server" detail; signup, the dashboard and support still work.
+- `POST /billing/checkout` → Stripe session; `GET /billing/portal` → Stripe customer portal (cancel, card, invoices). Checkout returns 503 without `STRIPE_SECRET_KEY` or while the legal pages are not live, and the portal without Stripe; both with a "not enabled on this server" detail; signup, the dashboard and support still work.
 - `POST /billing/key/rotate` (current key) and `POST /admin/customers/{id}/key/rotate` (operator) → `rotate_api_key()`; the new key is shown once, the old one stops at once; action `billing.key_rotate` (actor `customer` | `owner`).
 - `/billing/me` adds `effective_tier`, `billing_status`, `past_due_since`, `rate_limit_per_minute`.
 - `POST /billing/webhook` → verify signature → `record_stripe_event(event.id)` (duplicate → `{ok, duplicate: true}`, nothing else) → state machine → one `billing.<event type>` action record (outcome `applied… | ignored | duplicate | escalated…`). If applying the event raises, the id is forgotten again (`forget_stripe_event`) and the handler returns 500 so Stripe's retry is processed rather than treated as a duplicate. A `charge.dispute.created` object has no `customer`; the handler reads it from the disputed Charge (`stripe.Charge.retrieve`):
@@ -285,7 +296,7 @@ trigger (GitHub event · schedule · owner request · support escalation · Stri
 
 ## UI Design System
 
-Pages: `/` (landing), `/chat` (Pricing | Support toggle; the optional service key lives in `sessionStorage` only), `/calculator`, `/compare`, `/history`, `/trends`, `/widget`, `/ide-compare`, `/billing`, `/faq` (generated by `scripts/sync_faq.py` from `docs/FAQ.md`), `/admin`, `/mcp-setup`, `/api-docs`, `/whats-new`, `/conversations` (operator key in-page).
+Pages: `/` (landing), `/chat` (Pricing | Support toggle; the optional service key lives in `sessionStorage` only), `/calculator`, `/compare`, `/history`, `/trends`, `/widget`, `/ide-compare`, `/billing`, `/faq` (generated by `scripts/sync_faq.py` from `docs/FAQ.md`), `/terms`, `/privacy`, `/refunds`, `/dpa`, `/subprocessors`, `/security` (generated by `scripts/sync_legal.py` from `docs/legal/*.md`, linked from the landing footer, `/billing` and `/faq`; reachable from the footer, not the eight-item top nav), `/admin`, `/mcp-setup`, `/api-docs`, `/whats-new`, `/conversations` (operator key in-page).
 
 | Token | Value |
 |---|---|
@@ -313,7 +324,7 @@ Pages: `/` (landing), `/chat` (Pricing | Support toggle; the optional service ke
 | `CONVERSATION_DB_PATH` (optional) | `conversations` | Unset on Fly → in-memory. Support turns (`sup-…` ids) are stored with secrets redacted; the customer's own email is kept (operator-only view) |
 | `orchestrator.db` (`ORCHESTRATOR_DB_PATH`) | `orch_runs`, `orch_steps`, `orch_events`, `orch_approvals`, `orch_actions`, `orch_spend`, `orch_settings` | Rows purged after `ORCHESTRATOR_RUN_RETENTION_DAYS` (365); redacted I/O summaries nulled after `ORCHESTRATOR_IO_RETENTION_DAYS` (90); `orch_actions` is append-only |
 
-- All `.db` files are gitignored and live on the Fly volume (`/app/data`). The mount hides the image's
+- All `.db` files are gitignored and live on the Fly volume (`/app/data`). `billing.db`, `pricing_history.db` and `orchestrator.db` are replicated continuously to S3-compatible storage by Litestream (v1.86.0; `litestream.yml`, restore in `docs/DEPLOYMENT.md`); `scripts/check_replication.py` fails the build if a new `*_db_path` database is not on the volume and in `litestream.yml`. The mount hides the image's
   `data/` tree, so the registry snapshot, registry-sourced model files and exchange-rate table are read
   from the Dockerfile's copy under `/app/vendored` (`PRICE_SNAPSHOT_PATH`, `REGISTRY_MODELS_DIR`,
   `EXCHANGE_RATES_PATH`; startup logs the registry-sourced model count, v1.84.1).
@@ -353,7 +364,7 @@ Auth: **None** = public · **Rate-limited** = anonymous, per-IP limit + body cap
 | POST/GET/PUT/DELETE | `/dispatch/keys[/{provider}]` | Customer key | Stored provider keys |
 | GET | `/mcp` | None | MCP server info |
 | POST | `/mcp` | None (key per tool, see MCP table) | MCP JSON-RPC; 1 MB body cap |
-| GET | `/billing/config` | None | Tier catalogue, `checkout_enabled` / `portal_enabled`, grace days |
+| GET | `/billing/config` | None | Tier catalogue, `checkout_enabled` / `portal_enabled`, `legal_pages_live`, `checkout_disabled_reason`, grace days |
 | POST | `/billing/signup` | Rate-limited | Free-tier signup |
 | GET/POST | `/billing/me`, `/billing/checkout`, `/billing/portal` | Service key | Dashboard (+ `effective_tier`, `billing_status`), Stripe checkout/portal (503 without Stripe) |
 | POST | `/billing/key/rotate` | Customer key | Rotate own service key (shown once) |
@@ -369,6 +380,7 @@ Auth: **None** = public · **Rate-limited** = anonymous, per-IP limit + body cap
 | GET | `/api/versions`, `/deployment/metadata`, `/deployment/info` | Service key | Version metadata |
 | POST/GET | `/deployment/shutdown`, `/deployment/shutdown/status` | Operator key | Graceful shutdown |
 | GET | `/docs`, `/redoc`, `/openapi.json` | None | OpenAPI |
+| GET | `/terms`, `/privacy`, `/refunds`, `/dpa`, `/subprocessors`, `/security` | None | Legal pages and security statement (generated from `docs/legal/`; draft notice until live, `/security` never) |
 | GET | `/`, UI pages (see Design System) | None | Static UIs |
 
 ---
@@ -377,7 +389,9 @@ Auth: **None** = public · **Rate-limited** = anonymous, per-IP limit + body cap
 
 ```
 PR to develop/master, push to master  (ci-cd.yml)
-  test · lint (flake8) · osv_scan · security (bandit) · secret_scan (gitleaks)
+  test · lint (flake8) · osv_scan · security (bandit) · secret_scan (gitleaks)   (the five deploy gates)
+PR to master/develop + weekly → codeql.yml (python code scanning; additional, not a deploy gate)
+weekly → .github/dependabot.yml opens grouped minor+patch PRs for pip and github-actions (never auto-merged)
     └─ all pass on a master push → deploy_fly → /health version must match src/__init__.py
          └─ confirmed → tag vX.Y.Z + GitHub Release (notes = that version's What's New entry,
             via scripts/release_notes_from_whats_new.py; idempotent, skipped on an unconfirmed deploy)

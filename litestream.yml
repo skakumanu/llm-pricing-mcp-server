@@ -1,0 +1,20 @@
+# Litestream continuous replication (v1.86.0). See docs/DEPLOYMENT.md.
+#
+# Every database the application opens in production lives on the Fly volume at /app/data
+# and is listed here; scripts/check_replication.py (and tests/test_litestream_config.py)
+# fail if a *_db_path setting is added without being listed.
+#
+# LITESTREAM_REPLICA_URL is the bucket URL, e.g. s3://<bucket>/<prefix> (for Cloudflare R2
+# use the endpoint form described in docs/DEPLOYMENT.md). Credentials are read from the
+# LITESTREAM_ACCESS_KEY_ID and LITESTREAM_SECRET_ACCESS_KEY environment variables. All three
+# are Fly secrets; nothing secret belongs in this file.
+dbs:
+  - path: /app/data/billing.db
+    replicas:
+      - url: ${LITESTREAM_REPLICA_URL}/billing.db
+  - path: /app/data/pricing_history.db
+    replicas:
+      - url: ${LITESTREAM_REPLICA_URL}/pricing_history.db
+  - path: /app/data/orchestrator.db
+    replicas:
+      - url: ${LITESTREAM_REPLICA_URL}/orchestrator.db

@@ -44,7 +44,7 @@
     .faq h2 { font-size: 18px; font-weight: 600; margin: 32px 0 10px; padding-top: 8px; border-top: 1px solid var(--border); }
     .faq p { color: var(--muted); margin: 0 0 10px; }
     .faq h1 + p { font-size: 15px; }
-    .faq ul { margin: 0 0 12px 1.2rem; color: var(--text); }
+    .faq ul, .faq ol { margin: 0 0 12px 1.2rem; color: var(--text); }
     .faq li { margin: 4px 0; overflow-wrap: anywhere; }
     .faq a { color: var(--accent); text-decoration: none; }
     .faq a:hover { text-decoration: underline; }
@@ -123,7 +123,7 @@
 </ul>
 <h2 id="upgrading-cancelling-invoices-and-cards">Upgrading, cancelling, invoices and cards</h2>
 <ul>
-<li>Upgrade: Upgrade tab on <a href="/billing">/billing</a> with your key. Checkout is handled by Stripe. When Stripe is not configured on a server the buttons say so and nothing can be bought.</li>
+<li>Upgrade: Upgrade tab on <a href="/billing">/billing</a> with your key. Checkout is handled by Stripe. Paid plans are a pilot. Until the <a href="/terms">Terms</a>, <a href="/privacy">Privacy</a> and <a href="/refunds">Refund policy</a> are in force, or when Stripe is not configured on a server, the buttons say so and nothing can be bought.</li>
 <li>Cancel, change your card, download invoices: <strong>Manage Billing</strong> on <a href="/billing">/billing</a> opens the Stripe customer portal for your account. Cancelling returns you to Free at the end of the paid period.</li>
 <li>The support assistant explains and points you to these flows. It never changes your plan, card or invoices itself.</li>
 </ul>
@@ -135,8 +135,15 @@
 </ul>
 <h2 id="refunds-double-charges-and-disputes">Refunds, double charges and disputes</h2>
 <ul>
-<li>The support assistant cannot refund, credit, discount or change a tier. Ask it anyway: it escalates the request to the owner with a reference and tells you so. The owner reviews every refund or dispute personally.</li>
+<li>Full refund of your first payment if you ask within 14 days of paying; pro-rated for the unused period if you ask after that. The full policy is at <a href="/refunds">/refunds</a>.</li>
+<li>The owner reviews every request personally. Refunds are never granted by software, and the support assistant cannot refund, credit, discount or change a tier. Ask it anyway: it escalates the request to the owner with a reference and tells you so. Disputes and double charges are handled the same way.</li>
 <li>Keep the reference. You can check its status on <a href="/chat">/chat</a> (Support mode) with "what is the status of escalation orc_...".</li>
+</ul>
+<h2 id="legal-privacy-and-your-data">Legal, privacy and your data</h2>
+<ul>
+<li>Published policies: <a href="/terms">Terms</a>, <a href="/privacy">Privacy</a>, <a href="/refunds">Refunds</a>, <a href="/dpa">Data Processing Addendum</a>, <a href="/subprocessors">Subprocessors</a> and the <a href="/security">Security statement</a>. They are templates awaiting legal review and show a draft notice until the owner marks them in force; paid checkout stays disabled until then.</li>
+<li>To see, correct or delete the data held about you, ask the support assistant to escalate a data request, or write to the contact address in the Privacy policy. The owner verifies you first.</li>
+<li>Security reports are escalated privately through the support assistant and never posted publicly. The Security statement lists what the service does and does not have.</li>
 </ul>
 <h2 id="rate-limits">Rate limits</h2>
 <ul>
