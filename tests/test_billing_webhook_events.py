@@ -6,6 +6,7 @@ pro -> cancel -> free flow. Stripe fixtures are plain dicts (``construct_event``
 every id is assembled at runtime so nothing looks like a real key.
 """
 import asyncio
+import dataclasses
 import sys
 import time
 from pathlib import Path
@@ -76,7 +77,8 @@ def env(tmp_path):
         return client.post("/billing/webhook", content=b"{}", headers={"stripe-signature": "t=1,v1=x"})
 
     def reload():
-        return asyncio.run(billing.get_customer_by_id(customer.id))
+        # v1.87.0: the store keeps only a hash; carry the plaintext key from creation for header use.
+        return dataclasses.replace(asyncio.run(billing.get_customer_by_id(customer.id)), api_key=customer.api_key)
 
     def actions(prefix="billing."):
         return [a for a in asyncio.run(store.list_actions()) if a["action"].startswith(prefix)]

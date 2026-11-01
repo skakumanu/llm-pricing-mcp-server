@@ -424,6 +424,8 @@ class OrchestratorService:
             (trigger_class == "payment_event" and actor_kind != "stripe")
             or (trigger_class == "customer_message" and event_type == wfdef.SUPPORT_ESCALATION_EVENT
                 and actor_kind != "support_agent")
+            or (trigger_class == "customer_message" and event_type == wfdef.ACCOUNT_DELETION_EVENT
+                and actor_kind != "account_service")
         )
         if untrusted_escalation:
             return await self._refuse_intake(event_base, dedup_key, trigger_class, event_type, actor_kind,

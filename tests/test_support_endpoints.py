@@ -6,6 +6,7 @@ the customer's current key; /admin/customers/{id}/key/rotate is operator-only wi
 refusals. Keys are assembled at runtime so no secret-shaped literal lands in a commit.
 """
 import asyncio
+import dataclasses
 import sys
 import time
 from pathlib import Path
@@ -53,7 +54,8 @@ def env(tmp_path):
     free = asyncio.run(billing.create_customer("free" + "@" + "example.org"))
     pro = asyncio.run(billing.create_customer("pro" + "@" + "example.org"))
     asyncio.run(billing.update_tier(pro.id, "pro"))
-    pro = asyncio.run(billing.get_customer_by_id(pro.id))
+    # v1.87.0: the store keeps only a key hash; carry the plaintext from creation for request headers.
+    pro = dataclasses.replace(asyncio.run(billing.get_customer_by_id(pro.id)), api_key=pro.api_key)
     store = OrchestratorStore(str(tmp_path / "orch.db"))
     asyncio.run(store.initialize())
     svc = OrchestratorService(store)

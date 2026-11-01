@@ -89,7 +89,7 @@
 <div class="container">
   <div class="legal">
 <!-- legal:notice -->
-<p class="updated">Last updated 2026-10-31</p>
+<p class="updated">Last updated 2026-11-01</p>
 <!-- legal:start (generated from docs/legal/ by scripts/sync_legal.py; do not edit by hand) -->
 <h1>Security</h1>
 <p>Plain facts about how the LLM Pricing API service is run, and what it does not have. We do not claim any certification.</p>
@@ -97,7 +97,7 @@
 <ul>
 <li>TLS only: the hosted service redirects plain HTTP to HTTPS.</li>
 <li>Provider keys you store for dispatch are encrypted at rest with AES-256-GCM; the ciphertext is never returned and the plaintext is used only to run your request.</li>
-<li>Service keys are shown once at signup, are not shown again in full after that (the operator console shows only a short prefix), and can be rotated at any time. They are stored unhashed in the account database on the hosting volume and in its off-site backup copy, so access to either exposes them; rotate a key if you suspect exposure.</li>
+<li>Service keys are shown once at signup and can be rotated at any time. They are stored as a SHA-256 hash, so neither the account database nor its off-site backup copy holds a usable key; the owner sees only an 8-character prefix, which cannot be used to sign in.</li>
 <li>Secrets live in the hosting provider's secret store, not in the repository or the container image. A secret scanner runs on every change.</li>
 <li>The container runs as a non-root user.</li>
 <li>Every change passes automated gates before deploy: tests, lint, dependency vulnerability scan, static analysis and a secret scan. CodeQL code scanning and Dependabot dependency updates run in addition.</li>

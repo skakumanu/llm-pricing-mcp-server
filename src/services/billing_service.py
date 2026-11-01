@@ -1,4 +1,6 @@
 """Billing service — SQLite-backed customer/subscription management."""
+import hashlib
+import hmac
 import logging
 import secrets
 import time
@@ -43,7 +45,30 @@ CREATE TABLE IF NOT EXISTS customers (
 _ADDED_COLUMNS = (
     ("billing_status", "TEXT NOT NULL DEFAULT 'active'"),
     ("past_due_since", "REAL"),
+    # v1.87.0: service keys are stored as SHA-256(key) hex + an 8-char prefix; the legacy
+    # ``api_key`` column keeps only a non-secret placeholder (its NOT NULL UNIQUE constraint
+    # cannot be dropped in place). first_paid_at drives the refund-window check on deletion.
+    ("api_key_hash", "TEXT"),
+    ("api_key_prefix", "TEXT"),
+    ("first_paid_at", "REAL"),
 )
+
+_CREATE_HASH_INDEX = "CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_api_key_hash ON customers (api_key_hash)"
+
+# v1.87.0: what remains after an account is deleted: a dated, non-reversible marker.
+_CREATE_DELETED_ACCOUNTS = """
+CREATE TABLE IF NOT EXISTS deleted_accounts (
+    marker_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email_hash TEXT NOT NULL,
+    deleted_at REAL NOT NULL
+)
+"""
+_CREATE_DELETED_INDEX = "CREATE INDEX IF NOT EXISTS idx_deleted_accounts_hash ON deleted_accounts (email_hash)"
+_CREATE_META = "CREATE TABLE IF NOT EXISTS billing_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+_SALT_KEY = "suppression_salt"
+
+# Placeholder stored in the legacy plaintext column once a key is hashed (never a secret).
+_KEY_PLACEHOLDER_PREFIX = "hashed:"
 
 # v1.84.0: Stripe event ids seen, so a redelivered webhook event is ignored (AC18).
 _CREATE_STRIPE_EVENTS = """
@@ -54,10 +79,24 @@ CREATE TABLE IF NOT EXISTS stripe_events (
 )
 """
 
+# api_key (the legacy plaintext column) is deliberately never selected.
 _COLUMNS = (
-    "id, email, stripe_customer_id, stripe_subscription_id, api_key, tier, org_id, created_at, updated_at, "
-    "billing_status, past_due_since"
+    "id, email, stripe_customer_id, stripe_subscription_id, tier, org_id, created_at, updated_at, "
+    "billing_status, past_due_since, api_key_prefix, first_paid_at"
 )
+
+
+def hash_api_key(api_key: str) -> str:
+    """SHA-256 hex of a service key.
+
+    Service keys are 256-bit values from ``secrets.token_urlsafe(32)``, not human-chosen
+    passwords, so there is nothing for a slow (bcrypt/PBKDF2) hash to protect against: a
+    brute-force of the key space is infeasible regardless of hash speed, and a fast hash keeps
+    per-request authentication cheap. CodeQL's py/weak-sensitive-data-hashing rule flags this
+    because it assumes password-class input; the alert is dismissed as a false positive in the
+    repository's code-scanning settings rather than worked around in code.
+    """
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
 
 BILLING_STATUSES = ("active", "past_due")
 
@@ -68,7 +107,9 @@ class CustomerRecord:
     email: str
     stripe_customer_id: Optional[str]
     stripe_subscription_id: Optional[str]
-    api_key: str
+    # v1.87.0: the plaintext key exists only on the record returned by create_customer(); records
+    # read from the store carry api_key=None and the 8-char api_key_prefix instead.
+    api_key: Optional[str]
     tier: str
     org_id: str
     created_at: float
@@ -76,6 +117,8 @@ class CustomerRecord:
     # v1.84.0 — 'active' | 'past_due'; past_due_since is set when a renewal payment fails.
     billing_status: str = "active"
     past_due_since: Optional[float] = None
+    api_key_prefix: Optional[str] = None
+    first_paid_at: Optional[float] = None
 
 
 def _row_to_customer(row) -> CustomerRecord:
@@ -84,14 +127,31 @@ def _row_to_customer(row) -> CustomerRecord:
         email=row[1],
         stripe_customer_id=row[2],
         stripe_subscription_id=row[3],
-        api_key=row[4],
-        tier=row[5],
-        org_id=row[6],
-        created_at=row[7],
-        updated_at=row[8],
-        billing_status=row[9] if len(row) > 9 and row[9] else "active",
-        past_due_since=row[10] if len(row) > 10 else None,
+        api_key=None,
+        tier=row[4],
+        org_id=row[5],
+        created_at=row[6],
+        updated_at=row[7],
+        billing_status=row[8] or "active",
+        past_due_since=row[9],
+        api_key_prefix=row[10],
+        first_paid_at=row[11],
     )
+
+
+def within_refund_window(record: Optional[CustomerRecord], days: int, now: Optional[float] = None) -> bool:
+    """True when ``record`` is a paying account still inside the full-refund window.
+
+    Pure helper (no I/O). ``first_paid_at`` unknown counts as inside (conservative: the owner
+    is asked to review rather than silently skipped).
+    """
+    if record is None or not record.stripe_subscription_id:
+        return False
+    first = getattr(record, "first_paid_at", None)
+    if first is None:
+        return True
+    now = time.time() if now is None else now
+    return now - float(first) <= max(0, int(days)) * 86400
 
 
 def effective_tier(record: Optional[CustomerRecord], grace_days: int, now: Optional[float] = None) -> str:
@@ -134,7 +194,42 @@ class BillingService:
                 if name not in existing:
                     await db.execute(f"ALTER TABLE customers ADD COLUMN {name} {decl}")  # nosec B608 — literals
             await db.execute(_CREATE_STRIPE_EVENTS)
+            await db.execute(_CREATE_HASH_INDEX)
+            await db.execute(_CREATE_DELETED_ACCOUNTS)
+            await db.execute(_CREATE_DELETED_INDEX)
+            await db.execute(_CREATE_META)
+            await db.execute(
+                "INSERT OR IGNORE INTO billing_meta (key, value) VALUES (?, ?)",
+                (_SALT_KEY, secrets.token_hex(32)),
+            )
             await db.commit()
+        await self.migrate_plaintext_keys()
+
+    async def migrate_plaintext_keys(self) -> int:
+        """v1.87.0: hash every service key still stored in clear, in place and idempotently.
+
+        For each row without a hash: store SHA-256(key) and the 8-char prefix, then replace the
+        plaintext with a non-secret placeholder. A second run finds nothing to do. Returns the
+        number of rows migrated.
+        """
+        async with _open_db(self._db_path) as db:
+            async with db.execute(
+                "SELECT id, api_key FROM customers WHERE api_key_hash IS NULL"
+            ) as cur:
+                rows = await cur.fetchall()
+            for customer_id, api_key in rows:
+                await db.execute(
+                    "UPDATE customers SET api_key_hash = ?, api_key_prefix = ?, api_key = ? WHERE id = ?",
+                    (hash_api_key(api_key), api_key[:8], _KEY_PLACEHOLDER_PREFIX + customer_id, customer_id),
+                )
+            await db.commit()
+            async with db.execute("SELECT COUNT(*) FROM customers") as cur:
+                total = (await cur.fetchone())[0]
+        if rows:
+            logger.info("service keys hashed in place: %d migrated, %d customers total", len(rows), total)
+        else:
+            logger.info("service key hashing: nothing to migrate (%d customers)", total)
+        return len(rows)
 
     async def create_customer(self, email: str) -> Optional[CustomerRecord]:
         """Create a free-tier customer for a new email, or return None if it is taken.
@@ -153,10 +248,11 @@ class BillingService:
             try:
                 await db.execute(
                     "INSERT INTO customers "
-                    "(id, email, stripe_customer_id, stripe_subscription_id, api_key, tier, org_id, "
-                    "created_at, updated_at, billing_status, past_due_since) "
-                    "VALUES (?, ?, NULL, NULL, ?, 'free', ?, ?, ?, 'active', NULL)",
-                    (customer_id, email, api_key, org_id, now, now),
+                    "(id, email, stripe_customer_id, stripe_subscription_id, api_key, api_key_hash, "
+                    "api_key_prefix, tier, org_id, created_at, updated_at, billing_status, past_due_since) "
+                    "VALUES (?, ?, NULL, NULL, ?, ?, ?, 'free', ?, ?, ?, 'active', NULL)",
+                    (customer_id, email, _KEY_PLACEHOLDER_PREFIX + customer_id, hash_api_key(api_key),
+                     api_key[:8], org_id, now, now),
                 )
                 await db.commit()
             except aiosqlite.IntegrityError:
@@ -171,6 +267,7 @@ class BillingService:
             org_id=org_id,
             created_at=now,
             updated_at=now,
+            api_key_prefix=api_key[:8],
         )
 
     async def _one(self, where: str, value: str) -> Optional[CustomerRecord]:
@@ -182,7 +279,10 @@ class BillingService:
         return _row_to_customer(row) if row else None
 
     async def get_customer_by_api_key(self, api_key: str) -> Optional[CustomerRecord]:
-        return await self._one("api_key", api_key)
+        """Look a customer up by presented service key: hash it, match the stored hash."""
+        if not api_key:
+            return None
+        return await self._one("api_key_hash", hash_api_key(api_key))
 
     async def get_customer_by_stripe_id(self, stripe_customer_id: str) -> Optional[CustomerRecord]:
         return await self._one("stripe_customer_id", stripe_customer_id)
@@ -220,6 +320,9 @@ class BillingService:
         if stripe_subscription_id is not None:
             sets.append("stripe_subscription_id = ?")
             params.append(stripe_subscription_id)
+        if tier != "free" and stripe_subscription_id is not None:
+            sets.append("first_paid_at = COALESCE(first_paid_at, ?)")  # v1.87.0: first payment time
+            params.append(now)
         if billing_status is not None:
             if billing_status not in BILLING_STATUSES:
                 raise ValueError(f"unknown billing_status {billing_status!r}")
@@ -227,6 +330,9 @@ class BillingService:
             params.append(billing_status)
             if billing_status == "active":
                 sets.append("past_due_since = NULL")
+                if tier != "free" and stripe_subscription_id is None:
+                    sets.append("first_paid_at = COALESCE(first_paid_at, ?)")
+                    params.append(now)
         params.append(customer_id)
         async with _open_db(self._db_path) as db:
             await db.execute(
@@ -243,8 +349,10 @@ class BillingService:
         since = None if status == "active" else (past_due_since if past_due_since is not None else now)
         async with _open_db(self._db_path) as db:
             await db.execute(
-                "UPDATE customers SET billing_status = ?, past_due_since = ?, updated_at = ? WHERE id = ?",
-                (status, since, now, customer_id),
+                "UPDATE customers SET billing_status = ?, past_due_since = ?, updated_at = ?, "
+                "first_paid_at = CASE WHEN ? = 'active' AND tier != 'free' THEN COALESCE(first_paid_at, ?) "
+                "ELSE first_paid_at END WHERE id = ?",
+                (status, since, now, status, now, customer_id),
             )
             await db.commit()
 
@@ -255,12 +363,65 @@ class BillingService:
         now = time.time()
         async with _open_db(self._db_path) as db:
             cur = await db.execute(
-                "UPDATE customers SET api_key = ?, updated_at = ? WHERE id = ?", (new_key, now, customer_id)
+                "UPDATE customers SET api_key = ?, api_key_hash = ?, api_key_prefix = ?, updated_at = ? "
+                "WHERE id = ?",
+                (_KEY_PLACEHOLDER_PREFIX + customer_id, hash_api_key(new_key), new_key[:8], now, customer_id),
             )
             await db.commit()
             if (cur.rowcount or 0) != 1:
                 return None
         return new_key
+
+    async def _suppression_salt(self, db) -> bytes:
+        async with db.execute("SELECT value FROM billing_meta WHERE key = ?", (_SALT_KEY,)) as cur:
+            row = await cur.fetchone()
+        if row is None:  # initialize() always seeds it; this covers a table created behind our back
+            await db.execute("INSERT OR IGNORE INTO billing_meta (key, value) VALUES (?, ?)",
+                             (_SALT_KEY, secrets.token_hex(32)))
+            async with db.execute("SELECT value FROM billing_meta WHERE key = ?", (_SALT_KEY,)) as cur:
+                row = await cur.fetchone()
+        return bytes.fromhex(row[0])
+
+    @staticmethod
+    def _email_hash(salt: bytes, email: str) -> str:
+        return hmac.new(salt, email.strip().lower().encode("utf-8"), hashlib.sha256).hexdigest()
+
+    async def delete_customer(self, customer_id: str) -> Optional[float]:
+        """v1.87.0: erase the customer row and record the suppression marker in ONE transaction.
+
+        The marker holds only a timestamp and HMAC-SHA256(per-database salt, lower-cased email).
+        Returns the deletion timestamp, or None when the customer does not exist.
+        """
+        async with _open_db(self._db_path) as db:
+            await db.execute("BEGIN IMMEDIATE")
+            try:
+                async with db.execute("SELECT email FROM customers WHERE id = ?", (customer_id,)) as cur:
+                    row = await cur.fetchone()
+                if row is None:
+                    await db.rollback()
+                    return None
+                salt = await self._suppression_salt(db)
+                deleted_at = time.time()
+                await db.execute(
+                    "INSERT INTO deleted_accounts (email_hash, deleted_at) VALUES (?, ?)",
+                    (self._email_hash(salt, row[0]), deleted_at),
+                )
+                await db.execute("DELETE FROM customers WHERE id = ?", (customer_id,))
+                await db.commit()
+            except BaseException:
+                await db.rollback()
+                raise
+        return deleted_at
+
+    async def suppression_marker_count(self, email: str) -> int:
+        """How many deletion markers exist for ``email`` (checked without storing the address)."""
+        async with _open_db(self._db_path) as db:
+            salt = await self._suppression_salt(db)
+            await db.commit()
+            async with db.execute(
+                "SELECT COUNT(*) FROM deleted_accounts WHERE email_hash = ?", (self._email_hash(salt, email),)
+            ) as cur:
+                return (await cur.fetchone())[0]
 
     async def record_stripe_event(self, event_id: str, event_type: str) -> bool:
         """v1.84.0: INSERT OR IGNORE the Stripe event id. False = already seen (duplicate)."""
@@ -277,6 +438,27 @@ class BillingService:
         async with _open_db(self._db_path) as db:
             await db.execute("DELETE FROM stripe_events WHERE event_id = ?", (str(event_id),))
             await db.commit()
+
+
+async def cancel_stripe_subscription(subscription_id: str, secret_key: Optional[str] = None) -> bool:
+    """v1.87.0: end a Stripe subscription immediately (no refund, no proration invoice).
+
+    Returns True when the subscription is now ended, including when it was already cancelled or
+    no longer exists at Stripe. Any other Stripe error propagates so the caller can abort.
+    """
+    import asyncio
+
+    import stripe  # local import — optional dependency
+    if secret_key:
+        stripe.api_key = secret_key
+    try:
+        await asyncio.to_thread(stripe.Subscription.cancel, subscription_id)
+    except stripe.InvalidRequestError as exc:
+        text = str(exc).lower()
+        if "no such subscription" in text or "already" in text or "canceled" in text or "cancelled" in text:
+            return True
+        raise
+    return True
 
 
 async def init_billing_service(db_path: str) -> BillingService:

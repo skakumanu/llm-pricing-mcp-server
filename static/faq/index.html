@@ -142,7 +142,10 @@
 <h2 id="legal-privacy-and-your-data">Legal, privacy and your data</h2>
 <ul>
 <li>Published policies: <a href="/terms">Terms</a>, <a href="/privacy">Privacy</a>, <a href="/refunds">Refunds</a>, <a href="/dpa">Data Processing Addendum</a>, <a href="/subprocessors">Subprocessors</a> and the <a href="/security">Security statement</a>. They are templates awaiting legal review and show a draft notice until the owner marks them in force; paid checkout stays disabled until then.</li>
-<li>To see, correct or delete the data held about you, ask the support assistant to escalate a data request, or write to the contact address in the Privacy policy. The owner verifies you first.</li>
+<li><strong>How to export or delete your data.</strong> You do it yourself with your service key, no email needed. Export: <code>GET /billing/account/export</code> with your key in the <code>x-api-key</code> header downloads one JSON file with everything held about your organisation (account record, stored provider-key metadata but never the keys, usage, dispatch receipts, budget alerts, routing history and your support conversations). Delete: <code>POST /billing/account/delete</code> with the body <code>{"confirm": "DELETE", "org_id": "&lt;your org id&gt;"}</code> permanently erases all of it and your key stops working at once. Deletion is irreversible; without the exact confirmation nothing is changed. Details are in the <a href="/privacy">Privacy policy</a> and the <a href="/api-docs">API docs</a>.</li>
+<li>A paid subscription is ended immediately when you delete, so no further charge occurs. Deleting within 14 days of your first payment also asks the owner to review a refund; you get a reference, and nothing is refunded automatically.</li>
+<li>Support conversations you hold with your key are kept against your organisation for 90 days and then purged.</li>
+<li>To correct data, or if you lost your key, ask the support assistant to escalate a data request, or write to the contact address in the Privacy policy. The owner verifies you first.</li>
 <li>Security reports are escalated privately through the support assistant and never posted publicly. The Security statement lists what the service does and does not have.</li>
 </ul>
 <h2 id="rate-limits">Rate limits</h2>
