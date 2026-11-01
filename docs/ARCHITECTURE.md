@@ -398,7 +398,7 @@ Auth: **None** = public · **Rate-limited** = anonymous, per-IP limit + body cap
 PR to develop/master, push to master  (ci-cd.yml)
   test · lint (flake8) · osv_scan · security (bandit) · secret_scan (gitleaks)   (the five deploy gates)
 PR to master/develop + weekly → codeql.yml (python code scanning; additional, not a deploy gate)
-weekly → .github/dependabot.yml opens grouped minor+patch PRs for pip and github-actions (never auto-merged)
+weekly → .github/dependabot.yml opens grouped minor+patch PRs for pip and github-actions against develop (never auto-merged)
     └─ all pass on a master push → deploy_fly → /health version must match src/__init__.py
          └─ confirmed → tag vX.Y.Z + GitHub Release (notes = that version's What's New entry,
             via scripts/release_notes_from_whats_new.py; idempotent, skipped on an unconfirmed deploy)

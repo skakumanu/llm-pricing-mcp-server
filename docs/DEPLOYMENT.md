@@ -12,8 +12,9 @@ The old Azure blue-green docs are historical only:
 - `deploy_fly` waits for `test`, `lint`, `osv_scan`, `security`, `secret_scan`, then runs
   `flyctl deploy --remote-only` (token: `FLY_API_TOKEN` Actions secret). These five gates are
   unchanged. CodeQL (`.github/workflows/codeql.yml`, on pull requests and weekly) and Dependabot
-  (`.github/dependabot.yml`, pip and github-actions, weekly, minor and patch grouped) run in
-  addition as scanners; neither is a deploy gate and Dependabot PRs are never auto-merged.
+  (`.github/dependabot.yml`, pip and github-actions, weekly, minor and patch grouped, PRs against
+  `develop`) run in addition as scanners; neither is a deploy gate and Dependabot PRs are never
+  auto-merged.
 - After a confirmed deploy it tags `vX.Y.Z` and publishes a GitHub Release whose notes are
   that version's What's New entry (`scripts/release_notes_from_whats_new.py`). An unconfirmed
   health check publishes nothing, so the Releases page only ever reflects what is live.

@@ -87,8 +87,15 @@ _COLUMNS = (
 
 
 def hash_api_key(api_key: str) -> str:
-    """SHA-256 hex of a service key. Keys are 256-bit random, so an unsalted fast hash is sufficient."""
-    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+    """SHA-256 hex of a service key.
+
+    Service keys are 256-bit values from ``secrets.token_urlsafe(32)``, not human-chosen
+    passwords, so there is nothing for a slow (bcrypt/PBKDF2) hash to protect against: a
+    brute-force of the key space is infeasible regardless of hash speed, and a fast hash keeps
+    per-request authentication cheap. CodeQL's weak-hashing rule assumes password-class input,
+    which is why it is suppressed on the line below.
+    """
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()  # lgtm[py/weak-sensitive-data-hashing]
 
 BILLING_STATUSES = ("active", "past_due")
 

@@ -77,7 +77,7 @@ Additional to the five gates above; none of them is a deploy gate.
 | Workflow / config | Runs | Does | How to handle |
 |---|---|---|---|
 | `.github/workflows/codeql.yml` | PR to `develop`/`master`, weekly (Mondays 05:23 UTC), `workflow_dispatch` | CodeQL code scanning for Python; results in the Security tab | Triage alerts; fix or dismiss with a reason |
-| `.github/dependabot.yml` | Weekly | Version-update PRs for `pip` and `github-actions`, minor and patch updates grouped into one PR per ecosystem | Review and merge like any PR (never auto-merged); keep `requirements.txt` and `pyproject.toml` in sync |
+| `.github/dependabot.yml` | Weekly | Version-update PRs for `pip` and `github-actions` against `develop`, minor and patch updates grouped into one PR per ecosystem; major bumps arrive as separate PRs | Review and merge like any PR (never auto-merged); keep `requirements.txt` and `pyproject.toml` in sync |
 | GitHub secret-scanning push protection | On push | Blocks pushes containing secrets | A manual GitHub UI setting (launch checklist LC-17), not code |
 
 ## Weekly price-audit PRs

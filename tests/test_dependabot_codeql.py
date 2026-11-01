@@ -24,6 +24,11 @@ class TestDependabot:
         assert DEPENDABOT["version"] == 2
         assert sorted(u["package-ecosystem"] for u in DEPENDABOT["updates"]) == ["github-actions", "pip"]
 
+    def test_prs_target_develop(self):
+        """Git flow: every PR targets develop, never master (v1.87.0; the first run went to master)."""
+        for update in DEPENDABOT["updates"]:
+            assert update["target-branch"] == "develop"
+
     def test_weekly_and_minor_patch_grouped(self):
         for update in DEPENDABOT["updates"]:
             assert update["directory"] == "/"

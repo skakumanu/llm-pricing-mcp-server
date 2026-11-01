@@ -46,7 +46,8 @@ def test_fresh_customer_row_holds_no_plaintext(svc):
     cust = run(svc.create_customer("a" + "@" + "example.org"))
     assert cust.api_key and cust.api_key_prefix == cust.api_key[:8]
     [(cid, legacy, digest, prefix)] = rows(svc._db_path)
-    assert digest == hashlib.sha256(cust.api_key.encode()).hexdigest() == hash_api_key(cust.api_key)
+    # 256-bit random key: a fast hash is the right choice (see hash_api_key); CodeQL assumes a password.
+    assert digest == hashlib.sha256(cust.api_key.encode()).hexdigest() == hash_api_key(cust.api_key)  # lgtm[py/weak-sensitive-data-hashing]
     assert len(digest) == 64 and prefix == cust.api_key[:8]
     assert legacy != cust.api_key and cust.api_key not in dump(svc._db_path)
 

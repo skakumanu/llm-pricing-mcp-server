@@ -175,6 +175,7 @@
       <ul class="change-list">
         <li><strong>Service keys are now stored only as a SHA-256 hash plus an 8-character prefix.</strong> Existing keys are converted in place on the first start (once, safe to repeat); every key keeps working and the admin console shows the prefix as before. Keys are still shown once, at signup or rotation. This means the off-site backup copy of the account database holds no usable keys</li>
         <li>The privacy policy and security statement now describe the self-service export and deletion and the hashed keys</li>
+        <li>Dependabot pull requests now target <code>develop</code>, matching the repository's branch flow (the first run had opened them against <code>master</code>)</li>
         <li>No pricing data, tiers or prices changed</li>
       </ul>
     </div>
