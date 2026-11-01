@@ -47,6 +47,8 @@ SUPPORT_ESCALATION_EVENT = "support.escalation"
 # v1.87.0: opened by the account-deletion handler (actor_kind 'account_service') when a paying
 # account is deleted inside the refund window; routed like a support escalation, category refund.
 ACCOUNT_DELETION_EVENT = "account.deletion_refund_review"
+# v1.88.0: the weekly compliance-audit.yml posts this schedule event; routed to compliance_audit.
+COMPLIANCE_AUDIT_EVENT = "compliance-audit.requested"
 PAYMENT_ESCALATION_EVENTS = ("charge.refunded", "charge.dispute.created", "invoice.payment_failed")
 ESCALATION_CATEGORIES = ("billing_dispute", "refund", "double_charge", "payment_failure", "key_recovery",
                          "bug", "feature", "other")
@@ -214,6 +216,26 @@ WORKFLOWS: Dict[str, Workflow] = {
             Step("summarize", "deterministic", "orchestrator", requires=("record_jobs",)),
         ),
     ),
+    # v1.88.0: report-only compliance audit. run_checks persists the report first and, when any check
+    # fails, returns gate_result='fail'; review_report requires run_checks, so the engine parks the run
+    # at an audit_flag owner checkpoint. Pass / warn-only reports finish with no approval.
+    "compliance_audit": Workflow(
+        workflow_id="compliance_audit",
+        trigger_classes=("schedule", "owner_request"),
+        specialist_available=True,
+        per_run_budget_usd=0.25,
+        monthly_budget_usd=5.0,
+        description="Weekly (and on-demand) mechanical audit of the whole system; report-only. A failing "
+                    "check opens one owner checkpoint; the optional LLM summary is one bounded haiku call.",
+        steps=(
+            Step("run_checks", "deterministic", "audit_agent", timeout_s=180, max_attempts=2,
+                 description="Run the check catalogue and persist the report (read-only against everything audited)."),
+            Step("executive_summary", "deterministic", "audit_agent", timeout_s=60, max_attempts=1,
+                 description="Template summary; one optional bounded LLM call when AUDIT_LLM_SUMMARY is on."),
+            Step("review_report", "deterministic", "orchestrator", requires=("run_checks",),
+                 description="Completes at once on a pass/warn report; a failing report waits for the owner."),
+        ),
+    ),
 }
 
 
@@ -337,6 +359,8 @@ def route(trigger_class: str, event_type: str, owner_signals: Dict[str, Any],
     if trigger_class == "schedule":
         if event_type == "price-audit.completed":
             return _if_present("weekly_price_audit", registry)
+        if event_type == COMPLIANCE_AUDIT_EVENT:
+            return _if_present("compliance_audit", registry)
         return None, "refused:no_route"
 
     if trigger_class == "owner_request":

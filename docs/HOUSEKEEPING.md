@@ -78,6 +78,7 @@ Additional to the five gates above; none of them is a deploy gate.
 |---|---|---|---|
 | `.github/workflows/codeql.yml` | PR to `develop`/`master`, weekly (Mondays 05:23 UTC), `workflow_dispatch` | CodeQL code scanning for Python; results in the Security tab | Triage alerts; fix or dismiss with a reason |
 | `.github/dependabot.yml` | Weekly | Version-update PRs for `pip` and `github-actions` against `develop`, minor and patch updates grouped into one PR per ecosystem; major bumps arrive as separate PRs | Review and merge like any PR (never auto-merged); keep `requirements.txt` and `pyproject.toml` in sync |
+| `.github/workflows/compliance-audit.yml` | Mondays 07:00 UTC (after price-audit), `workflow_dispatch` | Runs the repo-side checks (`scripts/compliance_repo_checks.py`: Dependabot, CodeQL, tracked files, replication check, checklist parser, version tests) and asks the service to run the weekly compliance audit with one `schedule` event; exits 0 without `ORCHESTRATOR_INTAKE_KEY` | Read the report on `/admin` (Compliance audit) or `GET /audit/reports/latest`; a failing check opens one approval in the queue |
 | GitHub secret-scanning push protection | On push | Blocks pushes containing secrets | A manual GitHub UI setting (launch checklist LC-17), not code |
 
 ## Weekly price-audit PRs

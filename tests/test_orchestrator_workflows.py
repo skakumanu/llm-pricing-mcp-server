@@ -39,7 +39,8 @@ class TestRegistryValidation:
     def test_shipped_registry_is_valid_and_bounded(self):
         wf.validate_registry(wf.WORKFLOWS)
         assert set(wf.WORKFLOWS) == {"github_accepted_bug", "release_notes_draft", "support_triage",
-                                     "weekly_price_audit", "support_escalation"}  # v1.84.0: + support_escalation
+                                     "weekly_price_audit", "support_escalation",
+                                     "compliance_audit"}  # v1.84.0: + support_escalation; v1.88.0: + compliance_audit
         for w in wf.WORKFLOWS.values():
             assert 1 <= len(w.steps) <= wf.MAX_STEPS
 
@@ -126,6 +127,14 @@ class TestRouting:
         assert wf.route("github_event", "push.master", {"actor_is_owner": True}) == ("release_notes_draft", "routed")
         assert wf.route("github_event", "push.master", {"actor_is_owner": False}) == (None, "refused:not_owner")
         assert wf.route("schedule", "price-audit.completed", {}) == ("weekly_price_audit", "routed")
+        # v1.88.0: the weekly compliance-audit.yml event, and the owner's on-demand request
+        assert wf.route("schedule", "compliance-audit.requested", {}) == ("compliance_audit", "routed")
+        assert wf.route("owner_request", "compliance_audit",
+                        {"actor_is_owner": True, "workflow_id": "compliance_audit"}) == ("compliance_audit", "routed")
+        assert wf.route("owner_request", "compliance_audit",
+                        {"actor_is_owner": False, "workflow_id": "compliance_audit"}) == (None, "refused:not_owner")
+        assert wf.route("github_event", "compliance-audit.requested", {"actor_is_owner": True}) == (None, "refused:no_route")
+        assert wf.route("customer_message", "compliance-audit.requested", {}) == (None, "refused:no_route")
         assert wf.route("schedule", "other", {}) == (None, "refused:no_route")
         assert wf.route("owner_request", "support_triage", {"actor_is_owner": True, "workflow_id": "support_triage"}) \
             == ("support_triage", "routed")
@@ -214,6 +223,16 @@ class TestModes:
             w = wf.WORKFLOWS[wid]
             assert wf.resolve_mode(w, "standard") == "dry_run"
             assert wf.resolve_mode(w, "standard", requested="standard") == "dry_run"
+
+    def test_compliance_audit_definition(self):
+        """v1.88.0: report-only; the owner checkpoint comes from the engine's gate, not an extra step kind."""
+        w = wf.WORKFLOWS["compliance_audit"]
+        assert w.specialist_available and w.trigger_classes == ("schedule", "owner_request")
+        assert [s.name for s in w.steps] == ["run_checks", "executive_summary", "review_report"]
+        assert all(s.kind == "deterministic" and s.checkpoint_kind is None and s.action is None for s in w.steps)
+        assert w.step("review_report").requires == ("run_checks",) and w.step("executive_summary").requires == ()
+        assert w.per_run_budget_usd == 0.25 and w.monthly_budget_usd == 5.0
+        assert w.step("run_checks").timeout_s == 180
 
     def test_mandatory_kinds(self):
         assert wf.MANDATORY_CHECKPOINT_KINDS == {"merge", "money", "outbound", "publish", "audit_flag",

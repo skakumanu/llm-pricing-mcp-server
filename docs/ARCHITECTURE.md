@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.87.0 | **Last updated**: 2026-11-01
+**Version**: v1.88.0 | **Last updated**: 2026-11-01
 
 Canonical internals reference. Release history lives in `static/whats-new/`, not here.
 
@@ -16,7 +16,8 @@ FastAPI service that aggregates LLM pricing from 30 providers (600+ models) and 
 - **Dispatch gateway**: `POST /v1/chat/completions` + `dispatch` object executes the best eligible model on the caller's own provider key
 - **Local currency**: 13 currencies, additive `local_*` fields; pricing data itself stays USD
 - **Dev tooling (not deployed)**: `/release-feature` phase-agent pipeline (see `CLAUDE.md`); `scripts/audit_repo.py` customer-run cost auditor
-- **Orchestrator core (v1.83.0)**: operator-only `/orchestrator/*` — idempotent intake of GitHub events / schedules / owner requests / payment events, finite workflows with human checkpoints, run log, approval queue, budgets; executors are `orchestrator-intake.yml`, the support agent and the owner on `/admin`; no LLM *step* runs inside a workflow
+- **Orchestrator core (v1.83.0)**: operator-only `/orchestrator/*` — idempotent intake of GitHub events / schedules / owner requests / payment events, finite workflows with human checkpoints, run log, approval queue, budgets; executors are `orchestrator-intake.yml`, the support agent and the owner on `/admin`; the only LLM use inside a workflow is the optional, off-by-default, single bounded executive-summary call of the compliance audit (v1.88.0)
+- **Compliance audit agent (v1.88.0)**: operator-only `/audit/*` — a weekly (`compliance-audit.yml`) and on-demand, mechanical, report-only audit of the whole system (legal gate, backup coverage, secrets presence, version consistency, data-quality regression, billing key hashing, Stripe reconciliation, launch-checklist honesty) that persists a report in `orchestrator.db` and opens an owner checkpoint only when a check fails; it plugs into the orchestrator as the `compliance_audit` workflow (`audit_checks.py`, `audit_store.py`, `audit_service.py`)
 - **Support agent (v1.84.0)**: `POST /support/chat` + `support_chat` MCP tool — identity-aware (`_resolve_mcp_caller`), grounded in `docs/FAQ.md` + the tier catalogue (`src/services/tiers.py`) + the caller's own account, escalates to an `owner_handoff` checkpoint in the orchestrator, spends under per-caller daily caps and the orchestrator ledger, and never changes billing
 
 ---
@@ -42,6 +43,7 @@ FastAPI service that aggregates LLM pricing from 30 providers (600+ models) and 
 │ Usage/Budget/Alerts  │ │ TF-IDF RAG     │ │ ProviderKeyStore        │
 │ WebhookGuard         │ │ conv. memory   │ │ OrchestratorService     │
 │ Currency · Dispatch  │ │ SupportBudget  │ │ (runs, approvals, budget)│
+│                      │ │                │ │ AuditService (reports)  │
 └───────┬──────────────┘ └──────┬─────────┘ └──────────┬──────────────┘
 ┌───────▼───────────────────────▼──────────────────────▼───────────────┐
 │ Data: pricing_history · billing · orchestrator · conversations (.db) │
@@ -101,6 +103,10 @@ src/
     orchestrator_workflows.py  finite workflow definitions (validated at import), route(), redaction, templates
     orchestrator_store.py   orchestrator.db: runs, steps, events, approvals, append-only actions, spend, settings
     orchestrator_service.py the run engine: intake/dedup, step loop, checkpoints, executors, budgets, pause
+    audit_checks.py         compliance audit check catalogue (pure, injected adapters, read-only) (v1.88.0)
+    audit_store.py          audit_reports + audit_checks tables in orchestrator.db; append-only except set_summary and the retention purge
+    audit_service.py        compliance_audit step handlers (run_checks, executive_summary, review_report) and the Stripe / data-quality adapters
+    launch_checklist.py     parser/validator for docs/LAUNCH_CHECKLIST.md (moved from scripts/ in v1.88.0: the image has no scripts/)
     ide_pricing.py, telemetry.py, geolocation.py, data_fetcher.py, data_sources.py, deployment.py
 mcp/
   server.py                 STDIO transport (always anonymous; transport='stdio')
@@ -120,13 +126,15 @@ data/
 scripts/                    weekly audit scripts, validate_price_snapshot.py, sync_nav.py, sync_faq.py,
                             sync_legal.py (docs/legal → legal pages, --check, --placeholders),
                             check_replication.py (every *_db_path DB is on the volume and in litestream.yml),
-                            launch_checklist.py (parser/validator for docs/LAUNCH_CHECKLIST.md),
+                            launch_checklist.py (CLI over src/services/launch_checklist.py),
+                            compliance_repo_checks.py (repo-side checks posted by compliance-audit.yml),
                             quick_validate.py, audit_repo.py, promote_branch_content.sh,
                             release_notes_from_whats_new.py (deploy job → GitHub Release notes)
 npm/llm-pricing-mcp/        zero-dependency STDIO↔HTTP bridge published to npm
 server.json                 MCP registry listing (remote + npm package)
 .github/workflows/          ci-cd, sync-develop, price-audit (+ report-run), npm-publish, mcp-registry-publish,
                             orchestrator-intake (GitHub executor of the orchestrator core),
+                            compliance-audit (weekly repo-side checks + one schedule event for the compliance audit),
                             codeql (python code scanning; PR + weekly); .github/dependabot.yml (pip + github-actions)
 tests/                      pytest suite (count: README "passing tests" line)
 fly.toml, Dockerfile        Fly config; image copies src/ static/ agent/ rag/ mcp/ docs/ data/ (multi-stage: adds the Litestream binary)
@@ -151,7 +159,7 @@ Checked in this order:
 
 | Step | Paths | Effect |
 |---|---|---|
-| 1. Operator-only request | GET/HEAD `/pricing/alerts`, `/agent/conversations`; DELETE `/pricing/alerts/{id}`, `/agent/conversations/{id}`; any method under `/orchestrator/` and `/admin/customers/` (`_OPERATOR_ONLY_PREFIXES`; the latter is `/admin/customers/{id}/key/rotate`) | Decided first so the `/pricing` prefix bypass can't expose them |
+| 1. Operator-only request | GET/HEAD `/pricing/alerts`, `/agent/conversations`; DELETE `/pricing/alerts/{id}`, `/agent/conversations/{id}`; any method under `/orchestrator/`, `/audit/` and `/admin/customers/` (`_OPERATOR_ONLY_PREFIXES`; the latter is `/admin/customers/{id}/key/rotate`) | Decided first so the `/pricing` prefix bypass can't expose them |
 | 2. Full bypass | OPTIONS, static UIs (incl. `/faq`), the legal pages (`_LEGAL_PAGE_PATHS`: `/terms`, `/privacy`, `/refunds`, `/dpa`, `/subprocessors`, `/security`), `/pricing*`, `/mcp`, `_unauthenticated_paths` (incl. `/billing/config`) | No auth, no limiter; `_public_body_capped_paths` (`/v1/chat/completions`, `/mcp`) still body-capped |
 | 3. Operator key | step 1 + `_sensitive_paths` (`/deployment/shutdown*`, `/admin/customers`, `/admin/stats`, `/admin/rate-limits`) | Global `MCP_API_KEY` in `x-api-key` only (byte compare); 503 if unset. The three orchestrator executor routes (POST `/orchestrator/events`, GET `…/runs/{id}/actions`, POST `…/actions/{aid}/result`) also accept `ORCHESTRATOR_INTAKE_KEY`; it unlocks nothing else, but on those routes it carries the executor's owner assertion for GitHub events, so a `pull_request.opened` continuation is additionally bound to the repository the run was created from (`refused:repo_mismatch` otherwise) |
 | 4. Anonymous, rate-limited | `/agent/chat*`, `/support/chat`, `/support/escalations/status`, `/billing/signup`, POST `/pricing/alerts`, `/pricing/alerts/self/*`, `/cost-estimate*` | Per-IP limit + body cap; a customer key on `/cost-estimate*` and `/support/*` gets its tier limit (the support handlers resolve identity themselves via `_resolve_mcp_caller`) |
@@ -287,7 +295,8 @@ trigger (GitHub event · schedule · owner request · support escalation · Stri
   failure / block / deadline / max steps → status parked (reason + prior outputs); owner resumes or closes
   result ∈ {done, awaiting_owner, failed, deliberately_not_done}; public_summary is a template
 ```
-- **Workflows (code, `orchestrator_workflows.py`)**: `github_accepted_bug` (intake → annotate → `sdlc_run` checkpoint → one status comment), `release_notes_draft` and `support_triage` (specialist missing → forced `dry_run`, owner checkpoint "do manually or skip"; `support_triage` is also the ledger workflow id for live support-chat spend), `support_escalation` (v1.84.0: intake → mandatory `owner_handoff` checkpoint; trigger classes `customer_message` with event `support.escalation` (from the support agent) or `account.deletion_refund_review` (v1.87.0, from the account service only), `payment_event` with `charge.refunded` / `charge.dispute.created` / `invoice.payment_failed`, `owner_request`), `weekly_price_audit` (parks on any failed job). `validate_registry()` runs at import and rejects `FORBIDDEN_ACTIONS` (`merge_pr`, `refund`, `charge`, `send_email`, `publish`, `push_branch`, `grant_permission`); the only executor action kind is `github_issue_comment_upsert`.
+- **Workflows (code, `orchestrator_workflows.py`)**: `github_accepted_bug` (intake → annotate → `sdlc_run` checkpoint → one status comment), `release_notes_draft` and `support_triage` (specialist missing → forced `dry_run`, owner checkpoint "do manually or skip"; `support_triage` is also the ledger workflow id for live support-chat spend), `support_escalation` (v1.84.0: intake → mandatory `owner_handoff` checkpoint; trigger classes `customer_message` with event `support.escalation` (from the support agent) or `account.deletion_refund_review` (v1.87.0, from the account service only), `payment_event` with `charge.refunded` / `charge.dispute.created` / `invoice.payment_failed`, `owner_request`), `weekly_price_audit` (parks on any failed job), `compliance_audit` (v1.88.0: `run_checks` → `executive_summary` → `review_report`, see below). `validate_registry()` runs at import and rejects `FORBIDDEN_ACTIONS` (`merge_pr`, `refund`, `charge`, `send_email`, `publish`, `push_branch`, `grant_permission`); the only executor action kind is `github_issue_comment_upsert`.
+- **Compliance audit (v1.88.0)**: workflow `compliance_audit` (trigger classes `schedule` with event `compliance-audit.requested`, dedup `schedule:compliance-audit:<UTC day>`, and `owner_request` with its own id per click; budgets 0.25 USD per run, 5 USD per month). `run_checks` runs the `audit_checks.CHECK_SPECS` catalogue (each check returns `pass | fail | warn | n/a` with a fixed severity, redacted evidence and the launch-checklist ids it verifies; a check that cannot run is an `n/a` row with a reason, never a pass), persists the report **first** (`audit_reports` + `audit_checks`, one transaction) and, when any check failed, returns `gate_result = fail`; `review_report` requires `run_checks`, so the engine's existing gate parks it at a mandatory `audit_flag` checkpoint whose artifact adds `failed_outcome` (the failing check ids) and `report_id` (the /admin card links to it). Approve = reviewed (run `done`), reject = closed. Pass / warn-only reports finish `done` with no approval. `executive_summary` always writes a deterministic template; with `AUDIT_LLM_SUMMARY` on it makes at most one call on `AUDIT_SUMMARY_MODEL` (default `claude-haiku-5-5`) after `check_budget`, records the spend under `compliance_audit`, and keeps the template on refusal or error. Independence: billing.db is opened `mode=ro`, Stripe uses a distinct restricted read-only key (`STRIPE_AUDIT_KEY`) passed per call, the audit modules reference no write method of billing, Stripe or the orchestrator settings (pinned by test), and `audit_store.py` is the only writer of its tables. Repo-side checks (Dependabot, CodeQL, tracked files, replication, checklist parser, version tests) are run by `compliance-audit.yml` (the image has no `.github/`, `scripts/`, `tests/`) and posted as a bounded `repo_checks` dict; absent ones are `n/a`. Reports and check rows are purged after `AUDIT_REPORT_RETENTION_DAYS`.
 - **Support escalations (v1.84.0)**: dedup `msg:<conversation_id>` (one run per support conversation; a second attempt attaches and returns the same reference) or `stripe:<event id>`; actor kinds `support_agent` / `stripe`; structured inputs `category`, `priority`, `tier`, `identified`, `customer_ref` (org prefix), `conversation_ref`, `suggested_reply` (redacted, ≤ 500). The `owner_handoff` artifact is `{kind, label, priority, body (redacted ≤ 500), customer {identified, org_ref}, conversation_ref, instruction_like, suggested_reply}`; decisions are `done_manually` (with a reply note the customer can read) or `reject`, never `approve`; `approval_queue()` adds `priority` and sorts enterprise > pro > standard, then newest. `public_escalation_view(run_id)` → `{reference, status, owner_reply}` is all a customer ever sees (`POST /support/escalations/status`, `check_escalation`). No email, key or Stripe id reaches an artifact, event or action record.
 - **Support spend**: `record_agent_spend()` writes every support LLM call to `orch_spend` (`run_id conv:<id>`, workflow `support_triage`, default `budget.workflow_monthly_usd.support_triage` = 40); `budget_gate(workflow_id)` (factored out of `check_budget`) is asked before every call, so the global 150 USD/month ceiling and the /admin budget bars cover support. Action records written outside a run: `support.answer` (outcome `answered | fallback_cap | fallback_disabled | error`), `support.cap_hit`, `support.account_read`, `support.escalation`, `support.escalation_status`, `billing.key_rotate`, `billing.<stripe event>`.
 - **SDLC wrap**: the checkpoint shows `/release-feature Fix issue #N (orchestrator run orc_…)`; the skill stamps `Orchestrator-Run:` into the PR footer; `pull_request: opened` (same repo, owner) completes the checkpoint and approves the templated status comment (`decided_by: github_pr_marker`); the PR URL must be in the repository recorded on the run and match the event's PR number, so a leaked intake key cannot attach a foreign link. Merging stays the owner's.
@@ -327,7 +336,7 @@ Pages: `/` (landing), `/chat` (Pricing | Support toggle; the optional service ke
 | `pricing_history.db` | `pricing_snapshots`, `routing_savings`, `routing_feedback`, `usage_events`, `pricing_alerts`, `budget_alerts`, `dispatch_receipts` | Receipts are metadata only, purged after 90 days |
 | `billing.db` | `customers` (+ `billing_status`, `past_due_since` since v1.84.0; `api_key_hash`, `api_key_prefix`, `first_paid_at` since v1.87.0), `stripe_events` (event-id dedup), `provider_keys`, `deleted_accounts` (suppression markers), `billing_meta` (per-database salt) | Provider keys stored as ciphertext + last-4 fingerprint; new columns added by a `PRAGMA table_info`-guarded `ALTER TABLE` |
 | `conversations.db` (`CONVERSATION_DB_PATH`) | `conversations` (+ nullable `org_id`, index on `(org_id, updated_at)` since v1.87.0) | Set to `/app/data/conversations.db` on Fly and replicated (unset locally → in-memory). Support turns (`sup-…` ids) are stored with secrets redacted; conversations of identified customers are attributed to their org (never detached by a later anonymous turn). Purged after `CONVERSATION_RETENTION_DAYS` (90; `<= 0` disables) at startup and after saves; erased with the account |
-| `orchestrator.db` (`ORCHESTRATOR_DB_PATH`) | `orch_runs`, `orch_steps`, `orch_events`, `orch_approvals`, `orch_actions`, `orch_spend`, `orch_settings` | Rows purged after `ORCHESTRATOR_RUN_RETENTION_DAYS` (365); redacted I/O summaries nulled after `ORCHESTRATOR_IO_RETENTION_DAYS` (90); `orch_actions` is append-only |
+| `orchestrator.db` (`ORCHESTRATOR_DB_PATH`) | `orch_runs`, `orch_steps`, `orch_events`, `orch_approvals`, `orch_actions`, `orch_spend`, `orch_settings`; `audit_reports`, `audit_checks` (compliance audit, v1.88.0; purged after `AUDIT_REPORT_RETENTION_DAYS` (365), append-only except a report's own summary) | Rows purged after `ORCHESTRATOR_RUN_RETENTION_DAYS` (365); redacted I/O summaries nulled after `ORCHESTRATOR_IO_RETENTION_DAYS` (90); `orch_actions` is append-only |
 
 - All `.db` files are gitignored and live on the Fly volume (`/app/data`). `billing.db`, `pricing_history.db`, `orchestrator.db` and `conversations.db` are replicated continuously to S3-compatible storage by Litestream (v1.86.0; `litestream.yml`, restore in `docs/DEPLOYMENT.md`); `scripts/check_replication.py` fails the build if a new `*_db_path` database is not on the volume and in `litestream.yml`. The mount hides the image's
   `data/` tree, so the registry snapshot, registry-sourced model files and exchange-rate table are read
@@ -383,6 +392,9 @@ Auth: **None** = public · **Rate-limited** = anonymous, per-IP limit + body cap
 | POST/GET | `/orchestrator/runs[/{id}]`, `/orchestrator/runs/{id}/resume`, `/orchestrator/runs/{id}/close` | Operator key | Owner request; run log (JSON/CSV); run detail; dead-letter controls |
 | GET/POST | `/orchestrator/approvals[/{id}]` | Operator key | Approval queue; approve / reject / edit_approve / done_manually / skip |
 | GET | `/orchestrator/parked`, `/orchestrator/budget`, `/orchestrator/workflows`, `/orchestrator/actions` | Operator key | Parked runs, budget view, workflow catalogue, action records (JSON/CSV) |
+| POST | `/audit/run` | Operator key | Start an on-demand compliance audit (v1.88.0); returns the run plus `report_id` / `report_status`; 503 when the audit is not initialised |
+| GET | `/audit/reports` | Operator key | Reports, newest first: status, counts, data-quality numbers, summary source |
+| GET | `/audit/reports/{report_id}` | Operator key | One report with every check row and the summary; `latest` is an alias; 404 `report_not_found` |
 | GET/PUT | `/orchestrator/settings` | Operator key | Global pause, mode defaults, budgets (422 `specialist_missing`) |
 | GET | `/api/versions`, `/deployment/metadata`, `/deployment/info` | Service key | Version metadata |
 | POST/GET | `/deployment/shutdown`, `/deployment/shutdown/status` | Operator key | Graceful shutdown |
@@ -406,11 +418,12 @@ push to master → sync-develop.yml opens a ci/sync-develop-* PR if develop lags
 push to master touching npm/llm-pricing-mcp/** → npm-publish.yml
 push to master touching server.json            → mcp-registry-publish.yml
 weekly → price-audit.yml (human-merged PRs) → report-run posts one schedule event to the orchestrator
+weekly (Mon 07:00 UTC) → compliance-audit.yml: repo-checks job → report-run posts one `compliance-audit.requested` schedule event
 issues labeled · PR opened (same repo, develop) · push master · workflow_dispatch(run_id)
   → orchestrator-intake.yml: POST /orchestrator/events → GET …/actions?executor=github → comment upsert → POST …/result
 ```
 
-`orchestrator-intake.yml` runs with `contents: read`; only its `execute` job has `issues: write`. It uses `GITHUB_TOKEN` (no PAT), picks fields with `jq` from the event payload (never `${{ github.event.* }}` text in a script), guards PRs to the same repo, and exits 0 with a step-summary line when `ORCHESTRATOR_INTAKE_KEY` is absent. Pinned by `tests/test_orchestrator_intake_workflow.py`.
+`orchestrator-intake.yml` runs with `contents: read`; only its `execute` job has `issues: write`. It uses `GITHUB_TOKEN` (no PAT), picks fields with `jq` from the event payload (never `${{ github.event.* }}` text in a script), guards PRs to the same repo, and exits 0 with a step-summary line when `ORCHESTRATOR_INTAKE_KEY` is absent. Pinned by `tests/test_orchestrator_intake_workflow.py`. `compliance-audit.yml` (v1.88.0) is `contents: read` throughout, uses no PAT, builds its payload with `jq` from fixed fields (`repo_checks`, `repo_version`, `sha`) and exits 0 when the intake key is absent; pinned by `tests/test_compliance_audit_workflow.py`.
 
 | Weekly job (`price-audit.yml`) | Does |
 |---|---|
