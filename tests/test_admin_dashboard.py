@@ -417,3 +417,25 @@ def test_migration_guide_url_points_at_an_existing_doc():
     url = resp.json()["migration_guide_url"]
     assert url.startswith(prefix)
     assert (project_root / url[len(prefix):]).exists()
+
+    # v1.89.0 — Documents panel (AC15)
+    def test_documents_panel_markup_and_ordering(self):
+        html = self._html()
+        for el in ("docs-panel", "docs-badge", "docs-type-select", "docs-generate-btn", "docs-params", "docs-data-only",
+                   "docs-body"):
+            assert f'id="{el}"' in html, el
+        assert "Generate" in html and "Download" in html
+        for path in ("/documents/types", "/documents/artifacts?limit=", "/documents/generate", "/download?format="):
+            assert path in html, path
+        assert html.index('id="docs-panel"') > html.index('id="audit-panel"') > html.index('id="orch-section"')
+
+    def test_publish_card_links_the_preview(self):
+        html = self._html()
+        assert 'art.kind === "publish" && art.artifact_id' in html
+        assert "art.doc_type" in html and "art.corrections" in html and "art.llm_mode" in html and "preview" in html
+
+    def test_documents_paths_are_operator_only_not_public(self):
+        import src.main as main_module
+        assert "/documents/" in main_module._OPERATOR_ONLY_PREFIXES
+        for path in main_module._unauthenticated_paths | main_module._anonymous_rate_limited_paths:
+            assert not path.startswith("/documents"), path

@@ -518,6 +518,29 @@
     </div>
   </div>
 
+  <!-- ── Documents (v1.89.0) — owner-requested decks and one-pagers, traced to a provenance manifest ── -->
+  <div class="panel" id="docs-panel">
+    <div class="panel-header">
+      Documents
+      <span class="orch-filters">
+        <select id="docs-type-select" onchange="docsTypeChanged(this.value)" title="Document type (closed catalogue)"></select>
+        <label style="font-size:11px;color:var(--muted)" title="Templated prose, no model call"><input type="checkbox" id="docs-data-only"> data-only</label>
+        <label style="font-size:11px;color:var(--muted)" title="Draft the narrative with the premium model"><input type="checkbox" id="docs-premium"> premium model</label>
+        <button id="docs-generate-btn" onclick="docsGenerate()" title="Gather the figures, draft, verify and wait for your publish approval. Nothing is sent anywhere">Generate</button>
+      </span>
+      <span class="panel-badge" id="docs-badge">—</span>
+    </div>
+    <div style="padding:10px 16px 0;font-size:11px;color:var(--muted)">Parameters (JSON; omitted ones use the defaults shown, which the document discloses):</div>
+    <div style="padding:4px 16px 10px"><textarea id="docs-params" rows="4" spellcheck="false" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:11px;font-family:monospace"></textarea></div>
+    <div id="docs-message" style="padding:0 16px 8px;font-size:11px;color:var(--muted)"></div>
+    <div class="table-scroll">
+    <table class="data-table" id="docs-table">
+      <thead><tr><th>Artifact</th><th>Type</th><th>Title</th><th>Status</th><th>Created</th><th>Fixes</th><th>Mode</th><th>Download</th></tr></thead>
+      <tbody id="docs-body"><tr class="empty-row"><td colspan="8">Loading…</td></tr></tbody>
+    </table>
+    </div>
+  </div>
+
   <div class="panel">
     <div class="panel-header">
       Run Log
@@ -882,6 +905,7 @@ async function loadOrchestrator() {
     renderOrchParked(parked);
     renderOrchRuns(runs);
     await loadAudit();
+    await loadDocuments();
   } catch (e) {
     showError("Orchestrator: " + e.message);
   }
@@ -967,6 +991,87 @@ async function auditRun() {
   }
 }
 
+// ── Documents (v1.89.0) ────────────────────────────────────────────────────
+// Operator-only. "Generate" gathers the figures from the product's data, drafts, verifies every number against
+// the provenance manifest and parks the document at a publish approval in the queue above. Downloads go through
+// fetch (the operator key travels in a header) and open as a blob in a new tab.
+let _docTypes = [];
+
+async function loadDocuments() {
+  const badge = document.getElementById("docs-badge");
+  try {
+    if (!_docTypes.length) {
+      const t = await orchJson("/documents/types");
+      if (t._unavailable) { badge.textContent = "unavailable"; return; }
+      _docTypes = t.types || [];
+      const sel = document.getElementById("docs-type-select");
+      sel.innerHTML = _docTypes.map(x => `<option value="${esc(x.doc_type)}">${esc(x.title)}</option>`).join("");
+      docsTypeChanged(sel.value);
+    }
+    const list = await orchJson("/documents/artifacts?limit=30");
+    if (list._unavailable) { badge.textContent = "unavailable"; return; }
+    const rows = list.artifacts || [];
+    const pending = rows.filter(r => r.status === "draft").length;
+    badge.textContent = pending ? pending + " awaiting review" : rows.length + " stored";
+    const cls = { draft: "pill-amber", published: "pill-green", discarded: "pill-blue", failed: "pill-red", gathering: "pill-blue" };
+    const body = document.getElementById("docs-body");
+    if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="8">No documents yet</td></tr>'; return; }
+    body.innerHTML = rows.map(r => `<tr id="doc-${esc(r.artifact_id)}">
+      <td class="mono" style="font-size:11px">${esc(r.artifact_id)}</td>
+      <td style="font-size:11px">${esc(r.doc_type)}</td>
+      <td style="font-size:11px">${esc(truncate(r.title || "", 60))}</td>
+      <td><span class="pill ${cls[r.status] || "pill-blue"}">${esc(r.status)}</span></td>
+      <td style="font-size:11px;color:var(--muted)">${esc(new Date(r.created_at * 1000).toLocaleString())}</td>
+      <td style="font-size:11px">${esc(String(r.corrections == null ? "" : r.corrections))}</td>
+      <td style="font-size:11px;color:var(--muted)">${esc(r.llm_mode || "")}</td>
+      <td style="font-size:11px">${r.status === "failed" ? "" : `<a href="#" onclick="docsDownload('${esc(r.artifact_id)}','html');return false" style="color:var(--accent)">HTML</a> · <a href="#" onclick="docsDownload('${esc(r.artifact_id)}','md');return false" style="color:var(--accent)">Markdown</a>`}</td>
+    </tr>`).join("");
+  } catch (e) {
+    badge.textContent = "error";
+    document.getElementById("docs-message").textContent = "Documents unavailable: " + e.message;
+  }
+}
+
+function docsTypeChanged(id) {
+  const t = _docTypes.find(x => x.doc_type === id);
+  document.getElementById("docs-params").value = t ? JSON.stringify(t.defaults, null, 2) : "{}";
+}
+
+async function docsGenerate() {
+  const btn = document.getElementById("docs-generate-btn");
+  const msg = document.getElementById("docs-message");
+  let params;
+  try { params = JSON.parse(document.getElementById("docs-params").value || "{}"); }
+  catch (e) { msg.textContent = "Parameters must be valid JSON"; return; }
+  btn.disabled = true;
+  msg.textContent = "Generating…";
+  try {
+    const res = await orchJson("/documents/generate", { method: "POST", body: JSON.stringify({
+      doc_type: document.getElementById("docs-type-select").value, params,
+      data_only: document.getElementById("docs-data-only").checked ? true : null,
+      premium: document.getElementById("docs-premium").checked }) });
+    if (res._unavailable) { msg.textContent = "Document writer is not initialised"; return; }
+    msg.textContent = `Draft ${res.artifact_id} ready (${res.llm_mode}, ${res.corrections} correction(s)); approve it in the queue above to publish.`;
+    await loadOrchestrator();
+  } catch (e) {
+    msg.textContent = "Generate failed: " + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function docsDownload(id, fmt) {
+  try {
+    const res = await fetch("/documents/artifacts/" + encodeURIComponent(id) + "/download?format=" + fmt, { headers: headers() });
+    if (!res.ok) throw new Error(res.status + "");
+    const url = URL.createObjectURL(await res.blob());
+    window.open(url, "_blank", "noopener");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    showError("Download failed: " + e.message);
+  }
+}
+
 function renderOrchControls(data, budget) {
   const s = data.settings || {};
   const workflows = data.workflows || [];
@@ -1027,6 +1132,11 @@ function renderOrchApprovals(data) {
     if (art.kind === "audit_flag") {
       if (art.failed_outcome) artifact += `<div style="font-size:11px;color:var(--danger);margin-top:4px">${esc(truncate(art.failed_outcome, 220))}</div>`;
       if (art.report_id) artifact += `<div style="font-size:11px;margin-top:4px"><a href="#audit-report-${esc(art.report_id)}" onclick="auditSelect('${esc(art.report_id)}')" style="color:var(--accent)">view report ${esc(art.report_id)}</a></div>`;
+    }
+    // v1.89.0 — publish card for a generated document: what it is, how many numbers were corrected, a preview.
+    if (art.kind === "publish" && art.artifact_id) {
+      artifact += `<div style="font-size:11px;color:var(--muted);margin-top:4px">${esc(art.doc_type || "")} · ${esc(truncate(art.title || "", 80))} · ${esc(String(art.corrections == null ? 0 : art.corrections))} correction(s) · ${esc(art.llm_mode || "")}</div>`
+        + `<div style="font-size:11px;margin-top:4px"><a href="#" onclick="docsDownload('${esc(art.artifact_id)}','html');return false" style="color:var(--accent)">preview ${esc(art.artifact_id)}</a></div>`;
     }
     // v1.84.0 — customer escalation card (owner_handoff): priority, category, opaque customer, conversation link.
     let priorityPill = "";

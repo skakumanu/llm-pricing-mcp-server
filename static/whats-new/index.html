@@ -155,8 +155,32 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.88.0 -->
+  <!-- v1.89.0 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.89.0</span>
+      <span class="release-date">Nov 1, 2026</span>
+      <span class="release-tag tag-feature">Feature</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Document writer: decks and one-pagers with provenance, owner-reviewed</div>
+      <div class="section-label">Added</div>
+      <ul class="change-list">
+        <li><strong>A document writer for the operator.</strong> Ask for one of four documents from a closed catalogue (a pricing comparison deck, a pricing one-pager, a release notes brief built only from this page, or an internal status report) and get a self-contained printable HTML file or Markdown. Decks have one slide per section with speaker notes and print to PDF from a browser; charts are inline SVG next to the table they plot</li>
+        <li><strong>Every figure is traced.</strong> Each number comes from a product data call made while the document was generated and is recorded in a provenance manifest. Each price carries its as-of date and a status label (provider-confirmed, registry-sourced, stale, withheld, unpriced, retired); anything without a usable price reads &ldquo;price not available&rdquo; and is left out of rankings and charts. A verification step removes any number in the text that the manifest cannot back and reports how many it removed</li>
+        <li><strong>Operator-only: <code>POST /documents/generate</code>, <code>GET /documents/types</code>, <code>GET /documents/artifacts</code>, <code>GET /documents/artifacts/{id}</code> and <code>.../download</code></strong>, plus a Documents panel in the admin console. Each document waits for the owner's publish approval; approving marks it published, rejecting discards it, and it stays downloadable either way. Nothing is sent anywhere</li>
+        <li>The narrative is one bounded model call (<code>claude-haiku-5-5</code> by default, <code>claude-sonnet-5-5</code> on request) inside the orchestrator budget. With the budget spent, no key or the backend down, the document is still produced from templates and is visibly labelled &ldquo;Data-only edition&rdquo;</li>
+      </ul>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li><strong>Customer-visible behaviour is unchanged.</strong> No endpoint, tool, tier, price or page a customer uses changed, and no pricing data was touched</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.88.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.88.0</span>

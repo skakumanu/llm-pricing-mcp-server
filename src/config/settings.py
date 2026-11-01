@@ -193,6 +193,13 @@ class Settings(BaseSettings):
     audit_escalation_max_age_days: int = 7          # open owner escalations older than this -> warn
     audit_stale_price_pct_warn: float = 10.0        # stale confirmed prices above this % -> warn
     audit_disabled_checks: str = ""                 # comma list of check ids reported n/a "disabled"
+    # Document writer (v1.89.0). Operator-only artefacts (src/services/docs_*.py); one bounded draft call per
+    # document, spend recorded in the orchestrator ledger under document_generate. Budgets live on the
+    # workflow definition and are owner-adjustable through PUT /orchestrator/settings.
+    docs_default_model: str = "claude-haiku-5-5"    # drafting model unless the request asks for the premium one
+    docs_premium_model: str = "claude-sonnet-5-5"   # selectable per request (premium=true)
+    docs_artifact_retention_days: int = 30          # stored artefacts are purged past this age
+    docs_data_only_default: bool = False            # true = templated prose and zero LLM calls unless asked otherwise
 
     # v1.82.1: back to "forbid" so an unknown .env key fails at startup instead of being
     # silently ignored; retired keys are filtered out first (RETIRED_ENV_KEYS). Process

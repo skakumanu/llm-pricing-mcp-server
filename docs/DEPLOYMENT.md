@@ -135,6 +135,22 @@ read -rs STRIPE_AUDIT_KEY && flyctl secrets set STRIPE_AUDIT_KEY="$STRIPE_AUDIT_
 | `AUDIT_STALE_PRICE_PCT_WARN` | `10` | Stale confirmed prices above this percentage raise a warning |
 | `AUDIT_DISABLED_CHECKS` | empty | Comma list of check ids reported as n/a "disabled" and listed in the coverage line |
 
+## Document writer (v1.89.0)
+
+The document writer (`/documents/*`, operator key only) needs no new secret and no workflow file: it uses the
+existing `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` (per `AGENT_LLM_PROVIDER`) for its one drafting call and falls
+back to labelled data-only documents when there is no key, the orchestrator budget refuses or the backend
+fails. Artefacts are rows of the `doc_artifacts` table in `orchestrator.db`, so Litestream already replicates
+them; they are purged after `DOCS_ARTIFACT_RETENTION_DAYS`. The workflow's budgets (2 USD per run, 20 USD per
+month) are owner-adjustable through `PUT /orchestrator/settings`.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `DOCS_DEFAULT_MODEL` | `claude-haiku-5-5` | Model for the drafting call (spend is recorded under `document_generate`) |
+| `DOCS_PREMIUM_MODEL` | `claude-sonnet-5-5` | Model when a request sets `premium` |
+| `DOCS_ARTIFACT_RETENTION_DAYS` | `30` | Stored artefacts older than this are purged |
+| `DOCS_DATA_ONLY_DEFAULT` | `false` | `true` = templated prose and no model call unless a request says otherwise |
+
 The audit is report-only evidence, not a certification: it opens the billing database read-only, passes the
 Stripe key per call, and writes nothing except its own report tables.
 
