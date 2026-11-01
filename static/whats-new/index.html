@@ -155,8 +155,26 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.89.0 -->
+  <!-- v1.89.1 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.89.1</span>
+      <span class="release-date">Nov 1, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Recommendations now rank the Claude 5 family correctly</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li><strong>Claude 5.x models had no quality score.</strong> <code>claude-haiku-5-5</code>, <code>claude-sonnet-5-5</code>, <code>claude-opus-5-5</code>, <code>claude-fable-5-1</code> and <code>claude-mythos-5-1</code> were priced but unscored, so <code>recommend_model</code>, <code>/router/recommend</code> and <code>optimize_workload</code> ranked the previous generation first; a Claude Code session asking for a cheap model was told to use <code>claude-haiku-4-5</code> at ten times the price of <code>claude-haiku-5-5</code>. The five models now carry tier-relative scores placed from the public launch benchmarks, each above its predecessor, and the undated <code>claude-haiku-4-5</code> registry entry is scored like its dated twin</li>
+        <li>No price, tier or endpoint changed; the data-quality figures are unchanged</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.89.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.89.0</span>
