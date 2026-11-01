@@ -22,7 +22,7 @@ from io import StringIO  # noqa: E402
 from fastapi.responses import JSONResponse, Response, StreamingResponse, FileResponse, HTMLResponse  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
-from typing import Any, Optional, Dict, List  # noqa: E402
+from typing import Any, Literal, Optional, Dict, List  # noqa: E402
 import asyncio  # noqa: E402
 import time  # noqa: E402
 import uuid  # noqa: E402
@@ -80,6 +80,10 @@ from src.services.orchestrator_service import (  # noqa: E402
 )
 from src.services.orchestrator_workflows import workflow_catalogue as _orchestrator_workflow_catalogue  # noqa: E402
 from src.models.audit import AuditRunIn  # noqa: E402
+from src.models.documents import DocGenerateIn  # noqa: E402
+from src.services.docs_catalogue import ParamError, describe_types  # noqa: E402
+from src.services.docs_service import DocsService, get_docs_service, init_docs_service  # noqa: E402
+from src.services.docs_store import init_docs_store  # noqa: E402
 from src.services.audit_service import AuditService, get_audit_service, init_audit_service  # noqa: E402
 from src.services.audit_store import init_audit_store  # noqa: E402
 from src.models.orchestrator import (  # noqa: E402
@@ -214,6 +218,14 @@ _openapi_tags = [
             "Operator-only orchestrator core (v1.83.0): idempotent intake, run log, approval queue, parked runs, "
             "budgets and settings. Every route needs the operator key; the three executor routes also accept "
             "ORCHESTRATOR_INTAKE_KEY."
+        ),
+    },
+    {
+        "name": "Documents",
+        "description": (
+            "Operator-only document writer (v1.89.0): decks, one-pagers, release briefs and status reports "
+            "from a closed catalogue, every figure traced to a provenance manifest, stored as artefacts that "
+            "wait for the owner's publish approval. Every route needs the operator key."
         ),
     },
     {
@@ -546,7 +558,8 @@ _OPERATOR_ONLY_DELETE_PREFIXES = ("/pricing/alerts/", "/agent/conversations/")
 # v1.84.0: /admin/customers/{id}/key/rotate (owner-side key rotation) joins them; the exact
 # path /admin/customers stays in _sensitive_paths.
 # v1.88.0: /audit/ (compliance audit reports) joins them; the intake key is NOT accepted there.
-_OPERATOR_ONLY_PREFIXES = ("/orchestrator/", "/admin/customers/", "/audit/")
+# v1.89.0: /documents/ (document writer) joins them. Not "/docs/": GET /docs is the public Swagger page.
+_OPERATOR_ONLY_PREFIXES = ("/orchestrator/", "/admin/customers/", "/audit/", "/documents/")
 
 # The three executor routes that also accept the separate ORCHESTRATOR_INTAKE_KEY
 # (GitHub Actions). The intake key unlocks nothing else, but through these three routes it can
@@ -1263,6 +1276,17 @@ async def startup_pricing_history() -> None:
                         "on" if settings.stripe_audit_key else "off", "on" if settings.audit_llm_summary else "off")
         except Exception as exc:  # nosec B110
             logger.error("Compliance audit init failed (/audit routes answer 503): %s", type(exc).__name__)
+        # v1.89.0 — document writer: artefact table in the same file, handlers registered with the
+        # orchestrator. Operator-only; /documents routes answer 503 if this fails.
+        try:
+            docs_store = await init_docs_store(settings.orchestrator_db_path,
+                                               retention_days=settings.docs_artifact_retention_days)
+            docs_service = init_docs_service(DocsService(docs_store, orch_service, settings))
+            docs_service.install()
+            logger.info("Document writer initialized (default model %s, retention %d days)",
+                        settings.docs_default_model, settings.docs_artifact_retention_days)
+        except Exception as exc:  # nosec B110
+            logger.error("Document writer init failed (/documents routes answer 503): %s", type(exc).__name__)
     except Exception as exc:  # nosec B110
         logger.error("Orchestrator init failed (/orchestrator routes answer 503): %s", type(exc).__name__)
     asyncio.create_task(_pricing_snapshot_loop())
@@ -4531,6 +4555,91 @@ async def audit_report(report_id: str):
     if report is None:
         return JSONResponse(status_code=404, content={"error": "report_not_found", "message": "no such report"})
     return report
+
+
+# ---------------------------------------------------------------------------
+# Document writer (v1.89.0) — operator-only via _OPERATOR_ONLY_PREFIXES ("/documents/"); stores only.
+# ---------------------------------------------------------------------------
+
+def _docs() -> DocsService:
+    try:
+        return get_docs_service()
+    except RuntimeError:
+        raise HTTPException(status_code=503, detail="Document writer is not initialized")
+
+
+def _doc_summary(r: Dict[str, Any], svc: DocsService) -> Dict[str, Any]:
+    out = {k: r.get(k) for k in ("artifact_id", "run_id", "created_at", "doc_type", "kind", "title", "status",
+                                 "corrections", "expires_at", "size_bytes", "format")}
+    out["llm_mode"] = svc.llm_mode(r)
+    return out
+
+
+@app.get("/documents/types", tags=["Documents"])
+async def documents_types():
+    """The closed document catalogue: four types with their parameters, defaults, sections and data sources."""
+    _docs()
+    return {"count": len(describe_types()), "types": describe_types()}
+
+
+@app.post("/documents/generate", tags=["Documents"])
+async def documents_generate(body: DocGenerateIn):
+    """
+    Generate one document (owner request, operator key only). Gathers the figures from the product's own data,
+    drafts the narrative (one bounded model call, or data-only), cross-checks every number against the
+    provenance manifest, stores the artefact and waits at the publish checkpoint for the owner. Nothing is
+    sent anywhere. 422 for an unknown type or parameter, or a document that fails validation (no artefact).
+    """
+    svc = _docs()
+    try:
+        result = await svc.generate(body.doc_type, body.params, body.format, body.data_only, body.premium,
+                                    body.request_id)
+    except ParamError as exc:
+        return JSONResponse(status_code=422, content={"error": "invalid_params", "field": exc.field,
+                                                      "message": exc.message})
+    except OrchestratorError as exc:
+        return _orchestrator_error(exc)
+    if result.get("artifact_status") == "failed" or not result.get("artifact_id"):
+        return JSONResponse(status_code=422, content={"error": "document_failed", "run_id": result.get("run_id"),
+                                                      "message": result.get("failure") or "generation failed"})
+    return result
+
+
+@app.get("/documents/artifacts", tags=["Documents"])
+async def documents_artifacts(limit: int = Query(50, ge=1, le=500), status: Optional[str] = Query(None)):
+    """Stored artefacts, newest first: type, title, status, corrections and model mode. Never the content."""
+    svc = _docs()
+    rows = await svc.list_artifacts(limit=limit, status=status)
+    return {"count": len(rows), "artifacts": [_doc_summary(r, svc) for r in rows]}
+
+
+@app.get("/documents/artifacts/{artifact_id}", tags=["Documents"])
+async def documents_artifact(artifact_id: str):
+    """One artefact's metadata, resolved parameters, outline and provenance manifest (no rendered body)."""
+    svc = _docs()
+    row = await svc.get_artifact(artifact_id)
+    if row is None:
+        return JSONResponse(status_code=404, content={"error": "artifact_not_found", "message": "no such artifact"})
+    doc = row.get("document") or {}
+    return {**_doc_summary(row, svc), "params": row.get("params"), "manifest": row.get("manifest"),
+            "llm": row.get("llm"), "error": row.get("error"),
+            "outline": [{"id": s["id"], "title": s["title"]} for s in doc.get("sections", [])]}
+
+
+@app.get("/documents/artifacts/{artifact_id}/download", tags=["Documents"])
+async def documents_download(artifact_id: str, format: Literal["html", "md", "markdown"] = Query("html")):
+    """Download the artefact as self-contained HTML or Markdown, rendered now with its current status banner
+    (a draft carries a DRAFT banner). Allowed in every state that has a document."""
+    svc = _docs()
+    row = await svc.get_artifact(artifact_id)
+    if row is None:
+        return JSONResponse(status_code=404, content={"error": "artifact_not_found", "message": "no such artifact"})
+    if not row.get("document"):
+        return JSONResponse(status_code=404, content={"error": "artifact_has_no_document",
+                                                      "message": "generation failed; there is nothing to download"})
+    body, media, name = await svc.render(row, "html" if format == "html" else "md")
+    return Response(content=body, media_type=media,
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 # ---------------------------------------------------------------------------

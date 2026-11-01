@@ -236,6 +236,32 @@ WORKFLOWS: Dict[str, Workflow] = {
                  description="Completes at once on a pass/warn report; a failing report waits for the owner."),
         ),
     ),
+    # v1.89.0: owner-requested document from the closed catalogue (src/services/docs_*.py). The LLM
+    # draft is made inside the handler (check_budget -> call -> record_spend) so a refused budget or a
+    # failing backend falls back to labelled data-only prose instead of parking the run. The final
+    # step is the existing mandatory publish checkpoint; nothing is sent anywhere.
+    "document_generate": Workflow(
+        workflow_id="document_generate",
+        trigger_classes=("owner_request",),
+        specialist_available=True,
+        per_run_budget_usd=2.0,
+        monthly_budget_usd=20.0,
+        description="Owner-requested document (deck, one-pager, release brief, status report) -> gather -> "
+                    "draft (one bounded model call, or data-only) -> verify and render -> owner review "
+                    "(publish checkpoint) -> stored artefact. Nothing is sent anywhere.",
+        steps=(
+            Step("gather", "deterministic", "document_agent", timeout_s=120, max_attempts=2,
+                 description="Product data calls, provenance manifest and the artefact row."),
+            Step("draft", "deterministic", "document_agent", requires=("gather",), timeout_s=120, max_attempts=1,
+                 description="One bounded prose call after check_budget; data-only on refusal or failure."),
+            Step("verify_render", "deterministic", "document_agent", requires=("draft",), timeout_s=60,
+                 max_attempts=1, description="Cross-check every number against the manifest, validate, trial render."),
+            Step("owner_review", "checkpoint", "orchestrator", checkpoint_kind="publish",
+                 requires=("verify_render",)),
+            Step("publish", "deterministic", "document_agent", requires=("owner_review",), timeout_s=30,
+                 max_attempts=1, description="Marks the artefact published; no outbound action exists here."),
+        ),
+    ),
 }
 
 

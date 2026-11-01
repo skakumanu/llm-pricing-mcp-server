@@ -129,6 +129,8 @@ _INPUT_KEYS = ("issue_number", "labels", "label", "pr_number", "pr_url", "sha", 
                "orchestrator_run_id", "customer_ref",
                # v1.88.0 compliance audit (bounded status dict + versions posted by compliance-audit.yml)
                "repo_checks", "repo_version",
+               # v1.89.0 document writer (owner request only; validated by the docs catalogue in the handler)
+               "doc_type", "doc_params", "doc_format", "data_only", "doc_premium",
                # v1.84.0 support escalations (all set by server code, never by customer text)
                "category", "priority", "tier", "conversation_ref", "identified", "suggested_reply")
 _SUPPORT_STR_KEYS = ("category", "priority", "tier", "conversation_ref")
@@ -209,6 +211,32 @@ def _pick_inputs(data: Dict[str, Any]) -> Dict[str, Any]:
             out.pop("repo_checks")
     if "repo_version" in out:
         out["repo_version"] = str(out["repo_version"])[:20]
+    if "doc_type" in out:
+        out["doc_type"] = str(out["doc_type"])[:60]
+    if "doc_params" in out:
+        out["doc_params"] = _bounded_doc_params(out["doc_params"])
+    if "doc_format" in out:
+        out["doc_format"] = out["doc_format"] if out["doc_format"] in ("html", "markdown", "both") else "both"
+    for flag in ("data_only", "doc_premium"):
+        if flag in out:
+            out[flag] = bool(out[flag])
+    return out
+
+
+def _bounded_doc_params(value: Any) -> Dict[str, Any]:
+    """v1.89.0: owner-supplied document parameters, bounded like repo_checks (keys, strings, lists, ints)."""
+    if not isinstance(value, dict):
+        return {}
+    out: Dict[str, Any] = {}
+    for k, v in list(value.items())[:20]:
+        key = str(k)[:60]
+        if isinstance(v, bool) or isinstance(v, (int, float)):
+            out[key] = v
+        elif isinstance(v, list):
+            out[key] = [x if isinstance(x, (int, float)) and not isinstance(x, bool) else str(x)[:60]
+                        for x in v[:20]]
+        else:
+            out[key] = str(v)[:_INPUT_STR_MAX]
     return out
 
 
@@ -1023,6 +1051,17 @@ class OrchestratorService:
         elif kind == "publish":
             artifact = {"kind": "publish", "label": "publish requires owner approval",
                         "content_step": sdef.requires[-1] if sdef.requires else None}
+            # v1.89.0: data only. When the run produced a document, its id and headline facts so the
+            # owner's card can link to the preview (the same way the audit_flag card links the report).
+            summary = run.get("summary_json") or {}
+            if isinstance(summary.get("artifact_id"), str) and summary["artifact_id"]:
+                artifact["artifact_id"] = summary["artifact_id"][:40]
+                for key, cap in (("doc_type", 60), ("title", 200), ("llm_mode", 100)):
+                    if isinstance(summary.get(key), str):
+                        artifact[key] = wfdef.redact_untrusted_text(summary[key])[:cap]
+                for key in ("corrections", "figures"):
+                    if isinstance(summary.get(key), int):
+                        artifact[key] = summary[key]
         elif kind == "owner_handoff":
             # v1.84.0: the customer escalation card. Body and suggested reply were redacted and
             # truncated at intake; the customer is an opaque org prefix, never an email or key.
