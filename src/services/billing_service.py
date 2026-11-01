@@ -92,10 +92,11 @@ def hash_api_key(api_key: str) -> str:
     Service keys are 256-bit values from ``secrets.token_urlsafe(32)``, not human-chosen
     passwords, so there is nothing for a slow (bcrypt/PBKDF2) hash to protect against: a
     brute-force of the key space is infeasible regardless of hash speed, and a fast hash keeps
-    per-request authentication cheap. CodeQL's weak-hashing rule assumes password-class input,
-    which is why it is suppressed on the line below.
+    per-request authentication cheap. CodeQL's py/weak-sensitive-data-hashing rule flags this
+    because it assumes password-class input; the alert is dismissed as a false positive in the
+    repository's code-scanning settings rather than worked around in code.
     """
-    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()  # lgtm[py/weak-sensitive-data-hashing]
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
 
 BILLING_STATUSES = ("active", "past_due")
 
