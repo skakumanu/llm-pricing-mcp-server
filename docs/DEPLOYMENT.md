@@ -99,6 +99,45 @@ gh variable set ORCHESTRATOR_BASE_URL --body "https://llm-pricing-api.fly.dev"
 - Rotation: set the new value in both places (two commands, no downtime); the old value stops
   working at the next deploy. Startup logs `Orchestrator initialized ... (intake key set|unset)`.
 
+## Compliance audit (v1.88.0)
+
+The weekly audit (`.github/workflows/compliance-audit.yml`, Mondays 07:00 UTC) and the **Run audit now**
+button on `/admin` use the same two credentials as the rest of the orchestrator (`ORCHESTRATOR_INTAKE_KEY`
+and `ORCHESTRATOR_BASE_URL`, above). Without the intake key the workflow prints one step-summary line and
+exits 0; the audit can still be run from `/admin` or `POST /audit/run`. Reports are stored in
+`orchestrator.db` (already replicated); nothing new needs to be created on Fly.
+
+**Restricted read-only Stripe key (`STRIPE_AUDIT_KEY`, optional).** It enables the Stripe reconciliation
+checks (orphan subscriptions, tier and past-due mismatches, shared Stripe ids, and that the webhook endpoint
+registers the seven event types). It is a different key from `STRIPE_SECRET_KEY`: the audit must not be able
+to change anything in Stripe.
+
+1. Stripe Dashboard > Developers > API keys > **Create restricted key**.
+2. Give it the name "compliance audit (read-only)" and set exactly these permissions to **Read**:
+   **Customers**, **Subscriptions**, **Webhook Endpoints**. Leave every other resource at **None**.
+3. Copy the key once and set it on Fly from your shell without writing it to a file or into chat:
+
+```bash
+read -rs STRIPE_AUDIT_KEY && flyctl secrets set STRIPE_AUDIT_KEY="$STRIPE_AUDIT_KEY"; unset STRIPE_AUDIT_KEY
+```
+
+- Unset: every `stripe.*` check shows n/a "not configured". Set but missing a permission: that check shows
+  n/a "key lacks permission" (it never shows a pass it did not earn). Rotate by creating a new restricted
+  key and setting the secret again; the old key can be deleted in the dashboard.
+- Back it up outside Fly with the other secrets (launch checklist LC-08).
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `AUDIT_LLM_SUMMARY` | `false` | One bounded executive-summary call per report; off = deterministic template |
+| `AUDIT_SUMMARY_MODEL` | `claude-haiku-5-5` | Model for that call (spend is recorded under `compliance_audit` and counts against the orchestrator budget) |
+| `AUDIT_REPORT_RETENTION_DAYS` | `365` | Reports older than this are purged |
+| `AUDIT_ESCALATION_MAX_AGE_DAYS` | `7` | Open owner escalations older than this raise a warning |
+| `AUDIT_STALE_PRICE_PCT_WARN` | `10` | Stale confirmed prices above this percentage raise a warning |
+| `AUDIT_DISABLED_CHECKS` | empty | Comma list of check ids reported as n/a "disabled" and listed in the coverage line |
+
+The audit is report-only evidence, not a certification: it opens the billing database read-only, passes the
+Stripe key per call, and writes nothing except its own report tables.
+
 ## Stripe (paid tiers, v1.84.0)
 
 - Checkout, the customer portal and the webhook stay off (503, and `/billing` shows "Checkout
