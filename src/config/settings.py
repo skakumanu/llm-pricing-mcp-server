@@ -101,6 +101,13 @@ class Settings(BaseSettings):
     # days (billing_status = past_due); after that the *effective* tier is free until
     # Stripe reports the invoice paid. Stored tiers change only through Stripe events.
     billing_past_due_grace_days: int = 14
+    # v1.86.0: the full-refund window the refund policy (/refunds, FAQ) quotes. Policy copy
+    # only: refunds are never automatic; the owner reviews every request.
+    billing_refund_window_days: int = 14
+    # v1.86.0: operator flag marking the legal pages (/terms, /privacy, ...) in force. Default
+    # off. Even when on, services/legal_pages.py treats the pages as draft (and keeps checkout
+    # disabled) while any [PLACEHOLDER] remains in docs/legal/*.md.
+    legal_pages_live: bool = False
 
     # Support agent (v1.84.0). A second ReAct agent (agent/support_agent.py) that answers
     # account, billing, key and FAQ questions on the operator's LLM key. Per-caller daily

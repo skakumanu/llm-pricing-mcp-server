@@ -46,6 +46,9 @@ class BillingConfigResponse(BaseModel):
     checkout_enabled: bool
     portal_enabled: bool
     past_due_grace_days: int
+    # v1.86.0: checkout also needs the legal pages in force; the portal does not.
+    legal_pages_live: bool = False
+    checkout_disabled_reason: Optional[str] = None
     tiers: List[Dict[str, Any]]
 
 

@@ -24,7 +24,7 @@ from agent.support_agent import SupportResponse  # noqa: E402
 from src.services.billing_service import BillingService  # noqa: E402
 from src.services.orchestrator_service import OrchestratorService  # noqa: E402
 from src.services.orchestrator_store import OrchestratorStore  # noqa: E402
-from src.services import tiers  # noqa: E402
+from src.services import tiers, legal_pages  # noqa: E402
 
 client = TestClient(app)
 
@@ -238,9 +238,12 @@ class TestBillingConfig:
         fake_secret = "-".join(["stripe", "secret", "placeholder"])
         with patch.object(main_module.settings, "stripe_secret_key", fake_secret), \
                 patch.object(main_module.settings, "stripe_price_id_pro", "price_" + "P" * 14), \
-                patch.object(main_module.settings, "stripe_price_id_enterprise", None):
+                patch.object(main_module.settings, "stripe_price_id_enterprise", None), \
+                patch.object(main_module.settings, "legal_pages_live", True), \
+                patch.object(legal_pages, "_cache", {}):
             body = client.get("/billing/config").json()
         assert body["checkout_enabled"] is True and body["portal_enabled"] is True
+        assert body["legal_pages_live"] is True and body["checkout_disabled_reason"] is None
         by_id = {t["id"]: t for t in body["tiers"]}
         assert by_id["pro"]["checkout_available"] is True
         assert by_id["enterprise"]["checkout_available"] is False and by_id["free"]["checkout_available"] is False
