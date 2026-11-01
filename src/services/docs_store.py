@@ -154,11 +154,17 @@ class DocsStore:
 
     async def list(self, limit: int = 50, status: Optional[str] = None) -> List[Dict[str, Any]]:
         limit = max(1, min(int(limit), 500))
-        sql = "SELECT * FROM doc_artifacts" + (" WHERE status = ?" if status else "")
-        sql += " ORDER BY created_at DESC, artifact_id DESC LIMIT ?"
+        # Two static statements (no string-built SQL); the status value is always a bound parameter.
+        if status:
+            sql = ("SELECT * FROM doc_artifacts WHERE status = ? "
+                   "ORDER BY created_at DESC, artifact_id DESC LIMIT ?")
+            params: List[Any] = [status, limit]
+        else:
+            sql = "SELECT * FROM doc_artifacts ORDER BY created_at DESC, artifact_id DESC LIMIT ?"
+            params = [limit]
         async with _open_db(self._db_path) as db:
             db.row_factory = aiosqlite.Row
-            async with db.execute(sql, ([status] if status else []) + [limit]) as cur:  # nosec B608
+            async with db.execute(sql, params) as cur:
                 rows = await cur.fetchall()
         return [_decode(r) for r in rows]
 
