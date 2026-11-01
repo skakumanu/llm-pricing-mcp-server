@@ -12,6 +12,8 @@ Project overview and quick start: [README.md](../README.md). Release notes: `/wh
 | [BACKWARDS_COMPATIBILITY.md](BACKWARDS_COMPATIBILITY.md) | API v1 change policy: additive only |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | How a release reaches Fly.io; settings, secrets, operations |
 | [FAQ.md](FAQ.md) | Customer-facing FAQ (plans, billing, keys, rate limits, data accuracy, help); source of `/faq` and the support agent's knowledge base |
+| [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md) | Machine-parsed list of what must be true before paid plans are sold (entity, Stripe, backups, legal review, scanners) |
+| [legal/](legal/) | Markdown sources of the legal pages (`/terms`, `/privacy`, `/refunds`, `/dpa`, `/subprocessors`) and the security statement (`/security`); templates until lawyer-reviewed |
 | [MCP_QUICK_START.md](MCP_QUICK_START.md) | Connect an MCP client; canonical tool reference |
 | [CLAUDE_INTEGRATION.md](CLAUDE_INTEGRATION.md) | Claude Desktop setup |
 | [PERPLEXITY_INTEGRATION.md](PERPLEXITY_INTEGRATION.md) | Perplexity desktop setup |

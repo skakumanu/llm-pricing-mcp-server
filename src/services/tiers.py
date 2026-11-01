@@ -10,9 +10,12 @@ Only entitlements that are actually implemented appear here: the per-minute rate
 (security middleware), the support assistant's daily allowance (support_budget.py) and the
 escalation priority (orchestrator approval-queue ordering). Nothing else is advertised.
 
-Pure module: no I/O, no settings import (the caller passes the settings object).
+Pure module apart from the legal-pages gate (a cached scan of docs/legal/); the caller
+passes the settings object.
 """
 from typing import Any, Dict, List
+
+from src.services import legal_pages
 
 TIER_IDS = ("free", "pro", "enterprise")
 
@@ -84,9 +87,24 @@ def stripe_configured(settings: Any) -> bool:
     return bool(getattr(settings, "stripe_secret_key", None))
 
 
-# Two response fields, one fact: the portal cannot be enabled independently of checkout.
-checkout_enabled = stripe_configured
-portal_enabled = stripe_configured
+def checkout_enabled(settings: Any) -> bool:
+    """Checkout needs Stripe AND the legal pages in force (v1.86.0): nobody can buy under
+    terms that are still a draft. The customer portal is not gated (see ``portal_enabled``)."""
+    return stripe_configured(settings) and legal_pages.is_live(settings)
+
+
+def portal_enabled(settings: Any) -> bool:
+    """The Stripe customer portal (cancel, card, invoices) needs only the Stripe secret."""
+    return stripe_configured(settings)
+
+
+def checkout_disabled_reason(settings: Any):
+    """Why checkout is off: ``stripe_not_configured`` | ``legal_pages_not_live`` | ``None``."""
+    if not stripe_configured(settings):
+        return "stripe_not_configured"
+    if not legal_pages.is_live(settings):
+        return "legal_pages_not_live"
+    return None
 
 
 def _checkout_available(tier: str, settings: Any) -> bool:
@@ -105,6 +123,8 @@ def catalog_payload(settings: Any) -> Dict[str, Any]:
     return {
         "checkout_enabled": checkout_enabled(settings),
         "portal_enabled": portal_enabled(settings),
+        "legal_pages_live": legal_pages.is_live(settings),
+        "checkout_disabled_reason": checkout_disabled_reason(settings),
         "past_due_grace_days": int(settings.billing_past_due_grace_days),
         "tiers": tier_catalog(settings),
     }

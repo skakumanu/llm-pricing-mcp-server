@@ -36,7 +36,7 @@ Published answers about the LLM Pricing API service: plans, billing, service key
 
 ## Upgrading, cancelling, invoices and cards
 
-- Upgrade: Upgrade tab on [/billing](/billing) with your key. Checkout is handled by Stripe. When Stripe is not configured on a server the buttons say so and nothing can be bought.
+- Upgrade: Upgrade tab on [/billing](/billing) with your key. Checkout is handled by Stripe. Paid plans are a pilot. Until the [Terms](/terms), [Privacy](/privacy) and [Refund policy](/refunds) are in force, or when Stripe is not configured on a server, the buttons say so and nothing can be bought.
 - Cancel, change your card, download invoices: **Manage Billing** on [/billing](/billing) opens the Stripe customer portal for your account. Cancelling returns you to Free at the end of the paid period.
 - The support assistant explains and points you to these flows. It never changes your plan, card or invoices itself.
 
@@ -48,8 +48,15 @@ Published answers about the LLM Pricing API service: plans, billing, service key
 
 ## Refunds, double charges and disputes
 
-- The support assistant cannot refund, credit, discount or change a tier. Ask it anyway: it escalates the request to the owner with a reference and tells you so. The owner reviews every refund or dispute personally.
+- Full refund of your first payment if you ask within 14 days of paying; pro-rated for the unused period if you ask after that. The full policy is at [/refunds](/refunds).
+- The owner reviews every request personally. Refunds are never granted by software, and the support assistant cannot refund, credit, discount or change a tier. Ask it anyway: it escalates the request to the owner with a reference and tells you so. Disputes and double charges are handled the same way.
 - Keep the reference. You can check its status on [/chat](/chat) (Support mode) with "what is the status of escalation orc_...".
+
+## Legal, privacy and your data
+
+- Published policies: [Terms](/terms), [Privacy](/privacy), [Refunds](/refunds), [Data Processing Addendum](/dpa), [Subprocessors](/subprocessors) and the [Security statement](/security). They are templates awaiting legal review and show a draft notice until the owner marks them in force; paid checkout stays disabled until then.
+- To see, correct or delete the data held about you, ask the support assistant to escalate a data request, or write to the contact address in the Privacy policy. The owner verifies you first.
+- Security reports are escalated privately through the support assistant and never posted publicly. The Security statement lists what the service does and does not have.
 
 ## Rate limits
 

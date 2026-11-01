@@ -70,6 +70,16 @@ Every PR to `develop`/`master` and every `master` push runs:
 | `security` | bandit | `bandit -r src -q` |
 | `secret_scan` | gitleaks, full history (`.gitleaks.toml`) | `pre-commit run gitleaks --all-files` |
 
+## Scanners and automation workflows (v1.86.0)
+
+Additional to the five gates above; none of them is a deploy gate.
+
+| Workflow / config | Runs | Does | How to handle |
+|---|---|---|---|
+| `.github/workflows/codeql.yml` | PR to `develop`/`master`, weekly (Mondays 05:23 UTC), `workflow_dispatch` | CodeQL code scanning for Python; results in the Security tab | Triage alerts; fix or dismiss with a reason |
+| `.github/dependabot.yml` | Weekly | Version-update PRs for `pip` and `github-actions`, minor and patch updates grouped into one PR per ecosystem | Review and merge like any PR (never auto-merged); keep `requirements.txt` and `pyproject.toml` in sync |
+| GitHub secret-scanning push protection | On push | Blocks pushes containing secrets | A manual GitHub UI setting (launch checklist LC-17), not code |
+
 ## Weekly price-audit PRs
 
 `.github/workflows/price-audit.yml` runs Mondays 06:00 UTC (or `workflow_dispatch`).
@@ -104,6 +114,7 @@ Fixing a drift issue:
 - bandit findings: fix, or add a justified `# nosec` on that line only.
 - Secrets: env vars locally, `flyctl secrets set` in production. Never commit `.env`, `*.db`, keys.
 - `.db` files (`pricing_history.db`, `billing.db`) are gitignored; never `git add -f` them.
+- Off-site backups: Litestream replicates `billing.db`, `pricing_history.db` and `orchestrator.db`; restore steps are in [DEPLOYMENT.md](DEPLOYMENT.md#restore-from-the-litestream-replica).
 - Doc and shell examples use `"$VAR"` references; gitleaks flags quoted placeholders.
 - Optional local hooks: `pip install pre-commit && pre-commit install`
   (gitleaks, `no-commit-to-branch`, large files, merge conflicts, whitespace).
@@ -123,6 +134,7 @@ Fixing a drift issue:
 - `static/whats-new/` and `docs/archive/` are historical; never rewrite old entries.
 - After editing the nav, run `scripts/sync_nav.py` to restamp every `static/` page.
 - After editing `docs/FAQ.md`, run `scripts/sync_faq.py` to regenerate `static/faq/index.html` (`--check` in CI).
+- After editing `docs/legal/*.md`, run `scripts/sync_legal.py` to regenerate the legal pages (`--check` in tests). `docs/LAUNCH_CHECKLIST.md` is parsed by `scripts/launch_checklist.py` (`tests/test_launch_checklist.py`).
 
 ## Repo layout
 
@@ -133,7 +145,7 @@ Fixing a drift issue:
 | `agent/`, `rag/` | ReAct agent and its retrieval pipeline |
 | `static/` | Browser UI pages (incl. `whats-new/`, `api-docs/`, `mcp-setup/`) |
 | `data/` | Vendored price snapshot, `registry_models/`, `exchange_rates.json` |
-| `scripts/` | Promotion, price-audit scripts, `sync_nav.py`, `sync_faq.py`, `quick_validate.py` (MCP STDIO smoke test) |
+| `scripts/` | Promotion, price-audit scripts, `sync_nav.py`, `sync_faq.py`, `sync_legal.py`, `check_replication.py`, `launch_checklist.py`, `quick_validate.py` (MCP STDIO smoke test) |
 | `npm/llm-pricing-mcp/` | npm wrapper, versioned separately |
 | `.claude/` | Phase agents, `/release-feature` skill, `release-feature.js` workflow |
 | `docs/` | [INDEX.md](INDEX.md), [ARCHITECTURE.md](ARCHITECTURE.md); superseded docs in `archive/` |

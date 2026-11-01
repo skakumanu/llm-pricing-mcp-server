@@ -10,7 +10,10 @@ The old Azure blue-green docs are historical only:
 - Git flow: `feature/*` → PR to `develop` → promotion PR to `master` (see [HOUSEKEEPING.md](HOUSEKEEPING.md)).
 - Push to `master` runs `.github/workflows/ci-cd.yml`.
 - `deploy_fly` waits for `test`, `lint`, `osv_scan`, `security`, `secret_scan`, then runs
-  `flyctl deploy --remote-only` (token: `FLY_API_TOKEN` Actions secret).
+  `flyctl deploy --remote-only` (token: `FLY_API_TOKEN` Actions secret). These five gates are
+  unchanged. CodeQL (`.github/workflows/codeql.yml`, on pull requests and weekly) and Dependabot
+  (`.github/dependabot.yml`, pip and github-actions, weekly, minor and patch grouped) run in
+  addition as scanners; neither is a deploy gate and Dependabot PRs are never auto-merged.
 - After a confirmed deploy it tags `vX.Y.Z` and publishes a GitHub Release whose notes are
   that version's What's New entry (`scripts/release_notes_from_whats_new.py`). An unconfirmed
   health check publishes nothing, so the Releases page only ever reflects what is live.
@@ -24,14 +27,15 @@ The old Azure blue-green docs are historical only:
 |---|---|
 | Region / VM | `iad`, shared-cpu-1x, 512 MB |
 | HTTP | port 8000, `force_https`, `GET /health` every 30s, `min_machines_running = 1` |
-| Volume | `llm_pricing_data` → `/app/data` (both SQLite DBs live here) |
+| Volume | `llm_pricing_data` → `/app/data` (all three SQLite DBs live here) |
 | `PRICING_HISTORY_DB_PATH` | `/app/data/pricing_history.db` |
 | `BILLING_DB_PATH` | `/app/data/billing.db` (unset = ephemeral image disk) |
 | `EXCHANGE_RATES_PATH` | `/app/vendored/exchange_rates.json` (the volume shadows the image's `/app/data`) |
 | `PRICE_SNAPSHOT_PATH` | `/app/vendored/data/model_prices_snapshot.json` (same reason, v1.84.1) |
 | `REGISTRY_MODELS_DIR` | `/app/vendored/data/registry_models` (same reason, v1.84.1; without it production serves only the curated ~270 models) |
 | `ORCHESTRATOR_DB_PATH` | `/app/data/orchestrator.db` (orchestrator core, v1.83.0) |
-| Build | repo `Dockerfile`: non-root uvicorn, `--workers 2`, port 8000; `Procfile` unused |
+| `LEGAL_PAGES_LIVE` | not set (default off). Add `LEGAL_PAGES_LIVE = "true"` only after the launch checklist items for the lawyer review and placeholders are done (v1.86.0) |
+| Build | repo `Dockerfile` (multi-stage, adds Litestream): non-root, `entrypoint.sh` runs uvicorn `--workers 2` on port 8000, under Litestream when `LITESTREAM_REPLICA_URL` is set; `Procfile` unused |
 
 ## Settings and secrets
 
@@ -96,7 +100,9 @@ gh variable set ORCHESTRATOR_BASE_URL --body "https://llm-pricing-api.fly.dev"
 ## Stripe (paid tiers, v1.84.0)
 
 - Checkout, the customer portal and the webhook stay off (503, and `/billing` shows "Checkout
-  unavailable on this server") until these four secrets are set. Everything else, including
+  unavailable on this server") until these four secrets are set. From v1.86.0 checkout also stays
+  off until the legal pages are in force (see "Legal pages and the checkout gate" below); the
+  customer portal needs only the Stripe secret. Everything else, including
   free signup and the support assistant, works without them.
 
 ```bash
@@ -113,7 +119,83 @@ env | grep '^STRIPE_' | flyctl secrets import
   the account is served at the free rate limit until `invoice.paid` arrives. Refunds, disputes and
   failed renewals also open an escalation in the `/admin` queue.
 - `GET /billing/config` shows what the running server can sell (`checkout_enabled`, per-tier
-  `checkout_available`).
+  `checkout_available`, `portal_enabled`, `legal_pages_live` and `checkout_disabled_reason`).
+
+## Legal pages and the checkout gate (v1.86.0)
+
+- `/terms`, `/privacy`, `/refunds`, `/dpa`, `/subprocessors` and `/security` are generated from
+  `docs/legal/*.md` by `python scripts/sync_legal.py` (`--check` in tests). The first five show a
+  "Draft, not yet in force" notice until they are live; `/security` is a statement of fact and never
+  carries it.
+- They are live only when `LEGAL_PAGES_LIVE=true` **and** no placeholder (`[ENTITY NAME]`,
+  `[STATE]`, `[CONTACT EMAIL]`, `[POSTAL ADDRESS]`) remains in `docs/legal/`. With the flag on
+  and a placeholder left, the pages stay draft, checkout stays disabled and startup logs a WARNING.
+  A test fails the build if the flag is on by default while a placeholder remains.
+- Order of launch: lawyer review, replace placeholders, regenerate (`python scripts/sync_legal.py`),
+  merge, then `flyctl secrets set LEGAL_PAGES_LIVE=true` (or the `fly.toml` `[env]` entry). Track
+  progress in [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md).
+- `BILLING_REFUND_WINDOW_DAYS` (14) is the number the refund policy and FAQ quote. Refunds are
+  never automatic; the owner reviews every request.
+
+## Continuous replication (Litestream)
+
+- The three production databases on the volume (`billing.db`, `pricing_history.db`,
+  `orchestrator.db`) are replicated continuously to S3-compatible object storage (Cloudflare R2 or
+  Amazon S3) by Litestream. `litestream.yml` lists them; `entrypoint.sh` runs the app under
+  `litestream replicate` when `LITESTREAM_REPLICA_URL` is set. With none of the three secrets set
+  the app runs exactly as before, so local runs and CI are unaffected.
+- Creating the bucket and an access key limited to it is the owner's step. Then set three Fly
+  secrets (never put them in the repo, `.env` or `fly.toml`):
+
+| Secret | Value |
+|---|---|
+| `LITESTREAM_REPLICA_URL` | bucket URL with prefix, e.g. `s3://<bucket>/<prefix>`; for R2 use the endpoint form `s3://<bucket>.<account-id>.r2.cloudflarestorage.com/<prefix>` |
+| `LITESTREAM_ACCESS_KEY_ID` | access key id for that bucket |
+| `LITESTREAM_SECRET_ACCESS_KEY` | secret for that key |
+
+```bash
+# export the three values in your own shell first (never paste them into docs or chat)
+flyctl secrets set LITESTREAM_REPLICA_URL="$LITESTREAM_REPLICA_URL" \
+  LITESTREAM_ACCESS_KEY_ID="$LITESTREAM_ACCESS_KEY_ID" \
+  LITESTREAM_SECRET_ACCESS_KEY="$LITESTREAM_SECRET_ACCESS_KEY"
+```
+
+- They are process environment variables, not application settings, so they are not in `.env`.
+- `flyctl logs` shows `entrypoint: replication on` and litestream lines per database when it works.
+  Back the three values up outside Fly (launch checklist LC-08): you need them to restore.
+- `scripts/check_replication.py` (run by `tests/test_litestream_config.py`) fails the build if a
+  `*_db_path` setting gains a default without being placed under `/app/data` in `fly.toml` and
+  listed in `litestream.yml`.
+- **Harden the bucket.** `billing.db` holds every customer's service key unhashed, so the replica
+  is as sensitive as the volume. Keep the bucket private (block all public access), enable
+  server-side encryption, give the access key only read/write on that one bucket, and allow
+  write access to nobody else: `entrypoint.sh` restores whatever the bucket holds onto an empty
+  volume, so bucket write access is control of the account database. Rotate the key if it leaks.
+- This is backup and documented restore, not failover: there is no high availability.
+
+## Restore from the Litestream replica
+
+Use this when the volume is lost or replaced. Do not skip the order: an app that starts on an empty
+volume before the restore would otherwise create empty databases. `entrypoint.sh` therefore restores
+any replicated database that is missing from the volume before the app starts, and refuses to start
+if a restore fails. Have the three `LITESTREAM_*` values at hand (they are backed up outside Fly).
+
+1. Confirm the loss: `flyctl volumes list` shows no `llm_pricing_data`, or the data is empty.
+2. Stop the machines so nothing writes: `flyctl machines list`, then `flyctl machine stop "$MACHINE_ID"` for each.
+3. Create an empty volume with the same name and region: `flyctl volumes create llm_pricing_data --region iad --size 1`.
+4. Confirm the replication secrets exist: `flyctl secrets list` shows `LITESTREAM_REPLICA_URL`, `LITESTREAM_ACCESS_KEY_ID`, `LITESTREAM_SECRET_ACCESS_KEY`; if not, set them from your backup as in the previous section.
+5. Start one machine: `flyctl machine start "$MACHINE_ID"`. The entrypoint restores `billing.db`, `pricing_history.db` and `orchestrator.db` in turn (`flyctl logs` shows each restore) and then starts the app.
+6. If a restore failed, fix the cause shown in `flyctl logs` (usually a wrong URL or key: correct it with `flyctl secrets set`) and restart the machine; the entrypoint tries again. To restore by hand, run these in `flyctl ssh console` on the machine while the databases are absent, then `chown appuser:appuser /app/data/*.db` and restart:
+
+```bash
+litestream restore -o /app/data/billing.db "$LITESTREAM_REPLICA_URL/billing.db"
+litestream restore -o /app/data/pricing_history.db "$LITESTREAM_REPLICA_URL/pricing_history.db"
+litestream restore -o /app/data/orchestrator.db "$LITESTREAM_REPLICA_URL/orchestrator.db"
+```
+
+7. Verify: `curl -s https://llm-pricing-api.fly.dev/health` returns 200 with the expected version; `GET /admin/customers` with the operator key lists a customer you know exists; `/data-quality` returns data; `flyctl logs` shows `entrypoint: replication on` again.
+
+Record the drill's date in [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md) (LC-10).
 
 ## Support assistant (`SUPPORT_*`)
 
