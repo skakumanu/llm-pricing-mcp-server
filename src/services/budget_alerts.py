@@ -140,6 +140,14 @@ class BudgetAlertService:
             alerts.append(row)
         return alerts
 
+    async def delete_org(self, org_id: str) -> int:
+        """v1.87.0 account deletion: erase every budget alert of one org."""
+        import aiosqlite
+        async with aiosqlite.connect(self._db_path) as db:
+            cur = await db.execute("DELETE FROM budget_alerts WHERE org_id = ?", (org_id,))
+            await db.commit()
+            return cur.rowcount or 0
+
     async def delete(self, alert_id: int, org_id: Optional[str] = None) -> bool:
         """Delete a budget alert by ID. Returns True if a row was deleted.
 

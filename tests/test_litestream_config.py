@@ -16,7 +16,7 @@ DOCKERFILE = (project_root / "Dockerfile").read_text(encoding="utf-8")
 ENTRYPOINT = project_root / "entrypoint.sh"
 LITESTREAM_YML = (project_root / "litestream.yml").read_text(encoding="utf-8")
 DEPLOYMENT = (project_root / "docs" / "DEPLOYMENT.md").read_text(encoding="utf-8")
-DBS = ("billing.db", "pricing_history.db", "orchestrator.db")
+DBS = ("billing.db", "pricing_history.db", "orchestrator.db", "conversations.db")
 
 
 class TestImageAndConfig:
@@ -33,14 +33,15 @@ class TestImageAndConfig:
         assert os.stat(ENTRYPOINT).st_mode & stat.S_IXUSR
         assert subprocess.run(["sh", "-n", str(ENTRYPOINT)]).returncode == 0
 
-    def test_litestream_yml_names_the_three_databases(self):
+    def test_litestream_yml_names_the_four_databases(self):
         paths = check_replication.litestream_paths()
         assert paths == [f"/app/data/{d}" for d in DBS]
         for db in DBS:
             assert f"url: ${{LITESTREAM_REPLICA_URL}}/{db}" in LITESTREAM_YML
 
-    def test_part_b_database_is_not_listed_yet(self):
-        assert "conversations.db" not in LITESTREAM_YML
+    def test_conversations_db_is_replicated_and_on_the_volume(self):
+        assert "/app/data/conversations.db" in check_replication.litestream_paths()
+        assert check_replication.fly_env()["CONVERSATION_DB_PATH"] == "/app/data/conversations.db"
 
     def test_no_credential_looking_values_in_repo_files(self):
         pattern = re.compile(
@@ -75,9 +76,9 @@ class TestCompletenessGuard:
         assert found == []
         assert check_replication.main([]) == 0
 
-    def test_enumerates_the_three_production_databases(self):
+    def test_enumerates_the_four_production_databases(self):
         assert check_replication.db_path_fields() == [
-            "billing_db_path", "orchestrator_db_path", "pricing_history_db_path"]
+            "billing_db_path", "conversation_db_path", "orchestrator_db_path", "pricing_history_db_path"]
 
     def test_injected_fake_setting_fails(self):
         fields = check_replication.db_path_fields() + ["fake_db_path"]
@@ -95,8 +96,13 @@ class TestCompletenessGuard:
         found = check_replication.check(check_replication.db_path_fields(), env, check_replication.litestream_paths())
         assert any("not under /app/data" in p for p in found)
 
-    def test_optional_store_set_in_fly_must_be_listed(self):
-        env = dict(check_replication.fly_env(), CONVERSATION_DB_PATH="/app/data/conversations.db")
+    def test_conversations_db_missing_from_litestream_fails(self):
+        paths = [p for p in check_replication.litestream_paths() if not p.endswith("conversations.db")]
+        found = check_replication.check(check_replication.db_path_fields(), check_replication.fly_env(), paths)
+        assert any("conversation_db_path" in p and "not listed" in p for p in found)
+
+    def test_conversations_db_missing_from_fly_toml_fails(self):
+        env = {k: v for k, v in check_replication.fly_env().items() if k != "CONVERSATION_DB_PATH"}
         found = check_replication.check(check_replication.db_path_fields(), env, check_replication.litestream_paths())
         assert any("conversation_db_path" in p for p in found)
 
@@ -128,7 +134,7 @@ class TestEntrypoint:
         assert out.returncode == 0
         lines = out.stdout.splitlines()
         restores = [ln for ln in lines if ln.startswith("litestream restore")]
-        assert len(restores) == 3
+        assert len(restores) == len(DBS)
         for db, line in zip(DBS, restores):
             assert "-if-db-not-exists" in line and "-if-replica-exists" in line and line.endswith(f"/app/data/{db}")
         replicate = [ln for ln in lines if ln.startswith("litestream replicate")]

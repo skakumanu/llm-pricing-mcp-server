@@ -259,6 +259,28 @@ class TestPinnedFacts:
         assert f"within {DEFAULTS.billing_refund_window_days} days" in refunds
         assert f"After {DEFAULTS.billing_refund_window_days} days" in refunds
 
+    def test_conversation_retention_is_pinned_to_the_setting(self):
+        privacy = _read("PRIVACY.md")
+        assert DEFAULTS.conversation_retention_days == 90
+        assert f"for {DEFAULTS.conversation_retention_days} days after the last message" in privacy
+        assert f"{DEFAULTS.conversation_retention_days} days" in (project_root / "docs" / "FAQ.md").read_text("utf-8")
+
+    def test_privacy_describes_the_self_service_endpoints(self):
+        privacy = _read("PRIVACY.md")
+        for needle in ("GET /billing/account/export", "POST /billing/account/delete", '"confirm": "DELETE"',
+                       "irreversible", "marker"):
+            assert needle in privacy, needle
+        assert "ask us to: tell you what we hold" in privacy  # the rights list itself stays
+
+    def test_service_keys_are_described_as_hashed_everywhere(self):
+        for text in (_read("SECURITY.md"), _read("PRIVACY.md")):
+            assert "SHA-256" in text or "hash" in text
+        security = _read("SECURITY.md")
+        assert "SHA-256 hash" in security and "8-character prefix" in security
+        assert "unhashed" not in security.lower()
+        assert "unhashed" not in (project_root / "docs" / "DEPLOYMENT.md").read_text("utf-8").lower()
+        assert "SHA-256 hash" in (STATIC / "security" / "index.html").read_text("utf-8")
+
     def test_refund_window_default(self):
         assert DEFAULTS.billing_refund_window_days == 14
 

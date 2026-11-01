@@ -81,6 +81,9 @@ class Settings(BaseSettings):
 
     # Conversation persistence (None = in-memory only; path = SQLite file)
     conversation_db_path: Optional[str] = None   # e.g. "conversations.db"
+    # v1.87.0 — env CONVERSATION_RETENTION_DAYS. Conversations not updated within this many days
+    # are purged (at startup and after saves); <= 0 disables. The privacy policy quotes it.
+    conversation_retention_days: int = 90
 
     # Webhook signing secret (None = unsigned; set to a long random string in production)
     webhook_secret: Optional[str] = None

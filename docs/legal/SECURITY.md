@@ -1,6 +1,6 @@
 # Security
 
-**Last updated:** 2026-10-31
+**Last updated:** 2026-11-01
 
 Plain facts about how the LLM Pricing API service is run, and what it does not have. We do not claim any certification.
 
@@ -8,7 +8,7 @@ Plain facts about how the LLM Pricing API service is run, and what it does not h
 
 - TLS only: the hosted service redirects plain HTTP to HTTPS.
 - Provider keys you store for dispatch are encrypted at rest with AES-256-GCM; the ciphertext is never returned and the plaintext is used only to run your request.
-- Service keys are shown once at signup, are not shown again in full after that (the operator console shows only a short prefix), and can be rotated at any time. They are stored unhashed in the account database on the hosting volume and in its off-site backup copy, so access to either exposes them; rotate a key if you suspect exposure.
+- Service keys are shown once at signup and can be rotated at any time. They are stored as a SHA-256 hash, so neither the account database nor its off-site backup copy holds a usable key; the owner sees only an 8-character prefix, which cannot be used to sign in.
 - Secrets live in the hosting provider's secret store, not in the repository or the container image. A secret scanner runs on every change.
 - The container runs as a non-root user.
 - Every change passes automated gates before deploy: tests, lint, dependency vulnerability scan, static analysis and a secret scan. CodeQL code scanning and Dependabot dependency updates run in addition.

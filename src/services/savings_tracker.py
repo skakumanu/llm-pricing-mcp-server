@@ -127,6 +127,54 @@ class SavingsTrackerService:
                 pass  # nosec B110 — column already exists, this is intentional
             await db.commit()
 
+    async def list_routing(self, org_id: str, limit: int = 100000) -> List[Dict[str, Any]]:
+        """v1.87.0 account export: every routing decision of exactly one org."""
+        import aiosqlite
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT id, org_id, api_key_tier, requested_at, recommended_model, recommended_provider, "
+                "recommended_cost_per_1m, baseline_model, baseline_cost_per_1m, savings_per_1m, task_type, "
+                "routing_id, ide_context FROM routing_savings WHERE org_id = ? ORDER BY requested_at, id LIMIT ?",
+                (org_id, limit),
+            ) as cur:
+                rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+    async def list_feedback(self, org_id: str, limit: int = 100000) -> List[Dict[str, Any]]:
+        """v1.87.0 account export: feedback on the org's routing decisions (joined via routing_id,
+        because routing_feedback itself carries no org_id)."""
+        import aiosqlite
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT id, routing_id, was_used, actual_model_used, notes, feedback_at FROM routing_feedback "
+                "WHERE routing_id IN (SELECT routing_id FROM routing_savings WHERE org_id = ?) "
+                "ORDER BY feedback_at, id LIMIT ?",
+                (org_id, limit),
+            ) as cur:
+                rows = await cur.fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["was_used"] = bool(d.get("was_used"))
+            out.append(d)
+        return out
+
+    async def delete_org(self, org_id: str) -> int:
+        """v1.87.0 account deletion: feedback first (it is found through the org's routing ids),
+        then the routing decisions. Returns the number of routing rows removed."""
+        import aiosqlite
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                "DELETE FROM routing_feedback "
+                "WHERE routing_id IN (SELECT routing_id FROM routing_savings WHERE org_id = ?)",
+                (org_id,),
+            )
+            cur = await db.execute("DELETE FROM routing_savings WHERE org_id = ?", (org_id,))
+            await db.commit()
+            return cur.rowcount or 0
+
     async def record_routing(
         self,
         recommended_model: str,

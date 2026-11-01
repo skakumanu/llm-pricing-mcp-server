@@ -4,6 +4,7 @@ Secret-shaped literals are assembled at runtime so none lands in a commit.
 """
 import asyncio
 import copy
+import dataclasses
 import sys
 import time
 from pathlib import Path
@@ -110,7 +111,9 @@ def build_env(tmp_path, script: List[Any], clock: Optional[FakeClock] = None, ma
         asyncio.run(billing.update_tier(pro.id, "pro", stripe_customer_id=STRIPE_CUS,
                                         stripe_subscription_id="sub_" + "S" * 14))
         other = asyncio.run(billing.create_customer(OTHER_EMAIL))
-        customers = {"free": free, "pro": asyncio.run(billing.get_customer_by_id(pro.id)), "other": other}
+        customers = {"free": free, "pro": dataclasses.replace(asyncio.run(billing.get_customer_by_id(pro.id)),
+                                                    api_key=pro.api_key),
+                     "other": other}
 
     conversations = ConversationStore()
     budget = SupportBudget(settings, clock=clock.now)

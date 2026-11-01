@@ -82,3 +82,37 @@ class SupportChatResponse(BaseModel):
 class EscalationStatusRequest(BaseModel):
     """POST /support/escalations/status — the reference travels in the body, never the URL."""
     reference: str = Field(..., min_length=1, max_length=40)
+
+
+class AccountExportResponse(BaseModel):
+    """v1.87.0 — GET /billing/account/export: everything held about the caller's organisation.
+
+    Never the service key, never provider-key material or fingerprints, never another org's rows.
+    """
+    format_version: int = 1
+    exported_at: str
+    account: Dict[str, Any]
+    provider_keys: List[Dict[str, Any]]
+    usage_events: List[Dict[str, Any]]
+    dispatch_receipts: List[Dict[str, Any]]
+    budget_alerts: List[Dict[str, Any]]
+    routing_savings: List[Dict[str, Any]]
+    routing_feedback: List[Dict[str, Any]]
+    support_conversations: List[Dict[str, Any]]
+    counts: Dict[str, int]
+    truncated: bool = False
+
+
+class AccountDeleteRequest(BaseModel):
+    """v1.87.0 — POST /billing/account/delete. Both fields must match for anything to happen."""
+    confirm: Optional[str] = Field(None, max_length=50, description="Must be exactly DELETE")
+    org_id: Optional[str] = Field(None, max_length=64, description="Your own org id (from /billing/me or signup)")
+
+
+class AccountDeleteResponse(BaseModel):
+    deleted: bool
+    org_id: str
+    deleted_at: str
+    subscription_ended: bool = False
+    refund_escalation_reference: Optional[str] = None
+    message: str

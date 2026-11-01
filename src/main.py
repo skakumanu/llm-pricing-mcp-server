@@ -66,6 +66,7 @@ from src.services.billing_service import (  # noqa: E402
     effective_tier as _effective_tier, init_billing_service, get_billing_service,
 )
 from src.services import tiers as _tiers  # noqa: E402
+from src.services.account_data import AccountDataError, build_account_data_service  # noqa: E402
 from src.services import legal_pages as _legal_pages  # noqa: E402
 from src.services.support_budget import support_action as _support_action  # noqa: E402
 from src.models.dispatch import ChatCompletionsRequest  # noqa: E402
@@ -95,6 +96,7 @@ from src.services.rate_limiter import (  # noqa: E402
     _rate_limit_lock, _rate_limit_store, cleanup_stale_rate_limit_entries,
 )
 from src.models.billing import (  # noqa: E402
+    AccountExportResponse, AccountDeleteRequest, AccountDeleteResponse,
     SignupRequest, SignupResponse, CheckoutRequest, CheckoutResponse,
     BillingPortalResponse, CustomerDashboard, BillingConfigResponse, KeyRotateResponse,
     SupportChatRequest, SupportChatResponse, EscalationStatusRequest,
@@ -1206,7 +1208,9 @@ async def startup_pricing_history() -> None:
     await init_budget_alert_service(settings.pricing_history_db_path)
     logger.info("Budget alert service initialized")
     set_cache_ttl(settings.benchmark_cache_ttl_hours)
-    await init_conversation_store(settings.conversation_db_path, settings.agent_max_history_turns)
+    await init_conversation_store(
+        settings.conversation_db_path, settings.agent_max_history_turns, settings.conversation_retention_days
+    )
     logger.info(
         "Conversation store initialized (%s)",
         settings.conversation_db_path or "in-memory",
@@ -3264,7 +3268,7 @@ async def billing_me(request: Request):
         email=customer.email,
         tier=customer.tier,
         org_id=customer.org_id,
-        api_key_preview=customer.api_key[:8] + "...",
+        api_key_preview=(customer.api_key_prefix or "") + "...",
         router_calls_30d=router_calls,
         savings_per_1m_30d=savings_per_1m,
         acceptance_rate=acceptance_rate,
@@ -3297,6 +3301,52 @@ async def billing_key_rotate(request: Request):
         message="Your service key was rotated. Save the new key now: it is shown only once and the old key "
                 "no longer works.",
     )
+
+
+@app.get("/billing/account/export", response_model=AccountExportResponse, tags=["Billing"])
+async def billing_account_export(request: Request):
+    """
+    Download everything the service holds about your organisation (v1.87.0).
+
+    Customer key only (anonymous and operator-key-only requests are 401). One JSON document:
+    account record, stored provider-key metadata (never key material), usage events, dispatch
+    receipts, budget alerts, routing savings and feedback, and support conversations. Never the
+    service key and never another org's rows. Each table is capped; `truncated` says if one was.
+    """
+    customer = getattr(request.state, "customer", None)
+    if customer is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        data = await build_account_data_service(settings).export(customer)
+    except AccountDataError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.message)
+    return JSONResponse(
+        content=data,
+        headers={"Content-Disposition": f'attachment; filename="llm-pricing-export-{customer.org_id[:8]}.json"'},
+    )
+
+
+@app.post("/billing/account/delete", response_model=AccountDeleteResponse, tags=["Billing"])
+async def billing_account_delete(request: Request, req: Optional[AccountDeleteRequest] = None):
+    """
+    Permanently delete your account and every record the service holds about it (v1.87.0).
+
+    Customer key only (401 otherwise). IRREVERSIBLE: send `{"confirm": "DELETE", "org_id": "<your org id>"}`;
+    anything else is 400 and changes nothing. A paying account's Stripe subscription is ended
+    immediately first (a Stripe failure aborts with 502 and deletes nothing). Only a dated,
+    non-reversible marker remains. Deleting within the refund window opens a refund review for the
+    owner and returns its reference; no refund is automatic.
+    """
+    customer = getattr(request.state, "customer", None)
+    if customer is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        result = await build_account_data_service(settings).delete(
+            customer, req.confirm if req else None, req.org_id if req else None
+        )
+    except AccountDataError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.message)
+    return AccountDeleteResponse(**result)
 
 
 @app.post("/admin/customers/{customer_id}/key/rotate", response_model=KeyRotateResponse, tags=["Admin"])
@@ -4206,7 +4256,7 @@ async def admin_customers():
             "effective_tier": _effective_tier(c, settings.billing_past_due_grace_days),
             "billing_status": getattr(c, "billing_status", "active") or "active",
             "org_id": c.org_id,
-            "api_key_preview": c.api_key[:8] + "...",
+            "api_key_preview": (c.api_key_prefix or "") + "...",
             "stripe_customer_id": c.stripe_customer_id,
             "created_at": datetime.fromtimestamp(c.created_at, tz=UTC).isoformat(),
         })
