@@ -22,3 +22,12 @@ stripe>=10.0.0
 email-validator>=2.0.0
 # v1.86.0: scripts/check_replication.py parses litestream.yml (already installed transitively by uvicorn[standard])
 pyyaml==6.0.3
+# v1.89.3: minimum versions for transitive dependencies. OSV-Scanner 2.7 resolves requirements.txt
+# transitively and, with no floor stated, evaluates these at old versions carrying known advisories
+# (anyio PYSEC-2026-4024/4025, certifi PYSEC-2026-4320, idna PYSEC-2026-215, pygments PYSEC-2023-117,
+# tqdm PYSEC-2017-74). pip already installs newer versions; the floors make the scan match reality.
+anyio>=4.14.2
+certifi>=2026.10.18
+idna>=3.15
+pygments>=2.20.0
+tqdm>=4.66.3
