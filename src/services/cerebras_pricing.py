@@ -18,43 +18,6 @@ class CerebrasPricingService(BasePricingProvider):
     PRICE_AS_OF = "2026-05-10"
 
     STATIC_PRICING = {
-        "llama3.1-8b": {
-            "input": 0.0001,
-            "output": 0.0001,
-            "price_as_of": "2026-10-25",
-            "context_window": 8192,
-            "use_cases": [
-                "Real-time applications", "High-volume processing", "Edge streaming",
-                "Fast chatbots", "Classification"
-            ],
-            "strengths": [
-                "Fastest inference available (2000+ tok/s)", "Ultra-affordable",
-                "Llama 3.1 quality", "Low latency"
-            ],
-            "best_for": (
-                "Applications requiring the fastest possible inference "
-                "with open-source model quality"
-            ),
-            "supports_function_calling": True,
-            "supports_json_mode": True,
-        },
-        "llama3.1-70b": {
-            "input": 0.0006,
-            "output": 0.0006,
-            "price_as_of": "2026-10-25",
-            "context_window": 8192,
-            "use_cases": [
-                "Streaming AI apps", "Real-time assistants", "Code generation",
-                "Advanced Q&A", "Data analysis"
-            ],
-            "strengths": [
-                "Extremely fast inference", "Strong capability", "Competitive pricing",
-                "Wafer-scale chip speed"
-            ],
-            "best_for": "High-quality real-time AI applications needing speed and capability",
-            "supports_function_calling": True,
-            "supports_json_mode": True,
-        },
         "llama3.3-70b": {
             "input": 0.00085,
             "output": 0.00085,
