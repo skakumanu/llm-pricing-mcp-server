@@ -168,7 +168,12 @@
       <div class="section-label">Changed</div>
       <ul class="change-list">
         <li><strong>The dependency vulnerability gate now runs OSV-Scanner 2.7</strong> (from 2.3), which also resolves the packages our direct dependencies pull in. Five of those (anyio, certifi, idna, pygments, tqdm) now carry explicit minimum versions in <code>requirements.txt</code> so the scan evaluates the versions that are actually installed instead of the oldest ones that satisfy the range. gunicorn moves to 26.2. The product's behaviour is unchanged</li>
+        <li><strong>Weekly price audit applied.</strong> The vendored price registry snapshot and the exchange-rate table (now as of 30 Oct 2026) were refreshed, the as-of dates of registry-sourced prices for Databricks, DeepInfra, Nebius, Novita and Vercel AI Gateway were re-confirmed, and four models retired by their providers (two Databricks Gemini 2.5 entries, Cerebras Llama 3.1 8B and 70B) were removed. Confirmed prices rise from 98.1% to 98.7% of the catalogue with no price value changed</li>
       </ul>
+      <div class="stats-strip">
+        <div class="stat-chip">Models <strong>624 → 620</strong></div>
+        <div class="stat-chip">Confirmed <strong>98.1% → 98.7%</strong></div>
+      </div>
     </div>
   </div>
 
