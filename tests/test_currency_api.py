@@ -26,6 +26,14 @@ SUPPORTED = list(cur.SUPPORTED_CURRENCIES)
 # the six endpoints (active or not) so a shared cache never serves the USD body
 # to a header-driven request.
 VARY = main_module._LOCALE_VARY_HEADERS
+
+
+def _vary_ok(response) -> bool:
+    """The locale Vary contract: every locale header is listed, and nothing else except
+    ``Origin``, which Starlette's CORSMiddleware appends on its own (since 1.10, v1.89.2)."""
+    tokens = {t.strip() for t in response.headers["vary"].split(",")}
+    expected = {t.strip() for t in VARY.split(",")}
+    return expected <= tokens and tokens - expected <= {"Origin"}
 # A genuinely global address: 203.0.113.0/24 (TEST-NET-3) is *reserved*, so
 # ipaddress.is_global is False for it and the resolver rightly never looks it up.
 PUBLIC_IP = "93.184.216.34"
@@ -173,7 +181,7 @@ class TestPricingListing:
         assert r.headers["cache-control"] == "public, max-age=300"
         # The USD variant varies on the same headers as the converted ones: a shared
         # cache must not hand it to the next caller who sends X-Currency: EUR.
-        assert r.headers["vary"] == VARY
+        assert _vary_ok(r)
         assert not _has_local_fields(r.json())
 
     def test_filters_still_work_with_currency(self, client):
@@ -195,7 +203,7 @@ class TestPricingListing:
     def test_explicit_currency_keeps_public_cache_and_sets_vary(self, client):
         r = client.get("/pricing?currency=EUR")
         assert r.headers["cache-control"] == "public, max-age=300"
-        assert r.headers["vary"] == VARY
+        assert _vary_ok(r)
         for name in ("X-Currency", "X-Country", "CF-IPCountry", "X-Vercel-IP-Country",
                      "CloudFront-Viewer-Country", "X-Country-Code"):
             assert name in r.headers["vary"], name
@@ -320,7 +328,7 @@ class TestDetection:
         conv = r.json()["currency_conversion"]
         assert conv["currency"] == "EUR" and conv["country"] == "DE" and conv["country_source"] == "ip"
         assert r.headers["cache-control"] == "private, max-age=300"
-        assert r.headers["vary"] == VARY
+        assert _vary_ok(r)
         assert PUBLIC_IP not in r.text and "Berlin" not in r.text
         assert PUBLIC_IP not in caplog.text
 
@@ -331,7 +339,7 @@ class TestDetection:
         geo(result={"country": "Germany", "country_code": "DE"})
         detected = _call(client, method, path, body, headers={"Fly-Client-IP": PUBLIC_IP})
         assert detected.status_code == 200 and detected.json()["currency_conversion"]["country"] == "DE"
-        assert detected.headers["cache-control"] == "private" and detected.headers["vary"] == VARY
+        assert detected.headers["cache-control"] == "private" and _vary_ok(detected)
         platform = _call(client, method, path, body, headers={"CF-IPCountry": "DE"})
         assert platform.headers["cache-control"] == "private"
         stated = _call(client, method, path, body, headers={"X-Country": "DE"})
@@ -604,7 +612,7 @@ class TestBackwardCompatibility:
         assert not _has_local_fields(r.json())
         # Vary is the one header the plain variant gains (cache safety); nothing is
         # marked private for a request that stated and detected nothing.
-        assert r.headers["vary"] == VARY
+        assert _vary_ok(r)
         assert r.headers.get("cache-control", "") != "private"
 
     def test_existing_currency_fields_still_say_usd(self, client):
