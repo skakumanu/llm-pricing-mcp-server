@@ -63,7 +63,7 @@ jobs:
         flake8 src tests --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
   osv_scan:
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.3.3"
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.7.0"
     permissions:
       actions: read
       security-events: write
@@ -106,7 +106,7 @@ jobs:
         fetch-depth: 0
 
     - name: Gitleaks — scan for committed secrets
-      uses: gitleaks/gitleaks-action@v2
+      uses: gitleaks/gitleaks-action@v3
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

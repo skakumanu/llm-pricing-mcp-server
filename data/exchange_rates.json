@@ -1,21 +1,21 @@
 {
   "base": "USD",
-  "as_of": "2026-10-26",
+  "as_of": "2026-10-30",
   "source": "Frankfurter (ECB reference rates, USD base) via scripts/refresh_exchange_rates.py",
   "placeholder": false,
   "rates": {
     "USD": 1.0,
-    "EUR": 0.89381,
-    "GBP": 0.7492,
-    "INR": 95.18,
-    "JPY": 157.45,
-    "CAD": 1.4028,
+    "EUR": 0.89509,
+    "GBP": 0.74633,
+    "INR": 94.95,
+    "JPY": 157.25,
+    "CAD": 1.3969,
     "AUD": 1.4236,
-    "BRL": 5.5884,
-    "CNY": 6.6681,
-    "SGD": 1.2806,
-    "CHF": 0.82615,
-    "KRW": 1325.28,
-    "MXN": 18.6155
+    "BRL": 5.4325,
+    "CNY": 6.6529,
+    "SGD": 1.2784,
+    "CHF": 0.82295,
+    "KRW": 1335.27,
+    "MXN": 18.908
   }
 }
