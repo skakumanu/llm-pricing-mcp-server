@@ -157,6 +157,10 @@ fails. Artefacts are rows of the `doc_artifacts` table in `orchestrator.db`, so 
 them; they are purged after `DOCS_ARTIFACT_RETENTION_DAYS`. The workflow's budgets (2 USD per run, 20 USD per
 month) are owner-adjustable through `PUT /orchestrator/settings`.
 
+v1.90.0 adds `python-pptx` and `python-docx` (plus the `lxml`, `Pillow` and `XlsxWriter` they pull in) to the
+image, roughly 75 MB installed. Nothing to configure and no fonts are needed; the .pptx/.docx editions are
+rendered on download from the stored JSON, so artefacts still live only in `orchestrator.db`.
+
 | Setting | Default | Meaning |
 |---|---|---|
 | `DOCS_DEFAULT_MODEL` | `claude-haiku-5-5` | Model for the drafting call (spend is recorded under `document_generate`) |

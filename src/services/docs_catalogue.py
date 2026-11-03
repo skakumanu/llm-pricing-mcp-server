@@ -151,11 +151,12 @@ def required_section_ids(doc_type: str) -> List[str]:
 
 def describe_types() -> List[Dict[str, Any]]:
     """GET /documents/types: the catalogue with parameters, defaults and sections."""
+    from src.services.docs_render import allowed_formats  # lazy: docs_render imports this module
     out = []
     for t in DOC_TYPES.values():
         out.append({
             "doc_type": t.id, "title": t.title, "kind": t.kind, "description": t.description,
-            "formats": ["html", "markdown"], "data_sources": list(t.data_sources),
+            "formats": allowed_formats(t.kind), "data_sources": list(t.data_sources),
             "params": [{k: v for k, v in asdict(p).items() if v is not None} for p in t.params],
             "defaults": {p.name: p.default for p in t.params},
             "sections": [{"id": s.id, "title": s.title} for s in t.sections],

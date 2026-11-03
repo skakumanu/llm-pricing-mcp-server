@@ -29,7 +29,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from src.services.secret_values import secret_present, secret_value
 from src.services import docs_catalogue as cat
-from src.services import docs_render, docs_sources, docs_verify
+from src.services import docs_render, docs_render_office, docs_sources, docs_verify
 from src.services.docs_store import DocsStore
 from src.services.orchestrator_service import OrchestratorService, StepBlocked, StepContext, _iso
 
@@ -42,6 +42,12 @@ DRAFT_MAX_CHARS = 6000
 LLM_INPUT_MAX_CHARS = 8000
 MAX_ARTIFACT_BYTES = 400_000
 FORMATS = ("html", "markdown", "both")
+RENDERERS = {"html": docs_render.render_html, "md": docs_render.render_markdown,
+             "pptx": docs_render_office.render_pptx, "docx": docs_render_office.render_docx}
+
+
+def _size(body: Any) -> int:
+    return len(body) if isinstance(body, (bytes, bytearray)) else len(body.encode("utf-8"))
 
 DRAFT_SYSTEM_PROMPT = (
     "You write the narrative parts of a business document for the owner of a small SaaS. You are given only a "
@@ -275,8 +281,7 @@ class DocsService:
         doc = cat.build_document(row["doc_type"], params, defaulted, manifest, prose, llm, product, src.__version__)
         try:
             docs_verify.validate_document(doc, manifest)
-            sizes = {fmt: len(render(doc, "draft").encode("utf-8"))
-                     for fmt, render in (("html", docs_render.render_html), ("markdown", docs_render.render_markdown))}
+            sizes = {fmt: _size(RENDERERS[fmt](doc, "draft")) for fmt in docs_render.allowed_formats(doc["kind"])}
             if max(sizes.values()) > MAX_ARTIFACT_BYTES:
                 raise docs_verify.ValidationError("rendered document exceeds the size limit")
         except Exception as exc:
@@ -374,20 +379,22 @@ class DocsService:
         row = await self.store.get(artifact_id)
         return await self.reconcile(row) if row else None
 
-    async def render(self, row: Dict[str, Any], fmt: str) -> Tuple[str, str, str]:
-        """(body, content type, filename) for one artefact, rendered with its current status banner."""
+    async def render(self, row: Dict[str, Any], fmt: str) -> Tuple[Any, str, str]:
+        """(body, content type, filename) for one artefact, rendered with its current status banner.
+        The body is str for html/md and bytes for pptx/docx. FormatNotAvailable for a kind that lacks fmt."""
         doc = row.get("document")
         if not doc:
             raise LookupError("artefact has no document")
-        if fmt == "html":
-            body, ext = docs_render.render_html(doc, row["status"]), "html"
-        else:
-            body, ext = docs_render.render_markdown(doc, row["status"]), "md"
+        ext = docs_render.FORMAT_ALIASES.get(fmt, fmt)
+        allowed = docs_render.allowed_formats(row.get("kind") or doc.get("kind"))
+        if ext not in allowed:  # every allowed format has a RENDERERS entry (pinned by verify_render)
+            raise docs_render_office.FormatNotAvailable(str(row.get("kind")), ext, allowed)
+        body = RENDERERS[ext](doc, row["status"])
         stamp = time.strftime("%Y%m%d", time.gmtime(row["created_at"]))
         name = f"{row['doc_type'].replace('_', '-')}-{stamp}-{row['artifact_id']}.{ext}"
         await self._record(row["run_id"], "docs.download", "served", target=row["artifact_id"], trigger=row["doc_type"],
                            provenance={"format": ext})
-        return body, docs_render.content_type(fmt), name
+        return body, docs_render.content_type(ext), name
 
 
 _service: Optional[DocsService] = None

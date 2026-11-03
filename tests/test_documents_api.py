@@ -114,6 +114,40 @@ class TestRoundTrip:
         md = client.get(f"/documents/artifacts/{aid}/download?format=md", headers=OP)
         assert md.headers["content-type"].startswith("text/markdown") and md.headers["content-disposition"].endswith('.md"')
 
+    def test_office_downloads_and_415_and_422(self, docs_env):
+        import io
+        import docx
+        import pptx
+        deck = client.post("/documents/generate", headers=OP, json={"doc_type": "pricing_comparison_deck"}).json()
+        aid = deck["artifact_id"]
+        types = {"pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                 "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+        for ext, media in types.items():
+            res = client.get(f"/documents/artifacts/{aid}/download?format={ext}", headers=OP)
+            assert res.status_code == 200 and res.headers["content-type"] == media
+            assert re.fullmatch(rf'attachment; filename="pricing-comparison-deck-\d{{8}}-doc_\w+\.{ext}"',
+                                res.headers["content-disposition"])
+            assert res.content[:2] == b"PK"
+            opener = pptx.Presentation if ext == "pptx" else docx.Document
+            assert opener(io.BytesIO(res.content)) is not None
+        assert len(pptx.Presentation(io.BytesIO(client.get(
+            f"/documents/artifacts/{aid}/download?format=pptx", headers=OP).content)).slides) == 9
+        page = client.post("/documents/generate", headers=OP, json={"doc_type": "pricing_one_pager"}).json()["artifact_id"]
+        res = client.get(f"/documents/artifacts/{page}/download?format=pptx", headers=OP)
+        assert res.status_code == 415
+        assert res.json()["error"] == "format_not_available" and res.json()["allowed"] == ["html", "md", "docx"]
+        word = client.get(f"/documents/artifacts/{page}/download?format=docx", headers=OP)
+        assert word.status_code == 200 and word.content[:2] == b"PK"
+        assert client.get(f"/documents/artifacts/{aid}/download?format=xlsx", headers=OP).status_code == 422
+
+    def test_formats_are_listed_per_kind_and_per_artifact(self, docs_env):
+        by_type = {t["doc_type"]: t for t in client.get("/documents/types", headers=OP).json()["types"]}
+        assert by_type["pricing_comparison_deck"]["formats"] == ["html", "md", "pptx", "docx"]
+        assert by_type["pricing_one_pager"]["formats"] == ["html", "md", "docx"]
+        client.post("/documents/generate", headers=OP, json={"doc_type": "pricing_comparison_deck"})
+        row = client.get("/documents/artifacts", headers=OP).json()["artifacts"][0]
+        assert row["formats"] == ["html", "md", "pptx", "docx"]
+
     def test_download_works_after_discard(self, docs_env):
         aid = client.post("/documents/generate", headers=OP, json={"doc_type": "pricing_one_pager"}).json()["artifact_id"]
         approval = asyncio.run(docs_env.ostore.list_approvals(status="waiting"))[0]

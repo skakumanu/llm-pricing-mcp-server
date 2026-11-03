@@ -29,6 +29,127 @@ class AgentTool:
         }
 
 
+COMPACT_PRICING_LIMIT_DEFAULT = 25
+COMPACT_PRICING_LIMIT_MAX = 100
+COMPACT_PRICING_SORTS = ("avg", "input", "output", "name")
+
+COMPACT_PRICING_DESCRIPTION = (
+    "Current per-token prices as a compact list (model, provider, USD per 1M input and output "
+    "tokens, status). ALWAYS narrow it: provider=\"Anthropic\" for one provider, "
+    "model_contains=\"gpt-4\" for a name match, sort_by=\"avg\" with limit=10 for the cheapest "
+    "models, sort_by=\"output\" for output price. At most 100 rows are returned (default 25) and "
+    "total_models says how many matched, so never ask for everything."
+)
+
+
+def compact_pricing_schema(base_schema: Dict[str, Any]) -> Dict[str, Any]:
+    """The agent-facing input schema for get_all_pricing: the MCP schema plus filters."""
+    schema = dict(base_schema or {"type": "object"})
+    props = dict(schema.get("properties") or {})
+    props.update({
+        "provider": {"type": "string", "description": "Only this provider (case-insensitive, e.g. 'OpenAI')"},
+        "model_contains": {"type": "string", "description": "Only models whose name contains this text"},
+        "sort_by": {
+            "type": "string", "enum": list(COMPACT_PRICING_SORTS),
+            "description": "Order: 'avg' (mean of input and output per 1M, cheapest first), 'input', 'output', or 'name'",
+        },
+        "limit": {
+            "type": "integer", "minimum": 1, "maximum": COMPACT_PRICING_LIMIT_MAX,
+            "description": f"Rows to return (default {COMPACT_PRICING_LIMIT_DEFAULT}, max {COMPACT_PRICING_LIMIT_MAX})",
+        },
+    })
+    schema["properties"] = props
+    schema.pop("required", None)
+    return schema
+
+
+def _price_status(m: Dict[str, Any]) -> str:
+    if m.get("price_is_stale"):
+        return "stale"
+    if m.get("price_confirmed") is False:
+        return "unconfirmed"
+    kind = m.get("price_source_kind")
+    return str(kind) if kind else "confirmed"
+
+
+def compact_pricing_result(raw: Dict[str, Any], arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """Project a get_all_pricing result to compact rows, filtered, sorted and limited.
+
+    Pure and synchronous so it can be tested without the live catalogue. Each row is
+    ~100 characters, so even the maximum of 100 rows stays far below the loop's
+    tool-result bound.
+    """
+    if not isinstance(raw, dict) or not raw.get("success", True):
+        return raw
+    models = [m for m in (raw.get("models") or []) if isinstance(m, dict)]
+    provider = str(arguments.get("provider") or "").strip().lower()
+    contains = str(arguments.get("model_contains") or "").strip().lower()
+    sort_by = arguments.get("sort_by") or "avg"
+    if sort_by not in COMPACT_PRICING_SORTS:
+        sort_by = "avg"
+    try:
+        limit = int(arguments.get("limit") or COMPACT_PRICING_LIMIT_DEFAULT)
+    except (TypeError, ValueError):
+        limit = COMPACT_PRICING_LIMIT_DEFAULT
+    limit = max(1, min(limit, COMPACT_PRICING_LIMIT_MAX))
+
+    rows = []
+    for m in models:
+        name = str(m.get("model_name", ""))
+        prov = str(m.get("provider", ""))
+        if provider and prov.lower() != provider:
+            continue
+        if contains and contains not in name.lower():
+            continue
+        try:
+            inp = float(m.get("cost_per_input_token") or 0) * 1_000_000
+            out = float(m.get("cost_per_output_token") or 0) * 1_000_000
+        except (TypeError, ValueError):
+            inp, out = 0.0, 0.0
+        row = {
+            "model": name,
+            "provider": prov,
+            "input_per_1m": round(inp, 4),
+            "output_per_1m": round(out, 4),
+            "context_window": m.get("context_window"),
+            "status": _price_status(m),
+            "price_as_of": m.get("price_as_of"),
+        }
+        local = m.get("local_prices")
+        if isinstance(local, dict) and local.get("currency"):
+            row["local_currency"] = local.get("currency")
+        rows.append(row)
+
+    keys = {
+        "avg": lambda r: ((r["input_per_1m"] + r["output_per_1m"]) / 2, r["model"]),
+        "input": lambda r: (r["input_per_1m"], r["model"]),
+        "output": lambda r: (r["output_per_1m"], r["model"]),
+        "name": lambda r: (r["model"].lower(), r["provider"]),
+    }
+    if sort_by in ("avg", "input", "output"):
+        # Unpriced rows (0/0) go last so "cheapest" never answers with a model that has no price.
+        rows.sort(key=lambda r: (r["input_per_1m"] == 0 and r["output_per_1m"] == 0, keys[sort_by](r)))
+    else:
+        rows.sort(key=keys[sort_by])
+
+    out = {
+        "success": True,
+        "total_models": len(rows),
+        "returned": min(limit, len(rows)),
+        "sort_by": sort_by,
+        "unit": "USD per 1M tokens",
+        "models": rows[:limit],
+        "timestamp": raw.get("timestamp"),
+    }
+    if provider and not rows:
+        out["note"] = f"No models for provider '{arguments.get('provider')}'. Known providers: " + \
+            ", ".join(sorted({str(m.get('provider', '')) for m in models})[:40])
+    if len(rows) > limit:
+        out["note"] = (out.get("note", "") + f" {len(rows) - limit} more rows match; raise limit "
+                       f"(max {COMPACT_PRICING_LIMIT_MAX}) or narrow with provider / model_contains.").strip()
+    return out
+
+
 def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
     """Build the full list of agent tools from the ToolManager and RAG pipeline.
 
@@ -254,6 +375,25 @@ def build_agent_tools(tool_manager, rag_pipeline) -> List[AgentTool]:
             async def _executor(arguments: Dict[str, Any]) -> Dict[str, Any]:
                 return await tool_manager.execute_tool(name, arguments)
             return _executor
+
+        if tool_name == "get_all_pricing":
+            # v1.90.1: the agent gets a compact, filterable edition of the catalogue (the
+            # full MCP result is ~140k tokens for 600+ models and overflowed the model's
+            # context in production).
+            def _make_compact_executor(name: str):
+                async def _executor(arguments: Dict[str, Any]) -> Dict[str, Any]:
+                    passthrough = {k: v for k, v in arguments.items() if k in ("currency", "country")}
+                    raw = await tool_manager.execute_tool(name, passthrough)
+                    return compact_pricing_result(raw, arguments)
+                return _executor
+
+            tools.append(AgentTool(
+                name=tool_name,
+                description=COMPACT_PRICING_DESCRIPTION,
+                input_schema=compact_pricing_schema(tool_meta["input_schema"]),
+                execute=_make_compact_executor(tool_name),
+            ))
+            continue
 
         tools.append(AgentTool(
             name=tool_name,

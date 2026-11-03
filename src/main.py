@@ -82,6 +82,8 @@ from src.services.orchestrator_workflows import workflow_catalogue as _orchestra
 from src.models.audit import AuditRunIn  # noqa: E402
 from src.models.documents import DocGenerateIn  # noqa: E402
 from src.services.docs_catalogue import ParamError, describe_types  # noqa: E402
+from src.services.docs_render import allowed_formats as docs_allowed_formats  # noqa: E402
+from src.services.docs_render_office import FormatNotAvailable  # noqa: E402
 from src.services.docs_service import DocsService, get_docs_service, init_docs_service  # noqa: E402
 from src.services.docs_store import init_docs_store  # noqa: E402
 from src.services.audit_service import AuditService, get_audit_service, init_audit_service  # noqa: E402
@@ -4571,6 +4573,7 @@ def _docs() -> DocsService:
 def _doc_summary(r: Dict[str, Any], svc: DocsService) -> Dict[str, Any]:
     out = {k: r.get(k) for k in ("artifact_id", "run_id", "created_at", "doc_type", "kind", "title", "status",
                                  "corrections", "expires_at", "size_bytes", "format")}
+    out["formats"] = docs_allowed_formats(r.get("kind"))
     out["llm_mode"] = svc.llm_mode(r)
     return out
 
@@ -4627,9 +4630,11 @@ async def documents_artifact(artifact_id: str):
 
 
 @app.get("/documents/artifacts/{artifact_id}/download", tags=["Documents"])
-async def documents_download(artifact_id: str, format: Literal["html", "md", "markdown"] = Query("html")):
-    """Download the artefact as self-contained HTML or Markdown, rendered now with its current status banner
-    (a draft carries a DRAFT banner). Allowed in every state that has a document."""
+async def documents_download(artifact_id: str, format: Literal["html", "md", "markdown", "pptx", "docx"] = Query("html")):
+    """Download the artefact as self-contained HTML, Markdown, PowerPoint (.pptx, decks) or Word (.docx),
+    rendered now from the stored document with its current status banner (a draft carries a DRAFT banner).
+    Allowed in every state that has a document. 415 format_not_available when the kind lacks that edition
+    (a one-pager has no .pptx); an unknown token is 422."""
     svc = _docs()
     row = await svc.get_artifact(artifact_id)
     if row is None:
@@ -4637,7 +4642,12 @@ async def documents_download(artifact_id: str, format: Literal["html", "md", "ma
     if not row.get("document"):
         return JSONResponse(status_code=404, content={"error": "artifact_has_no_document",
                                                       "message": "generation failed; there is nothing to download"})
-    body, media, name = await svc.render(row, "html" if format == "html" else "md")
+    try:
+        body, media, name = await svc.render(row, format)
+    except FormatNotAvailable as exc:
+        return JSONResponse(status_code=415, content={
+            "error": "format_not_available", "message": f"{exc.fmt} is not available for kind '{exc.kind}'",
+            "kind": exc.kind, "allowed": exc.allowed})
     return Response(content=body, media_type=media,
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
