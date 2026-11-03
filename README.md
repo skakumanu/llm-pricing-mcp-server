@@ -135,7 +135,7 @@ The chat agent binds 27 of the 32 MCP tools (all except `ask_agent`, `support_ch
 
 ### Document agent (operator-only, v1.89.0)
 - Owner-requested decks, one-pagers, release briefs and status reports from a closed four-type catalogue (`release_notes_brief`, `pricing_comparison_deck`, `pricing_one_pager`, `internal_status_report`). Every figure comes from a product data call made during the generation and is recorded in a provenance manifest; every number in the text is cross-checked against it (untraceable numbers are removed and counted); each price carries its `price_as_of` and a status label, and models without a usable price show "price not available" and stay out of rankings and charts.
-- `GET /documents/types`, `POST /documents/generate`, `GET /documents/artifacts`, `GET /documents/artifacts/{id}` and `.../download?format=html|md` (self-contained printable HTML, or Markdown), plus a Documents panel on `/admin`. One bounded drafting call per document (`claude-haiku-5-5` by default, `claude-sonnet-5-5` on request) with a labelled data-only fallback; each document waits for the owner's publish approval. Nothing is sent anywhere, no MCP tool exposes it, and customer-visible behaviour is unchanged.
+- `GET /documents/types`, `POST /documents/generate`, `GET /documents/artifacts`, `GET /documents/artifacts/{id}` and `.../download?format=html|md|pptx|docx` (self-contained printable HTML, Markdown, a PowerPoint deck with native tables, native charts and speaker notes, or a Word document with native tables and numbered notes; a deck also saves as a Word handout, a one-pager has no .pptx and answers 415), plus a Documents panel on `/admin`. One bounded drafting call per document (`claude-haiku-5-5` by default, `claude-sonnet-5-5` on request) with a labelled data-only fallback; each document waits for the owner's publish approval. Nothing is sent anywhere, no MCP tool exposes it, and customer-visible behaviour is unchanged.
 
 ---
 
@@ -196,7 +196,7 @@ Full list: `src/config/settings.py`. Production settings: [docs/DEPLOYMENT.md](d
 pytest tests/ -q
 ```
 
-- 4078 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy); CodeQL and Dependabot run as additional scanners
+- 4117 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy); CodeQL and Dependabot run as additional scanners
 - Git Flow: `feature/*` → `develop` → `master`. See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 - Internals, services, data stores and CI: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Deploys to Fly.io from `master` when all CI gates pass: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
