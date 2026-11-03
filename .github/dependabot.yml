@@ -14,6 +14,14 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # v1.90.2: the OpenAI SDK is the live client for the production chat agent
+      # (agent/llm_backend.py OpenAIBackend). Major bumps (1.x -> 2.x/3.x) change the
+      # API and the test suite stubs the client, so CI cannot vouch for them. Take
+      # them deliberately with a live re-check, not from an auto-opened PR; minor and
+      # patch within the pinned major still flow.
+      - dependency-name: "openai"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "github-actions"
     directory: "/"
     target-branch: "develop"

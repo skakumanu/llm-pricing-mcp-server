@@ -155,8 +155,26 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.90.1 -->
+  <!-- v1.90.2 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.90.2</span>
+      <span class="release-date">Nov 3, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Dependency maintenance</div>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li><strong>The OpenAI SDK moves to the latest 1.x (1.109.1, from 1.68.2).</strong> That is dozens of fixes within the same major version, which keeps the chat agent's provider client working unchanged. Major SDK upgrades (2.x and 3.x) change the API, so they are now taken deliberately with a live re-check rather than merged automatically, because the test suite stubs the client and cannot prove a live call still works</li>
+        <li>Routine weekly dependency updates (pydantic, and the certifi and tqdm floors) are also included. The product's behaviour is unchanged</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.90.1 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.90.1</span>
