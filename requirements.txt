@@ -14,7 +14,7 @@ pytest==9.2.0
 pytest-asyncio==1.4.1
 pytest-cov==7.1.0
 anthropic==0.49.0
-openai==1.68.2
+openai==3.42.0
 tiktoken==0.14.0
 aiofiles
 aiosqlite
