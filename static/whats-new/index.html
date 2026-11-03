@@ -155,8 +155,28 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.90.0 -->
+  <!-- v1.90.1 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.90.1</span>
+      <span class="release-date">Nov 3, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">The pricing chat answers &ldquo;cheapest model&rdquo; again</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li><strong>The chat assistant failed on catalogue-wide questions.</strong> Asking the pricing agent &ldquo;What's the cheapest model?&rdquo; made it fetch the whole catalogue and hand all 600+ models to the language model at once, about 200,000 tokens, which exceeded the model's context window and returned a provider error instead of an answer. The catalogue has been that large since the production data fix in v1.84.1, which is when this started</li>
+        <li><strong>The agent now gets a compact, filterable price list.</strong> Its <code>get_all_pricing</code> tool returns model, provider, USD per 1M input and output tokens, context window and price status, filtered by provider or name match, sorted by average, input or output price, and capped at 100 rows (25 by default) with a count of how many more matched. Unpriced models sort last, so &ldquo;cheapest&rdquo; is never a model without a price</li>
+        <li><strong>Every tool result is bounded.</strong> The agent loop cuts any result larger than roughly 15,000 tokens to fit, keeps as many entries as fit and tells the model how many were omitted and how to narrow the query, so no future tool can overflow the context again</li>
+        <li>No price, tier or endpoint changed; the MCP <code>get_all_pricing</code> tool itself is unchanged</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.90.0 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.90.0</span>
