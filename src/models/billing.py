@@ -115,4 +115,5 @@ class AccountDeleteResponse(BaseModel):
     deleted_at: str
     subscription_ended: bool = False
     refund_escalation_reference: Optional[str] = None
+    escalations_scrubbed: int = 0
     message: str

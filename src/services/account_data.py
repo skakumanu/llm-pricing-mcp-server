@@ -170,6 +170,19 @@ class AccountDataService:
             subscription_ended = True
 
         rows: Dict[str, int] = {}
+        escalations_scrubbed = 0
+        try:
+            conv_ids = [c["id"] for c in await self.conversations.list_for_org(org)]
+            escalations_scrubbed = await self._scrub_escalations(org[:8], conv_ids)
+        except Exception as exc:  # incomplete deletion must be retryable, never silent
+            logger.error("account deletion: escalation scrub failed for org %s (%s)", org[:8], type(exc).__name__)
+            await support_action("billing.account_delete", "error:escalations", actor="customer", target=target,
+                                 trigger=trigger, provenance={"subscription_ended": subscription_ended})
+            raise AccountDataError(
+                500, "deletion_incomplete",
+                "Deletion did not finish. Your subscription may already have ended. Send the request again "
+                "to complete it, or ask the support assistant.",
+            ) from exc
         steps: List[Tuple[str, Callable[[], Awaitable[Any]]]] = [
             ("usage_events", lambda: self.usage.delete_org(org)),
             ("dispatch_receipts", lambda: self.receipts.delete_org(org)),
@@ -207,7 +220,8 @@ class AccountDataService:
         await support_action(
             "billing.account_delete", "deleted", actor="customer", target=target, trigger=trigger,
             provenance={"subscription_ended": subscription_ended, "refund_escalation": bool(reference),
-                        "rows": rows},
+                        "rows": rows,
+                        "escalations_scrubbed": escalations_scrubbed},
         )
         message = ("Your account and all of its data have been permanently deleted. This is irreversible. "
                    "Your service key no longer works.")
@@ -219,8 +233,20 @@ class AccountDataService:
         return {
             "deleted": True, "org_id": org, "deleted_at": _iso(deleted_at),
             "subscription_ended": subscription_ended, "refund_escalation_reference": reference,
-            "message": message,
+            "escalations_scrubbed": escalations_scrubbed, "message": message,
         }
+
+    async def _scrub_escalations(self, org8: str, conversation_ids: List[str]) -> int:
+        """Anonymise the org's support_escalation runs. No orchestrator running means nothing to scrub."""
+        from src.services.orchestrator_service import get_orchestrator_service
+        try:
+            svc = (self._orchestrator_getter or get_orchestrator_service)()
+        except RuntimeError:
+            return 0
+        store = getattr(svc, "store", None)
+        if store is None:
+            return 0
+        return int(await store.scrub_support_escalations(org8, conversation_ids))
 
     async def _open_refund_review(self, customer: Any, deleted_at: float) -> Optional[str]:
         """Open a support_escalation run (category refund) for the owner. No money moves.
