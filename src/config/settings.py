@@ -187,6 +187,10 @@ class Settings(BaseSettings):
     # (Customers:read, Subscriptions:read, Webhook Endpoints:read) used only for reconciliation;
     # unset = every stripe.* check reports n/a "not configured". SecretStr so a repr never shows it.
     stripe_audit_key: Optional[SecretStr] = None
+    # v1.89.4: optional pepper for the deletion suppression marker, held outside billing.db. When set,
+    # new markers are keyed with HMAC(pepper, db salt) and record scheme "pepper". Back it up: losing it
+    # makes peppered markers uncheckable. Unset = markers keyed by the per-database salt alone.
+    suppression_hash_key: Optional[SecretStr] = None
     audit_llm_summary: bool = False                 # one optional bounded executive-summary call
     audit_summary_model: str = "claude-haiku-5-5"   # model for that call (spend: orch_spend, compliance_audit)
     audit_report_retention_days: int = 365          # reports (and their check rows) purged past this age

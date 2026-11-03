@@ -169,6 +169,7 @@ Set via environment variables or `.env`. An unknown key in `.env` stops startup 
 | `ORCHESTRATOR_DB_PATH` | Orchestrator SQLite file (runs, approvals, action records, spend, settings) |
 | `ORCHESTRATOR_INTAKE_KEY` | Separate credential for the GitHub Actions executor; accepted on three routes only |
 | `ORCHESTRATOR_RUN_RETENTION_DAYS` / `ORCHESTRATOR_IO_RETENTION_DAYS` | Orchestrator retention: rows (365) and redacted I/O summaries (90) |
+| `SUPPRESSION_HASH_KEY` | Optional pepper (secret, held outside the database) for the account-deletion marker; unset = salt-only markers; back it up (v1.89.4) |
 | `STRIPE_AUDIT_KEY` | Restricted read-only Stripe key (Customers, Subscriptions, Webhook Endpoints: read) for the compliance audit's Stripe reconciliation; unset = those checks report n/a (v1.88.0) |
 | `AUDIT_LLM_SUMMARY` / `AUDIT_SUMMARY_MODEL` | Optional one-call executive summary of each audit report (default off; model `claude-haiku-5-5`); spend lands in the orchestrator ledger under `compliance_audit` |
 | `AUDIT_REPORT_RETENTION_DAYS` / `AUDIT_ESCALATION_MAX_AGE_DAYS` / `AUDIT_STALE_PRICE_PCT_WARN` / `AUDIT_DISABLED_CHECKS` | Audit report retention (365), escalation age warning (7 days), stale-price warning (10 %), and a comma list of check ids reported as n/a "disabled" |
@@ -195,7 +196,7 @@ Full list: `src/config/settings.py`. Production settings: [docs/DEPLOYMENT.md](d
 pytest tests/ -q
 ```
 
-- 4064 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy); CodeQL and Dependabot run as additional scanners
+- 4078 passing tests, CI/CD on every PR (test → lint → bandit → OSV → gitleaks → deploy); CodeQL and Dependabot run as additional scanners
 - Git Flow: `feature/*` → `develop` → `master`. See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 - Internals, services, data stores and CI: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Deploys to Fly.io from `master` when all CI gates pass: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

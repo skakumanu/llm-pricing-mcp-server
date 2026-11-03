@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional
 
 from src.services import audit_checks as checks
+from src.services.secret_values import secret_present, secret_value
 from src.services.audit_store import AuditStore
 from src.services.orchestrator_service import OrchestratorService, StepContext, _iso
 
@@ -228,7 +229,7 @@ class AuditService:
                 "status": status, "counts": counts, "numbers": actx.numbers,
                 "config": {
                     "disabled_checks": sorted(actx.disabled),
-                    "stripe_configured": checks._present(getattr(s, "stripe_audit_key", None)),
+                    "stripe_configured": secret_present(getattr(s, "stripe_audit_key", None)),
                     "llm_summary": bool(getattr(s, "audit_llm_summary", False)),
                     "summary_model": str(getattr(s, "audit_summary_model", "")),
                     "repo_checks_supplied": bool(actx.repo_checks), "repo_version": actx.repo_version,
@@ -281,7 +282,7 @@ class AuditService:
         s = self.settings
         provider = str(getattr(s, "agent_llm_provider", "anthropic"))
         api_key = getattr(s, "anthropic_api_key" if provider == "anthropic" else "openai_api_key", None)
-        if not checks._present(api_key):
+        if not secret_present(api_key):
             return template, "llm_skipped:no_api_key", {}
         ok, reason, _info = await self.orchestrator.check_budget(ctx.run, ctx.step)
         if not ok:
@@ -291,7 +292,7 @@ class AuditService:
             factory = self._llm_factory
             if factory is None:
                 from agent.llm_backend import create_llm_backend as factory
-            backend = factory(provider, checks._secret(api_key), model)
+            backend = factory(provider, secret_value(api_key), model)
             response = await asyncio.wait_for(
                 backend.complete(messages=[{"role": "user", "content": _llm_table(report)}], tools=[],
                                  system=SUMMARY_SYSTEM_PROMPT),

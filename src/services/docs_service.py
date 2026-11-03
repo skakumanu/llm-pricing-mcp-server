@@ -27,6 +27,7 @@ import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
+from src.services.secret_values import secret_present, secret_value
 from src.services import docs_catalogue as cat
 from src.services import docs_render, docs_sources, docs_verify
 from src.services.docs_store import DocsStore
@@ -81,17 +82,6 @@ async def _price_call(model: str, tokens_in: int, tokens_out: int, settings: Any
     except Exception:  # nosec B110
         pricing = None
     return estimate_turn_cost(tokens_in, tokens_out, pricing, settings)
-
-
-def _present(secret: Any) -> bool:
-    if secret is None:
-        return False
-    value = secret.get_secret_value() if hasattr(secret, "get_secret_value") else secret
-    return bool(str(value).strip())
-
-
-def _secret(secret: Any) -> str:
-    return secret.get_secret_value() if hasattr(secret, "get_secret_value") else str(secret)
 
 
 class DocsService:
@@ -227,7 +217,7 @@ class DocsService:
             return {**fallback, "reason": "requested"}
         provider = str(getattr(s, "agent_llm_provider", "anthropic"))
         api_key = getattr(s, "anthropic_api_key" if provider == "anthropic" else "openai_api_key", None)
-        if not _present(api_key):
+        if not secret_present(api_key):
             return {**fallback, "reason": "no_api_key"}
         ok, reason, _info = await self.orchestrator.check_budget(ctx.run, ctx.step)
         if not ok:
@@ -237,7 +227,7 @@ class DocsService:
             factory = self._llm_factory
             if factory is None:
                 from agent.llm_backend import create_llm_backend as factory
-            backend = factory(provider, _secret(api_key), model)
+            backend = factory(provider, secret_value(api_key), model)
             content = docs_sources.llm_table(manifest, LLM_INPUT_MAX_CHARS)
             response = await asyncio.wait_for(
                 backend.complete(messages=[{"role": "user", "content": content}], tools=[],
