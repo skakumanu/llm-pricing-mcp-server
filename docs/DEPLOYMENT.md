@@ -107,6 +107,19 @@ and `ORCHESTRATOR_BASE_URL`, above). Without the intake key the workflow prints 
 exits 0; the audit can still be run from `/admin` or `POST /audit/run`. Reports are stored in
 `orchestrator.db` (already replicated); nothing new needs to be created on Fly.
 
+**Deletion-marker pepper (`SUPPRESSION_HASH_KEY`, optional).** When set, account-deletion suppression markers
+are keyed with HMAC-SHA256(pepper, per-database salt) and record the scheme `pepper`, so someone holding only
+`billing.db` or a Litestream replica cannot test known addresses against them. Generate and set it without
+writing it to a file or chat, and back it up with your other production secrets:
+
+```bash
+read -rs SUPPRESSION_HASH_KEY && flyctl secrets set SUPPRESSION_HASH_KEY="$SUPPRESSION_HASH_KEY"; unset SUPPRESSION_HASH_KEY
+```
+
+- Unset: markers use the per-database salt only (scheme `db-salt`), as before. Existing markers are never
+  re-hashed; both schemes are checked. If the pepper is lost, peppered markers can no longer be verified
+  (they stay in the database, unreadable). Do not rotate it casually: a new value cannot check old markers.
+
 **Restricted read-only Stripe key (`STRIPE_AUDIT_KEY`, optional).** It enables the Stripe reconciliation
 checks (orphan subscriptions, tier and past-due mismatches, shared Stripe ids, and that the webhook endpoint
 registers the seven event types). It is a different key from `STRIPE_SECRET_KEY`: the audit must not be able

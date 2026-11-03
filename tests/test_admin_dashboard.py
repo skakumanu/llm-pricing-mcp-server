@@ -439,3 +439,23 @@ def test_migration_guide_url_points_at_an_existing_doc():
         assert "/documents/" in main_module._OPERATOR_ONLY_PREFIXES
         for path in main_module._unauthenticated_paths | main_module._anonymous_rate_limited_paths:
             assert not path.startswith("/documents"), path
+
+
+class TestArtefactDownloadHardening:
+    """v1.89.4: artefacts are saved via an anchor download and previewed only in a sandboxed iframe."""
+
+    def _html(self):
+        return client.get("/admin/", follow_redirects=True).text
+
+    def test_no_window_open_or_navigated_blob(self):
+        html = self._html()
+        assert "window.open" not in html
+
+    def test_anchor_download_uses_content_disposition(self):
+        html = self._html()
+        assert "Content-Disposition" in html and "a.download = filename" in html
+
+    def test_preview_iframe_is_sandboxed_without_same_origin_or_scripts(self):
+        html = self._html()
+        assert 'setAttribute("sandbox", "")' in html and "srcdoc" in html
+        assert "allow-same-origin" not in html and "allow-scripts" not in html

@@ -23,6 +23,7 @@ from urllib.parse import quote
 
 import aiosqlite
 
+from src.services.secret_values import secret_present, secret_value
 from src.services import launch_checklist, legal_pages
 from src.services.tiers import checkout_disabled_reason, checkout_enabled
 
@@ -93,15 +94,6 @@ class AuditContext:
     _memo: Dict[str, Any] = field(default_factory=dict)
 
 
-def _secret(value: Any) -> str:
-    getter = getattr(value, "get_secret_value", None)
-    return str(getter() if callable(getter) else (value or ""))
-
-
-def _present(value: Any) -> bool:
-    return value is not None and _secret(value).strip() != ""
-
-
 def _prefix(value: Any) -> str:
     return str(value or "")[:8]
 
@@ -164,7 +156,7 @@ async def check_litestream_config(ctx: AuditContext) -> Tuple[str, Dict[str, Any
     if not runtime:
         raise NotApplicable("no *_db_path setting points under /app/data (local run)", listed=len(listed))
     missing = sorted(name for name, value in runtime.items() if value not in listed)
-    replica_set = _present(ctx.env.get("LITESTREAM_REPLICA_URL"))
+    replica_set = secret_present(ctx.env.get("LITESTREAM_REPLICA_URL"))
     evidence = {"databases_checked": len(runtime), "listed_paths": len(listed), "missing_settings": missing,
                 "LITESTREAM_REPLICA_URL": "set" if replica_set else "unset"}
     if missing:
@@ -180,9 +172,9 @@ async def check_secrets_presence(ctx: AuditContext) -> Tuple[str, Dict[str, Any]
     states: Dict[str, str] = {}
     for name in SECRET_NAMES:
         value = ctx.env.get(name)
-        if not _present(value):
+        if not secret_present(value):
             value = getattr(ctx.settings, name.lower(), None)
-        states[name] = "set" if _present(value) else "unset"
+        states[name] = "set" if secret_present(value) else "unset"
     evidence = {"secrets": states, "unset_count": sum(1 for v in states.values() if v == "unset")}
     if states["MCP_API_KEY"] == "unset":
         return "fail", evidence
@@ -393,7 +385,7 @@ async def check_deleted_markers(ctx: AuditContext) -> Tuple[str, Dict[str, Any]]
 # ---------------------------------------------------------------------------
 
 def _stripe_key(ctx: AuditContext) -> str:
-    key = _secret(getattr(ctx.settings, "stripe_audit_key", None)).strip()
+    key = secret_value(getattr(ctx.settings, "stripe_audit_key", None)).strip()
     if not key:
         raise NotApplicable("not configured", setting="STRIPE_AUDIT_KEY")
     return key
@@ -637,7 +629,7 @@ async def check_coverage(ctx: AuditContext, results: List[Dict[str, Any]]) -> Tu
     evidence = {
         "counts": counts, "checks_run": len(results), "disabled": sorted(ctx.disabled),
         "na_reasons": reasons,
-        "stripe_configured": _present(getattr(ctx.settings, "stripe_audit_key", None)),
+        "stripe_configured": secret_present(getattr(ctx.settings, "stripe_audit_key", None)),
         "repo_checks_supplied": bool(ctx.repo_checks),
         "llm_summary": bool(getattr(ctx.settings, "audit_llm_summary", False)),
         "summary_model": str(getattr(ctx.settings, "audit_summary_model", "")),

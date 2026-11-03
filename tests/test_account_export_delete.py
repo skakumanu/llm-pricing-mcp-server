@@ -437,3 +437,78 @@ def test_mid_deletion_failure_is_retryable_and_keeps_the_key(env):
     assert actions(env, "billing.account_delete")[0]["outcome"] == "error:provider_keys"
     assert delete(env, env.a.api_key, org_id=env.a.org_id).status_code == 200
     assert all(v == 0 for v in count_rows(env, env.a.org_id).values())
+
+
+# --------------------------------------------------------------------------- v1.89.4 escalation scrub
+
+
+def open_escalation(env, tag, org8, conv=None, body=None):
+    payload = {
+        "trigger_class": "customer_message", "event_type": "account.deletion_refund_review",
+        "dedup_key": f"msg:test:{tag}", "actor": "account_deletion", "actor_is_owner": False,
+        "source": {"kind": "account_deletion", "ref": "test"},
+        "data": {"title": f"title {tag}", "body": body or f"please help, write to {EMAIL_A} {tag}",
+                 "category": "refund", "priority": "standard", "tier": "pro", "identified": True,
+                 "customer_ref": org8, "suggested_reply": f"reply to {EMAIL_A} {tag}",
+                 **({"conversation_ref": conv} if conv else {})},
+    }
+    return run(env.svc.intake_event(payload, actor_kind="account_service"))["run_id"]
+
+
+def raw_run_dump(env, run_id):
+    with sqlite3.connect(env.store._db_path) as c:
+        parts = [repr(c.execute("SELECT * FROM orch_runs WHERE run_id = ?", (run_id,)).fetchall())]
+        for t in ("orch_steps", "orch_approvals", "orch_events"):
+            parts.append(repr(c.execute(f"SELECT * FROM {t} WHERE run_id = ?", (run_id,)).fetchall()))  # nosec B608
+    return "\n".join(parts)
+
+
+def test_deletion_scrubs_the_orgs_escalations_only(env):
+    seed(env, env.a, "a")
+    r1 = open_escalation(env, "one", env.a.org_id[:8])
+    r2 = open_escalation(env, "two", "zzzzzzzz", conv="sup-a")  # referenced by the org's conversation id
+    other = open_escalation(env, "three", env.b.org_id[:8], conv="sup-b")
+    before_other = raw_run_dump(env, other)
+    before_actions = len(run(env.store.list_actions()))
+    assert "please help" in raw_run_dump(env, r1)
+    with patch("stripe.Subscription.cancel"):
+        r = delete(env, env.a.api_key, org_id=env.a.org_id)
+    assert r.status_code == 200 and r.json()["escalations_scrubbed"] == 2
+    for rid in (r1, r2):
+        dump = raw_run_dump(env, rid)
+        assert EMAIL_A not in dump and "please help" not in dump and "reply to" not in dump
+        assert "[removed: account deleted]" in dump and "scrubbed_at" in dump
+    assert raw_run_dump(env, other) == before_other
+    done = [a for a in actions(env, "billing.account_delete") if a["outcome"] == "deleted"][0]
+    assert done["provenance_json"]["escalations_scrubbed"] == 2
+    assert len(run(env.store.list_actions())) >= before_actions  # append-only: nothing removed
+
+
+def test_scrub_removes_owner_decision_note(env):
+    rid = open_escalation(env, "note", env.a.org_id[:8])
+    with sqlite3.connect(env.store._db_path) as c:
+        n = c.execute("UPDATE orch_approvals SET decision_note = ? WHERE run_id = ?",
+                      (f"Hi {EMAIL_A}, refunded", rid)).rowcount
+        c.commit()
+    assert n >= 1, "escalation must have an approval row"
+    assert run(env.store.scrub_support_escalations(env.a.org_id[:8], [])) == 1
+    dump = raw_run_dump(env, rid)
+    assert EMAIL_A not in dump and "refunded" not in dump
+
+
+def test_scrub_is_idempotent_and_handles_no_runs(env):
+    rid = open_escalation(env, "idem", env.a.org_id[:8])
+    assert run(env.store.scrub_support_escalations(env.a.org_id[:8], [])) == 1
+    assert run(env.store.scrub_support_escalations(env.a.org_id[:8], [])) == 0
+    assert run(env.store.scrub_support_escalations("nomatch0", [])) == 0
+    assert run(env.store.scrub_support_escalations("", [])) == 0
+    assert EMAIL_A not in raw_run_dump(env, rid)
+
+
+def test_deletion_without_orchestrator_scrubs_nothing(env):
+    svc = account_data.AccountDataService.__new__(account_data.AccountDataService)
+
+    def boom():
+        raise RuntimeError("no orchestrator")
+    svc._orchestrator_getter = boom
+    assert run(svc._scrub_escalations("abcdefgh", [])) == 0

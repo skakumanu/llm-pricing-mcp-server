@@ -232,6 +232,24 @@ _SCHEMA = (
 _FORMULA_PREFIXES = frozenset("=+-@\t\r")
 
 
+REMOVED_MARKER = "[removed: account deleted]"
+_SCRUB_KEYS = frozenset({"title", "body", "suggested_reply", "conversation_ref"})
+
+
+def _dump(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+
+
+def _scrub_fields(value: Any) -> Any:
+    """Recursively replace customer-text fields with REMOVED_MARKER (non-empty values only)."""
+    if isinstance(value, dict):
+        return {k: (REMOVED_MARKER if k in _SCRUB_KEYS and v not in (None, "") else _scrub_fields(v))
+                for k, v in value.items()}
+    if isinstance(value, list):
+        return [_scrub_fields(v) for v in value]
+    return value
+
+
 def _insert_sql(table: str, columns: List[str], or_ignore: bool = False) -> str:
     verb = "INSERT OR IGNORE" if or_ignore else "INSERT"
     marks = ", ".join("?" for _ in columns)
@@ -240,7 +258,7 @@ def _insert_sql(table: str, columns: List[str], or_ignore: bool = False) -> str:
 
 def _encode(col: str, value: Any) -> Any:
     if col in _JSON_COLUMNS and value is not None and not isinstance(value, str):
-        return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+        return _dump(value)
     if col in _BOOL_COLUMNS:
         return 1 if value else 0
     return value
@@ -351,6 +369,66 @@ class OrchestratorStore:
         async with _open_db(self._db_path) as db:
             await db.execute(f"UPDATE orch_runs SET {sets} WHERE run_id = ?", params)  # nosec B608
             await db.commit()
+
+    async def scrub_support_escalations(self, customer_ref: str, conversation_ids: List[str]) -> int:
+        """v1.89.4: anonymise the customer's text in support_escalation runs on account deletion.
+
+        Matches runs whose inputs.customer_ref equals ``customer_ref`` (the 8-char org prefix) or whose
+        inputs.conversation_ref is one of ``conversation_ids``. title/body/suggested_reply/conversation_ref
+        in run summary (inputs + text), step io, approval artifacts (and the owner's decision_note) and the intake event payload become
+        REMOVED_MARKER and the run summary gains ``scrubbed_at``. Ids, timestamps, status, decisions and
+        orch_actions (append-only; they hold only the org prefix) are untouched. Returns runs scrubbed.
+        """
+        ids = {c for c in conversation_ids if c}
+        if not customer_ref and not ids:
+            return 0
+        now = time.time()
+        scrubbed = 0
+        async with _open_db(self._db_path) as db:
+            await db.execute("BEGIN IMMEDIATE")
+            try:
+                async with db.execute(
+                    "SELECT run_id, summary_json FROM orch_runs WHERE workflow_id = 'support_escalation'"
+                ) as cur:
+                    rows = await cur.fetchall()
+                for run_id, raw in rows:
+                    try:
+                        summary = json.loads(raw) if raw else {}
+                    except ValueError:
+                        summary = {}
+                    if not isinstance(summary, dict) or summary.get("scrubbed_at"):
+                        continue
+                    inputs = summary.get("inputs") if isinstance(summary.get("inputs"), dict) else {}
+                    if not ((customer_ref and inputs.get("customer_ref") == customer_ref)
+                            or inputs.get("conversation_ref") in ids):
+                        continue
+                    summary = _scrub_fields(summary)
+                    summary["scrubbed_at"] = now
+                    await db.execute("UPDATE orch_runs SET summary_json = ? WHERE run_id = ?",
+                                     (_dump(summary), run_id))
+                    for table, pk, col in (("orch_steps", "step_id", "io_summary_json"),
+                                           ("orch_approvals", "approval_id", "artifact_summary_json"),
+                                           ("orch_events", "event_id", "payload_summary_json")):
+                        sql = f"SELECT {pk}, {col} FROM {table} WHERE run_id = ? AND {col} IS NOT NULL"  # nosec B608
+                        async with db.execute(sql, (run_id,)) as cur:
+                            sub = await cur.fetchall()
+                        for key, blob in sub:
+                            try:
+                                data = _scrub_fields(json.loads(blob))
+                            except ValueError:
+                                data = None
+                            upd = f"UPDATE {table} SET {col} = ? WHERE {pk} = ?"  # nosec B608
+                            await db.execute(upd, (_dump(data) if data is not None else None, key))
+                    await db.execute(
+                        "UPDATE orch_approvals SET decision_note = ? WHERE run_id = ? "
+                        "AND decision_note IS NOT NULL AND decision_note != ''",
+                        (REMOVED_MARKER, run_id))
+                    scrubbed += 1
+                await db.commit()
+            except BaseException:
+                await db.rollback()
+                raise
+        return scrubbed
 
     async def list_runs(self, status: Optional[str] = None, workflow_id: Optional[str] = None,
                         trigger_class: Optional[str] = None, since: Optional[float] = None,

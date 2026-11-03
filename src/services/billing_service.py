@@ -12,6 +12,9 @@ from typing import Optional
 
 import aiosqlite
 
+from src.config.settings import settings
+from src.services.secret_values import secret_value
+
 logger = logging.getLogger(__name__)
 
 
@@ -60,9 +63,14 @@ _CREATE_DELETED_ACCOUNTS = """
 CREATE TABLE IF NOT EXISTS deleted_accounts (
     marker_id INTEGER PRIMARY KEY AUTOINCREMENT,
     email_hash TEXT NOT NULL,
-    deleted_at REAL NOT NULL
+    deleted_at REAL NOT NULL,
+    hash_scheme TEXT NOT NULL DEFAULT 'db-salt'
 )
 """
+# v1.89.4: deleted_accounts rows created before the pepper option have no hash_scheme column.
+_DELETED_ADDED_COLUMNS = (("hash_scheme", "TEXT NOT NULL DEFAULT 'db-salt'"),)
+_SCHEME_DB = "db-salt"
+_SCHEME_PEPPER = "pepper"
 _CREATE_DELETED_INDEX = "CREATE INDEX IF NOT EXISTS idx_deleted_accounts_hash ON deleted_accounts (email_hash)"
 _CREATE_META = "CREATE TABLE IF NOT EXISTS billing_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
 _SALT_KEY = "suppression_salt"
@@ -196,6 +204,11 @@ class BillingService:
             await db.execute(_CREATE_STRIPE_EVENTS)
             await db.execute(_CREATE_HASH_INDEX)
             await db.execute(_CREATE_DELETED_ACCOUNTS)
+            async with db.execute("PRAGMA table_info(deleted_accounts)") as cur:
+                del_existing = {row[1] for row in await cur.fetchall()}
+            for name, decl in _DELETED_ADDED_COLUMNS:
+                if name not in del_existing:
+                    await db.execute(f"ALTER TABLE deleted_accounts ADD COLUMN {name} {decl}")  # nosec B608 — literals
             await db.execute(_CREATE_DELETED_INDEX)
             await db.execute(_CREATE_META)
             await db.execute(
@@ -386,6 +399,22 @@ class BillingService:
     def _email_hash(salt: bytes, email: str) -> str:
         return hmac.new(salt, email.strip().lower().encode("utf-8"), hashlib.sha256).hexdigest()
 
+    @staticmethod
+    def _pepper() -> bytes:
+        return secret_value(getattr(settings, "suppression_hash_key", None)).strip().encode("utf-8")
+
+    def _marker_key(self, salt: bytes, scheme: str) -> Optional[bytes]:
+        """Key for ``scheme``: the db salt, or HMAC(pepper, salt). None = pepper scheme but no pepper set."""
+        if scheme == _SCHEME_DB:
+            return salt
+        pepper = self._pepper()
+        if not pepper:
+            return None
+        return hmac.new(pepper, salt, hashlib.sha256).digest()
+
+    def _active_scheme(self) -> str:
+        return _SCHEME_PEPPER if self._pepper() else _SCHEME_DB
+
     async def delete_customer(self, customer_id: str) -> Optional[float]:
         """v1.87.0: erase the customer row and record the suppression marker in ONE transaction.
 
@@ -402,9 +431,10 @@ class BillingService:
                     return None
                 salt = await self._suppression_salt(db)
                 deleted_at = time.time()
+                scheme = self._active_scheme()
                 await db.execute(
-                    "INSERT INTO deleted_accounts (email_hash, deleted_at) VALUES (?, ?)",
-                    (self._email_hash(salt, row[0]), deleted_at),
+                    "INSERT INTO deleted_accounts (email_hash, deleted_at, hash_scheme) VALUES (?, ?, ?)",
+                    (self._email_hash(self._marker_key(salt, scheme), row[0]), deleted_at, scheme),
                 )
                 await db.execute("DELETE FROM customers WHERE id = ?", (customer_id,))
                 await db.commit()
@@ -418,10 +448,17 @@ class BillingService:
         async with _open_db(self._db_path) as db:
             salt = await self._suppression_salt(db)
             await db.commit()
-            async with db.execute(
-                "SELECT COUNT(*) FROM deleted_accounts WHERE email_hash = ?", (self._email_hash(salt, email),)
-            ) as cur:
-                return (await cur.fetchone())[0]
+            total = 0
+            for scheme in (_SCHEME_DB, _SCHEME_PEPPER):
+                key = self._marker_key(salt, scheme)
+                if key is None:  # peppered markers cannot be checked without the pepper
+                    continue
+                async with db.execute(
+                    "SELECT COUNT(*) FROM deleted_accounts WHERE email_hash = ? AND hash_scheme = ?",
+                    (self._email_hash(key, email), scheme),
+                ) as cur:
+                    total += (await cur.fetchone())[0]
+            return total
 
     async def record_stripe_event(self, event_id: str, event_type: str) -> bool:
         """v1.84.0: INSERT OR IGNORE the Stripe event id. False = already seen (duplicate)."""

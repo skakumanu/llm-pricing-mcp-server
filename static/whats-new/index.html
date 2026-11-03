@@ -155,8 +155,28 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.89.3 -->
+  <!-- v1.89.4 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.89.4</span>
+      <span class="release-date">Nov 3, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Hardening: safer admin downloads, peppered deletion marker, escalation scrub</div>
+      <div class="section-label">Changed</div>
+      <ul class="change-list">
+        <li><strong>Customer-visible behaviour is unchanged</strong>, except that deleting your account now also anonymises your organisation's support escalation records (the text you wrote is replaced with a removal notice; dates, status and decisions stay; the text of any owner reply to you is removed)</li>
+        <li>The operator Documents panel now saves artefacts through a download link and previews them in a sandboxed frame, so document markup can never run in the admin page</li>
+        <li>New optional <code>SUPPRESSION_HASH_KEY</code> secret keys the deletion marker outside the database; existing markers keep working</li>
+        <li>One shared helper now unwraps secret settings for the audit and document services</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.89.3 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.89.3</span>
