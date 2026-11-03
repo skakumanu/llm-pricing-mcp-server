@@ -1024,7 +1024,7 @@ async function loadDocuments() {
       <td style="font-size:11px;color:var(--muted)">${esc(new Date(r.created_at * 1000).toLocaleString())}</td>
       <td style="font-size:11px">${esc(String(r.corrections == null ? "" : r.corrections))}</td>
       <td style="font-size:11px;color:var(--muted)">${esc(r.llm_mode || "")}</td>
-      <td style="font-size:11px">${r.status === "failed" ? "" : `<a href="#" onclick="docsDownload('${esc(r.artifact_id)}','html');return false" style="color:var(--accent)">HTML</a> · <a href="#" onclick="docsDownload('${esc(r.artifact_id)}','md');return false" style="color:var(--accent)">Markdown</a>`}</td>
+      <td style="font-size:11px">${r.status === "failed" ? "" : (r.formats || ["html", "md"]).map(f => `<a href="#" onclick="docsDownload('${esc(r.artifact_id)}','${esc(f)}');return false" style="color:var(--accent)">${({html: "HTML", md: "Markdown", pptx: "PPTX", docx: "DOCX"})[f] || esc(f)}</a>`).join(" · ")}</td>
     </tr>`).join("");
   } catch (e) {
     badge.textContent = "error";
@@ -1073,7 +1073,7 @@ async function docsDownload(id, fmt) {
     const res = await docsFetch(id, fmt);
     const cd = res.headers.get("Content-Disposition") || "";
     const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
-    let filename = id + "." + (fmt === "md" ? "md" : "html");
+    let filename = id + "." + ({md: "md", pptx: "pptx", docx: "docx"}[fmt] || "html");
     if (m) { try { filename = decodeURIComponent(m[1]); } catch (_) { filename = m[1]; } }
     filename = filename.replace(/[\\/]/g, "_");
     const url = URL.createObjectURL(await res.blob());

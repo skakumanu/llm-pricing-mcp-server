@@ -136,7 +136,9 @@ async def test_release_brief_and_status_documents_render_in_both_formats():
     assert "Document writer" in r.render_markdown((await make("release_notes_brief"))[0])
 
 
-@pytest.mark.parametrize("fmt,ctype", [("html", "text/html; charset=utf-8"), ("md", "text/markdown; charset=utf-8")])
+@pytest.mark.parametrize("fmt,ctype", [("html", "text/html; charset=utf-8"), ("md", "text/markdown; charset=utf-8"),
+    ("pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+    ("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")])
 def test_content_types(fmt, ctype):
     assert r.content_type(fmt) == ctype
 
