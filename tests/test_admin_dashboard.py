@@ -425,6 +425,7 @@ def test_migration_guide_url_points_at_an_existing_doc():
                    "docs-body"):
             assert f'id="{el}"' in html, el
         assert "Generate" in html and "Download" in html
+        assert "PPTX" in html and "DOCX" in html and "r.formats" in html
         for path in ("/documents/types", "/documents/artifacts?limit=", "/documents/generate", "/download?format="):
             assert path in html, path
         assert html.index('id="docs-panel"') > html.index('id="audit-panel"') > html.index('id="orch-section"')

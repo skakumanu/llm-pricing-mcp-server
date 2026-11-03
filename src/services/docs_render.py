@@ -9,7 +9,7 @@ Brand kit: ``BRAND`` copies the ``:root`` design tokens of static/index.html (a 
 so a design-token change fails loudly) and adds a print palette.
 """
 from html import escape
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from src.services.docs_catalogue import fmt_usd
 
@@ -54,6 +54,33 @@ _BANNERS = {"draft": ("banner", "DRAFT - not approved"),
             "gathering": ("banner", "DRAFT - not approved"),
             "discarded": ("banner discarded", "DISCARDED - rejected by the owner"),
             "failed": ("banner discarded", "FAILED - not a usable document")}
+
+
+# v1.90.0 format metadata: the single source for which editions each kind offers.
+FORMAT_ALIASES = {"markdown": "md"}
+FORMATS_BY_KIND = {"deck": ("html", "md", "pptx", "docx"), "document": ("html", "md", "docx")}
+MEDIA_TYPES = {
+    "html": "text/html; charset=utf-8",
+    "md": "text/markdown; charset=utf-8",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
+
+def allowed_formats(kind: Optional[str]) -> List[str]:
+    return list(FORMATS_BY_KIND.get(kind or "", FORMATS_BY_KIND["document"]))
+
+
+def banner_text(status: str) -> Optional[str]:
+    """The status banner wording for a non-published artefact (None when published)."""
+    return _BANNERS[status][1] if status in _BANNERS else None
+
+
+def chart_table(chart: Dict[str, Any]) -> Dict[str, Any]:
+    """The chart's values as a table (same values the SVG draws); shared by Markdown and Word."""
+    return {"columns": [chart["x_label"], chart["y_label"], "Status"],
+            "rows": [[b["label"], fmt_usd(b["value"]), b["status"]] for b in chart["bars"]],
+            "caption": "Chart data (the same values as the table above)"}
 
 
 def _e(x: Any) -> str:
@@ -188,9 +215,7 @@ def render_markdown(doc: Dict[str, Any], status: str = "draft") -> str:
                 c = s["chart"]
                 lines += [f"**{c['title']}** ({c['y_label']} by {c['x_label'].lower()}; legend: "
                           f"{', '.join(c.get('legend', [])) or 'none'})", ""]
-                lines += _md_table({"columns": [c["x_label"], c["y_label"], "Status"],
-                                    "rows": [[b["label"], fmt_usd(b["value"]), b["status"]] for b in c["bars"]],
-                                    "caption": "Chart data (the same values as the table above)"})
+                lines += _md_table(chart_table(c))
         if doc["kind"] == "deck":
             lines += [f"> Speaker notes: {s['notes']}", ""]
     if doc.get("footnotes"):
@@ -202,4 +227,4 @@ def render_markdown(doc: Dict[str, Any], status: str = "draft") -> str:
 
 
 def content_type(fmt: str) -> str:
-    return "text/html; charset=utf-8" if fmt == "html" else "text/markdown; charset=utf-8"
+    return MEDIA_TYPES.get(FORMAT_ALIASES.get(fmt, fmt), MEDIA_TYPES["md"])
