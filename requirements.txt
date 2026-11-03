@@ -33,7 +33,7 @@ anyio>=4.14.2
 certifi>=2026.10.23
 idna>=3.15
 pygments>=2.20.0
-tqdm>=4.66.3
+tqdm>=4.70.1
 # v1.90.0: python-pptx 1.0.2 declares lxml>=3.1.0, Pillow>=3.3.2, XlsxWriter>=0.5.7 and python-docx 1.2.0
 # declares lxml>=3.1.0, so OSV-Scanner would evaluate those at their oldest (advisory-laden) versions.
 # pip already installs newer versions; the floors make the scan match reality. Pillow 12.x carries
