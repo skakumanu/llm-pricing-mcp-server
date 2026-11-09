@@ -133,17 +133,6 @@
    "supports_function_calling": true,
    "supports_vision": true
   },
-  "databricks-claude-sonnet-4": {
-   "added_on": "2026-10-25",
-   "context_window": 200000,
-   "input": 0.00299999,
-   "output": 0.01500002,
-   "price_as_of": "2026-10-26",
-   "price_source_kind": "registry",
-   "registry_key": "databricks/databricks-claude-sonnet-4",
-   "supports_function_calling": true,
-   "supports_vision": false
-  },
   "databricks-claude-sonnet-4-1": {
    "added_on": "2026-10-25",
    "context_window": 200000,
