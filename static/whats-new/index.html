@@ -155,8 +155,27 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.90.2 -->
+  <!-- v1.90.3 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.90.3</span>
+      <span class="release-date">Nov 17, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Price drift cleared — 7 withheld prices restored</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li><strong>Seven registry-sourced prices that disagreed with the reference registry are corrected and serving again.</strong> The weekly audit had withheld them (so cost math was never wrong — they simply were not returned): two Novita <code>mindai/macaron</code> entries, and five DeepInfra entries including <code>anthropic/claude-sonnet-5</code> ($2.00&rarr;$3.00 per 1M input), <code>google/gemma-4-31B-it</code>, <code>mistralai/Mistral-Nemo-Instruct-2407</code> and two NVIDIA Nemotron models</li>
+        <li><strong>The offline price-registry snapshot was refreshed from the live registry</strong> and the DeepInfra and Novita registry-sourced entries re-synced against it, which is what brought those seven back in line; four newly registry-priced DeepInfra models were picked up in the same pass</li>
+        <li>Confirmed-price coverage rises from 96.9% to 98.1% with nothing withheld for drift; no curated rate card, tier or endpoint changed</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.90.2 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.90.2</span>
