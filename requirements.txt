@@ -42,4 +42,4 @@ tqdm>=4.70.1
 # asked to decode an image here.
 lxml>=6.1.3
 Pillow>=13.0.0
-XlsxWriter>=3.2.9
+XlsxWriter>=3.3.1
