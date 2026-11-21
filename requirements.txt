@@ -29,7 +29,7 @@ python-docx==1.2.0
 # transitively and, with no floor stated, evaluates these at old versions carrying known advisories
 # (anyio PYSEC-2026-4024/4025, certifi PYSEC-2026-4320, idna PYSEC-2026-215, pygments PYSEC-2023-117,
 # tqdm PYSEC-2017-74). pip already installs newer versions; the floors make the scan match reality.
-anyio>=4.14.2
+anyio>=4.16.0
 certifi>=2026.10.23
 idna>=3.15
 pygments>=2.21.0
