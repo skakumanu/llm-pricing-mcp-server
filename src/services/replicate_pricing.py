@@ -20,6 +20,7 @@ class ReplicatePricingService(BasePricingProvider):
         "meta/meta-llama-3-70b-instruct": {
             "input": 0.00065,
             "output": 0.00275,
+            "price_as_of": "2026-11-23",
             "context_window": 8192,
             "use_cases": [
                 "General purpose", "Code generation", "Data analysis",
@@ -35,6 +36,7 @@ class ReplicatePricingService(BasePricingProvider):
         "meta/meta-llama-3-8b-instruct": {
             "input": 0.00005,
             "output": 0.00025,
+            "price_as_of": "2026-11-23",
             "context_window": 8192,
             "use_cases": [
                 "High-volume processing", "Simple tasks", "Classification",
