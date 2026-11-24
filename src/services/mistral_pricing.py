@@ -50,9 +50,12 @@ class MistralPricingService(BasePricingProvider):
             "supports_json_mode": True,
         },
         "mistral-large-latest": {
-            "input": 0.0005,
-            "output": 0.0015,
-            "price_as_of": "2026-10-27",
+            # v1.90.4: 0.50/1.50 -> 0.70/2.10 per 1M to match the registry
+            # (mistral/mistral-large-latest); the prior figures had drifted ~29%
+            # understated and were withheld for drift. Refs #353.
+            "input": 0.0007,
+            "output": 0.0021,
+            "price_as_of": "2026-11-24",
             "context_window": 32000,
             "use_cases": ["Complex reasoning", "Advanced analytics", "Code generation", "Multi-step planning"],
             "strengths": ["Excellent reasoning", "Strong code skills", "Well-balanced"],
