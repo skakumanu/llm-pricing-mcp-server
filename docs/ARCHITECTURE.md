@@ -1,6 +1,6 @@
 # Architecture — LLM Pricing MCP Server
 
-**Version**: v1.90.3 | **Last updated**: 2026-11-17
+**Version**: v1.90.4 | **Last updated**: 2026-11-24
 
 Canonical internals reference. Release history lives in `static/whats-new/`, not here.
 

@@ -62,9 +62,11 @@ class SnowflakePricingService(BasePricingProvider):
         "llama3.1-8b": {
             # v1.73.11: 0.30 -> 0.24 per 1M (registry snowflake/llama3.1-8b;
             # Cortex lists 0.11 credits per 1M, i.e. $0.22 at $2.00/credit).
-            "input": 0.00024,
-            "output": 0.00024,
-            "price_as_of": "2026-10-25",
+            # v1.90.4: 0.24 -> 0.22 per 1M to match the registry (and the Cortex
+            # figure above); the 0.24 value had drifted 9%. Refs #353.
+            "input": 0.00022,
+            "output": 0.00022,
+            "price_as_of": "2026-11-24",
             "context_window": 128000,
             "use_cases": [
                 "High-volume classification", "Data tagging", "Simple summarization",
@@ -94,8 +96,12 @@ class SnowflakePricingService(BasePricingProvider):
             "supports_function_calling": True,
         },
         "mistral-7b": {
-            "input": 0.0018,
-            "output": 0.0018,
+            # v1.90.4: 1.80 -> 0.15 in / 0.20 out per 1M to match the registry
+            # (snowflake/mistral-7b). The 1.80 figure was ~12x the reference,
+            # overstated, and had been withheld for drift. Refs #353.
+            "input": 0.00015,
+            "output": 0.0002,
+            "price_as_of": "2026-11-24",
             "context_window": 32768,
             "use_cases": [
                 "General tasks", "Multilingual", "Code assistance",

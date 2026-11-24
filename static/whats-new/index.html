@@ -155,8 +155,26 @@
     <p>Latest updates, new providers, features, and fixes — one place for every release.</p>
   </div>
 
-  <!-- v1.90.3 -->
+  <!-- v1.90.4 -->
   <div class="release latest">
+    <div class="release-dot"></div>
+    <div class="release-header">
+      <span class="version-badge">v1.90.4</span>
+      <span class="release-date">Nov 24, 2026</span>
+      <span class="release-tag tag-fix">Fix</span>
+    </div>
+    <div class="release-body">
+      <div class="release-title">Price drift cleared — 3 curated prices corrected</div>
+      <div class="section-label">Fixed</div>
+      <ul class="change-list">
+        <li><strong>Three curated prices that disagreed with the reference registry are corrected and serving again.</strong> The weekly audit had withheld them (so cost math was never wrong — they simply were not returned): Snowflake <code>mistral-7b</code> ($1.80&rarr;$0.15 per 1M input, a ~12&times; overstatement), Mistral AI <code>mistral-large-latest</code> ($0.50/$1.50&rarr;$0.70/$2.10) and Snowflake <code>llama3.1-8b</code> ($0.24&rarr;$0.22)</li>
+        <li>Each was corrected to the reference registry value in its provider rate card (<code>snowflake_pricing.py</code>, <code>mistral_pricing.py</code>) and re-dated; confirmed-price coverage rises from 97.0% to 97.4% with nothing withheld for drift</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- v1.90.3 -->
+  <div class="release">
     <div class="release-dot"></div>
     <div class="release-header">
       <span class="version-badge">v1.90.3</span>
